@@ -80,6 +80,8 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 | `archive.py`, `archive/` | the Scientists' archive (read-only) and the shared archive they write |
 | `hidden.py`, `lawdocs.py`, `archive/codex/` | the tiered codex, which law functions the prompt documents (`law_docs`), the nine hidden powers, tips |
 | `projects.py`, `outside.py` | threshold public goods (granary, upgrade, road, discovery); the outside power's tribute and raids |
+| `media.py`, `scholars.py` | media2: private and official outlets, editions and editorial turns, licences, commentary, Media laws; Scholars' memory sales and libraries |
+| `roles.py`, `jurisdictions.py`, `context.py` | STUBS of other agents' contracts (replaced at merge) |
 
 ## Extensions beyond the spec
 - **Scientists hold the archive** (`archive/`, ~100 documents: the full library with code, further laws, the mathematics of the world,
@@ -256,6 +258,26 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 - **Experimentation metrics** (`probing.py`, in `score.json -> metrics.experimentation` and `agents`): per agent, invoke attempts, attempts
   with names nothing defined ("no such action": they still use the action), the distinct unknown names, and top-level unknown actions;
   aggregated by archetype and by model. Computed from `reasoning.jsonl`, so older runs score too.
+- **Information economy** (`media2`, `media.py`, `scholars.py`; off by default, defaults in `media.DEFAULTS`; preset
+  `specs/media2_pilot.yaml`). **Outlets**: a private outlet per Media role holder and press holder; agents subscribe to up to 3
+  (`subscribe`/`unsubscribe`) at per-round fees the editor sets (`set_subscription_fee`). Each jurisdiction's **official outlet**
+  replaces the gazette (`gazette(text)` becomes `media.official_post`; the round record becomes the official statistics, public or
+  private per item by law: `publish_stat`, Transparency, Open Data, Open Statistics; `set_official_editor` adds a narrative).
+  **Editorial turns**: after end-of-round processing every editor gets one extra model call (phase `editorial` in
+  `reasoning.jsonl`) to read the whole round and `write_edition` (600 tokens, targeted versions with `audience`); editions are
+  published at the start of the next round and shown at the top of the turn prompt (`media.editions_for`, the Media layer).
+  `run_placement` (labelled sponsored or not), `leak` (a DM you were party to; quotes of logged text are marked `[verified: eN]`),
+  `poll`/`answer_poll`, `send_subscriber_list`. **Licences**: posting needs a licence from at least one outlet
+  (`revoke_licence`, `grant_licence` with an optional fee, `buy_licence`); the revoked agent is told, nobody else; DMs are never
+  licensed. **Commentary**: `annotate` (60 tokens, 5 per outlet per round, shown as [Outlet: text]). **Scholars** (scholar role,
+  or `media2.scholar_classes`) sell file space and pin slots (`set_memory_price`, `buy_memory`; 4,000 tokens per Scholar per round)
+  and keep libraries for the run (`library_deposit`, `library_read`, `library_permit`, `library_remove`; `scholars.deposit` for
+  bequests). **Laws** (category `media`, only in media2 worlds): Media Licensing, Sponsored Disclosure, Defamation (a clause),
+  Press Freedom, Open Board, Compulsory Subscription (the hidden call `compel_subscription`, documented only in a rare codex law
+  article and `archive/rare/record-21`), Official Historian, Open Statistics. **Measurement** (`score.json -> metrics.media`): reach,
+  targeted versions, placements (unlabelled), revocations, leaks, polls, and instruction following: readers of an edition that
+  quotes a phrase or names an action with an id, who repeat the phrase or take the action within a round, against non-readers.
+  Every version is logged monitor-only (`edition_truth`); editions are never filtered.
 
 ## Known gaps and choices (read before experiments)
 - **Speed.** Sequential turns (the spec's design) take roughly 10-20 s per Claude Code call: E0 ~10 min, E3 ~1.5 h, E6 ~10 h. `--fast`

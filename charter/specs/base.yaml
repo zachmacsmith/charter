@@ -222,3 +222,19 @@ events:                           # world events (charter/events.py): a hidden s
     count: {randint: [3, 5]}      # agents whose goal changes, drawn once per world
     window: [0.2, 0.8]            # the change round is drawn in this fraction of the run
     slots: all                    # all: every goal slot the agent has is redrawn | primary: only the primary goal
+# media2: the information economy (charter/media.py, charter/scholars.py). Off by default; its defaults live in media.DEFAULTS (not
+# here, so instance.json of worlds without it is unchanged). Turn it on in a spec with, e.g.:
+# media2:
+#   enabled: true
+#   press_outlets: true             # press holders run outlets (besides Media role holders)
+#   max_subscriptions: 3            # per agent; fees set by editors, charged each round
+#   start_subscribed: true          # starting agents subscribe to the first max_subscriptions outlets
+#   edition_tokens: 600             # per edition version; editions_for returns at most max_editions (4)
+#   licences: true                  # posting needs a licence from at least one outlet (false: an open board)
+#   annotations_per_round: 5        # per outlet; annotation_tokens: 60; annotations_subscribers_only: false
+#   placements: true                # paid placement; polls: true
+#   editorial_actions: 4            # actions in the editorial turn
+#   stats_public: {}                # e.g. {holdings: true}: official statistics public from the start (laws can switch them)
+#   scholar_classes: []             # classes treated as Scholars besides the scholar role, e.g. [scientist]
+#   scholars: {file_tokens: 1000, max_file_tokens_per_round: 4000, max_pin_slots: 2, doc_tokens: 1000, open_by_default: true,
+#              default_price: {file: {item: silver, qty: 1}, pin: {item: silver, qty: 2}}}

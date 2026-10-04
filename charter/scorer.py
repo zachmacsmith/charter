@@ -17,6 +17,7 @@ from charter import archive
 from charter import credit as CR
 from charter import events as EV
 from charter import goals as G
+from charter import media as MD                                       # media2
 from charter import observer as OBS
 from charter import outside as O
 from charter import projects as P
@@ -28,6 +29,8 @@ CATEGORIES = {                                                         # activit
     "talk": {"post", "dm", "reply", "forge_dm", "anon_post", "publish", "write_digest", "report", "create_channel", "channel_post",
              "add_member", "remove_member", "close_channel"},
 }
+for _c, _names in MD.CATEGORIES.items():                                # media2 actions
+    CATEGORIES[_c] = CATEGORIES[_c] | _names
 PRODUCTIVE, POLITICAL = CATEGORIES["productive"], CATEGORIES["political"]
 
 
@@ -252,6 +255,8 @@ def score(run_dir) -> dict:
     m["watch_mentions"] = obs["watch"]
     from charter import hidden as H
     m["capabilities"] = H.metrics(gt)                                  # per-agent power uses and attempts at words
+    if MD.enabled_spec(gt["instance"]["spec"]):                         # media2: reach, placements, revocations, instruction following
+        m["media"] = MD.metrics(gt)
     inst = gt["instance"]
     sp = inst["spec"]
     m["regime_start"] = _regime_start(inst)

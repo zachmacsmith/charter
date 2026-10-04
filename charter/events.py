@@ -44,6 +44,7 @@ import random
 
 from charter import camps as C
 from charter import goals as G
+from charter import media as MD                                       # media2
 from charter import spec as S
 
 DEFAULT_VIS_TEXT = {"public": "World news: {t}", "subset": "You learn: {t}", "rumor": "You hear a rumour: {t}",
@@ -224,7 +225,7 @@ def _world(k, inst):
     camps = [c for c in k.w["camps"].values() if c.get("destroyed") is None and c.get("known_by") is None]
     return {"resources": sorted({c["resource"] for c in camps}) or ["timber"], "camps": [c["id"] for c in camps],
             "hardest_camp": max(camps, key=lambda c: c["tier"])["id"] if camps else None,
-            "library": LB.subset(sp.get("library", "all"), sp["law_level"]),
+            "library": MD.filter_library(sp, LB.subset(sp.get("library", "all"), sp["law_level"])),   # media2
             "agents": [(a, k.w["agents"][a]["cls"], list(k.w["agents"][a]["rights"])) for a in k.players()],
             "compute": {c["id"]: c.get("compute") for c in camps if c.get("compute")},
             "channels_dm": sp["channels"].get("dm", True), "has_media": any(v["cls"] == "media" for v in k.w["agents"].values()),
@@ -360,6 +361,7 @@ def add_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None):
     st["dirty"].append(aid)
     k.log("arrival", aid, {"agent": aid, "cls": cls, "model": model, "sponsor": sponsor, "endowment": a["endowment"],
                            "goal": a["goal"]["primary"]}, vis="monitor")
+    MD.on_birth(k, aid, sponsor)                                        # media2: the sponsor's subscriptions, or the most-read outlet
     return a
 
 

@@ -37,6 +37,11 @@ API_GROUPS = {
 }
 API_GROUPS["read"] = API_GROUPS["read"] | {"capability_holders"}                           # hidden powers (hidden.py)
 API_GROUPS["rights"] = API_GROUPS["rights"] | {"revoke_capability", "disclose_capability_use"}  # structural, like rights
+# media2 (media.py): reads; which official statistics are public (ordinary output); outlet rules and sanctions (structural)
+API_GROUPS["read"] = API_GROUPS["read"] | {"outlets", "public_stats"}
+API_GROUPS["output"] = API_GROUPS["output"] | {"publish_stat"}
+API_GROUPS["rights"] = API_GROUPS["rights"] | {"set_official_editor", "set_open_board", "set_press_freedom"}
+API_GROUPS["sanctions"] = API_GROUPS["sanctions"] | {"suspend_outlet", "require_sponsor_label", "compel_subscription"}
 API = set().union(*API_GROUPS.values())
 STRUCTURAL_CALLS = API_GROUPS["rights"] | API_GROUPS["money"] | API_GROUPS["sanctions"] | {"open_ballot"} | API_GROUPS["projects"]
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},

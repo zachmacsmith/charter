@@ -1,0 +1,14 @@
+extends: [base]
+# media2 pilot: the information economy (charter/media.py, charter/scholars.py) in a small world. Two Media editors run private
+# outlets, Scientists act as Scholars (memory sales, libraries), the official outlet prints the round's statistics, and the Media
+# laws are in the library. Dry run: .venv/bin/python -m charter run media2_pilot --seed 1 --fast --dry --fresh --sandbox off
+agents: {worker: 4, scientist: 2, legislator: 2, media: 2, board: 0, fixer: 0}
+rounds: 6
+actions_per_turn: 3
+camps: {tiers: [1, 2, 3], dials: {count: 4, max: 7}}
+law_level: L3
+library: [commons, governance, information, media]
+channels: {dm: true, encryption: false, surveillance: false}
+media2:
+  enabled: true
+  scholar_classes: [scientist]     # without the Roles module: Scientists are the Scholars

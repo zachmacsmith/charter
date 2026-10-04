@@ -9,6 +9,7 @@ from charter import camps as C
 from charter import credit as CR
 from charter import hidden as H
 from charter import lawlang as L
+from charter import media as MD                                       # media2
 from charter import outside as O
 from charter import projects as P
 
@@ -17,6 +18,7 @@ ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem
            "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
            "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
            "reply", "forge_dm")
+ACTIONS += MD.ACTIONS                                                 # media2: outlets, licences, commentary, Scholars (media.py)
 DM_ACTIONS = ("dm", "reply", "forge_dm")                               # private messages: the DM limit applies; fast mode's DM step delivers them
 
 
@@ -25,8 +27,8 @@ class ActionError(Exception):
 
 
 def act(k, aid: str, name: str, args: dict) -> str:
-    if name not in ACTIONS:
-        raise ActionError(f"unknown action '{name}'. Actions: {', '.join(ACTIONS)}")
+    if name not in ACTIONS or (name in MD.ACTIONS and not MD.enabled(k)):     # media2: its actions exist only with it on
+        raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in MD.ACTIONS or MD.enabled(k))}")
     fn = globals()[f"_{name}"]
     if k.w["agents"].get(aid, {}).get("departed") is not None:        # world events: departed agents are out of play
         raise ActionError("you have left the world")
@@ -116,6 +118,7 @@ def _run_python(k, aid, code):
 
 # ------------------------------------------------------------------ communication and trade
 def _post(k, aid, text):
+    MD.check_post(k, aid)                                              # media2: posting needs a licence from some outlet
     text = str(text)[:2000]
     t = k.agent(aid)["title"]
     eid = k.log("post", aid, {"text": text, "title": t}, vis="public")
@@ -130,6 +133,7 @@ def _post(k, aid, text):
 def _anon_post(k, aid, text):
     """A public post shown as 'Anonymous'. The author is recorded only in a monitor-only entry (never visible or citable in-game)."""
     _need(k, aid, "anon", "post anonymously")
+    MD.check_post(k, aid)                                              # media2: posting needs a licence from some outlet
     text = str(text)[:2000]
     eid = k.log("anon_post", None, {"text": text}, vis="public")
     k.log("anon_truth", aid, {"event": eid, "author": aid}, vis="monitor")
@@ -638,6 +642,113 @@ def _channel_post(k, aid, channel, text):
         raise ActionError(f"you cannot post in {channel}")
     eid = k.log("channel_post", aid, {"channel": str(channel), "text": str(text)[:2000]}, vis=f"channel:{channel}")
     return f"Posted in {channel} ({eid})."
+
+
+# ------------------------------------------------------------------ media2: outlets, licences, commentary, Scholars (media.py, scholars.py)
+def _subscribe(k, aid, outlet):
+    MD.need(k)
+    return MD.subscribe(k, aid, outlet)
+
+
+def _unsubscribe(k, aid, outlet):
+    MD.need(k)
+    return MD.unsubscribe(k, aid, outlet)
+
+
+def _set_subscription_fee(k, aid, item=None, qty=0, outlet=None):
+    MD.need(k)
+    return MD.set_subscription_fee(k, aid, item, qty, outlet)
+
+
+def _write_edition(k, aid, text, audience=None, outlet=None):
+    MD.need(k)
+    return MD.write_edition(k, aid, text, audience, outlet)
+
+
+def _buy_placement(k, aid, outlet, text, item, qty):
+    MD.need(k)
+    return MD.buy_placement(k, aid, outlet, text, item, qty)
+
+
+def _run_placement(k, aid, placement, sponsored=True):
+    MD.need(k)
+    return MD.run_placement(k, aid, placement, sponsored)
+
+
+def _leak(k, aid, outlet, message):
+    MD.need(k)
+    return MD.leak(k, aid, outlet, message)
+
+
+def _poll(k, aid, question, options, outlet=None):
+    MD.need(k)
+    return MD.poll(k, aid, question, options, outlet)
+
+
+def _answer_poll(k, aid, poll, choice):
+    MD.need(k)
+    return MD.answer_poll(k, aid, poll, choice)
+
+
+def _send_subscriber_list(k, aid, to, outlet=None):
+    MD.need(k)
+    return MD.send_subscriber_list(k, aid, to, outlet)
+
+
+def _revoke_licence(k, aid, agent, outlet=None):
+    MD.need(k)
+    return MD.revoke_licence(k, aid, agent, outlet)
+
+
+def _grant_licence(k, aid, agent, item=None, qty=0, outlet=None):
+    MD.need(k)
+    return MD.grant_licence(k, aid, agent, item, qty, outlet)
+
+
+def _buy_licence(k, aid, outlet):
+    MD.need(k)
+    return MD.buy_licence(k, aid, outlet)
+
+
+def _annotate(k, aid, post, text, outlet=None):
+    MD.need(k)
+    return MD.annotate(k, aid, post, text, outlet)
+
+
+def _set_memory_price(k, aid, kind, item, qty):
+    MD.need(k)
+    from charter import scholars as SC
+    return SC.set_memory_price(k, aid, kind, item, qty)
+
+
+def _buy_memory(k, aid, scholar, kind="file", n=1):
+    MD.need(k)
+    from charter import scholars as SC
+    return SC.buy_memory(k, aid, scholar, kind, n)
+
+
+def _library_deposit(k, aid, scholar, title, text):
+    MD.need(k)
+    from charter import scholars as SC
+    return SC.library_deposit(k, aid, scholar, title, text)
+
+
+def _library_read(k, aid, scholar, doc=None):
+    MD.need(k)
+    from charter import scholars as SC
+    return SC.library_read(k, aid, scholar, doc)
+
+
+def _library_permit(k, aid, doc, agent, allow=True):
+    MD.need(k)
+    from charter import scholars as SC
+    return SC.library_permit(k, aid, doc, agent, allow)
+
+
+def _library_remove(k, aid, doc):
+    MD.need(k)
+    from charter import scholars as SC
+    return SC.library_remove(k, aid, doc)
 
 
 # ------------------------------------------------------------------ the Scientists' archive
