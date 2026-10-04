@@ -48,6 +48,7 @@ TOPICS = {
     "preview": ("How the dry-run preview works", "Every proposal is played forward on a copy of the world before anyone votes."),
     "bounty": ("Bounty numbers", "Factoring camps publish a number; laws can read it."),
     "powers": ("Powers and the law", "Some agents hold hidden powers (words used through invoke). Laws can expose or remove them."),
+    "leases": ("Leasing harvest rights", "Harvest rights can be leased for a term; laws can tax, cap or ban leases."),   # camps
 }
 
 # (name, topic, prompt group, prompt text, article detail, core tier, minimal tier)
@@ -190,7 +191,21 @@ E += [
     ("revoke_capability", "powers", "Powers", "revoke_capability(agent, name=None)", "takes a power (None: every power) from an agent; returns "
      "how many were taken. Structural.", "uncommon", "uncommon"),
 ]
+E += [                                                                  # camps: leasing harvest rights (camptypes/leases.py)
+    ("set_lease_rules", "leases", "Camps", "set_lease_rules(allowed=True, tax=0.0, max_rounds=None, max_fee=None)",
+     "bans leases (allowed=False), taxes them (tax: the fraction of every lease fee that goes to the reserve) or caps them (max_rounds: "
+     "the longest term; max_fee: the most a fee may be worth). Ordinary.", "prompt", "common"),
+    ("leases", "leases", "Read", "leases()", "every lease offered or in force: right, holder, tenant, rounds, fee, status, start, end.",
+     "prompt", "common"),
+]
 ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
+
+
+def _gated_off(spec: dict) -> set:
+    """Entries of modules switched off in this world: left out of the mapping, so worlds without the module document (and hand out
+    articles and tips about) exactly what they did before. camps: the lease functions exist only with leasing on."""
+    from charter.camptypes import leases as _LS
+    return set() if _LS.enabled_spec(spec) else {"set_lease_rules", "leases"}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
 
@@ -208,7 +223,10 @@ def resolve(spec: dict) -> dict:
     if preset not in ("full", "core", "minimal"):
         raise ValueError(f"law_docs.preset must be full, core or minimal, not {preset!r}")
     mapping = {}
+    off = _gated_off(spec)
     for n, e in ENTRIES.items():
+        if n in off:
+            continue
         if preset == "full":
             mapping[n] = e["core"] if n in ALWAYS_ARTICLE else "prompt"
         else:
@@ -218,6 +236,8 @@ def resolve(spec: dict) -> dict:
             raise ValueError(f"law_docs.overrides: no law function, hook or feature {n!r}")
         if t not in ("prompt",) + TIERS:
             raise ValueError(f"law_docs.overrides.{n}: must be prompt or one of {TIERS}")
+        if n in off:
+            continue
         mapping[n] = t
     return {"preset": preset, "mapping": mapping}
 
@@ -229,7 +249,7 @@ def api_doc(resolved: dict, original: str) -> str:
         return original
     lines = [SKELETON]
     for g in GROUP_ORDER:
-        items = [ENTRIES[n]["prompt"] for n in ENTRIES if m[n] == "prompt" and ENTRIES[n]["group"] == g]
+        items = [ENTRIES[n]["prompt"] for n in ENTRIES if m.get(n) == "prompt" and ENTRIES[n]["group"] == g]
         if items:
             lines.append(f"{g}: " + ", ".join(items))
     lines.append(FOOTER)
@@ -245,7 +265,7 @@ def articles(resolved: dict) -> dict:
     m = resolved["mapping"]
     by_topic: dict = {}
     for n, e in ENTRIES.items():
-        if m[n] != "prompt":
+        if n in m and m[n] != "prompt":
             by_topic.setdefault(e["topic"], {}).setdefault(m[n], []).append(n)
     out = {}
     for topic, tiers in by_topic.items():

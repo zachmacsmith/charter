@@ -1,0 +1,19 @@
+extends: [base]
+# camps_pilot: the New Features camp framework on a small world. Typed camps (tutorial, a solo-science landscape with drift, two
+# science-plus-coordination camps, one social game, maybe a wildcard), leasing harvest rights, survey and invest. Upkeep stays off.
+agents: {worker: 6, scientist: 2, legislator: 2, media: 1, board: 0, fixer: 1}
+rounds: 20
+turns: simultaneous
+actions_per_turn: 3
+camps:
+  model: types
+  typed:
+    set: standard
+    wildcard_prob: 0.5
+law_level: L2
+library: [commons, money, taxes]
+constitution: assembly
+models: {mix: all_strong}
+hidden: {enabled: false}
+projects: {enabled: false}
+shared_archive: {namespace: camps_pilot}

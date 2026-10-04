@@ -80,6 +80,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 | `archive.py`, `archive/` | the Scientists' archive (read-only) and the shared archive they write |
 | `hidden.py`, `lawdocs.py`, `archive/codex/` | the tiered codex, which law functions the prompt documents (`law_docs`), the nine hidden powers, tips |
 | `projects.py`, `outside.py` | threshold public goods (granary, upgrade, road, discovery); the outside power's tribute and raids |
+| `camptypes/`, `resources.py` | camps: typed camps under `camps.model: types` (registry, framework, modifiers, leases, harness, calibration); resource values, uses, slots, `pay`, optional upkeep |
 
 ## Extensions beyond the spec
 - **Scientists hold the archive** (`archive/`, ~100 documents: the full library with code, further laws, the mathematics of the world,
@@ -256,6 +257,43 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 - **Experimentation metrics** (`probing.py`, in `score.json -> metrics.experimentation` and `agents`): per agent, invoke attempts, attempts
   with names nothing defined ("no such action": they still use the action), the distinct unknown names, and top-level unknown actions;
   aggregated by archetype and by model. Computed from `reasoning.jsonl`, so older runs score too.
+
+## Camp types and resources (New Features Update; `camps.model: types`, default `legacy`)
+<!-- camps: Camps-A -->
+- **Off by default.** `camps.model: legacy` keeps the five fixed tiers exactly as before. `types` replaces them with a camp per *type*
+  plus *modifiers* (`charter/camptypes/`; preset `specs/camps_pilot.yaml`). Nothing about types is in `base.yaml` except comments: the
+  defaults live in `camptypes/framework.py` (`DEFAULTS`, `ROLE_MODIFIERS`), so legacy instances are byte-identical.
+- **Types** (registry `camptypes.TYPES`; one file each, auto-loaded; base class `CampType`): `tutorial` (linear, the legacy tier-1
+  rule), `landscape` (solo science: 8 dials 0..15, ruggedness K, best setting moves with public conditions), `cartel` (forecast
+  cartel: one price falling with total extraction, hidden shifting demand, 4 right holders), `minority` (open to every agent; only
+  the less crowded of two sides is paid). Camps-B's consortium, weak link, catalyst and partner-choice dilemma register the same way.
+- **Standard set** (`camps.typed.set: standard`): tutorial, a solo-science landscape with drift, two different science-plus-coordination
+  camps, one social game, and with `wildcard_prob` a wildcard (any type, with crowding, history coupling and a production chain).
+  Drawn from the registry by role, skipping types whose participation rule the world cannot meet. `set: [{type, role?, resource?,
+  modifiers?}, ...]` lists camps explicitly.
+- **Modifiers** (`camptypes/modifiers.py`): conditions vector, drift (every 15-20 rounds), crowding, history coupling, survey (action
+  `survey`, a fee), infrastructure (action `invest`: stone raises capacity, regrowth and safety; `modifiers.accident_factor(camp)` for
+  accidents), production chain, split control, input visibility (`sealed` default / `visible`), disclosure (`totals` default / `inputs`).
+- **Sealed inputs** (cartel, minority, split control) resolve at end-of-round step 2 (`CT.end_of_round`, before ballots); inputs of
+  agents who left play that round are void. World update (step 5, after regrowth): drift, next conditions, leases returned.
+- **Resources** (`resources.py`): `VALUE` (quicksilver 8 added), `USES`, default slots (tutorial timber, social stone, coordination
+  copper then gold, solo science silver, wildcard quicksilver); `resources.placement: copper_solo | gold_solo` moves copper or gold
+  into the solo-science slot; `pay(k, aid, {item: qty}, to="reserve"|agent|None)` charges a cost all or nothing (None destroys it);
+  optional upkeep (`resources.upkeep.enabled`: 1 timber every 5 rounds or one action fewer per turn until paid).
+- **Leasing** (`camptypes/leases.py`, on with types or `camps.leases.enabled`): `lease {right, to, rounds, fee}` and `accept_lease`; the
+  right itself moves to the tenant for the term (the holder cannot harvest) and the kernel returns it at the end. Laws:
+  `set_lease_rules(allowed, tax, max_rounds, max_fee)` (ordinary) and `leases()`. Leases show in the state view and snapshots.
+- **Removed under types**: the sparse modular rule (tiers 4 and 5 become decision trees wherever tiers are still drawn: secret camps,
+  roads, discoveries) and proof-of-work (compute camps draw parity or factoring). There was no best-shot camp in the code to remove.
+- **Records**: `snapshots.json -> camptypes` (per camp per round: stock, conditions, best setting, cartel totals vs optimum, minority
+  counts; monitor-only) and `leases`; `ground_truth.json -> camptypes` (hidden rules, modifiers, per-camp stats); `score.json ->
+  metrics.camps` (value per action by type and relative to the tutorial; cartel coordination = revenue / joint-optimum revenue).
+- **Calibration**: `.venv/bin/python -m charter.camptypes.calibrate [--stock full|dynamic]` prints value per action relative to the
+  tutorial for scripted strategies (random, learned, nash, fail). At full stock the defaults give landscape 1.5x learned, cartel 2.4x
+  learned / 1.5x at the textbook equilibrium / 0.5x when everyone grabs, minority 1.0x. With models: run `camps_pilot` over 3+ seeds
+  and compare `metrics.camps.yield_by_type.*.relative_to_tutorial` with the spec's targets; tune `camps.typed.targets` and
+  `camps.typed.types.<type>` (see the calibrate module's docstring).
+- **Harness** for camp-type authors: `camptypes/harness.py` (`world([...types])`, `play(k, {camp: {agent: x}})`).
 
 ## Known gaps and choices (read before experiments)
 - **Speed.** Sequential turns (the spec's design) take roughly 10-20 s per Claude Code call: E0 ~10 min, E3 ~1.5 h, E6 ~10 h. `--fast`

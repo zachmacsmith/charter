@@ -17,6 +17,7 @@ ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem
            "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
            "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
            "reply", "forge_dm")
+ACTIONS += ("lease", "accept_lease", "survey", "invest")             # camps: leasing harvest rights; typed camps' survey and invest
 DM_ACTIONS = ("dm", "reply", "forge_dm")                               # private messages: the DM limit applies; fast mode's DM step delivers them
 
 
@@ -52,6 +53,9 @@ def _need(k, aid, right, what):
 def _harvest(k, aid, camp, x):
     if camp not in k.w["camps"]:
         raise ActionError(f"no such camp: {camp}. Camps: {', '.join(H.visible_camps(k))}")
+    if k.w["camps"][camp].get("type"):                                 # camps: typed camps (camps.model: types) run in the framework
+        from charter.camptypes import framework as CT
+        return CT.harvest_action(k, aid, camp, x)
     _need(k, aid, f"harvest:{camp}", f"harvest at {camp}")
     c = k.w["camps"][camp]
     x = [int(v) for v in (x if isinstance(x, list) else [x])]
@@ -105,6 +109,29 @@ def _harvest(k, aid, camp, x):
     elif c.get("compute") == "factoring":
         extra = "; correct factor: bounty paid, N redrawn" if info.get("factored") else "; not a factor of N"
     return f"Harvested {y - ded:.3g} {k.name_of('resource:' + item)} at {camp} with x={x if len(str(x)) < 200 else str(x)[:200]}{extra}" + (f" ({ded:.3g} deducted by law)" if ded else "")
+
+
+def _lease(k, aid, right, to, rounds, fee=None):
+    """camps: offer a harvest right for a term; the tenant takes it with accept_lease (charter/camptypes/leases.py)."""
+    from charter.camptypes import leases as LS
+    return LS.offer(k, aid, right, to, rounds, fee)
+
+
+def _accept_lease(k, aid, lease):
+    from charter.camptypes import leases as LS
+    return LS.accept(k, aid, lease)
+
+
+def _survey(k, aid, camp, x):
+    """camps: probe a setting at a typed camp with the survey modifier, without harvesting, for a fee."""
+    from charter.camptypes import framework as CT
+    return CT.survey_action(k, aid, str(camp), x)
+
+
+def _invest(k, aid, camp, qty):
+    """camps: lock resources into a typed camp's infrastructure (capacity, regrowth, safety)."""
+    from charter.camptypes import framework as CT
+    return CT.invest_action(k, aid, str(camp), qty)
 
 
 def _run_python(k, aid, code):

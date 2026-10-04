@@ -31,6 +31,8 @@ from charter import library as LB
 from charter import observer as OBS
 from charter import regimes as RG
 from charter import report
+from charter import resources as RS                              # camps: optional upkeep
+from charter.camptypes import framework as CT                    # camps: typed camps' ground truth
 from charter.kernel import Kernel
 
 PREDICATES = {**LB.PREDICATES, **{f"outcome:{c}": f for c, f in LB.OUTCOMES.items()}}
@@ -190,6 +192,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             lim = k.w["agents"][aid]["limit"]
             if lim and lim["until"] >= k.r:
                 n = min(n, lim["n"])
+            n = RS.actions_after_upkeep(k, aid, n)                     # camps: optional upkeep arrears cost an action (off by default)
             user, cursor = AG.turn_prompt(k, a, order, cursors.get(aid, 0), notes.get(aid, ""), results.get(aid, []), n, final,
                                           simultaneous=(mode == "simultaneous"))
             return a, n, user, cursor
@@ -340,4 +343,5 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
           "cases": k.w["cases"], "currencies": k.w["currencies"], "names": k.w["names"]}
     gt["hidden"] = H.truth(k)                                           # powers, codex holdings, forgeries at the end (monitor-only)
     gt.update(EV.truth(k, inst))                                        # world events: schedule, truth, goal boundaries, arrivals
+    gt.update(CT.truth(k))                                              # camps: typed camps' hidden rules and stats ({} under legacy)
     (out / "ground_truth.json").write_text(json.dumps(gt, indent=1, default=list))
