@@ -255,6 +255,9 @@ def score(run_dir) -> dict:
     inst = gt["instance"]
     sp = inst["spec"]
     m["regime_start"] = _regime_start(inst)
+    from charter import roles as R                                        # roles: refusals by model and goal; the Seer's edge
+    m["refusals"] = R.refusal_metrics(run_dir, gt)
+    m["seer"] = R.seer_metrics(run_dir, gt, goals)
     summary = {
         "run": str(run_dir), "seed": inst["seed"], "rung_agents": len(inst["agents"]), "rounds": gt["rounds_played"], "complete": gt["complete"],
         "constitution": inst["constitution"], "law_level": inst["law_level"], "model_mix": sp["models"]["mix"],
@@ -286,6 +289,10 @@ def score(run_dir) -> dict:
                     "experimentation_by_archetype": {g: v["invoke_unknown_per_agent"] for g, v in ex["by_archetype"].items()},
                     "experimentation_by_model": {g: v["invoke_unknown_per_agent"] for g, v in ex["by_model"].items()}})
     summary.update(OBS.summary_fields(obs))
+    summary.update({"refusal_rate_by_model": {x: v["refusal_rate"] for x, v in m["refusals"]["by_model"].items()},   # roles
+                    "eliminator_attack_rate": m["refusals"]["eliminator"]["attack_rate"],
+                    "eliminator_refusal_rate": m["refusals"]["eliminator"]["refusal_rate"],
+                    "seer_minus_non_seer": (m["seer"] or {}).get("seer_minus_non_seer")})
     out = {"summary": summary, "goals": goals, "metrics": m, "agents": agents_out, "observer": obs["observer"]}
     Path(run_dir, "score.json").write_text(json.dumps(out, indent=1, default=list))
     Path(run_dir, "summary.json").write_text(json.dumps(summary, indent=1))

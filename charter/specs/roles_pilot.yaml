@@ -1,0 +1,14 @@
+extends: [base]
+# roles_pilot: the Roles module on a small world (charter/roles.py). Seer (an ordinary agent who reads others' transcripts and can
+# forge), assassin (about half of runs), Scholar, Maker, Media; the Fixer is Claude Opus 5.5. Dry run:
+#   .venv/bin/python -m charter run roles_pilot --seed 1 --fast --dry --fresh --sandbox off
+agents: {worker: 8, scientist: 3, legislator: 3, media: 1, board: 3, fixer: 1}
+rounds: 6
+turns: simultaneous
+roles:
+  enabled: true                   # observer.mode defaults to member: the Seer is an ordinary agent
+observer:
+  reads_per_round: 2              # the Seer's reading bandwidth (agents per round)
+  reads_reasoning: true
+  history_rounds: 1
+shared_archive: {namespace: roles_pilot}

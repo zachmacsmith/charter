@@ -518,7 +518,8 @@ def test_dm_limit_is_set_by_media_and_can_be_taken_over_by_law():
 # ------------------------------------------------------------------ goals: slots, relational targets, new scorers, loans
 def test_goal_slots_and_relational_targets():
     from charter import goals as G
-    assert abs(sum(v[1] for v in G.CATALOGUE.values()) - 100) < 1e-6 and set(G.SCORERS) == set(G.CATALOGUE)
+    # roles: DIRECT_SHARE goals (Eliminator, ...) take their percent out of Wealth, so they are outside the 100
+    assert abs(sum(v[1] for g, v in G.CATALOGUE.items() if g not in G.DIRECT_SHARE) - 100) < 1e-6 and set(G.SCORERS) == set(G.CATALOGUE)
     n = sec = ter = 0
     for seed in range(20):
         inst = generator.generate(spec.load("E6"), seed)

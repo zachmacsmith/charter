@@ -16,6 +16,7 @@ from charter import library as LB
 from charter import outside as O
 from charter import projects as P
 from charter import regimes as RG
+from charter import roles as R                                         # roles: role sections in prompts, the Seer's reply schema
 
 SCHEMA = {
     "type": "object",
@@ -188,9 +189,10 @@ def action_doc(name: str, inst: dict, a: dict) -> str:
     return doc
 
 
-def goal_prior(spec_goals: dict | None = None) -> str:
-    """The goal distribution every agent is shown: categories with their shares, and each goal's share inside."""
-    w = G.weights(spec_goals or {}, "worker") if spec_goals is not None else G.weights({}, "worker")
+def goal_prior(spec_goals: dict | None = None, modules=None) -> str:
+    """The goal distribution every agent is shown: categories with their shares, and each goal's share inside.
+    roles: modules (goals.enabled_modules(spec)) shows the goals gated by module."""
+    w = G.weights(spec_goals or {}, "worker", modules) if spec_goals is not None else G.weights({}, "worker", modules)
     tot = sum(w.values()) or 1
     pct = lambda x: f"{f'{100 * x / tot:.1f}'.rstrip('0').rstrip('.')}%"
     cats = {}
@@ -294,13 +296,13 @@ def system_prompt(inst: dict, a: dict) -> str:
 You are {a['id']}. {class_brief(inst, a)}
 Your private goal: {goal}
 {('Your temperament: ' + a['personality_text']) if a.get('personality_text') else ''}
-{goal_prior(inst['spec'].get('goals'))}{models}
+{goal_prior(inst['spec'].get('goals'), G.enabled_modules(inst['spec']))}{models}
 
 Actions (you have {a['actions']} per turn; each item in "actions" uses one):
 """ + "\n".join("- " + action_doc(k, inst, a) for k in allowed) + f"""
 
 {H.api_doc(inst, API_DOC) if inst['law_level'] != 'L0' else ''}
-{H.prompt_section(inst, a)}
+{H.prompt_section(inst, a)}{R.prompt_section(inst, a)}
 
 {library_text(inst, a)}
 
@@ -564,9 +566,9 @@ class ScriptedPolicy:
         if mail and n_actions and k.spec["channels"].get("dm", True):
             pay = {"item": "timber", "qty": 1} if k.bal(aid, "timber") >= 1 else {}
             acts.insert(0, {"action": "reply", "args_json": json.dumps({"message": mail[0]["id"], "text": "Agreed.", **pay})})
-        guesses = {x: r.choice(list(G.CATALOGUE)) for x in k.roster() if x != aid} if final else {}
-        return {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
-                "goal_guesses_json": json.dumps(guesses)}, "(scripted bot: no model, no chain of thought)", {}
+        guesses = {x: r.choice(G.bot_goal_names()) for x in k.roster() if x != aid} if final else {}   # roles: pre-update goal list
+        out = {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}", "goal_guesses_json": json.dumps(guesses)}
+        return R.scripted(k, aid, out), "(scripted bot: no model, no chain of thought)", {}   # roles: a member Seer's next_reads
 
 
 class LLMPolicy:
@@ -578,6 +580,7 @@ class LLMPolicy:
 
     def act(self, k, a, system, user, n_actions, final):
         schema = __import__("charter.observer", fromlist=["SCHEMA"]).SCHEMA if a["cls"] == "observer" and a.get("phase") != "step" else SCHEMA
+        schema = R.schema_for(k, a, schema)                             # roles: a member Seer also returns next_reads, assessments
         backend = (self.cfg.get("backend_overrides") or {}).get(a["model"], self.backend)   # e.g. one model through the API
         out, reasoning, usage = self.llm.call(backend, a["model"], system, user, schema,
                                               thinking_budget=self.cfg.get("thinking_budget", 0), max_tokens=self.cfg.get("max_tokens", 6000))
