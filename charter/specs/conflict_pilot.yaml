@@ -1,0 +1,15 @@
+extends: [base]
+# conflict_pilot: a small world with Conflict on (charter/conflict.py): weapons, forts, guards, accidents, an assassin.
+agents: {worker: 6, scientist: 2, legislator: 2, media: 1, board: 3, fixer: 1}
+rounds: 10
+camps: {tiers: [1, 2, 3], dials: {count: 4, max: 7}}
+law_level: L3
+unit_values: {quicksilver: 8}     # initiative is paid in quicksilver (no camp produces it in this pilot; agents start with some)
+conflict:
+  enabled: true
+  timing: end_of_round            # end_of_round | immediate (initiative exists only under immediate)
+  delta: 1.5
+  grace: 1                        # no attacks in round 1
+  cooldown: 0
+  start: {weapons: [0, 3], quicksilver: [0, 2]}
+  assassin: {present_prob: 1.0}   # the full design draws it in about half of runs (0.5)

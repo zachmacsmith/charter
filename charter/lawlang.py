@@ -37,6 +37,8 @@ API_GROUPS = {
 }
 API_GROUPS["read"] = API_GROUPS["read"] | {"capability_holders"}                           # hidden powers (hidden.py)
 API_GROUPS["rights"] = API_GROUPS["rights"] | {"revoke_capability", "disclose_capability_use"}  # structural, like rights
+API_GROUPS["read"] = API_GROUPS["read"] | {"forts", "weapons_of", "defense_of", "guards", "attacks", "disabled_agents"}   # conflict
+API_GROUPS["sanctions"] = API_GROUPS["sanctions"] | {"ban_forging", "oblige_guard", "clear_obligations"}  # conflict: structural
 API = set().union(*API_GROUPS.values())
 STRUCTURAL_CALLS = API_GROUPS["rights"] | API_GROUPS["money"] | API_GROUPS["sanctions"] | {"open_ballot"} | API_GROUPS["projects"]
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},

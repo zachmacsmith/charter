@@ -6,6 +6,7 @@ import json
 import difflib
 
 from charter import camps as C
+from charter import conflict as CF
 from charter import credit as CR
 from charter import hidden as H
 from charter import lawlang as L
@@ -17,6 +18,7 @@ ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem
            "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
            "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
            "reply", "forge_dm")
+ACTIONS += CF.ACTIONS                                                  # conflict: attack, join_attack, forge, fortify, guard, buy_initiative, contract
 DM_ACTIONS = ("dm", "reply", "forge_dm")                               # private messages: the DM limit applies; fast mode's DM step delivers them
 
 
@@ -97,6 +99,7 @@ def _harvest(k, aid, camp, x):
     k.eff.setdefault(aid, {}).setdefault(camp, []).append((k.r, eff))
     k.log("harvest", aid, {"camp": camp, "x": x, "yield": y, "deducted": ded, "efficiency": round(eff, 4), "noise": round(noise, 4),
                            "stock_before": round(c["S"], 3), **({"info": info} if info else {})}, vis=[aid])
+    accident = CF.after_harvest(k, aid, camp)                          # conflict: a small chance the harvester is disabled
     extra = ""
     if "parity_bit" in info:
         extra = f"; parity bit {info['parity_bit']}"
@@ -104,7 +107,8 @@ def _harvest(k, aid, camp, x):
         extra = f"; leading zero bits {info['leading_zero_bits']}"
     elif c.get("compute") == "factoring":
         extra = "; correct factor: bounty paid, N redrawn" if info.get("factored") else "; not a factor of N"
-    return f"Harvested {y - ded:.3g} {k.name_of('resource:' + item)} at {camp} with x={x if len(str(x)) < 200 else str(x)[:200]}{extra}" + (f" ({ded:.3g} deducted by law)" if ded else "")
+    return f"Harvested {y - ded:.3g} {k.name_of('resource:' + item)} at {camp} with x={x if len(str(x)) < 200 else str(x)[:200]}{extra}" + (f" ({ded:.3g} deducted by law)" if ded else "") \
+        + (" An accident at the camp has removed you from the game." if accident else "")                       # conflict
 
 
 def _run_python(k, aid, code):
@@ -648,6 +652,8 @@ def _archive_docs(k, aid):
 
 
 def _read_archive(k, aid, doc):
+    if CF.claims_doc(k, doc):                                         # conflict: codex/conflict/* articles, only those held
+        return CF.read_article(k, aid, doc)
     if str(doc).strip("/").startswith("codex/") and H.enabled(k):    # codex articles: anyone, only those they hold (hidden.py)
         return H.read_article(k, aid, doc)
     _need(k, aid, "archive", "read the archive")
@@ -664,6 +670,10 @@ def _read_archive(k, aid, doc):
 
 
 def _search_archive(k, aid, query):
+    if CF.held(k, aid) and not k.has(aid, "archive") and not H.held_articles(k, aid):   # conflict: holders of conflict articles only
+        hits = CF.search(k, aid, query)
+        k.log("archive_search", aid, {"query": str(query), "hits": [h[0] for h in hits]}, vis=[aid])
+        return "\n".join(f"{d}: {snip}" for d, snip in hits) or "no matches"
     if not k.has(aid, "archive") and H.held_articles(k, aid):        # non-Scientists search only the codex articles they hold
         hits = H.search(k, aid, query)
         k.log("archive_search", aid, {"query": str(query), "hits": [h[0] for h in hits]}, vis=[aid])
@@ -672,6 +682,7 @@ def _search_archive(k, aid, query):
     from charter import archive
     hits = archive.search(str(query), k.shared_archive, only=_archive_docs(k, aid), run_id=k.run_id)
     hits += H.search(k, aid, query)                                     # plus the codex articles this Scientist holds
+    hits += CF.search(k, aid, query)                                    # conflict: plus conflict articles held ([] when off)
     k.log("archive_search", aid, {"query": str(query), "hits": [h[0] for h in hits]}, vis=[aid])
     return "\n".join(f"{d}: {snip}" for d, snip in hits) or "no matches"
 
@@ -749,3 +760,32 @@ def _rule(k, aid, case, verdict, reason):
     k.log("ruling", aid, {"case": case, "verdict": c["verdict"], "reason": c["reason"]}, vis="public")
     k.gazette(f"Case {case}: {c['verdict']} ({c['clause']}). Judge {aid}: {c['reason'][:300]}")
     return f"Ruled {c['verdict']} on {case}."
+
+
+# ------------------------------------------------------------------ conflict (charter/conflict.py; "there is no fighting" when off)
+def _attack(k, aid, target, units, covert=False, disguise=False):
+    return CF.act_attack(k, aid, target, units, covert, disguise)
+
+
+def _join_attack(k, aid, attacker, target, units):
+    return CF.act_join_attack(k, aid, attacker, target, units)
+
+
+def _forge(k, aid, qty):
+    return CF.act_forge(k, aid, qty)
+
+
+def _fortify(k, aid, qty, unlock=False):
+    return CF.act_fortify(k, aid, qty, unlock)
+
+
+def _guard(k, aid, agent=None, item=None, qty=None, accept=None, stop=False):
+    return CF.act_guard(k, aid, agent, item, qty, accept, stop)
+
+
+def _buy_initiative(k, aid, n):
+    return CF.act_buy_initiative(k, aid, n)
+
+
+def _contract(k, aid, to, target, item=None, qty=0, text=""):
+    return CF.act_contract(k, aid, to, target, item, qty, text)

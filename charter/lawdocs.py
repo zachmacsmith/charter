@@ -48,6 +48,7 @@ TOPICS = {
     "preview": ("How the dry-run preview works", "Every proposal is played forward on a copy of the world before anyone votes."),
     "bounty": ("Bounty numbers", "Factoring camps publish a number; laws can read it."),
     "powers": ("Powers and the law", "Some agents hold hidden powers (words used through invoke). Laws can expose or remove them."),
+    "conflict": ("Arms and force, read by law", "Laws can read forts, weapons and attacks, ban forging and oblige agents to guard each other."),
 }
 
 # (name, topic, prompt group, prompt text, article detail, core tier, minimal tier)
@@ -190,6 +191,11 @@ E += [
     ("revoke_capability", "powers", "Powers", "revoke_capability(agent, name=None)", "takes a power (None: every power) from an agent; returns "
      "how many were taken. Structural.", "uncommon", "uncommon"),
 ]
+# conflict: its law functions are documented in conflict.prompt_section while the module is on (group "Conflict" is not in the
+# prompt's GROUP_ORDER) and kept out of the law_docs mapping, so worlds without conflict are unchanged
+from charter.conflict import LAW_DOCS as _CF_DOCS
+MODULE_ENTRIES = {n for n, _, _ in _CF_DOCS}
+E += [(n, "conflict", "Conflict", sig, detail, "prompt", "prompt") for n, sig, detail in _CF_DOCS]
 ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
@@ -209,6 +215,8 @@ def resolve(spec: dict) -> dict:
         raise ValueError(f"law_docs.preset must be full, core or minimal, not {preset!r}")
     mapping = {}
     for n, e in ENTRIES.items():
+        if n in MODULE_ENTRIES:                                          # conflict: documented by its module, not mapped
+            continue
         if preset == "full":
             mapping[n] = e["core"] if n in ALWAYS_ARTICLE else "prompt"
         else:
@@ -229,7 +237,7 @@ def api_doc(resolved: dict, original: str) -> str:
         return original
     lines = [SKELETON]
     for g in GROUP_ORDER:
-        items = [ENTRIES[n]["prompt"] for n in ENTRIES if m[n] == "prompt" and ENTRIES[n]["group"] == g]
+        items = [ENTRIES[n]["prompt"] for n in ENTRIES if m.get(n) == "prompt" and ENTRIES[n]["group"] == g]   # conflict: m.get
         if items:
             lines.append(f"{g}: " + ", ".join(items))
     lines.append(FOOTER)
@@ -245,7 +253,7 @@ def articles(resolved: dict) -> dict:
     m = resolved["mapping"]
     by_topic: dict = {}
     for n, e in ENTRIES.items():
-        if m[n] != "prompt":
+        if m.get(n, "prompt") != "prompt":                               # conflict: module entries are not in the mapping
             by_topic.setdefault(e["topic"], {}).setdefault(m[n], []).append(n)
     out = {}
     for topic, tiers in by_topic.items():

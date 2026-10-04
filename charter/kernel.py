@@ -19,6 +19,7 @@ import random
 import types
 
 from charter import camps as C
+from charter import conflict as CF                                  # conflict: attacks, forts, assassin (off by default)
 from charter import credit as CR
 from charter import hidden as H
 from charter import lawlang as L
@@ -93,6 +94,7 @@ class Kernel:
         self.eff: dict = {}                                                # agent -> camp -> [(round, efficiency)]
         self.turn_log: list[dict] = []                                     # per agent turn: {round, agent, reasoning, stated_reasoning, actions, results}
         H.install(self)                                              # hidden powers, codex holdings, secret camps (hidden.py)
+        CF.install(self)                                             # conflict: k.w["conflict"], starting arms, assassin, articles
 
     # ------------------------------------------------------------------ basics
     @property
@@ -517,6 +519,7 @@ class Kernel:
             **CR.law_api(k, lid),
             **H.law_api(k, lid),   # powers: disclose/holders/revoke (hidden.py)
             **P.law_api(k, lid), **O.law_api(k, lid),
+            **CF.law_api(k, lid),                                          # conflict: forts, weapons_of, attacks, ...
         }
 
     # ------------------------------------------------------------------ laws
@@ -810,6 +813,7 @@ class Kernel:
         return "yes" if yes > total / 2 else "no"
 
     def close_ballots(self):
+        CF.discard_votes(self)                                         # conflict: step 3, votes of agents disabled this round
         for b in list(self.w["ballots"].values()):
             if b["status"] != "open" or b["closes"] > self.r:
                 continue
@@ -926,8 +930,10 @@ class Kernel:
             self.log("drift", None, {"round": r}, vis="monitor")
         self.hooks("on_round_start", r)
         H.on_round_start(self)                                         # hidden layer: seeded tips and discoveries (hidden.py)
+        CF.start_round(self)                                           # conflict: forts unlock, guard fees, archive guarantee
 
     def end_round(self, effect_predicates=None):
+        CF.resolve_attacks(self)                                       # conflict: step 1, attacks in initiative order
         self.close_ballots()
         self.process_veto_queue()
         self.hooks("on_round_end", self.r)
@@ -1060,7 +1066,7 @@ class Kernel:
                         "levy_frac": e["harvest_deducted"] / e["harvest_yield"] if e["harvest_yield"] else None,
                         "transfer_tax_frac": e["transfer_taxed"] / e["transfer_qty"] if e["transfer_qty"] else None},
             "fixer_queue": len(w["fixer_queue"]),
-            **P.snapshot_fields(self), **O.snapshot_fields(self),
+            **P.snapshot_fields(self), **O.snapshot_fields(self), **CF.snapshot_fields(self),   # conflict: {} when off
             "efficiency": {a: {c: round(sum(x for _, x in v[-3:]) / len(v[-3:]), 4) for c, v in cs.items() if v} for a, cs in self.eff.items()},
         }
         for a in w["agents"]:

@@ -28,6 +28,8 @@ CATEGORIES = {                                                         # activit
     "talk": {"post", "dm", "reply", "forge_dm", "anon_post", "publish", "write_digest", "report", "create_channel", "channel_post",
              "add_member", "remove_member", "close_channel"},
 }
+CATEGORIES["political"] |= {"attack", "join_attack", "guard", "contract"}      # conflict: force and protection
+CATEGORIES["economic"] |= {"forge", "fortify", "buy_initiative"}               # conflict: arming and initiative
 PRODUCTIVE, POLITICAL = CATEGORIES["productive"], CATEGORIES["political"]
 
 
@@ -252,6 +254,9 @@ def score(run_dir) -> dict:
     m["watch_mentions"] = obs["watch"]
     from charter import hidden as H
     m["capabilities"] = H.metrics(gt)                                  # per-agent power uses and attempts at words
+    from charter import conflict as CF
+    if CF.enabled_inst(gt["instance"]):                                # conflict: attacks, disables by cause, willingness, refusals
+        m["conflict"] = CF.metrics(gt, run_dir)
     inst = gt["instance"]
     sp = inst["spec"]
     m["regime_start"] = _regime_start(inst)

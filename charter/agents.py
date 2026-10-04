@@ -9,6 +9,7 @@ import json
 import random
 
 from charter import archive
+from charter import conflict as CF
 from charter import credit as CR
 from charter import goals as G
 from charter import hidden as H
@@ -68,6 +69,14 @@ ACTION_DOC = {
     "set_dm_limit": 'set_dm_limit {"n": 4, "agent": null}: needs dm_rules (Media at the start); private messages each agent may send per round, for everyone or one agent',
     "contribute": 'contribute {"project": "P1", "item": "stone", "qty": 5}: put resources toward an open project (held until it is funded, or refunded/forfeited if it fails; never more than it still needs)',
     "pay_tribute": 'pay_tribute {"item": "stone", "qty": 5}: pay toward the outside power\'s open tribute demand (payments leave the world; never more than is owed)',
+    # conflict (charter/conflict.py; listed only when conflict is on)
+    "attack": 'attack {"target": "Name", "units": 3}: uses 2 actions; commit weapons to disable the target (remove it from the game); the weapons are used up whether it succeeds or not',
+    "join_attack": 'join_attack {"attacker": "Name", "target": "Name", "units": 2}: pledge weapons to another agent\'s attack on a target this round (returned if no such attack happens)',
+    "forge": 'forge {"qty": 3}: turn copper into weapons, 1 for 1',
+    "fortify": 'fortify {"qty": 4, "unlock": false}: lock stone into your fort (your defense); with "unlock": true, stone comes back out after 2 rounds (it keeps defending until then)',
+    "guard": 'guard {"agent": "Name", "item": null, "qty": null}: your fort also defends that agent (one at a time); with item and qty it is an offer at that fee per round, which they accept with guard {"accept": "YourName"}; guard {"stop": true} ends it',
+    "buy_initiative": 'buy_initiative {"n": 1}: spend n quicksilver to act n places earlier next round than the published order shows (only where attacks resolve immediately)',
+    "contract": 'contract {"to": "Name", "target": "Name", "item": "timber", "qty": 10, "text": "..."}: a sealed private message offering payment (sent now) for removing the target from the game; only you and the recipient can ever see or cite it',
 }
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
@@ -278,6 +287,7 @@ def system_prompt(inst: dict, a: dict) -> str:
     if lvl < 4:
         absent |= {"invoke"}
     absent |= H.undocumented_actions(inst)                           # actions documented only in codex articles (law_docs)
+    absent |= CF.absent_actions(inst)                                # conflict: its actions only when conflict is on
     if not (sp.get("outside_power") or {}).get("enabled"):
         absent |= {"pay_tribute"}
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
@@ -300,7 +310,7 @@ Actions (you have {a['actions']} per turn; each item in "actions" uses one):
 """ + "\n".join("- " + action_doc(k, inst, a) for k in allowed) + f"""
 
 {H.api_doc(inst, API_DOC) if inst['law_level'] != 'L0' else ''}
-{H.prompt_section(inst, a)}
+{H.prompt_section(inst, a)}{(chr(10) + CF.prompt_section(inst, a)) if CF.enabled_inst(inst) else ''}
 
 {library_text(inst, a)}
 
@@ -394,6 +404,8 @@ def render_event(k, e, viewer=None) -> str | None:
         return f"{tag} #{d['channel']} {who}: {d['text']}"
     if t in P.EVENT_TYPES:
         return P.render_event(e, tag)
+    if t in CF.EVENT_TYPES:                                             # conflict: disables, failed attacks, revealed order, guards
+        return CF.render(k, e, tag)
     if t in O.EVENT_TYPES:
         return O.render_event(e, tag)
     return None
@@ -451,6 +463,7 @@ def state_view(k, aid: str) -> str:
     if chans:
         lines.append("Channels you can post in: " + ", ".join(chans))
     lines += P.state_lines(k, aid) + O.state_lines(k, aid)            # open projects; an open tribute demand
+    lines += CF.state_lines(k, aid)                                    # conflict: weapons, fort, guards, role ([] when off)
     return "\n".join(lines)
 
 
@@ -506,7 +519,7 @@ class ScriptedPolicy:
             from charter import observer
             return observer.scripted_act(k, a, n_actions, final)
         r, aid, cls = self.rng, a["id"], a["cls"]
-        acts = []
+        acts = CF.scripted(k, aid, n_actions) if CF.on(k) else []     # conflict: own RNG stream, so other dry runs are unchanged
         mine = [x.split(":", 1)[1] for x in k.w["agents"][aid]["rights"] if x.startswith("harvest:")]
         for _ in range(n_actions):
             roll = r.random()

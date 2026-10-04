@@ -24,6 +24,7 @@ from pathlib import Path
 from charter import actions as A
 from charter import agents as AG
 from charter import archive
+from charter import conflict as CF
 from charter import failstop as FS
 from charter import hidden as H
 from charter import events as EV
@@ -117,10 +118,12 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
     for r in range(first_round, inst["rounds"]):
         k.start_round()
         EV.round_start(k, inst, ev_rs)                                  # world events, goal changes, arrivals and departures
+        CF.sync_runner(k, agents)                                       # conflict: disabled agents leave the turn order
         order = list(agents)
         k.rng.shuffle(order)
         order = H.apply_order(k, order)                                 # places set with a hidden power (hidden.py)
         k.log("round_start", None, {"round": r, "order": order}, vis="public")
+        play = CF.begin_order(k, order)                                 # conflict: true order (initiative); `order` stays the published one
         final = r == inst["rounds"] - 1
         mode = inst["spec"].get("turns", "sequential")
         dmc = inst["spec"].get("dm_step") or {}
@@ -212,8 +215,9 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             free, counted = [], []
             for item in acts:
                 (free if str(item.get("action", "")) == "read_archive" and len(free) < free_cap else counted).append(item)
-            over = len(counted) > n
-            for item in free + counted[:n]:
+            cut = CF.fit(k, counted, n)                                 # conflict: an attack uses 2 actions (n otherwise)
+            over = len(counted) > cut
+            for item in free + counted[:cut]:
                 name = str(item.get("action", ""))
                 try:
                     args = A.parse_args(item)
@@ -223,8 +227,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                 except (A.ActionError, json.JSONDecodeError) as e:
                     res.append(f"{name}: ERROR {e}")
             if over:
-                res.append(f"(you sent {len(counted)} actions besides free reads; only the first {n} were used)")
-            acts = free + counted[:n]
+                res.append(f"(you sent {len(counted)} actions besides free reads; only the first {cut} were used)")
+            acts = free + counted[:cut]
             if outp.get("_error"):
                 res.append(f"(your last reply could not be used: {outp['_error'][:200]})")
             results[aid] = res
@@ -270,10 +274,14 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                             dict(zip(xo, preps + ([oprep] if oprep else []))), dict(zip(xo, decisions + ([odec] if odec else []))), pre, last, final)
             if oprep:                                                     # its posts/transfers run now, before everyone's actions
                 obs.step_finish(k, r, oprep, odec, pre.pop(obs.id), last.pop(obs.id, None), reason_f, mode)
-            for pos, (aid, pr, dec) in enumerate(zip(order, preps, decisions), 1):
+            for pos, (aid, pr, dec) in enumerate(CF.in_order(play, order, zip(order, preps, decisions)), 1):   # conflict: true order
+                if CF.skip_turn(k, aid):                                # conflict: disabled earlier this round
+                    continue
                 execute(pos, aid, pr, dec, pre[aid], last.get(aid))
         else:
-            for pos, aid in enumerate(order, 1):
+            for pos, aid in enumerate(play, 1):                         # conflict: the true order (== order unless initiative was bought)
+                if CF.skip_turn(k, aid):                                # conflict: disabled earlier this round
+                    continue
                 pr = prepare(aid)
                 dec = policy.act(k, pr[0], sysp[aid], pr[2], pr[1], final)
                 tally.add([dec[0]], [aid])
@@ -340,4 +348,5 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
           "cases": k.w["cases"], "currencies": k.w["currencies"], "names": k.w["names"]}
     gt["hidden"] = H.truth(k)                                           # powers, codex holdings, forgeries at the end (monitor-only)
     gt.update(EV.truth(k, inst))                                        # world events: schedule, truth, goal boundaries, arrivals
+    gt.update(CF.truth(k))                                              # conflict: true attackers, disguises, contracts ({} when off)
     (out / "ground_truth.json").write_text(json.dumps(gt, indent=1, default=list))
