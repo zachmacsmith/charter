@@ -126,6 +126,30 @@ observer:                         # a secret observer (charter/observer.py): an 
   actions: [dm, post, transfer]   # it holds no rights (no vote, propose)
   endowment: {timber: 20, stone: 10}
   max_chars_per_agent: 12000      # cap on each agent's rendered transcript in its prompt
+projects:                         # threshold public goods (charter/projects.py): built only if pooled contributions reach a threshold by a deadline
+  enabled: true                   # random projects arise as events (laws can always start them with start_project, at L2+)
+  mean_interval: 12               # mean rounds between random projects (a seeded Poisson draw each round)
+  max_open: 3                     # at most this many projects open at once (random and law-made together)
+  kinds: {granary: 3, upgrade: 3, road: 2, discovery: 2}   # relative odds of each kind for random projects
+  threshold_frac: [0.06, 0.14]    # random projects: threshold = this fraction (uniform in the range, per project) of all holdings + reserve value
+  specific_prob: 0.3              # chance a random project asks for 1-2 specific resources instead of value in any resource
+  deadline_in: [4, 8]             # rounds to fund a random project (an integer in the range, per project)
+  refund_prob: 0.5                # chance a random project is an assurance contract (refunded if it fails; otherwise the pool goes to the reserve)
+  public_contributions: true      # who gave what is public (false: agents see totals and their own contributions only)
+  law_min_value: 20               # a project started by law needs a threshold worth at least this
+  granary: {floor: 0.4, rounds: null}             # harvests can no longer take the camp's stock below floor x capacity; rounds null = for good
+  upgrade: {mult: 1.5, rounds: 20}                # the camp's yields x mult for `rounds` (null = for good); upgrades stack
+  road: {tiers: [2, 3, 4], rights: contributors}  # a new camp of one of these tiers; harvest rights to contributors (all: every Worker + contributors)
+  discovery: {tiers: [3, 4, 5], rights: all, min_share: 0.6, min_each: 1}   # found only if min_share of non-official agents each give >= min_each value
+                                  # (ranges here are plain [lo, hi] lists drawn per project, never spec distributions, so worlds stay unchanged)
+outside_power:                    # an outside power demanding tribute (charter/outside.py)
+  enabled: false
+  every: 20                       # a demand every N rounds, the first at round N (set `first` to change the first)
+  deadline_in: 3                  # rounds to pay a demand in full
+  demand: {value_frac: 0.08, items: null}         # value_frac of all holdings + reserve, in any resource; or items: {stone: 20, timber: 10}
+  escalation: {after_raid: 1.25, after_paid: 1.1} # the next demand is multiplied by this after a raid / after a paid demand
+  raid: {target: random, stock_loss: 0.5, seize_frac: 0.25}   # target: random | richest (stock value); the camp loses stock_loss of its stock
+                                  # and every holder of its harvest right loses seize_frac of their holdings of its resource; partial payments are lost
 llm:
   max_tokens: 6000
   thinking_budget: 2000           # native thinking for Haiku (fixed budget). Sonnet/Opus use adaptive thinking (API: summarised text;

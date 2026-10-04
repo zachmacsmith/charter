@@ -7,11 +7,13 @@ from charter import camps as C
 from charter import credit as CR
 from charter import hidden as H
 from charter import lawlang as L
+from charter import outside as O
+from charter import projects as P
 
 ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "request_fix",
            "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive",
            "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
-           "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "extend_loan")
+           "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute")
 
 
 class ActionError(Exception):
@@ -67,6 +69,7 @@ def _harvest(k, aid, camp, x):
             k.gazette(f"{aid} factored the number at {camp}. The new number is N = {info['new_N']}.")
     else:
         y, eff, noise = C.harvest(c, x, k.rng)
+        y = P.granary_cap(k, c, y)                                     # a funded granary keeps seed stock out of reach
     ded = 0.0
     for _, out in k.hooks("on_harvest", aid, camp, list(x), y):
         if isinstance(out, (int, float)) and out > 0:
@@ -173,6 +176,21 @@ def _repay_loan(k, aid, loan, qty=None):
 def _extend_loan(k, aid, loan, rounds, rate=None):
     """Lender only: roll a loan over (later due round, same or lower rate); revives a defaulted loan."""
     return CR.extend(k, aid, loan, rounds, rate)
+
+
+def _contribute(k, aid, project, item, qty):
+    """Put resources toward a project (threshold public good); they are held until it is funded or fails."""
+    took = P.contribute(k, aid, project, item, qty)
+    p = k.w["projects"][str(project)]
+    left = "it is now funded" if p["status"] == "funded" else f"{P.pooled_value(k, p):.4g} of {P.threshold_value(k, p):.4g} value pooled"
+    return f"Contributed {took:g} {item} to {project} ({left})" + (f"; only {took:g} was still needed" if took + 1e-9 < float(qty) else "") + "."
+
+
+def _pay_tribute(k, aid, item, qty):
+    """Pay toward the outside power's open tribute demand (payments leave the world)."""
+    t = O.current(k)
+    took = O.pay(k, aid, item, qty)
+    return f"Paid {took:g} {item} toward tribute {t['id']}" + (" (now paid in full)." if t["status"] == "met" else ".")
 
 
 def _transfer(k, aid, to, item, qty):

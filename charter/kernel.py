@@ -22,6 +22,8 @@ from charter import camps as C
 from charter import credit as CR
 from charter import hidden as H
 from charter import lawlang as L
+from charter import outside as O
+from charter import projects as P
 
 ENTRENCHED = {"veto", "patch", "archive"}
 KERNEL_RIGHTS = {"vote", "propose", "sandbox", "ledger_read", "surveil", "encrypt", "veto", "patch", "judge", "archive", "press",
@@ -73,6 +75,8 @@ class Kernel:
         }
         for a in self.w["agents"].values():
             a["start_value"] = self.holdings_value(a["id"])
+        P.init_state(self)                                                 # projects (threshold public goods)
+        O.init_state(self)                                                 # the outside power's tribute demands
         self._reset_effects()
         self.eff: dict = {}                                                # agent -> camp -> [(round, efficiency)]
         self.turn_log: list[dict] = []                                     # per agent turn: {round, agent, reasoning, stated_reasoning, actions, results}
@@ -473,6 +477,7 @@ class Kernel:
             "lower": lambda t: str(t).lower(), "repeal": repeal,
             **CR.law_api(k, lid),
             **H.law_api(k, lid),   # powers: disclose/holders/revoke (hidden.py)
+            **P.law_api(k, lid), **O.law_api(k, lid),
         }
 
     # ------------------------------------------------------------------ laws
@@ -617,7 +622,8 @@ class Kernel:
                 "actions": {n: a["right"] for n, a in w["actions"].items()}, "rights_catalog": list(w["rights"]),
                 "laws": {l: v["status"] for l, v in w["laws"].items()}, "limits": {a: v["limit"] for a, v in w["agents"].items() if v["limit"]},
                 "dm_limit": {"all": w["dm_limit"]["all"], **w["dm_limit"]["agents"]},
-                "suspended": {a: dict(v["suspended"]) for a, v in w["agents"].items() if v["suspended"]}}
+                "suspended": {a: dict(v["suspended"]) for a, v in w["agents"].items() if v["suspended"]},
+                "projects": P.view(self)}
 
     @staticmethod
     def diff(a, b):
@@ -635,7 +641,7 @@ class Kernel:
             gained = set(b["rights"][a_id]) - set(a["rights"].get(a_id, []))
             lost = set(a["rights"].get(a_id, [])) - set(b["rights"][a_id])
             out += [f"{a_id} gains right {g}" for g in sorted(gained)] + [f"{a_id} loses right {g}" for g in sorted(lost)]
-        for key in ("currencies", "procedures", "camps", "names", "titles", "actions", "limits", "suspended"):
+        for key in ("currencies", "procedures", "camps", "names", "titles", "actions", "limits", "suspended", "projects"):
             for k in sorted(set(a[key]) | set(b[key])):
                 if a[key].get(k) != b[key].get(k):
                     out.append(f"{key}: {k}: {a[key].get(k)} -> {b[key].get(k)}")
@@ -841,6 +847,12 @@ class Kernel:
         self.w["harvest_count"], self.w["quota_used"], self.w["fixes_this_round"], self.w["rulings_this_round"] = {}, {}, 0, {}
         self.w["dm_sent"] = {}
         self.settle_loans()
+        P.start_round(self)                                                # project deadlines (refund / forfeit), expiring effects
+        O.start_round(self)                                                # tribute deadline (raid) and scheduled demands
+        # --- random projects: a seeded Poisson draw (spec projects.mean_interval). Re-route to the event scheduler
+        # (charter/events.py) by registering P.spawn_random_project(k, rng) there and deleting this line.
+        P.maybe_spawn(self)
+        # ---
         for p in list(self.w["pending_patches"]):
             self.apply_patch(p["law"], p["patch"])
         self.w["pending_patches"] = []
@@ -983,6 +995,7 @@ class Kernel:
                         "levy_frac": e["harvest_deducted"] / e["harvest_yield"] if e["harvest_yield"] else None,
                         "transfer_tax_frac": e["transfer_taxed"] / e["transfer_qty"] if e["transfer_qty"] else None},
             "fixer_queue": len(w["fixer_queue"]),
+            **P.snapshot_fields(self), **O.snapshot_fields(self),
             "efficiency": {a: {c: round(sum(x for _, x in v[-3:]) / len(v[-3:]), 4) for c, v in cs.items() if v} for a, cs in self.eff.items()},
         }
         for a in w["agents"]:
