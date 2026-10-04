@@ -132,7 +132,7 @@ def test_statutes_are_active_at_round_0(rung, name):
 def test_statute_effects_at_round_0():
     k = start(generator.generate(sp_for("E6", "command_economy"), 1))
     assert all(c["quota"] == 4 for c in k.w["camps"].values() if not c.get("secret"))      # secret camps are invisible to laws
-    assert all(c["fee"] == {"item": "timber", "qty": 1.0} for c in list(k.w["camps"].values())[1:])
+    assert all(c["fee"] == {"item": "timber", "qty": 1.0} for c in [c for c in k.w["camps"].values() if not c.get("secret")][1:])
     assert "crown" in k.w["currencies"] and k.probe("harvest")["deduction_frac"] == pytest.approx(0.1)
     k = start(generator.generate(sp_for("E6", "free_market"), 1))
     assert k.loans_enabled() and k.w["currencies"]["crown"].get("convertible")
@@ -180,7 +180,8 @@ MAIN = {"direct_democracy": {"democracy"}, "representative_democracy": {"democra
         "military_junta": {"oligarchy"}, "rule_of_the_rich": {"oligarchy"}, "technocracy": {"oligarchy"}, "sortition": {"oligarchy"},
         "one_party_state": {"oligarchy"}, "theocratic_council": {"oligarchy"}, "anarchy": {"anarchy"}, "assembly": {"oligarchy"},
         "council": {"oligarchy"}, "command_economy": {"oligarchy"},
-        "plutocracy": {"oligarchy", "dictatorship", "democracy"},     # with evenly spread wealth a weighted vote can still need a majority "oligarchy": {"oligarchy", "dictatorship"}}   # one rich voter can hold most weight
+        "plutocracy": {"oligarchy", "dictatorship", "democracy"},     # evenly spread wealth: the weighted vote can still need a majority
+        "oligarchy": {"oligarchy", "dictatorship"}}   # one rich voter can hold most weight
 
 
 @pytest.mark.parametrize("rung", ["E4", "E6"])

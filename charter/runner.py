@@ -26,6 +26,7 @@ from charter import agents as AG
 from charter import archive
 from charter import failstop as FS
 from charter import hidden as H
+from charter import events as EV
 from charter import library as LB
 from charter import observer as OBS
 from charter import regimes as RG
@@ -79,10 +80,12 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         n_ev = 0
         first_round = 0
     obs = OBS.start(inst, out, k, ck["runner"].get("observer") if resume and ckpt_path.exists() else None)   # secret observer or None
+    EV.restore(k, inst, agents)                                         # world events: re-add arrivals, goal changes, departures
     sysp = {aid: AG.system_prompt(inst, a) for aid, a in agents.items()}
     (out / "prompts").mkdir(exist_ok=True)
     for aid, txt in sysp.items():
         (out / "prompts" / f"{aid}.system.md").write_text(txt)
+    ev_rs = {"agents": agents, "sysp": sysp, "cursors": cursors, "start_values": start_values, "out": out}
     mem = inst["spec"]["llm"].get("memory_chars", 4000)
     t0 = time.time()
 
@@ -111,6 +114,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
 
     for r in range(first_round, inst["rounds"]):
         k.start_round()
+        EV.round_start(k, inst, ev_rs)                                  # world events, goal changes, arrivals and departures
         order = list(agents)
         k.rng.shuffle(order)
         order = H.apply_order(k, order)                                 # places set with a hidden power (hidden.py)
@@ -314,4 +318,5 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
           "camp_resource": {c: v["resource"] for c, v in k.w["camps"].items()}, "shared_archive_at_start": shared_snap,
           "cases": k.w["cases"], "currencies": k.w["currencies"], "names": k.w["names"]}
     gt["hidden"] = H.truth(k)                                           # powers, codex holdings, forgeries at the end (monitor-only)
+    gt.update(EV.truth(k, inst))                                        # world events: schedule, truth, goal boundaries, arrivals
     (out / "ground_truth.json").write_text(json.dumps(gt, indent=1, default=list))
