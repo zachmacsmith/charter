@@ -78,6 +78,21 @@ archive_split:                    # the fixed archive is split between Scientist
   enabled: true
   copies: 1                       # e.g. {randint: [1, 2]} for some overlap; enabled: false gives every Scientist everything
   rare_prob: 0.08                 # archive/rare/*: each Scientist holds each rare record with this chance (independently; often nobody does)
+hidden:                           # codex articles, hidden powers (secret actions), tips (charter/hidden.py)
+  enabled: true                   # false: no codex, no powers, full law documentation in the prompt
+  start_prob: {common: 0.30, uncommon: 0.10, rare: 0.03, legendary: 0.0, 'false': 0.05}   # per Scientist, per codex article of the tier
+  non_scientist_scale: 0.1        # other agents start with each article at start_prob x this (common 3%, uncommon 1%, rare 0.3%, false 0.5%)
+  hold_prob: {common: 0.04, uncommon: 0.02, rare: 0.01, legendary: 0.005}  # per agent, per power of the tier; holders are not told
+  holder_classes: [worker, scientist, legislator, media]   # the Board and the Fixer never hold powers
+  uses_per_round: 2               # uses of each power per holder per round
+  tip_prob: 0.01                  # per agent per round: a rumour notice (who holds a power, a power's word, a hidden law function, or false)
+  tip_weights: {holder: 3, power: 3, law_function: 2, 'false': 2}
+  discovery_prob: 0.0005          # per agent per round: finds a legendary article (event schedulers can also call hidden.grant_article)
+  secret_camp_tiers: [3, 4, 5]    # tier of each secret camp (one per holder of the secret-camps power), drawn uniformly
+  disclose_uses: false            # true: every use of a power is announced publicly from the start (laws can switch it)
+law_docs:                         # how much of the law language the prompt documents; the rest is in codex/law/* articles (lawdocs.py)
+  preset: core                    # full (everything in the prompt, as before) | core | minimal (skeleton + basic reads only)
+  overrides: {}                   # per function/hook/feature: {hide_post: prompt, rng: common, on_dm: legendary, ...}
 shared_archive:                   # Scientists' writable archive, shared by all Scientists and persistent between runs
   enabled: true
   path: runs/charter/shared_archive   # relative to agnet/

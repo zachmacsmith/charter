@@ -10,6 +10,7 @@ import random
 
 from charter import archive
 from charter import goals as G
+from charter import hidden as H
 from charter import library as LB
 
 SCHEMA = {
@@ -219,6 +220,7 @@ def system_prompt(inst: dict, a: dict) -> str:
         absent |= {"deposit", "redeem", "accuse", "respond", "lend", "accept_loan", "repay_loan"}
     if lvl < 4:
         absent |= {"invoke"}
+    absent |= H.undocumented_actions(inst)                           # actions documented only in codex articles (law_docs)
     if "propose" not in a["rights"] and lvl > 0:
         pass                                                         # rights can change by law: keep propose/vote visible
     allowed = [k for k in ACTION_DOC if k not in absent] + {
@@ -236,7 +238,8 @@ Your private goal: {goal}
 Actions (you have {a['actions']} per turn; each item in "actions" uses one):
 """ + "\n".join("- " + ACTION_DOC[k] for k in allowed) + f"""
 
-{API_DOC if inst['law_level'] != 'L0' else ''}
+{H.api_doc(inst, API_DOC) if inst['law_level'] != 'L0' else ''}
+{H.prompt_section(inst, a)}
 
 {library_text(inst, a)}
 
@@ -250,6 +253,9 @@ Reply with a JSON object with these fields:
 
 # ------------------------------------------------------------------ feeds
 def render_event(k, e) -> str | None:
+    e = H.as_shown(k, e)                                             # rewritten history reads as forged (hidden.py)
+    if e["type"] in H.EVENT_TYPES:
+        return H.render(k, e, render_event)
     d, t, who = e["data"], e["type"], e["agent"]
     tag = f"[{e['id']} r{e['round'] + 1}]"
     title = (d.get("title") + " ") if d.get("title") else ""
@@ -334,11 +340,11 @@ def state_view(k, aid: str) -> str:
     a = k.w["agents"][aid]
     w = k.w
     hold = ", ".join(f"{q:.3g} {k.name_of('resource:' + i) if i in w['unit'] else i}" for i, q in sorted(a["holdings"].items())) or "nothing"
-    rights = ", ".join(r for r in a["rights"] if k.has(aid, r)) or "none"
+    rights = ", ".join(r for r in a["rights"] if k.has(aid, r) and not H.secret_right(k, r)) or "none"
     camps = "; ".join(f"{c} ({k.name_of('resource:' + v['resource'])}) stock ~{10 * round(v['S'] / v['K'] * 10)}%"
                       + (f" N={v['fn']['N']}" if v.get("compute") == "factoring" else "")
                       + (f" quota {v['quota']}" if v["quota"] is not None else "") + (f" fee {v['fee']}" if v["fee"] else "")
-                      for c, v in w["camps"].items())
+                      for c, v in w["camps"].items() if not v.get("secret"))
     curs = "; ".join(f"{c}: P={k.price(c):.4g}, supply {v['supply']:.4g}, {'backed' if v['backed'] else 'UNBACKED'}"
                      + (", convertible" if v.get("convertible") else "") for c, v in w["currencies"].items()) or "none"
     laws = "; ".join(f"{l['id']} '{l['title']}' ({l['cls']})" for l in k.active_laws()) or "none"

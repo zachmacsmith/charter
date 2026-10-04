@@ -310,6 +310,8 @@ def generate(spec: dict, seed: int) -> dict:
             "constitution": sp["constitution"], "constitution_code": LB.CONSTITUTIONS[sp["constitution"]],
             "library": [l["name"] for l in lib], "library_access": access, "conditions": sp["conditions"],
             "endowment_gini_target": target}
+    from charter import hidden as _hidden
+    inst["hidden"] = _hidden.generate(sp, seed, agents)                # codex articles, hidden powers, secret camps (own RNG stream)
     return validate(inst, rng)
 
 

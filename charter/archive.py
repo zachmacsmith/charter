@@ -35,7 +35,8 @@ def shared_dir(spec: dict | None) -> Path | None:
 
 
 def docs(shared: Path | None = None) -> dict:
-    out = {str(p.relative_to(ROOT).with_suffix("")): p for p in sorted(ROOT.rglob("*.md"))}
+    out = {str(p.relative_to(ROOT).with_suffix("")): p for p in sorted(ROOT.rglob("*.md"))
+           if not str(p.relative_to(ROOT)).startswith("codex/")}            # codex articles are held per agent (hidden.py)
     from charter import library as LB
     for name in LB.LIB:
         out.setdefault("library/" + _slug(name), None)

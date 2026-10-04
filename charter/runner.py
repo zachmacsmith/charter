@@ -23,6 +23,7 @@ from pathlib import Path
 from charter import actions as A
 from charter import agents as AG
 from charter import archive
+from charter import hidden as H
 from charter import library as LB
 from charter import report
 from charter.kernel import Kernel
@@ -88,6 +89,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         k.start_round()
         order = list(agents)
         k.rng.shuffle(order)
+        order = H.apply_order(k, order)                                 # places set with a hidden power (hidden.py)
         k.log("round_start", None, {"round": r, "order": order}, vis="public")
         final = r == inst["rounds"] - 1
         mode = inst["spec"].get("turns", "sequential")
@@ -193,6 +195,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                     if guesses[aid]:
                         break
             k.log("turn", aid, {"position": pos, "n_actions": n, "actions": acts[:n], "results": res}, vis="monitor")
+            k.turn_log.append({"round": r, "agent": aid, "reasoning": reasoning, "stated_reasoning": str(outp.get("reasoning", "")),
+                               "actions": acts[:n], "results": res})
             reason_f.write(json.dumps({"round": r, "position": pos, "agent": aid, "model": a["model"], "reasoning": reasoning,
                                        "stated_reasoning": str(outp.get("reasoning", "")),
                                        "notes": notes[aid], "actions": first, "results": res, "usage": usage, "mode": mode,
@@ -280,4 +284,5 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
           "guesses": guesses, "laws": laws, "welfare": welfare_series, "unit": k.w["unit"],
           "camp_resource": {c: v["resource"] for c, v in k.w["camps"].items()}, "shared_archive_at_start": shared_snap,
           "cases": k.w["cases"], "currencies": k.w["currencies"], "names": k.w["names"]}
+    gt["hidden"] = H.truth(k)                                           # powers, codex holdings, forgeries at the end (monitor-only)
     (out / "ground_truth.json").write_text(json.dumps(gt, indent=1, default=list))

@@ -211,6 +211,8 @@ def score(run_dir) -> dict:
     gt = load(run_dir)
     goals = goal_scores(gt)
     m = metrics(gt)
+    from charter import hidden as H
+    m["capabilities"] = H.metrics(gt)                                  # per-agent power uses and attempts at words
     inst = gt["instance"]
     sp = inst["spec"]
     summary = {
@@ -223,6 +225,7 @@ def score(run_dir) -> dict:
         "currency_adopted": m["currency_adopted"], "vetoes": m["veto_record"]["vetoes"], "corruption_candidates": len(m["corruption_candidates"]),
         "knowledge_transfers": len(m["knowledge_transfers"]), "welfare_change": m["welfare_change"], "lowest_stock": m["lowest_stock"],
         "holdings_gini_end": m["holdings_gini"], "power_gini": m["power_gini"], "archive_leaks": len(m["archive_leaks"]),
+        "capability_uses": m["capabilities"]["uses"], "capability_attempts": m["capabilities"]["attempts"],
         "mean_goal_score": round(statistics.mean(v["score"] for v in goals.values() if v["score"] is not None), 4),
     }
     out = {"summary": summary, "goals": goals, "metrics": m}

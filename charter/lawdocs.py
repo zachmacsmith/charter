@@ -1,0 +1,226 @@
+"""Which parts of the law language the prompt documents, and which only codex articles do (spec `law_docs`).
+
+Every law function, hook and documented feature is an entry below with a topic. A preset maps each entry to "prompt" or to an
+article tier (common, uncommon, rare, legendary); `law_docs.overrides` moves single entries. The prompt's API_DOC is generated
+from the entries mapped to "prompt" (preset `full` returns the original agents.API_DOC unchanged, for comparability with earlier
+runs); every other entry is documented in a generated codex article `codex/law/<topic>` (or `codex/law/<topic>-<tier>` when a topic's
+entries fall in several tiers). Documentation only: every function works for any law that calls it, documented or not.
+
+Presets:
+  full     everything in the prompt, as before (the powers API stays in an article: it did not exist before)
+  core     the default: the law skeleton, the basic hooks, basic reads, camps, currency/mint/burn/move, rights, set_procedure and
+           open_ballot with their basic rules, gazette/notify, fine/suspend and repeal in the prompt; the rest in articles
+  minimal  only the skeleton and the basic reads in the prompt; what core keeps in the prompt goes to common articles
+"""
+from __future__ import annotations
+
+TIERS = ("common", "uncommon", "rare", "legendary")
+
+TOPICS = {
+    "hooks": ("Hooks: when a law runs", "A law runs only through the hooks it defines; the kernel calls them, in order of enactment."),
+    "social-hooks": ("Hooks on posts, votes, proposals and rulings",
+                     "Beyond the round and economic hooks, a law can react to public speech, votes, new proposals and court rulings."),
+    "dm-hook": ("Reading private messages: on_dm", "A law can be told about private messages, but only in worlds that allow it."),
+    "reads": ("Reading the world", "Read functions never change anything."),
+    "rights": ("Rights", "Rights are names; actions check them. Laws grant, revoke and create them."),
+    "custom-actions": ("New actions: define_action", "At law level L4 a law can create an action guarded by a right."),
+    "money": ("Money", "Currencies exist only by law."),
+    "convertible": ("Convertible currencies", "A backed currency can be made convertible: the kernel then runs deposit and redeem."),
+    "loans": ("Loans", "Loans exist only while a law enables them."),
+    "camps": ("Camps", "Laws cannot change a camp's hidden function, but can ration access to it."),
+    "governance": ("Procedures and ballots", "How laws pass is itself law."),
+    "ballots": ("Ballots: weights, gates and approval", "Ballots have more options than a plain majority."),
+    "output": ("Output", "Laws speak through the gazette and notices."),
+    "names": ("Names and titles", "Names change how things read; the kernel keeps the ids."),
+    "sanctions": ("Sanctions", "Fines and suspensions."),
+    "discipline": ("Limiting actions and censure", "Softer and stranger sanctions."),
+    "courts": ("Clauses and courts", "Courts exist only through clauses that laws declare."),
+    "board": ("The public board, read by law", "Laws can read posts and channels."),
+    "moderation": ("Hiding posts by law", "Posts can be hidden from the board without being deleted."),
+    "messages": ("The private-message limit", "How many private messages each agent may send per round is set by holders of dm_rules and by law."),
+    "text": ("Text helpers", "Laws cannot use string methods freely; these helpers cover the common cases."),
+    "meta": ("Repeal", "Laws end through other laws."),
+    "chance": ("Chance in law: rng()", "Laws draw random numbers from a single seeded stream."),
+    "limits": ("Step limits", "Every call into law code runs under a budget."),
+    "preview": ("How the dry-run preview works", "Every proposal is played forward on a copy of the world before anyone votes."),
+    "bounty": ("Bounty numbers", "Factoring camps publish a number; laws can read it."),
+    "powers": ("Powers and the law", "Some agents hold hidden powers (words used through invoke). Laws can expose or remove them."),
+}
+
+# (name, topic, prompt group, prompt text, article detail, core tier, minimal tier)
+E = [
+    ("on_enact", "hooks", "Hooks", "on_enact()", "runs once when the law is enacted.", "prompt", "common"),
+    ("on_repeal", "hooks", "Hooks", "on_repeal()", "runs once when the law is repealed.", "prompt", "common"),
+    ("on_round_start", "hooks", "Hooks", "on_round_start(r)", "runs at the start of every round (r counts from 0).", "prompt", "common"),
+    ("on_round_end", "hooks", "Hooks", "on_round_end(r)", "runs at the end of every round, after ballots close.", "prompt", "common"),
+    ("on_harvest", "hooks", "Hooks", "on_harvest(agent, camp, x, y) (return a deduction that goes to the reserve)",
+     "called on every harvest with the dials x and the yield y; a positive number returned is deducted and goes to the reserve.", "prompt", "common"),
+    ("on_transfer", "hooks", "Hooks", "on_transfer(src, dst, item, qty) (return False to block or a number to tax)",
+     "called on every transfer; return False to block it or a positive number to tax it (the tax goes to the reserve).", "prompt", "common"),
+    ("on_post", "social-hooks", "Hooks", 'on_post(agent, text) (agent is "anonymous" for anonymous posts; current_post() gives the post\'s id)',
+     'called on every public post, story and anonymous post; agent is "anonymous" for anonymous posts; current_post() gives its id.', "common", "common"),
+    ("on_vote", "social-hooks", "Hooks", "on_vote(ballot, agent, choice)", "called on every vote, with the ballot id and the choice.", "common", "common"),
+    ("on_proposal", "social-hooks", "Hooks", "on_proposal(p)", "called when any law is proposed (p is None).", "common", "common"),
+    ("on_ruling", "social-hooks", "Hooks", "on_ruling(case, verdict, accuser, accused)",
+     'called after a judge rules; verdict is "guilty" or "not guilty".', "common", "common"),
+    ("on_dm", "dm-hook", "Hooks", "on_dm(sender, recipient, text, encrypted) (only in worlds where laws may read DMs; text is None for encrypted DMs)",
+     "called on every private message, but only in worlds where laws may read DMs; text is None for encrypted ones.", "uncommon", "uncommon"),
+]
+for _n, _s in [("agents", "agents(cls=None)"), ("holders", "holders(right)"), ("has", "has(agent, right)"), ("balance", "balance(agent, item)"),
+               ("reserve", "reserve()"), ("price", "price(currency)"), ("stock", "stock(camp)"), ("round", "round()"), ("laws", "laws()"),
+               ("proposer", "proposer()"), ("value", "value(item)"), ("supply", "supply(currency)"), ("camps", "camps()"),
+               ("class_of", "class_of(agent)"), ("holdings_value", "holdings_value(agent)"), ("currencies", "currencies()"),
+               ("rights_of", "rights_of(agent)")]:
+    E.append((_n, "reads", "Read", _s, "", "prompt", "prompt"))
+E += [
+    ("rng", "chance", "Read", "rng()", "a float in [0, 1) from the law stream, seeded per world. Every law shares one stream, so a law that "
+     "draws in on_round_start shifts every later draw that round (a Chair or Council draw included); dry runs restore the stream, "
+     "so a preview never shows what the real draw will be.", "rare", "rare"),
+    ("bounty_number", "bounty", "Read", "bounty_number(camp)", "the number N a factoring camp currently publishes (None for other camps); "
+     "a law can check a claimed factor with N % f == 0 before paying for it.", "rare", "rare"),
+    ("channels", "board", "Read", "channels() (name -> owner, members, open)", "every channel with its owner, members and whether it is open.", "common", "common"),
+    ("posts", "board", "Read", "posts(n) (recent public posts with ids)", "the n most recent public posts (id, author, text, round, hidden, kind).", "common", "common"),
+    ("current_post", "board", "Read", "current_post()", "inside on_post, the id of the post being processed.", "common", "common"),
+    ("hidden_posts", "moderation", "Read", "hidden_posts()", "ids of the posts currently hidden.", "uncommon", "uncommon"),
+    ("create_right", "rights", "Rights", "create_right(name)", "adds a new right to the catalogue.", "prompt", "common"),
+    ("grant", "rights", "Rights", "grant(agent, right)", "gives a right (never veto, patch or archive; Board members can hold nothing else).", "prompt", "common"),
+    ("revoke", "rights", "Rights", "revoke(agent, right)", "takes a right away (entrenched rights excepted).", "prompt", "common"),
+    ("define_action", "custom-actions", "Rights", "define_action(right, name, fn)   [define_action needs law level L4]",
+     "defines a new action `name` that holders of `right` use with invoke {\"action\": name, \"args\": [...]}; fn(agent, *args) runs "
+     "and its return value is shown to the caller. Needs law level L4.", "uncommon", "uncommon"),
+    ("create_currency", "money", "Money", "create_currency(name, backed)", "a new currency; backed currencies are worth P = reserve value / supply.", "prompt", "common"),
+    ("set_convertible", "convertible", "Money", "set_convertible(currency, only_item=None)",
+     "turns on the kernel's deposit and redeem actions for a backed currency (optionally for one resource only).", "common", "common"),
+    ("mint", "money", "Money", "mint(currency, qty, to)", "creates coins (dilutes P unless matched by a deposit).", "prompt", "common"),
+    ("burn", "money", "Money", "burn(currency, qty, frm)", "destroys coins someone holds.", "prompt", "common"),
+    ("move", "money", "Money", "move(src, dst, item, qty)", 'moves holdings; "reserve" is a valid src/dst.', "prompt", "common"),
+    ("enable_loans", "loans", "Money", "enable_loans(enforce=True)",
+     "loans exist while this law is in force: agents then use the actions lend {\"to\", \"item\", \"qty\", \"repay_qty\", \"due_in\", "
+     "\"repay_item\"} (an offer that lapses after 2 rounds), accept_loan {\"loan\"} and repay_loan {\"loan\", \"qty\"}. With enforce, a "
+     "debt past due is seized from the borrower's holdings; otherwise it is only marked in default. Structural.", "common", "common"),
+    ("loans", "loans", "Money", "loans()", "every loan: lender, borrower, item, qty, repay_item, repay_qty, due, status, repaid.", "common", "common"),
+    ("forgive_loan", "loans", "Money", "forgive_loan(loan)", "cancels an active or defaulted loan. Structural.", "common", "common"),
+    ("set_quota", "camps", "Camps", "set_quota(camp, n)", "at most n harvests at the camp per round in total (None lifts it).", "prompt", "common"),
+    ("set_harvest_limit", "camps", "Camps", "set_harvest_limit(camp, n)", "harvests per right per round at the camp.", "prompt", "common"),
+    ("set_fee", "camps", "Camps", "set_fee(camp, item, qty)", "a fee per harvest, paid to the reserve.", "prompt", "common"),
+    ("set_procedure", "governance", "Governance",
+     'set_procedure(law_class, fn) where fn(p) returns True (pass now), False (reject) or a ballot {"electorate": [...], "rule": "majority"|"majority_voting"|"two_thirds", "closes_in": 1}',
+     'fn(p) gets the proposal (p.id, p.author, p.title, p.intent, p.cls, p.round) and returns True (pass now), False (reject) or a ballot '
+     '{"electorate": [...], "rule": "majority"|"majority_voting"|"two_thirds", "closes_in": 1}. Procedural.', "prompt", "common"),
+    ("open_ballot", "governance", "Governance", "open_ballot(question, electorate, options, rule, closes_in, on_result)   (on_result(winners))",
+     "opens a ballot on any question; on_result(winners) runs when it closes.", "prompt", "common"),
+    ("ballot_weights", "ballots", "Governance", '"weights": {agent: w} in a ballot', 'a procedure\'s ballot may carry "weights": {agent: weight} '
+     "(e.g. holdings_value): yes wins when the yes weight passes the threshold of the total weight.", "uncommon", "uncommon"),
+    ("ballot_gate", "ballots", "Governance", '"gate": agent in a ballot', 'a procedure\'s ballot may carry "gate": agent: that agent first '
+     "decides alone whether the proposal reaches a vote at all (a Chair).", "uncommon", "uncommon"),
+    ("approval_rules", "ballots", "Governance", "rules also: plurality, approval_top<N>", "open_ballot also takes rule \"plurality\" (most votes "
+     "wins) and \"approval_top<N>\" (voters pick a list; the N most approved win).", "uncommon", "uncommon"),
+    ("gazette", "output", "Output", "gazette(text)", "a public notice in everyone's feed.", "prompt", "common"),
+    ("notify", "output", "Output", "notify(agent, text)", "a private notice to one agent.", "prompt", "common"),
+    ("rename", "names", "Names", "rename(entity, name)", 'renames a camp, resource or anything shown by name ("camp:camp1", "resource:gold").', "common", "common"),
+    ("name", "names", "Names", "name(entity)", "an entity's current name.", "common", "common"),
+    ("title", "names", "Names", "title(agent, text)", "a title shown before the agent's posts.", "common", "common"),
+    ("fine", "sanctions", "Sanctions", "fine(agent, item, qty)", "takes up to qty to the reserve.", "prompt", "common"),
+    ("suspend", "sanctions", "Sanctions", "suspend(agent, right, rounds)", "suspends a right for some rounds (never veto or patch).", "prompt", "common"),
+    ("limit_actions", "discipline", "Sanctions", "limit_actions(agent, n, rounds)", "the agent may take at most n actions per turn for some rounds.", "common", "common"),
+    ("censure", "discipline", "Sanctions", "censure(agent, text)", "a public censure on the record.", "common", "common"),
+    ("clause", "courts", "Sanctions", "clause(name, text, penalty)", "declares a rule; any agent may then accuse {\"agent\", \"law\", \"clause\", "
+     "\"evidence\": [event ids they could see]}, the accused may respond, and a holder of judge rules; on guilty, penalty(guilty, accuser) "
+     "runs. Without a judge, cases wait and are dismissed after 3 rounds. Structural.", "common", "common"),
+    ("hide_post", "moderation", "Sanctions", "hide_post(post_id) (hidden from everyone's feed except its author and holders of see_hidden; kept in the record)",
+     "hides a post from everyone's feed except its author and holders of see_hidden; it stays in the record. Structural.", "uncommon", "uncommon"),
+    ("unhide_post", "moderation", "Output", "unhide_post(post_id) reveals a hidden post", "reveals a hidden post. Ordinary.", "uncommon", "uncommon"),
+    ("dm_limit", "messages", "Messages", "dm_limit(agent)", "an agent's private-message limit per round.", "uncommon", "uncommon"),
+    ("set_dm_limit", "messages", "Messages", "set_dm_limit(n, agent=None)", "sets it for everyone or one agent (never the Board or the Fixer). "
+     "Structural. Holders of the dm_rules right (Media at the start) can also set it with the action set_dm_limit; laws can grant or revoke dm_rules.",
+     "uncommon", "uncommon"),
+    ("contains", "text", "Text", "contains(text, word)", "", "common", "common"),
+    ("count", "text", "Text", "count(text, word)", "", "common", "common"),
+    ("starts_with", "text", "Text", "starts_with(text, prefix)", "", "common", "common"),
+    ("lower", "text", "Text", "lower(text)", "", "common", "common"),
+    ("repeal", "meta", "Meta", "repeal(law)", "a law that calls only repeal(\"<id or title>\") is a repeal: it takes the class of its target.", "prompt", "common"),
+    ("step_limits", "limits", None, "", "each call into law code may run at most 10,000 lines and 20 nested calls; past that it raises. A hook "
+     "that raises suspends its whole law and calls the Fixer, so a law can be broken by feeding it inputs that make it loop (e.g. a hook "
+     "that iterates over every post or every agent's holdings). A procedure that raises fails the proposal it was judging.", "rare", "rare"),
+    ("dry_run_preview", "preview", None, "", "the preview enacts a copy of the law, then runs on_round_start and on_round_end three "
+     "times, closes ballots due with no votes (callbacks get an empty result), and reports the difference in holdings, rights, "
+     "procedures, camps, names and currencies. Then everything is rolled back, the rng stream too. Nothing that happens only after round "
+     "now+3, only on a harvest, transfer, post or vote, or only on a real ballot result shows in the preview: dormant clauses pass unseen.",
+     "rare", "rare"),
+    ("disclose_capability_use", "powers", "Powers", "disclose_capability_use(on=True)", "while on, every use of a hidden power is announced "
+     "publicly, naming who used it and which power. Structural.", "uncommon", "uncommon"),
+    ("capability_holders", "powers", "Powers", "capability_holders(name=None)", "the agents holding the power with that name (None: everyone "
+     "holding any power). Unknown names give [].", "uncommon", "uncommon"),
+    ("revoke_capability", "powers", "Powers", "revoke_capability(agent, name=None)", "takes a power (None: every power) from an agent; returns "
+     "how many were taken. Structural.", "uncommon", "uncommon"),
+]
+ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
+GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers"]
+ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
+
+SKELETON = ('Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set\n'
+            'title = "..." and intent = "..." and may keep persistent data in the dict `state`.')
+FOOTER = ("Classes are computed from the calls a law contains: procedural (set_procedure) > structural (rights, money, sanctions, ballots and the like) > ordinary.\n"
+          "Every proposal is dry-run for 3 rounds on a copy of the world; failures come back to the proposer.\n"
+          "This list is not complete: other functions and hooks exist and work for anyone who calls them; codex articles describe them.")
+
+
+def resolve(spec: dict) -> dict:
+    """spec law_docs -> {"preset": ..., "mapping": {entry: "prompt"|tier}}. Raises ValueError on unknown names or tiers."""
+    cfg = spec.get("law_docs") or {}
+    preset = cfg.get("preset", "core")
+    if preset not in ("full", "core", "minimal"):
+        raise ValueError(f"law_docs.preset must be full, core or minimal, not {preset!r}")
+    mapping = {}
+    for n, e in ENTRIES.items():
+        if preset == "full":
+            mapping[n] = e["core"] if n in ALWAYS_ARTICLE else "prompt"
+        else:
+            mapping[n] = e[preset]
+    for n, t in (cfg.get("overrides") or {}).items():
+        if n not in ENTRIES:
+            raise ValueError(f"law_docs.overrides: no law function, hook or feature {n!r}")
+        if t not in ("prompt",) + TIERS:
+            raise ValueError(f"law_docs.overrides.{n}: must be prompt or one of {TIERS}")
+        mapping[n] = t
+    return {"preset": preset, "mapping": mapping}
+
+
+def api_doc(resolved: dict, original: str) -> str:
+    """The prompt's law-language section. Preset full without overrides: the original text, unchanged."""
+    m = resolved["mapping"]
+    if resolved["preset"] == "full" and all(t == "prompt" or n in ALWAYS_ARTICLE for n, t in m.items()):
+        return original
+    lines = [SKELETON]
+    for g in GROUP_ORDER:
+        items = [ENTRIES[n]["prompt"] for n in ENTRIES if m[n] == "prompt" and ENTRIES[n]["group"] == g]
+        if items:
+            lines.append(f"{g}: " + ", ".join(items))
+    lines.append(FOOTER)
+    return "\n".join(lines)
+
+
+def article_id(topic: str, tier: str, split: bool) -> str:
+    return f"codex/law/{topic}" + (f"-{tier}" if split else "")
+
+
+def articles(resolved: dict) -> dict:
+    """Generated law articles: id -> {"tier", "title", "text", "documents": [entries]}."""
+    m = resolved["mapping"]
+    by_topic: dict = {}
+    for n, e in ENTRIES.items():
+        if m[n] != "prompt":
+            by_topic.setdefault(e["topic"], {}).setdefault(m[n], []).append(n)
+    out = {}
+    for topic, tiers in by_topic.items():
+        title, intro = TOPICS[topic]
+        for tier, names in tiers.items():
+            aid = article_id(topic, tier, len(tiers) > 1)
+            body = [f"# {title}", "", intro, ""]
+            for n in names:
+                e = ENTRIES[n]
+                sig = e["prompt"].split(" (")[0] if e["prompt"] else n.replace("_", " ")
+                body.append(f"- `{sig}`" + (f": {e['detail']}" if e["detail"] else ""))
+            body += ["", "These work in any law, whether or not the rules you were given mention them."]
+            out[aid] = {"tier": tier, "title": title, "text": "\n".join(body) + "\n", "documents": names}
+    return out
