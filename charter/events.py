@@ -284,12 +284,13 @@ def draw_goals(k, inst, aid, cls, rights, rng, slots=None, keep=None):
         if gspec.get("all_wealth") and s == "primary":
             name = "Wealth"
         else:
+            ws = G.slot_weights(w, s, sp)                               # goals: slot rules (off: ws is w)
             excl = tuple(x for x in (g.get("primary"), g.get("secondary"), g.get("tertiary"), (keep or {}).get(s)) if x)
-            if not any(v > 0 and n not in excl for n, v in w.items()):  # nothing left to draw (narrow goal weights): keep the slot
+            if not any(v > 0 and n not in excl for n, v in ws.items()):  # nothing left to draw (narrow goal weights): keep the slot
                 if g.get(s):
                     continue
                 excl = ()
-            name = G.sample_goal(rng, w, exclude=excl)
+            name = G.sample_goal(rng, ws, exclude=excl)
         g[s] = name
         g["params" if s == "primary" else f"{s}_params"] = _relational(k, inst, aid, name, rng, world)
     g["reachable"] = G.reachable(g["primary"], g["params"], sp["law_level"], {"rights": rights})

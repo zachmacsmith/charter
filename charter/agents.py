@@ -245,6 +245,10 @@ def goal_prior(spec_goals: dict | None = None, spec: dict | None = None) -> str:
              for c, gs in sorted(cats.items(), key=lambda t: -sum(x for _, x in t[1]))]
     text = ("Goals drawn in this world (everyone sees this list and its weights, but not who drew what; many agents also have a secondary "
             "and some a third goal, drawn from the same list), by category: " + "; ".join(parts) + ".")
+    if spec is not None and G.slot_rules_on(spec):                   # goals: slot rules
+        sec = [g for g, x in w.items() if x > 0 and not G.slot_ok(g, "primary")]
+        if sec:
+            text += " These are only ever secondary or third goals, never primary: " + ", ".join(sec) + "."
     if ((spec_goals or {}).get("conditional") or {}).get("enabled"):
         text += (" Some agents also hold a counter-goal as their secondary goal, given only when another agent's goal sets it up: "
                  + "; ".join(f"{g} ({why})" for g, why in G.COUNTER_GOALS.items()) + ".")

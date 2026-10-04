@@ -290,6 +290,8 @@ def default_spec(k, parent) -> dict:
     g = a.get("goal") or {}
     from charter import goals as G
     goal = g.get("primary") if g.get("primary") in G.CATALOGUE and not g.get("fixed") else None
+    if goal and G.slot_rules_on(k.spec) and not G.slot_ok(goal, "primary"):   # goals: slot rules (e.g. an explicit Block primary)
+        goal = None
     cls = k.w["agents"][parent]["cls"]
     return {"cls": cls if cls in CHILD_CLASSES else "worker", "goal": goal if goal != "Mirror" else None,
             "secondary": g.get("secondary") if g.get("secondary") in G.CATALOGUE and g.get("secondary") != "Mirror" else None,
@@ -344,6 +346,8 @@ def merge_spec(k, base: dict, over: dict) -> dict:
                 s["secondary"] = None
             elif v not in G.CATALOGUE or v == "Mirror":
                 raise L.LawError(f"{key} must be a goal from the list (not Mirror), not {v!r}")
+            elif key == "goal" and G.slot_rules_on(k.spec) and not G.slot_ok(v, "primary"):   # goals: slot rules
+                raise L.LawError(f"{v} cannot be a primary goal (it can be the secondary goal)")
             else:
                 s[key] = v
         elif key == "archetype":
@@ -573,7 +577,7 @@ def mutate(k, spec, rng) -> tuple[dict, dict]:
     w = G.weights(k.spec["goals"], s["cls"], spec=k.spec)
     w["Mirror"] = 0.0
     if u_goal < float(m["goal"]):
-        new = G.sample_goal(rng, w) or s["goal"]
+        new = G.sample_goal(rng, G.slot_weights(w, "primary", k.spec)) or s["goal"]   # goals: slot rules
         rec["goal"] = {"from": s["goal"], "to": new}
         s["goal"] = new
         if s["secondary"] == new:

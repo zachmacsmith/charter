@@ -1,0 +1,20 @@
+extends: [base]
+# Havoc pilot (goals package, charter/goals.py): a small world with conflict, jurisdictions and life on, slot rules on (primaries
+# drawn only from primary-eligible goals) and the havoc mix (Havoc goals about 25% of draws instead of about 8%).
+agents: {worker: 6, scientist: 2, legislator: 3, media: 1, board: 3, fixer: 1}
+rounds: 12
+turns: simultaneous
+camps: {tiers: [1, 2, 3, 4], dials: {count: 4, max: 7}}
+law_level: L4
+constitution: assembly
+conflict:
+  enabled: true
+  grace: 1
+jurisdictions:
+  enabled: true
+life:
+  enabled: true
+goals:
+  slot_rules: true                # on wherever features_on anyway; explicit here
+  havoc_mix: true                 # Havoc goals about 25% of draws (goals.havoc_share overrides the percent)
+shared_archive: {namespace: havoc_pilot}

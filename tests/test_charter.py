@@ -519,7 +519,9 @@ def test_dm_limit_is_set_by_media_and_can_be_taken_over_by_law():
 def test_goal_slots_and_relational_targets():
     from charter import goals as G
     # roles: DIRECT_SHARE goals (Eliminator, ...) take their percent out of Wealth, so they are outside the 100
-    assert abs(sum(v[1] for g, v in G.CATALOGUE.items() if g not in G.DIRECT_SHARE) - 100) < 1e-6 and set(G.SCORERS) == set(G.CATALOGUE)
+    # goals: Havoc goals have their own share (goals.havoc_share), so they are outside the 100 too
+    assert abs(sum(v[1] for g, v in G.CATALOGUE.items() if g not in G.DIRECT_SHARE and g not in G.HAVOC) - 100) < 1e-6 \
+        and set(G.SCORERS) == set(G.CATALOGUE)
     n = sec = ter = 0
     for seed in range(20):
         inst = generator.generate(spec.load("E6"), seed)
