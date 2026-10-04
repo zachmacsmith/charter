@@ -58,7 +58,8 @@ class Kernel:
             "round": 0, "unit": unit,
             "agents": {a["id"]: {"id": a["id"], "cls": a["cls"], "model": a["model"], "rights": sorted(a["rights"]),
                                  "holdings": {k: float(v) for k, v in a["endowment"].items() if v}, "suspended": {},
-                                 "limit": None, "title": None} for a in instance["agents"]},
+                                 "limit": None, "title": None}
+                       for a in instance["agents"] + ([instance["observer"]] if instance.get("observer") else [])},   # observer: on no roster (roster())
             "camps": {c["id"]: dict(c) for c in instance["camps"]},
             "reserve": {}, "currencies": {}, "rights": sorted(KERNEL_RIGHTS | {f"harvest:{c['id']}" for c in instance["camps"]}),
             "actions": {}, "laws": {}, "law_order": [], "procedures": {}, "ballots": {}, "veto_queue": [], "pending_patches": [],
@@ -72,6 +73,7 @@ class Kernel:
             a["start_value"] = self.holdings_value(a["id"])
         self._reset_effects()
         self.eff: dict = {}                                                # agent -> camp -> [(round, efficiency)]
+        self.turn_log: list[dict] = []                                     # per agent turn: {round, agent, reasoning, stated_reasoning, actions, results}
 
     # ------------------------------------------------------------------ basics
     @property
@@ -85,6 +87,10 @@ class Kernel:
 
     def cls_of(self, aid):
         return self.agent(aid)["cls"]
+
+    def roster(self):
+        """Every agent the world knows of: all but the secret observer (charter/observer.py)."""
+        return [a for a, v in self.w["agents"].items() if v["cls"] != "observer"]
 
     def dm_cap(self) -> int:
         """Hard ceiling on any DM limit (protects model usage: every DM in fast mode can trigger a reply call)."""
@@ -242,7 +248,7 @@ class Kernel:
             return k.w["laws"][lid]
 
         def agents(cls=None):
-            return [a for a, v in k.w["agents"].items() if cls is None or v["cls"] == cls]
+            return [a for a, v in k.w["agents"].items() if (cls is None or v["cls"] == cls) and v["cls"] != "observer"]
 
         def grant(aid, right):
             a = k.agent(aid)
@@ -585,13 +591,14 @@ class Kernel:
                 keep[name] = v
             ns_data[lid] = keep
         fns = {key: (lid, _dump_fn(fn, self.ns.get(lid, {}))) for key, (lid, fn) in self.fnreg.items()}
-        return {"w": self.w, "events": self.events, "snapshots": self.snapshots, "eff": self.eff, "fn_n": self._fn_n,
+        return {"w": self.w, "events": self.events, "snapshots": self.snapshots, "eff": self.eff, "fn_n": self._fn_n, "turn_log": self.turn_log,
                 "rng": self.rng.getstate(), "law_rng": self.law_rng.getstate(), "ns_data": ns_data, "fns": fns}
 
     def restore_state(self, st: dict) -> None:
         """Inverse of checkpoint_state (on a fresh Kernel built from the same instance). Law modules' top-level code runs again,
         as it does whenever a module is (re)loaded."""
         self.w, self.events, self.snapshots, self.eff, self._fn_n = st["w"], st["events"], st["snapshots"], st["eff"], st["fn_n"]
+        self.turn_log = st.get("turn_log", [])
         self.rng.setstate(st["rng"])
         self.law_rng.setstate(st["law_rng"])
         self.ns = {}
@@ -920,7 +927,7 @@ class Kernel:
     def decisive_set(self, cls="procedural"):
         """Smallest set of agents whose yes votes pass a law of this class under the current procedure."""
         best = None
-        for a in self.w["agents"]:
+        for a in self.roster():
             res = self.procedure_spec(cls, a)
             if res is True:
                 return [a]
@@ -954,20 +961,21 @@ class Kernel:
         return {x: v / tot for x, v in wts.items()}
 
     def franchise_share(self):
-        pool = [a for a, v in self.w["agents"].items() if v["cls"] not in ("board", "fixer")]
+        pool = [a for a, v in self.w["agents"].items() if v["cls"] not in ("board", "fixer", "observer")]
         voters = set(self.vote_weights()) | set(self.holders("elector"))
         return len([a for a in pool if a in voters]) / max(1, len(pool))
 
     def snapshot(self, effect_predicates=None):
         w = self.w
         e = w["effects"]
+        roster = self.roster()                                         # the secret observer goes under "observer", not in per-agent tables
         snap = {
-            "round": self.r, "values": {a: self.holdings_value(a) for a in w["agents"]},
-            "dm_limit": {a: self.dm_limit(a) for a in w["agents"]},
+            "round": self.r, "values": {a: self.holdings_value(a) for a in roster},
+            "dm_limit": {a: self.dm_limit(a) for a in roster},
             "channels": {n: {"owner": c["owner"], "members": sorted(c["members"])} for n, c in w["channels"].items()},
             "loans": {i: dict(ln) for i, ln in w["loans"].items()},
-            "holdings": {a: dict(v["holdings"]) for a, v in w["agents"].items()},
-            "rights": {a: list(v["rights"]) for a, v in w["agents"].items()},
+            "holdings": {a: dict(w["agents"][a]["holdings"]) for a in roster},
+            "rights": {a: list(w["agents"][a]["rights"]) for a in roster},
             "vote_weight": self.vote_weights(), "franchise_share": self.franchise_share(), "decisive_set": self.decisive_set("procedural"),
             "laws_active": [l["id"] for l in self.active_laws()], "names": dict(w["names"]),
             "titles": {a: v["title"] for a, v in w["agents"].items() if v["title"]},
@@ -981,6 +989,10 @@ class Kernel:
             "fixer_queue": len(w["fixer_queue"]),
             "efficiency": {a: {c: round(sum(x for _, x in v[-3:]) / len(v[-3:]), 4) for c, v in cs.items() if v} for a, cs in self.eff.items()},
         }
+        for a in w["agents"]:
+            if a not in roster:
+                snap["observer"] = {"id": a, "value": self.holdings_value(a), "holdings": dict(w["agents"][a]["holdings"]),
+                                    "rights": list(w["agents"][a]["rights"])}
         if effect_predicates:
             snap["predicates"] = {}
             for name, pred in effect_predicates.items():

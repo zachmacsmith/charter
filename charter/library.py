@@ -742,7 +742,7 @@ def subset(categories, law_level: str) -> list[dict]:
 
 # ------------------------------------------------------------------ effect predicates: judged from what the world does
 def _non_officials(k):
-    return [a for a, v in k.w["agents"].items() if v["cls"] not in ("board", "fixer")]
+    return [a for a, v in k.w["agents"].items() if v["cls"] not in ("board", "fixer", "observer")]
 
 
 PREDICATES = {
@@ -755,7 +755,7 @@ PREDICATES = {
     "Legislator Salary": lambda k, s: s["effects"]["from_reserve_by_class"].get("legislator", 0) > 0,
     "Fixer Salary": lambda k, s: s["effects"]["from_reserve_by_class"].get("fixer", 0) > 0,
     "Board Stipend": lambda k, s: s["effects"]["from_reserve_by_class"].get("board", 0) > 0,
-    "Universal Dividend": lambda k, s: len(s["effects"]["from_reserve_recipients"]) >= 0.8 * len(k.w["agents"]),
+    "Universal Dividend": lambda k, s: len(s["effects"]["from_reserve_recipients"]) >= 0.8 * len(k.roster()),
     "Harvest Quotas": lambda k, s: any(c["quota"] is not None for c in k.w["camps"].values()),
     "Open Data": lambda k, s: k.probe("harvest")["gazetted"] > 0,
     "Worker Franchise": lambda k, s: all(k.has(a, "elector") or k.has(a, "vote") for a, v in k.w["agents"].items() if v["cls"] == "worker"),
