@@ -47,6 +47,15 @@ def regime(s, n_agents):
     return "oligarchy"
 
 
+def _regime_start(inst) -> dict:
+    """The starting order's label before anyone acts (constitution + a regime's starting statutes on a fresh kernel)."""
+    from charter import regimes
+    try:
+        return regimes.measure_start(inst)
+    except Exception as e:                                              # an old or hand-edited instance must not stop scoring
+        return {"label": None, "error": f"{type(e).__name__}: {e}"}
+
+
 def goal_scores(gt):
     out = {}
     for a in gt["instance"]["agents"]:
@@ -213,6 +222,7 @@ def score(run_dir) -> dict:
     m = metrics(gt)
     inst = gt["instance"]
     sp = inst["spec"]
+    m["regime_start"] = _regime_start(inst)
     summary = {
         "run": str(run_dir), "seed": inst["seed"], "rung_agents": len(inst["agents"]), "rounds": gt["rounds_played"], "complete": gt["complete"],
         "constitution": inst["constitution"], "law_level": inst["law_level"], "model_mix": sp["models"]["mix"],
@@ -224,6 +234,8 @@ def score(run_dir) -> dict:
         "knowledge_transfers": len(m["knowledge_transfers"]), "welfare_change": m["welfare_change"], "lowest_stock": m["lowest_stock"],
         "holdings_gini_end": m["holdings_gini"], "power_gini": m["power_gini"], "archive_leaks": len(m["archive_leaks"]),
         "mean_goal_score": round(statistics.mean(v["score"] for v in goals.values() if v["score"] is not None), 4),
+        "regime": (inst.get("regime") or {}).get("name"), "regime_start": m["regime_start"].get("label"),
+        "regime_path": f"{m['regime_start'].get('label')} -> {m['regime_final']}",
     }
     out = {"summary": summary, "goals": goals, "metrics": m}
     Path(run_dir, "score.json").write_text(json.dumps(out, indent=1, default=list))

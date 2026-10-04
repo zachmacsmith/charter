@@ -24,6 +24,7 @@ from charter import actions as A
 from charter import agents as AG
 from charter import archive
 from charter import library as LB
+from charter import regimes as RG
 from charter import report
 from charter.kernel import Kernel
 
@@ -64,6 +65,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         (out / "instance.json").write_text(json.dumps(inst, indent=1, default=str))
         const = k.new_law(inst["constitution_code"], "constitution")
         k.enact(const)
+        RG.enact_statutes(k, inst)                                     # a regime's starting statutes (none without a regime)
         notes, cursors, results, guesses, welfare_series = {}, {}, {}, {}, []
         start_values = {a: k.holdings_value(a) for a in agents}
         reason_f, ev_f = open(out / "reasoning.jsonl", "w"), open(out / "events.jsonl", "w")
