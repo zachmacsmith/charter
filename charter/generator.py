@@ -82,6 +82,50 @@ def _relational_targets(agents, rng):
                 a["goal"]["params" if slot == "primary" else f"{slot}_params"] = {"target": None, "slot": "primary", "impossible": True}
 
 
+def conditional_goals(agents, gspec: dict, seed, law_level: str) -> list[dict]:
+    """Counter-goals (goals.COUNTER_GOALS), handed out after every other goal is drawn: each trigger, with probability
+    goals.conditional.prob, gives another agent the counter as their secondary goal (replacing the drawn one, or added).
+      Enact / Enact as author / Durable of law X  -> Block X        (someone else is pushing that law)
+      Silence / Rival targeting T                  -> Bodyguard T    (someone is working against T)
+      Ally / Foil targeting T                      -> Concealment for T (someone must work out T's goal)
+    Own seeded stream, so the rest of the world is unchanged. Returns what it assigned (recorded in the instance)."""
+    cfg = gspec.get("conditional") or {}
+    if not cfg.get("enabled"):
+        return []
+    rng = random.Random(f"{seed}|conditional_goals")
+    prob = float(cfg.get("prob", 0.6))
+    free = [a for a in agents if not a["goal"]["fixed"]]
+    triggers = []
+    for a in free:                                                   # snapshot first: counters never trigger further counters
+        for slot in _slots(a["goal"]):
+            g, p = a["goal"][slot], _slot_params(a["goal"], slot)
+            if g in ("Enact", "Enact as author", "Durable") and p.get("law"):
+                triggers.append((a, "Block", {k: p[k] for k in ("law", "intent", "law_level") if k in p}, None))
+            elif g in ("Silence", "Rival") and p.get("target"):
+                triggers.append((a, "Bodyguard", {"target": p["target"]}, p["target"]))
+            elif g in ("Ally", "Foil") and p.get("target"):
+                triggers.append((a, "Concealment", {}, p["target"]))
+    keep = ("Mirror", "Ally", "Foil", "Block", "Bodyguard", "Concealment")    # slots never overwritten (paired or already a counter)
+    out = []
+    for src, goal, params, about in triggers:
+        if rng.random() >= prob:
+            continue
+        if goal == "Concealment":
+            cands = [b for b in free if b["id"] == about]
+        else:
+            cands = [b for b in free if b is not src and b["id"] != about]
+        cands = [b for b in cands if b["goal"].get("secondary") not in keep and goal not in [b["goal"].get(s) for s in _slots(b["goal"])]]
+        if not cands:
+            continue
+        b = rng.choice(cands)
+        replaced = b["goal"].get("secondary")
+        b["goal"]["secondary"], b["goal"]["secondary_params"] = goal, dict(params)
+        b["goal"].setdefault("counter", {})["secondary"] = {"against": src["id"], "replaced": replaced}
+        out.append({"agent": b["id"], "goal": goal, "params": dict(params), "against": src["id"], "replaced": replaced,
+                    "reachable": G.reachable(goal, params, law_level, b)})
+    return out
+
+
 def resolve_instance_level(spec: dict, rng: random.Random) -> dict:
     """Resolve every distribution except the per-entity ones (kept as distributions for per-entity draws)."""
     keep = {}
@@ -184,7 +228,11 @@ def generate(spec: dict, seed: int) -> dict:
         ids = [a["id"] for a in agents]
         rng.shuffle(ids)
         balanced = {aid: lst[i % len(lst)] for i, aid in enumerate(ids)}
+    by_class = sp["models"].get("by_class") or {}                  # {legislator: claude-haiku-4-5}: every agent of the class, before overrides
     for a in agents:
+        if a["cls"] in by_class and a["id"] not in sp["models"].get("overrides", {}):
+            a["model"], a["tier"] = by_class[a["cls"]], "by_class"
+            continue
         if mix == "balanced":
             a["model"] = balanced[a["id"]]
             a["tier"] = {pool["weak"]: "weak", pool["strong"]: "strong", strongest: "strongest"}.get(a["model"], a["model"])
@@ -251,7 +299,12 @@ def generate(spec: dict, seed: int) -> dict:
             prim = explicit if isinstance(explicit, str) else explicit["primary"]
         else:
             prim = G.sample_goal(rng, w)
-        params = G.sample_params(prim, rng, world, a["id"])
+        params = G.sample_params(prim, rng, world, a["id"])          # drawn even when explicit params replace it, so other draws stay put
+        if isinstance(explicit, dict) and explicit.get("params") is not None:
+            params = dict(explicit["params"])
+            if prim in ("Enact", "Enact as author", "Block", "Durable") and "law" in params and "intent" not in params:
+                info = LB.info(params["law"])
+                params.update({"intent": G._intent(info["code"]), "law_level": info["level"]})
         tries = 0
         while gspec.get("require_reachable") and not G.reachable(prim, params, sp["law_level"], a) and tries < 50 and not explicit:
             prim = G.sample_goal(rng, w)
@@ -278,6 +331,7 @@ def generate(spec: dict, seed: int) -> dict:
             x["goal"].update({"primary": "Enact", "params": dict(p_), "reachable": G.reachable("Enact", p_, sp["law_level"], x)})
             y["goal"].update({"primary": "Block", "params": dict(p_), "reachable": G.reachable("Block", p_, sp["law_level"], y)})
     _relational_targets(agents, rng)
+    counters = conditional_goals(agents, gspec, seed, sp["law_level"])
     sw = gspec.get("score_weights") or {}
     for a in agents:
         g = a["goal"]
@@ -318,7 +372,7 @@ def generate(spec: dict, seed: int) -> dict:
     inst = {"seed": seed, "spec": sp, "law_level": sp["law_level"], "rounds": int(sp["rounds"]), "agents": agents, "camps": camps,
             "constitution": sp["constitution"], "constitution_code": RG.constitution_code(sp["constitution"]),
             "library": [l["name"] for l in lib], "library_access": access, "conditions": sp["conditions"],
-            "endowment_gini_target": target}
+            "endowment_gini_target": target, "counter_goals": counters}
     obs = OBS.make(sp, seed, agents)                                    # the secret observer (own RNG; absent unless observer.enabled)
     if obs:
         inst["observer"] = obs

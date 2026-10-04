@@ -106,13 +106,30 @@ def write(shared: Path, doc: str, text: str, mode: str, author: str, run_id: str
     return "shared/" + name
 
 
-def index(shared: Path | None = None, only: list | None = None, run_id: str | None = None) -> str:
+def summary(doc: str, text: str, limit: int = 150) -> str:
+    """One line on what a document offers: a history's Lesson, a rare record's 'tell', else its first sentence of body text."""
+    flat = re.sub(r"\s+", " ", text)
+    for mark in ("**Lesson.**", "**Lesson**", "**The tell.**"):
+        if mark in flat:
+            s = flat.split(mark, 1)[1].strip()
+            return ("Lesson: " if "Lesson" in mark else "Tell: ") + re.split(r"(?<=[.!?]) ", s, maxsplit=1)[0][:limit]
+    body = [l.strip() for l in text.splitlines() if l.strip() and not l.lstrip().startswith(("#", "```", "|", "title", "intent"))]
+    return re.split(r"(?<=[.!?]) ", re.sub(r"[*_`]", "", body[0]), maxsplit=1)[0][:limit] if body else ""
+
+
+def index(shared: Path | None = None, only: list | None = None, run_id: str | None = None, summaries: bool = False) -> str:
+    """The documents an agent holds, one per line: id and title (and, with summaries, what each one offers)."""
     lines = []
     for d, p in docs(shared).items():
         if only is not None and d not in only and not d.startswith("shared/"):
             continue
-        first = (p.read_text().splitlines()[0].lstrip("# ").strip() if p and p.read_text().strip() else d.split("/", 1)[1].replace("-", " ").title())
-        lines.append(f"- {d}: {NOT_OF_THIS_TIME if foreign(shared, d, run_id) else ''}{first[:100]}")
+        text = p.read_text() if p else ""
+        first = (text.splitlines()[0].lstrip("# ").strip() if text.strip() else d.split("/", 1)[1].replace("-", " ").title())
+        extra = ""
+        if summaries and text and not d.startswith(("library/", "shared/")):
+            s = summary(d, text)
+            extra = f" | {s}" if s and s != first else ""
+        lines.append(f"- {d}: {NOT_OF_THIS_TIME if foreign(shared, d, run_id) else ''}{first[:100]}{extra}")
     return "\n".join(lines)
 
 

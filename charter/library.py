@@ -830,11 +830,17 @@ def on_enact():
 ''',
     "oligarchy": '''
 title = "Constitution: Oligarchy"
-intent = "Legislators vote by majority weighted by their holdings."
+intent = "Legislators vote by majority weighted by their holdings (equal weights while none of them holds anything)."
 
 def weighted(p):
     voters = holders("vote")
-    return {"electorate": voters, "rule": "majority", "weights": {a: holdings_value(a) for a in voters}}
+    w = {a: holdings_value(a) for a in voters}
+    total = 0
+    for a in voters:
+        total = total + w[a]
+    if total <= 0:
+        w = {a: 1 for a in voters}
+    return {"electorate": voters, "rule": "majority", "weights": w}
 
 def on_enact():
     set_procedure("ordinary", weighted)

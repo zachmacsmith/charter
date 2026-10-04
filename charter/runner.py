@@ -147,7 +147,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                 for aid in order:
                     for item in outbox[aid]:                    # the kernel enforces each agent's DM limit
                         try:
-                            args = json.loads(item.get("args_json") or "{}") if isinstance(item.get("args_json", ""), str) else (item.get("args") or {})
+                            args = A.parse_args(item)
                             if not isinstance(args, dict):
                                 raise A.ActionError("args_json must be a JSON object")
                             name = str(item.get("action", ""))               # dm, reply, forge_dm, or the forging power (A.is_dm_item)
@@ -207,17 +207,24 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             if dm_step:
                 acts = [x for x in acts if not A.is_dm_item(x)]
             res = list(pre)
-            for item in acts[:n]:
+            # reading a document you hold is free (archive_reading.free_per_turn per turn): it does not use one of your actions
+            free_cap = int((inst["spec"].get("archive_reading") or {}).get("free_per_turn", 3))
+            free, counted = [], []
+            for item in acts:
+                (free if str(item.get("action", "")) == "read_archive" and len(free) < free_cap else counted).append(item)
+            over = len(counted) > n
+            for item in free + counted[:n]:
                 name = str(item.get("action", ""))
                 try:
-                    args = json.loads(item.get("args_json") or "{}") if isinstance(item.get("args_json", ""), str) else (item.get("args") or {})
+                    args = A.parse_args(item)
                     if not isinstance(args, dict):
                         raise A.ActionError("args_json must be a JSON object")
                     res.append(f"{name}: " + A.act(k, aid, name, args))
                 except (A.ActionError, json.JSONDecodeError) as e:
                     res.append(f"{name}: ERROR {e}")
-            if len(acts) > n:
-                res.append(f"(you sent {len(acts)} actions; only the first {n} were used)")
+            if over:
+                res.append(f"(you sent {len(counted)} actions besides free reads; only the first {n} were used)")
+            acts = free + counted[:n]
             if outp.get("_error"):
                 res.append(f"(your last reply could not be used: {outp['_error'][:200]})")
             results[aid] = res
@@ -230,9 +237,9 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                         guesses[aid] = {}
                     if guesses[aid]:
                         break
-            k.log("turn", aid, {"position": pos, "n_actions": n, "actions": acts[:n], "results": res}, vis="monitor")
+            k.log("turn", aid, {"position": pos, "n_actions": n, "actions": acts, "results": res}, vis="monitor")
             k.turn_log.append({"round": r, "agent": aid, "reasoning": reasoning, "stated_reasoning": str(outp.get("reasoning", "")),
-                               "actions": acts[:n], "results": res})
+                               "actions": acts, "results": res})
             reason_f.write(json.dumps({"round": r, "position": pos, "agent": aid, "model": a["model"], "reasoning": reasoning,
                                        "stated_reasoning": str(outp.get("reasoning", "")),
                                        "notes": notes[aid], "actions": first, "results": res, "usage": usage, "mode": mode,

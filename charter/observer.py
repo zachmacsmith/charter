@@ -267,7 +267,7 @@ def in_dm_step(inst: dict) -> bool:
 
 
 def _args(item):
-    args = json.loads(item.get("args_json") or "{}") if isinstance(item.get("args_json", ""), str) else (item.get("args") or {})
+    args = A.parse_args(item)
     if not isinstance(args, dict):
         raise A.ActionError("args_json must be a JSON object")
     return args

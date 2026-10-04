@@ -715,3 +715,38 @@ def test_a_section_with_a_distribution_like_key_merges_instead_of_replacing(tmp_
 def test_unknown_start_laws_fail_at_generation_with_a_suggestion():
     with pytest.raises(ValueError, match="did you mean 'Loan Registry'"):
         generator.generate(spec.apply_overrides(spec.load("E3"), ['start_laws=["Loan Registri"]']), 1)
+
+
+def test_repealing_a_procedure_law_restores_the_procedure_it_replaced():
+    inst = generator.generate(spec.load("E3"), 1)
+    k = Kernel(inst)
+    const = k.new_law(inst["constitution_code"], "constitution")
+    k.enact(const)
+    before = dict(k.w["procedures"])
+    leg = by_cls(k, "legislator")[0]
+    takeover = 'title = "Takeover"\nintent = "everything passes"\n\ndef rule(p):\n    return True\n\ndef on_enact():\n' \
+               '    set_procedure("ordinary", rule)\n    set_procedure("structural", rule)\n    set_procedure("procedural", rule)\n'
+    lid = k.new_law(takeover, leg)
+    k.enact(lid)
+    assert all(v.split("#")[0] == lid for v in k.w["procedures"].values())
+    k.repeal(lid)
+    assert k.w["procedures"] == before                                   # the constitution's procedures are back
+
+
+def test_a_law_that_fails_its_dry_run_is_marked_failed():
+    inst = generator.generate(spec.load("E3"), 1)
+    k = Kernel(inst)
+    k.enact(k.new_law(inst["constitution_code"], "constitution"))
+    leg = by_cls(k, "legislator")[0]
+    bad = 'title = "Bad"\nintent = "crashes"\n\ndef on_enact():\n    mint("nocoin", 5, "reserve")\n'
+    with pytest.raises(A.ActionError):
+        A.act(k, leg, "propose", {"code": bad})
+    assert [l["status"] for l in k.w["laws"].values() if l["title"] == "Bad"] == ["failed_check"]
+
+
+def test_lenient_action_arguments():
+    assert A.parse_args({"args_json": '{"text": "a\nb"}'}) == {"text": "a\nb"}
+    assert A.parse_args({"args_json": '{"code": "re.match(\'\\d\', x)"}'})["code"] == "re.match('\\d', x)"
+    assert A.parse_args({"args_json": '{"camp": "c1"} trailing'}) == {"camp": "c1"}
+    with pytest.raises(A.ActionError):
+        A.parse_args({"args_json": '{"camp": '})

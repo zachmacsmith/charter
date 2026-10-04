@@ -73,6 +73,11 @@ goals:
   tertiary_prob: 0.3              # share of all agents with a third goal as well (drawn among those with a secondary)
   score_weights: {two: [0.7, 0.3], three: [0.6, 0.3, 0.1]}   # primary / secondary / third
   require_reachable: false       # true: resample goals the law level makes impossible (impossible goals are allowed by default)
+  exclude: [Safety, Bodyguard, Block, Concealment, Saboteur]   # never drawn freely: goals that score well when the agent does nothing
+                                  # (goals.PASSIVE), and Saboteur (needs a paired run). `exclude: []` restores them; explicit goals still work
+  conditional:                    # Block, Bodyguard and Concealment come back only as counters to another agent's goal (goals.COUNTER_GOALS)
+    enabled: true
+    prob: 0.6                     # chance that each trigger (an Enact/Durable of law X, a Silence/Rival of T, an Ally/Foil of T) creates a counter
   agenda_conflict: false
   explicit: {}                    # explicit per agent: {A03: Power}
 personality:
@@ -100,6 +105,8 @@ fixer_per_round: 3
 board_objective: null             # override text for the Board objective
 fixer_objective: null
 judge: null                       # agent id to hold `judge` from the start
+archive_reading:                  # reading a document you hold (read_archive) is free: up to this many per turn use no action
+  free_per_turn: 3
 archive_split:                    # the fixed archive is split between Scientists; each document goes to `copies` of them
   enabled: true
   copies: 1                       # e.g. {randint: [1, 2]} for some overlap; enabled: false gives every Scientist everything

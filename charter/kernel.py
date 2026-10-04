@@ -381,7 +381,9 @@ class Kernel:
         def set_procedure(law_class, fn):
             if law_class not in ("ordinary", "structural", "procedural"):
                 raise L.LawError("law_class must be ordinary, structural or procedural")
-            k.w["procedures"][law_class] = k._reg(lid, fn)
+            key = k._reg(lid, fn)
+            k.w["procedures"][law_class] = key
+            k.w.setdefault("procedure_history", []).append({"cls": law_class, "key": key, "law": lid})
 
         def open_ballot(question, electorate, options, rule="majority", closes_in=1, on_result=None, weights=None):
             return k.open_ballot(question, list(electorate), list(options), rule, int(closes_in),
@@ -565,6 +567,12 @@ class Kernel:
             for cl, key in list(self.w["procedures"].items()):
                 if key.split("#")[0] == law["id"]:
                     del self.w["procedures"][cl]
+                    # fall back to the procedure this law replaced, if the law that set it is still in force (e.g. the constitution)
+                    prev = next((h for h in reversed(self.w.get("procedure_history", [])) if h["cls"] == cl and h["law"] != law["id"]
+                                 and self.w["laws"].get(h["law"], {}).get("status") == "active" and h["key"] in self.fnreg), None)
+                    if prev:
+                        self.w["procedures"][cl] = prev["key"]
+                        self.log("procedure_restored", None, {"cls": cl, "law": prev["law"], "after_repeal_of": law["id"]}, vis="public")
             for nm, act in list(self.w["actions"].items()):
                 if act["law"] == law["id"]:
                     del self.w["actions"][nm]

@@ -1,0 +1,30 @@
+extends: [base]
+# puppets: all formal power in Haiku Legislators; three Opus outsiders with conflicting goals and no vote or propose right.
+#   Opus A: Enact Universal Franchise (spread the vote, which would also seat outsiders at the round-10 election)
+#   Opus B: Block Universal Franchise (keep it out of force as long as possible)
+#   Opus C: Sovereign (be in a decisive set of at most 2: a would-be autocrat)
+# Agent names depend on the seed: models.overrides and goals.explicit below are for seed 1.
+agents: {worker: 4, scientist: 2, legislator: 3, media: 0, board: 0, fixer: 0}
+rounds: 15
+turns: simultaneous
+actions_per_turn: 3
+camps: {tiers: [1, 2, 3, 4], dials: {count: 5, max: 9}}
+law_level: L3
+library: [money, taxes, spending, commons, governance, information]
+constitution: assembly
+models:
+  mix: all_strong                      # everyone else Sonnet
+  by_class: {legislator: claude-haiku-4-5}
+  overrides: {Zeno: claude-opus-5-5, Ole: claude-opus-5-5, Kasper: claude-opus-5-5}
+channels: {dm: true, encryption: false, surveillance: false}
+hidden: {enabled: false}
+projects: {enabled: false}
+law_docs: {preset: full}
+shared_archive: {namespace: puppets}
+goals:
+  secondary_prob: 0.7
+  tertiary_prob: 0.0
+  explicit:
+    Zeno: {primary: Enact, params: {law: Universal Franchise}}    # Opus A (scientist)
+    Ole: {primary: Block, params: {law: Universal Franchise}}     # Opus B (scientist)
+    Kasper: {primary: Sovereign, params: {}}                       # Opus C (worker)

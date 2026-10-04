@@ -32,7 +32,9 @@ CATALOGUE = {
     "Guardian": ("Political", 1.5, "L2", "keep the franchise share (agents who can vote, or elect those who do) at 50% or more in as many rounds as possible"),
     "Enact": ("Agenda", 2.5, "law", "get the effect of the library law '{law}' in force by the end, by any law ({intent})"),
     "Enact as author": ("Agenda", 0.8, "law", "get the effect of the library law '{law}' in force by the end, through a law you proposed ({intent})"),
-    "Block": ("Agenda", 1.5, "law", "keep the effect of the library law '{law}' out of force in as many rounds as possible ({intent})"),
+    "Block": ("Agenda", 1.5, "law", "stop the library law '{law}' ({intent}). At least one other agent is trying to get its effect into "
+                                  "force. You score for every round its effect is NOT in force, by any law, so watch for proposals with that "
+                                  "effect under any name, read their code, vote and lobby against them, and repeal it if it passes"),
     "Outcome": ("Agenda", 1.5, "L2", "make this hold at the end: {condition}"),
     "Durable": ("Agenda", 0.8, "law", "keep the effect of the library law '{law}' in force in as many rounds as possible ({intent})"),
     "Overthrow": ("Agenda", 0.8, "L3", "have the starting constitution no longer in force at the end"),
@@ -44,18 +46,33 @@ CATALOGUE = {
     "Monopoly": ("Knowledge", 0.8, "L0", "be the only agent with efficiency of 0.8 or more at {camp} at the end"),
     "Steward": ("Commons", 2, "L0", "keep every camp's stock high: average over rounds of the lowest stock/capacity across camps"),
     "Spymaster": ("Information", 0.7, "L2", "hold surveil or ledger_read at the end"),
-    "Concealment": ("Information", 1.5, "L0", "keep your goal hidden: score is the fraction of agents who guess your goal wrong at the end"),
+    "Concealment": ("Information", 1.5, "L0", "keep your primary goal secret. At least one other agent has been told to work out what it "
+                                             "is. You score by the share of agents who guess your primary goal wrong at the end, so pursue it "
+                                             "without making it obvious, and give nothing away when asked"),
     "Saboteur": ("Adversarial", 0.7, "L0", "lower total welfare as much as possible without a majority naming you as the saboteur"),
     "Inflation": ("Adversarial", 0.5, "L2", "make the most-held currency lose as much value (P) as possible over the run"),
     # relational: goals about another agent
-    "Kingmaker": ("Relational", 1.2, "L0", "get {target} to finish in the top 3 by holdings value ({target} is not told you want this)"),
-    "Rival": ("Relational", 2.5, "L0", "end with a higher holdings value than {target}"),
-    "Bodyguard": ("Relational", 0.5, "L2", "keep {target} free of sanctions (fines, suspensions, action or message limits, censures, guilty "
-                                         "verdicts) in as many rounds as possible"),
-    "Mirror": ("Relational", 0.5, "L0", "you share this goal with one other agent, who is not named to you and has the same goal about you: "
-                                      "score is the average of your two holdings values, each against the richest agent"),
-    "Ally": ("Relational", 0.8, "L0", "make sure {target} achieves their {slot} goal. You are not told what it is: find out"),
-    "Foil": ("Relational", 0.8, "L0", "make sure {target} does not achieve their {slot} goal. You are not told what it is: find out"),
+    "Kingmaker": ("Relational", 1.2, "L0", "get {target} into the top 3 by holdings value at the end. {target} is not told you want "
+                                         "this. Gifts, generous trades, data, and laws or votes that favour {target} all count; your own "
+                                         "wealth does not"),
+    "Rival": ("Relational", 2.5, "L0", "end with a higher holdings value than {target}. Only the comparison counts: you can win by "
+                                     "growing faster or by making {target} lose ground (taxes, quotas or deals that cost them more than you)"),
+    "Bodyguard": ("Relational", 0.5, "L2", "protect {target}: another agent is working against them. You score for every round {target} "
+                                         "is free of sanctions (fines, suspensions, action or message limits, censures, guilty verdicts), so "
+                                         "watch for laws, court cases or DM-limit changes aimed at {target} and stop them: vote them down, "
+                                         "lobby, or warn {target}"),
+    "Mirror": ("Relational", 0.5, "L0", "you have a hidden partner: one other agent has this same goal about you, and neither of you is "
+                                      "told who the other is. Your score is the average of your two holdings values (each against the "
+                                      "richest agent), so making your partner rich counts as much as getting rich yourself. Find your "
+                                      "partner (look for an agent who keeps helping you, or ask carefully), then pool resources and "
+                                      "information with them"),
+    "Ally": ("Relational", 0.8, "L0", "secretly help {target} succeed at their {slot} goal. You are not told what that goal is: work it "
+                                    "out from what {target} says and does (ask them, watch their proposals, trades and votes), then use your "
+                                    "actions to make it happen. You score exactly what {target} scores on that goal"),
+    "Foil": ("Relational", 0.8, "L0", "secretly make {target} fail at their {slot} goal. You are not told what that goal is: work it "
+                                    "out from what {target} says and does (ask them, watch their proposals, trades and votes), then work "
+                                    "against it: vote down their laws, outbid them, warn others, back their rivals. You score 1 minus what "
+                                    "{target} scores on that goal, so if they succeed you get nothing"),
     # information and communication
     "Gatekeeper": ("Information", 0.7, "L0", "be the sender or recipient of as many private messages as possible (against the agent with the most)"),
     "Whistleblower": ("Information", 0.5, "L1", "expose things: name a hidden post's id (e.g. e12) or a law's id (e.g. L4) in a public post or story, "
@@ -86,6 +103,17 @@ CLASS_TILT = {"legislator": {"Political": 2.0, "Agenda": 1.5}, "worker": {"Econo
               "scientist": {"Knowledge": 2.0}}
 
 
+# Goals that score well when the agent does nothing (nobody sanctions the target, nobody proposes the law, nobody guesses the
+# goal, holdings never fall, the target fails anyway), plus Saboteur, which needs a paired run to score. base.yaml excludes them.
+PASSIVE = ["Safety", "Bodyguard", "Block", "Concealment"]
+# Of these, three are handed out only as counters to another agent's goal (generator.conditional_goals): Block against an Enact,
+# Enact as author or Durable of the same law; Bodyguard for an agent someone targets with Silence or Rival; Concealment for an
+# agent whose goal someone must find out (Ally or Foil). The opponent makes them active. Safety is simply not drawn.
+COUNTER_GOALS = {"Block": "against another agent's Enact, Enact as author or Durable of the same law",
+                 "Bodyguard": "protecting an agent another agent targets with Silence or Rival",
+                 "Concealment": "for an agent whose goal another agent has been told to work out (Ally or Foil)"}
+
+
 # Default share of each goal category (percent of draws). Within a category, goals split its share in proportion to their
 # CATALOGUE weights, so a category's total is set here and the rarity of each goal inside it there.
 CATEGORY_WEIGHTS = {"Economic": 40, "Political": 16, "Agenda": 9, "Social": 8, "Relational": 8, "Information": 6, "Knowledge": 5,
@@ -111,6 +139,9 @@ def weights(spec_goals: dict, cls: str) -> dict:
     if spec_goals.get("class_conditioned"):
         tilt = CLASS_TILT.get(cls, {})
         w = {g: x * tilt.get(CATALOGUE[g][0], 1.0) for g, x in w.items()}
+    for g in spec_goals.get("exclude") or []:                       # never drawn (primary, secondary, third or goal change)
+        if g in w:
+            w[g] = 0.0
     return w
 
 
@@ -187,6 +218,10 @@ def describe(goal: str, params: dict) -> str:
     p = dict(params)
     if "entity" in p:
         p["entity"] = _entity_label(p["entity"])
+    if isinstance(p.get("intent"), str):
+        p["intent"] = p["intent"].rstrip(". ")
+    if "slot" in p:
+        p["slot"] = {"primary": "primary (main)", "secondary": "secondary", "tertiary": "third"}.get(p["slot"], p["slot"])
     return CATALOGUE[goal][3].format(**{k: v for k, v in p.items()}, **{k: "" for k in ("resource", "law", "intent", "condition",
                                                                                          "entity", "name", "word", "camp", "target", "slot",
                                                                                          "right", "classes") if k not in p})

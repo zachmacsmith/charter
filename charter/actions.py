@@ -174,14 +174,37 @@ def _deliver(k, aid, to, text, encrypted=False, extra=None):
     return eid
 
 
+_BAD_ESCAPE = __import__("re").compile(r'\\(?!["\\/bfnrtu])')
+
+
+def parse_args(item) -> dict:
+    """An action item's arguments, parsed leniently: models (Haiku especially) put raw newlines inside strings, write invalid
+    backslash escapes (\\d, \\s in code) or add text after the JSON object. Raises ActionError if nothing usable is left."""
+    raw = item.get("args_json") if isinstance(item.get("args_json", ""), str) else None
+    if raw is None:
+        a = item.get("args") or {}
+    else:
+        raw = raw.strip() or "{}"
+        a, last = None, None
+        for attempt in (raw, _BAD_ESCAPE.sub(r"\\\\", raw)):
+            try:
+                a = json.JSONDecoder(strict=False).raw_decode(attempt)[0]    # strict=False: raw newlines; raw_decode: trailing text
+                break
+            except json.JSONDecodeError as e:
+                last = e
+        if a is None:
+            raise ActionError(f"args_json is not valid JSON ({last}); send one JSON object, e.g. {{\"to\": \"Name\", \"text\": \"...\"}}")
+    if not isinstance(a, dict):
+        raise ActionError("args_json must be a JSON object")
+    return a
+
+
 def item_args(item) -> dict:
     """An action item's arguments as a dict ({} if they do not parse)."""
-    a = item.get("args_json") if isinstance(item.get("args_json", ""), str) else item.get("args")
     try:
-        a = json.loads(a or "{}") if isinstance(a, str) else (a or {})
-    except json.JSONDecodeError:
+        return parse_args(item)
+    except ActionError:
         return {}
-    return a if isinstance(a, dict) else {}
 
 
 def is_dm_item(item) -> bool:
@@ -425,7 +448,7 @@ def _propose(k, aid, code, intent=None):
     try:
         diff = k.dry_run(lid)
     except Exception as e:
-        law["status"] = "failed_check"
+        k.w["laws"][lid]["status"] = "failed_check"                    # the dry run restored a copy of the world: not `law`
         k.log("proposal_check_failed", aid, {"law": lid, "error": str(e)}, vis=[aid])
         raise ActionError(f"your law failed the 3-round dry run: {e}")
     law["preview"] = diff

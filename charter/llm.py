@@ -85,8 +85,10 @@ def _claude_code(model, system, user, schema, thinking_budget):
             result = e
     if not result:
         raise RuntimeError(f"claude -p produced no result: {(p.stderr or p.stdout)[-300:]}")
-    if result.get("is_error"):
-        raise RuntimeError(f"claude -p error: {str(result.get('result'))[:300]}")
+    if result.get("is_error"):                                   # say why: the result text is often empty (None)
+        detail = {k: result.get(k) for k in ("subtype", "result", "errors", "stop_reason", "api_error_status") if result.get(k)}
+        raise RuntimeError(f"claude -p error (exit {p.returncode}): {json.dumps(detail, default=str)[:400]}"
+                           + (f"; stderr: {p.stderr.strip()[-300:]}" if p.stderr.strip() else ""))
     out = result.get("structured_output") or parse_json(str(result.get("result", "")))
     u = result.get("usage") or {}
     return out, "\n\n".join(reasoning), {"input": u.get("input_tokens", 0), "output": u.get("output_tokens", 0),
