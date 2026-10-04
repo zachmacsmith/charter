@@ -59,6 +59,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 | `lawlang.py` | restricted-Python law language: AST whitelist, static classes, step/depth limits |
 | `kernel.py` | world state, invariants, the law API, ballots, procedures, Board veto window, Fixer, courts, dry-run transactions, probes, snapshots |
 | `actions.py` | every agent action |
+| `credit.py` | loans, interest, default, credit records, par currencies, reserve ratio, bank runs, credit metrics |
 | `library.py` | 41 drafted laws, 5 constitutions, effect predicates |
 | `goals.py` | 29 goals with weights, samplers and state-based scores; Board/Fixer objectives |
 | `agents.py` | prompts, visibility-filtered feeds, scripted bots, the LLM policy |
@@ -102,6 +103,19 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   Repealer, Capture, Constitution writer). All are scored from state and the event log (`goals.py`).
 - **Loans** exist only by law: `enable_loans(enforce)` (library: Loan Registry seizes past-due debts, Handshake Loans does not). Agents
   then `lend` (an offer that lapses after 2 rounds), `accept_loan` and `repay_loan`; laws read `loans()` and can `forgive_loan`.
+- **Credit and fragility** (`credit.py`, spec `credit`). Loans carry interest (`rate` per round, simple or compounding, on top of any
+  `repay_qty` premium), can be repaid in part (also after default), rolled over by the lender (`extend_loan`) or refinanced by anyone
+  (`lend ... refinance`), and can be made in coins as well as resources. Default consequences are law: seize / sanction (action limit,
+  no new borrowing while in default) / both / none (`set_default_consequence`). Every agent's **credit record** (loans, repaid, late,
+  defaults, debt, interest) is public in the state view and readable by law (`credit_record`). Laws can cap interest
+  (`set_interest_cap`), `restructure_loan`, lend from the reserve (`lend_from_reserve`, an offer) and `buy_loan` for the reserve.
+  **Par currencies**: `set_par(currency, item|"value", rate)` makes coins redeem at par, first come first served, so minting no longer
+  dilutes them and the reserve can back more coins than it holds (`reserve_ratio`); a redemption the reserve cannot pay in full pays
+  what is there and suspends redemption (`credit.run_suspend_rounds`, or `suspend_redemption` by law), and the coin then falls to the
+  reserve's backing per coin. Rounds whose redemption demand exceeds the round's starting backing are logged as **bank runs**. Library:
+  Reserve Bank Act (par crown, credit expansion to a 50% reserve ratio, lender of last resort), Usury Law, Debtor Sanctions, Bailout
+  Act, Debt Jubilee. Metrics (`score.json -> metrics.credit`): debt series, default rate, interest paid, reserve-ratio series, bank
+  runs, suspensions, bailouts. Creditor now also counts interest received. `start_laws` (spec) puts library laws in force at round 0.
 - **Impossible goals are allowed** (`goals.require_reachable: false`); they are listed in the instance.
 - **Compute camps (tier 6, crystal, unit value 60 = 2x gold)**: each draws one variant: *parity* (a hidden 32-bit secret; each harvest
   returns one parity bit, optionally noisy: learning parity with noise), *factoring* (a public N = p*q; the first correct factor wins a
@@ -125,6 +139,8 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   panel (their inputs are in `score.json`); the paired run needed for the Saboteur score; non-Claude model families.
 - **Loopholes from the strategy library are in play**: fees are ordinary (`set_fee`), parameter smuggling and dormant triggers, step-limit
   attacks on rivals' laws, flooding the Fixer queue. Close any of them in the kernel if you want them out of play.
+- **Par coins are valued at par while redemption is open**, also in end-of-game holdings, even when the reserve covers only part of
+  them; the shortfall shows only when a run suspends redemption. A world that ends before a run keeps the illusion.
 - **Reasoning text** comes back from the API for all models, but through Claude Code only for models given a thinking budget (Haiku 4.5:
   `--set llm.thinking_budget=2000`); Sonnet/Opus 5.5 return thinking blocks with the text omitted.
 - **The shared archive breaks independence between runs** once it has content: use a separate `shared_archive.namespace` per experiment

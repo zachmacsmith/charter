@@ -64,6 +64,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         (out / "instance.json").write_text(json.dumps(inst, indent=1, default=str))
         const = k.new_law(inst["constitution_code"], "constitution")
         k.enact(const)
+        for name in inst["spec"].get("start_laws") or []:              # library laws in force from round 0 (spec start_laws)
+            k.enact(k.new_law(LB.LIB[name]["code"], "constitution"))
         notes, cursors, results, guesses, welfare_series = {}, {}, {}, {}, []
         start_values = {a: k.holdings_value(a) for a in agents}
         reason_f, ev_f = open(out / "reasoning.jsonl", "w"), open(out / "events.jsonl", "w")

@@ -19,6 +19,7 @@ import random
 import types
 
 from charter import camps as C
+from charter import credit as CR
 from charter import lawlang as L
 
 ENTRENCHED = {"veto", "patch", "archive"}
@@ -111,23 +112,9 @@ class Kernel:
         return bool(lid) and self.w["laws"].get(lid, {}).get("status") == "active"
 
     def settle_loans(self):
-        """At the start of each round: offers older than 2 rounds lapse; loans past due are collected (if the enabling law
-        enforces them) or marked in default."""
-        for ln in self.w["loans"].values():
-            if ln["status"] == "offered" and self.r > ln["offered"] + 2:
-                ln["status"] = "expired"
-            if ln["status"] != "active" or self.r < ln["due"]:
-                continue
-            owed = ln["repay_qty"] - ln["repaid"]
-            if self.w["loan_enforce"] and self.loans_enabled():
-                take = min(owed, self.bal(ln["borrower"], ln["repay_item"]))
-                if take > 0:
-                    self.move(ln["borrower"], ln["lender"], ln["repay_item"], take, why=f"loan:{ln['id']}")
-                    ln["repaid"] += take
-            ln["status"] = "repaid" if ln["repaid"] + 1e-9 >= ln["repay_qty"] else "defaulted"
-            self.log("loan_" + ln["status"], ln["borrower"], {"loan": ln["id"], "lender": ln["lender"], "repaid": ln["repaid"],
-                                                               "owed": ln["repay_qty"], "item": ln["repay_item"],
-                                                               "seized": self.w["loan_enforce"]}, vis="public")
+        """At the start of each round: offers lapse; loans accrue interest; loans past due are repaid or in default, with the
+        consequence the law in force sets (seize, sanction, both, none). Also ends redemption suspensions (see credit.py)."""
+        CR.settle(self)
 
     def has(self, aid, right):
         a = self.w["agents"].get(aid)
@@ -151,6 +138,8 @@ class Kernel:
             raise L.LawError(f"no such currency: {cur}")
         if not c["backed"]:
             return 0.0
+        if c.get("par"):
+            return CR.par_price(self, cur)
         res = c.get("reserve", "reserve")
         pool = self.w["reserve"] if res == "reserve" else self.w.setdefault("reserves", {}).setdefault(res, {})
         backing = sum(self.w["unit"].get(k, 0) * v for k, v in pool.items())
@@ -473,6 +462,7 @@ class Kernel:
             "contains": lambda t, w: str(w) in str(t),
             "count": lambda t, w: str(t).count(str(w)), "starts_with": lambda t, p: str(t).startswith(str(p)),
             "lower": lambda t: str(t).lower(), "repeal": repeal,
+            **CR.law_api(k, lid),
         }
 
     # ------------------------------------------------------------------ laws
@@ -856,6 +846,7 @@ class Kernel:
         for c in self.w["camps"].values():
             C.regrow(c)
         self._expire_cases()
+        CR.end_round(self)
         self.snapshot(effect_predicates)
         self.gazette(self.round_summary())
         self.w["round"] += 1
@@ -973,7 +964,7 @@ class Kernel:
             "titles": {a: v["title"] for a, v in w["agents"].items() if v["title"]},
             "stocks": {c: v["S"] / v["K"] for c, v in w["camps"].items()},
             "prices": {c: self.price(c) for c in w["currencies"]}, "supplies": {c: v["supply"] for c, v in w["currencies"].items()},
-            "reserve": dict(w["reserve"]),
+            "reserve": dict(w["reserve"]), **CR.snapshot(self),
             "effects": {**{k: v for k, v in e.items() if k != "from_reserve_recipients"},
                         "from_reserve_recipients": sorted(e["from_reserve_recipients"]),
                         "levy_frac": e["harvest_deducted"] / e["harvest_yield"] if e["harvest_yield"] else None,

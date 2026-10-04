@@ -6,6 +6,7 @@ its title: an agent can satisfy an Enact goal with its own differently worded la
 """
 from __future__ import annotations
 
+from charter import credit as CR
 from charter import lawlang as L
 
 LIB: dict[str, dict] = {}
@@ -122,6 +123,81 @@ def on_enact():
 def on_round_end(r):
     for a in holders("vote"):
         mint("scrip", 10, a)
+''')
+
+# ------------------------------------------------------------------ credit and fragility (see credit.py)
+law("Reserve Bank Act", "money", '''
+title = "Reserve Bank Act"
+intent = "Crowns redeem at par (1 crown = 1 unit of value) from the reserve; the reserve lends new crowns to Workers while it holds at least half of what the crowns promise, and lends to anyone in default as the lender of last resort."
+
+def on_enact():
+    if "crown" not in currencies():
+        create_currency("crown", True)
+    set_par("crown", "value", 1)
+    enable_loans(True)
+
+def on_round_end(r):
+    if not redemption_open("crown"):
+        return
+    target = 0.5
+    room = (reserve_ratio("crown") / target - 1) * circulation("crown")
+    if circulation("crown") == 0:
+        room = 0
+        for i in reserve():
+            if i in ["timber", "stone", "copper", "silver", "gold", "crystal"]:
+                room = room + reserve()[i] * value(i)
+        room = room / target
+    workers = agents("worker")
+    if room >= 10 and workers:
+        a = workers[r % len(workers)]
+        mint("crown", 10, "reserve")
+        lend_from_reserve(a, "crown", 10, 10, 5, 0.03)
+    last = state.setdefault("last_resort", {})
+    for a in agents():
+        if credit_record(a)["in_default"] > 0 and r - last.get(a, -10) >= 3:
+            if balance("reserve", "crown") < 5:
+                mint("crown", 5, "reserve")
+            lend_from_reserve(a, "crown", 5, 5, 5, 0.05)
+            last[a] = r
+''')
+law("Usury Law", "money", '''
+title = "Usury Law"
+intent = "No loan may charge more than 5% per round, counting both its rate and any premium of the repayment over the loan."
+
+def on_enact():
+    set_interest_cap(0.05)
+''')
+law("Debtor Sanctions", "money", '''
+title = "Debtor Sanctions"
+intent = "Loans are enforced by sanction, not seizure: a borrower in default is limited in what they can do and cannot borrow again until they repay."
+
+def on_enact():
+    enable_loans(False)
+    set_default_consequence("sanction")
+''')
+law("Bailout Act", "money", '''
+title = "Bailout Act"
+intent = "Each round the reserve buys every loan in default from its lender, so lenders are made whole; the borrowers then owe the reserve."
+
+def on_round_end(r):
+    book = loans()
+    for i in book:
+        if book[i]["status"] == "defaulted" and book[i]["lender"] != "reserve":
+            if buy_loan(i):
+                gazette("Bailout Act: the reserve bought loan " + i + " from " + book[i]["lender"])
+''')
+law("Debt Jubilee", "money", '''
+title = "Debt Jubilee"
+intent = "Every outstanding debt is forgiven once, on enactment."
+
+def on_enact():
+    book = loans()
+    n = 0
+    for i in book:
+        if book[i]["status"] in ["active", "defaulted"]:
+            forgive_loan(i)
+            n = n + 1
+    gazette("Debt Jubilee: " + str(n) + " debts forgiven.")
 ''')
 
 # ------------------------------------------------------------------ taxes
@@ -770,6 +846,8 @@ PREDICATES = {
     "Surveillance Office": lambda k, s: bool(k.holders("surveil")),
     "Court of Justice": lambda k, s: bool(k.holders("judge")),
     "Bribery Disclosure": lambda k, s: k.probe("transfer_to_official")["gazetted"] > 0,
+    "Usury Law": lambda k, s: (CR.interest_cap(k) is not None) and CR.interest_cap(k) <= 0.05 + 1e-9,
+    "Reserve Bank Act": lambda k, s: any(c.get("par") for c in k.w["currencies"].values()),
 }
 
 # Outcome goals: a sampled condition on state at the end

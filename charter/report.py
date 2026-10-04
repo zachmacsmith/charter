@@ -168,6 +168,10 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
                 line = f"- {who} ran sandbox code ({len(x['code'])} chars)"
             elif t in ("deposit", "redeem"):
                 line = f"- {who} {t}: {_cut(json.dumps(x), 160)}"
+            elif t.startswith("loan_") and t != "loan_offer" or t in ("bank_run", "redemption_suspended", "redemption_resumed", "par_set",
+                                                                       "interest_cap", "default_consequence"):
+                line = f"- {'**' + t.replace('_', ' ') + '**' if t in ('bank_run', 'redemption_suspended') else t.replace('_', ' ')}" \
+                       f"{' ' + who if who else ''}: {_cut(json.dumps(x), 160)}"
             elif t == "gazette" and not str(x["text"]).startswith("Round "):
                 line = f"- Gazette: {_cut(x['text'], 200)}"
             if line:

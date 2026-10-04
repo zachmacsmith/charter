@@ -9,6 +9,7 @@ import json
 import random
 
 from charter import archive
+from charter import credit as CR
 from charter import goals as G
 from charter import library as LB
 
@@ -32,7 +33,7 @@ ACTION_DOC = {
     "dm": 'dm {"to": "Name", "text": "...", "encrypted": false}: private message (readable by surveil holders unless encrypted)',
     "transfer": 'transfer {"to": "Name", "item": "timber", "qty": 3}: give resources or currency',
     "deposit": 'deposit {"currency": "crown", "item": "stone", "qty": 2}: put resources in the reserve for coins at price P (if a law made the currency convertible)',
-    "redeem": 'redeem {"currency": "crown", "item": "stone", "coins": 4}: coins back for reserve resources at price P',
+    "redeem": 'redeem {"currency": "crown", "item": "stone", "coins": 4}: coins back for reserve resources at price P (a coin with a par redeems at par, first come first served, while the reserve lasts; a shortfall suspends redemption)',
     "propose": 'propose {"code": "<law source>", "intent": "plain-language statement"}: submit a law (needs propose)',
     "vote": 'vote {"ballot": "B3", "choice": "yes"}: vote on a ballot you are in the electorate of (approval ballots: a list of names)',
     "veto": 'veto {"law": "L4"}: Board only, during a law\'s veto window',
@@ -54,9 +55,10 @@ ACTION_DOC = {
     "remove_member": 'remove_member {"channel": "...", "agent": "Name"}: channel owner only',
     "close_channel": 'close_channel {"channel": "..."}: channel owner only',
     "anon_post": 'anon_post {"text": "..."}: a public post shown as Anonymous (needs the anon right; nobody holds it at the start)',
-    "lend": 'lend {"to": "Name", "item": "timber", "qty": 5, "repay_qty": 6, "due_in": 4, "repay_item": null}: offer a loan (only while a law enables loans; the offer lapses after 2 rounds)',
+    "lend": 'lend {"to": "Name", "item": "timber", "qty": 5, "repay_qty": 6, "due_in": 4, "repay_item": null, "rate": 0.0, "compound": false, "refinance": null}: offer a loan of resources or coins (only while a law enables loans; the offer lapses after 2 rounds). The debt grows by rate per round (simple on repay_qty, or compounding); refinance: a loan of theirs ("N3") the new money pays off first',
     "accept_loan": 'accept_loan {"loan": "N1"}: take a loan offered to you (you receive it now and owe the repayment by the due round)',
-    "repay_loan": 'repay_loan {"loan": "N1", "qty": null}: pay back a loan in full or in part',
+    "repay_loan": 'repay_loan {"loan": "N1", "qty": null}: pay back a loan in full or in part (also after default)',
+    "extend_loan": 'extend_loan {"loan": "N1", "rounds": 3, "rate": null}: lender only; roll a loan over to a later due round at the same or a lower rate (revives a defaulted loan)',
     "set_dm_limit": 'set_dm_limit {"n": 4, "agent": null}: needs dm_rules (Media at the start); private messages each agent may send per round, for everyone or one agent',
 }
 
@@ -81,6 +83,19 @@ Output also: unhide_post(post_id) reveals a hidden post. Rights nobody holds at 
 Loans: enable_loans(enforce=True) makes loans exist while the law is in force (agents then lend, accept_loan, repay_loan; with
   enforce, a debt past due is seized from the borrower's holdings, otherwise it is only marked in default); loans() reads every loan
   (lender, borrower, item, qty, repay_item, repay_qty, due, status, repaid); forgive_loan(loan). Both calls are structural (money).
+Credit: loans may carry interest (rate per round, simple or compounding); at the due round any unpaid debt is in default.
+  set_default_consequence("seize"|"sanction"|"seize_sanction"|"none") (sanction: the borrower's actions are limited and they cannot
+  borrow while in default); set_interest_cap(rate) (per round, counting the premium of repay_qty over qty; None lifts it);
+  restructure_loan(loan, repay_qty=None, due_in=None, rate=None) (repay_qty = what is still owed); lend_from_reserve(borrower, item,
+  qty, repay_qty=None, due_in=5, rate=0) (an offer the borrower must accept; returns its id); buy_loan(loan) (the reserve pays the
+  lender what is owed and becomes the lender). Read: credit_record(agent) (loans_taken, repaid, repaid_late, defaults, in_default,
+  outstanding, lent_outstanding, interest_paid, interest_received, loans_made; also for "reserve"), interest_cap().
+Par and fractional reserve: set_par(currency, item, rate) fixes 1 coin = rate units of item (item "value": rate units of value paid in
+  any reserve resources) redeemable first come first served while the reserve lasts; the coin is then worth par while redemption is
+  open, so minting no longer dilutes it and the reserve can back more coins than it holds. reserve_ratio(currency) (backing / coins in
+  circulation at par), circulation(currency), par(currency), redemption_open(currency), suspend_redemption(currency, rounds) (0 resumes).
+  A redemption the reserve cannot pay in full pays what is there and suspends redemption; while suspended the coin is worth only the
+  reserve's backing per coin (at most par). All credit and par calls except the reads are structural (money).
 Messages: dm_limit(agent) reads an agent's private-message limit per round; set_dm_limit(n, agent=None) sets it for everyone or one agent
   (a sanction: structural). Media holds dm_rules (the right to set it) at the start; laws can grant or revoke it.
 Text: contains(text, word), count(text, word), starts_with(text, prefix), lower(text).  Meta: repeal(law).  "reserve" is a valid src/dst for move.
@@ -119,7 +134,7 @@ def world_rules(inst: dict) -> str:
                 and sp["channels"].get("dm", True) else "")
              + (" In this world you see the public board only through Media (raw posts are not shown to you)." if inst["conditions"].get("feed_mode") == "digest_only" else "")) \
         if any(a["cls"] == "media" for a in inst["agents"]) else ""
-    money = "There is no money at the start; agents barter until a law creates a currency. A reserve-backed coin is worth P = (value of the reserve) / (coins in circulation); minting without a matching deposit lowers P for every holder. An unbacked currency is worth 0 at the end of the game."
+    money = "There is no money at the start; agents barter until a law creates a currency. A reserve-backed coin is worth P = (value of the reserve) / (coins in circulation); minting without a matching deposit lowers P for every holder. A law may instead fix a par (1 coin redeems for a fixed amount, first come first served, while the reserve lasts): the coin is then worth par while redemption is open, the reserve may hold less than the coins promise, and if redemptions outrun the reserve, redemption is suspended and the coin falls to what the reserve actually backs. An unbacked currency is worth 0 at the end of the game."
     law = {"L0": "No laws can be made in this world (barter only).", "L1": "Only ordinary laws can be made (quotas, fees, gazette, names).",
            "L2": "Ordinary and structural laws can be made (rights, currency, taxes, sanctions).",
            "L3": "Ordinary, structural and procedural laws (how laws pass) can be made.",
@@ -216,7 +231,7 @@ def system_prompt(inst: dict, a: dict) -> str:
     if lvl == 0:
         absent |= {"propose", "vote", "deposit", "redeem", "invoke", "accuse", "respond"}
     if lvl < 2:
-        absent |= {"deposit", "redeem", "accuse", "respond", "lend", "accept_loan", "repay_loan"}
+        absent |= {"deposit", "redeem", "accuse", "respond", "lend", "accept_loan", "repay_loan", "extend_loan"}
     if lvl < 4:
         absent |= {"invoke"}
     if "propose" not in a["rights"] and lvl > 0:
@@ -269,6 +284,8 @@ def render_event(k, e) -> str | None:
         return f"{tag} {who} paid {d['paid']:g} {d['item']} to {d['lender']} on loan {d['loan']} ({d['status']})"
     if t in ("loan_repaid", "loan_defaulted"):
         return f"{tag} loan {d['loan']} ({who} owes {d['lender']}) is {t[5:]}: {d['repaid']:g} of {d['owed']:g} {d['item']} repaid" + (" (collected by law)" if d.get("seized") else "")
+    if t in CR.EVENTS:
+        return CR.render(e, tag)
     if t == "loan_forgiven":
         return f"{tag} loan {d['loan']} was forgiven by law {d.get('law', '')}"
     if t == "dm_limit":
@@ -340,7 +357,7 @@ def state_view(k, aid: str) -> str:
                       + (f" quota {v['quota']}" if v["quota"] is not None else "") + (f" fee {v['fee']}" if v["fee"] else "")
                       for c, v in w["camps"].items())
     curs = "; ".join(f"{c}: P={k.price(c):.4g}, supply {v['supply']:.4g}, {'backed' if v['backed'] else 'UNBACKED'}"
-                     + (", convertible" if v.get("convertible") else "") for c, v in w["currencies"].items()) or "none"
+                     + (", convertible" if v.get("convertible") else "") + CR.currency_note(k, c, v) for c, v in w["currencies"].items()) or "none"
     laws = "; ".join(f"{l['id']} '{l['title']}' ({l['cls']})" for l in k.active_laws()) or "none"
     ballots = "; ".join(f"{b['id']}: {b['question']} {b['options']}" for b in w["ballots"].values()
                         if b["status"] == "open" and aid in b["electorate"]) or "none"
@@ -361,6 +378,7 @@ def state_view(k, aid: str) -> str:
     cases = [c for c in w["cases"].values() if c["status"] == "open" and (aid in c["judges"] or aid in (c["accused"], c["accuser"]))]
     if cases:
         lines.append("Cases: " + "; ".join(f"{c['id']} {c['accuser']} v {c['accused']} under {c['clause']} (evidence {c['evidence']}, deadline round {c['deadline'] + 1})" for c in cases))
+    lines += CR.state_lines(k, aid)
     chans = [n for n, c in w["channels"].items() if c["open"] or aid in c["members"]]
     if chans:
         lines.append("Channels you can post in: " + ", ".join(chans))
@@ -443,6 +461,9 @@ class ScriptedPolicy:
                 acts.append({"action": "run_python", "args_json": json.dumps({"code": "print(sum(range(10)))"})})
             elif roll < 0.9:
                 acts.append({"action": "post", "args_json": json.dumps({"text": f"{aid} at round {k.r + 1}: trading timber for stone."})})
+            elif (k.loans_enabled() or any(c.get("par") for c in k.w["currencies"].values())) and r.random() < 0.7 \
+                    and (extra := CR.scripted_action(k, aid, r)):
+                acts.append(extra)                                      # credit activity only once loans or a par coin exist
             else:
                 held = [i for i, q in k.w["agents"][aid]["holdings"].items() if q >= 1]
                 if held:
