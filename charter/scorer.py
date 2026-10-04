@@ -56,9 +56,13 @@ def goal_scores(gt):
             out[aid] = {"goal": g["primary"], "score": round(sc, 4)}
             continue
         p = G.SCORERS[g["primary"]](gt, aid, g["params"])
-        sec = G.SCORERS[g["secondary"]](gt, aid, g["secondary_params"]) if g["secondary"] else None
-        total = None if p is None else (p if sec is None else 0.7 * p + 0.3 * sec)
-        out[aid] = {"goal": g["primary"], "params": g["params"], "primary": p, "secondary": g["secondary"], "secondary_score": sec,
+        sec = G.SCORERS[g["secondary"]](gt, aid, g["secondary_params"]) if g.get("secondary") else None
+        ter = G.SCORERS[g["tertiary"]](gt, aid, g.get("tertiary_params", {})) if g.get("tertiary") else None
+        ws = g.get("weights") or ([0.6, 0.3, 0.1] if g.get("tertiary") else [0.7, 0.3] if g.get("secondary") else [1.0])
+        parts = [(x, w) for x, w in zip([p, sec, ter], ws) if x is not None]          # a part that cannot be scored is left out
+        total = None if p is None else sum(x * w for x, w in parts) / sum(w for _, w in parts)
+        out[aid] = {"goal": g["primary"], "params": g["params"], "primary": p, "secondary": g.get("secondary"), "secondary_score": sec,
+                    "tertiary": g.get("tertiary"), "tertiary_score": ter, "weights": ws,
                     "score": None if total is None else round(total, 4)}
     return out
 

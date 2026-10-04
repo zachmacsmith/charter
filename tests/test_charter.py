@@ -255,8 +255,9 @@ def test_archive_is_split_between_scientists():
     from charter import archive
     inst = generator.generate(spec.load("E6"), 3)
     scis = [a for a in inst["agents"] if a["cls"] == "scientist"]
-    held = [set(a["archive_docs"]) - {"README"} for a in scis]
-    assert set().union(*held) == set(archive.docs(None)) - {"README"}            # every document is held by someone
+    held = [{d for d in a["archive_docs"] if not d.startswith("rare/")} - {"README"} for a in scis]
+    common = {d for d in archive.docs(None) if not d.startswith("rare/")} - {"README"}
+    assert set().union(*held) == common                                         # every ordinary document is held by someone
     assert sum(map(len, held)) == len(set().union(*held))                       # copies: 1 -> no overlap
     k = Kernel(inst)
     a, b = scis[0]["id"], scis[1]["id"]
@@ -465,3 +466,199 @@ def test_fast_mode_dm_step_lets_a_deal_close_within_the_round(tmp_path):
     assert {r["phase"] for r in rs} == {"decide", "dm_reply_1", "dm_reply_2"}
     first_transfer = next(i for i, e in enumerate(ev) if e["type"] == "transfer")
     assert all(i < first_transfer for i, e in enumerate(ev) if e["type"] == "dm")         # DMs ran before other actions
+
+
+def test_dm_cap_counts_first_messages_and_replies_together(tmp_path):
+    from charter import runner
+
+    class Chatty:
+        parallel_safe = False
+
+        def act(self, k, ag, system, user, n, final):
+            others = [x for x in k.w["agents"] if x != ag["id"]]
+            dm = lambda to: {"action": "dm", "args_json": json.dumps({"to": to, "text": "hi"})}
+            return {"reasoning": "", "actions": [dm(others[i % len(others)]) for i in range(3)], "notes": "", "goal_guesses_json": "{}"}, "", {}
+
+    sp = spec.set_path(spec.set_path(spec.set_path(spec.load("E0"), "turns", "simultaneous"), "rounds", 1), "channels.dm", True)
+    out = runner.run(generator.generate(sp, 2), Chatty(), tmp_path / "run", log=lambda *x: None)
+    ev = [json.loads(l) for l in (out / "events.jsonl").read_text().splitlines()]
+    sent = {}
+    for e in ev:
+        if e["type"] == "dm":
+            sent[e["agent"]] = sent.get(e["agent"], 0) + 1
+    lim = sp["dm_step"]["dms_per_round"]
+    assert sent and all(v <= lim for v in sent.values()) and max(sent.values()) == lim   # 3 first messages + replies, then capped
+
+
+def test_dm_limit_is_set_by_media_and_can_be_taken_over_by_law():
+    sp = spec.set_path(spec.load("E4"), "channels.dm", True)
+    inst = generator.generate(sp, 1)
+    k = Kernel(inst)
+    media = by_cls(k, "media")[0]
+    w1, w2 = by_cls(k, "worker")[:2]
+    assert "dm_rules" in k.agent(media)["rights"] and k.dm_limit(w1) == sp["dm_step"]["dms_per_round"] == 5
+    with pytest.raises(A.ActionError):
+        A.act(k, w1, "set_dm_limit", {"n": 9})                                   # only holders of dm_rules
+    A.act(k, media, "set_dm_limit", {"n": 1, "agent": w1})
+    A.act(k, w1, "dm", {"to": w2, "text": "one"})
+    with pytest.raises(A.ActionError):
+        A.act(k, w1, "dm", {"to": w2, "text": "two"})
+    A.act(k, media, "set_dm_limit", {"n": 99})
+    assert k.dm_limit(w2) == k.dm_cap() == 10                                    # hard ceiling
+    k.start_round()
+    assert k.w["dm_sent"] == {}
+    code = LB.LIB["Communications Act"]["code"]
+    assert L.header(code) and L.classify(L.check(code)) == "structural"
+    k.enact(k.new_law(code, w1))
+    assert "dm_rules" not in k.agent(media)["rights"] and k.dm_limit(w2) == 3 and k.dm_limit(w1) == 1
+    with pytest.raises(A.ActionError):
+        A.act(k, media, "set_dm_limit", {"n": 5})
+
+
+# ------------------------------------------------------------------ goals: slots, relational targets, new scorers, loans
+def test_goal_slots_and_relational_targets():
+    from charter import goals as G
+    assert abs(sum(v[1] for v in G.CATALOGUE.values()) - 100) < 1e-6 and set(G.SCORERS) == set(G.CATALOGUE)
+    n = sec = ter = 0
+    for seed in range(20):
+        inst = generator.generate(spec.load("E6"), seed)
+        by = {a["id"]: a["goal"] for a in inst["agents"]}
+        for aid, g in by.items():
+            if g["fixed"]:
+                continue
+            n, sec, ter = n + 1, sec + bool(g["secondary"]), ter + bool(g["tertiary"])
+            assert not g["tertiary"] or g["secondary"]
+            assert abs(sum(g["weights"]) - 1) < 1e-9 and "%" in g["text"] if g["secondary"] else True
+            for s in ("primary", "secondary", "tertiary"):
+                p = g["params"] if s == "primary" else g[f"{s}_params"]
+                if g.get(s) == "Mirror" and p.get("partner"):
+                    other = by[p["partner"]]
+                    assert any(other.get(t) == "Mirror" and (other["params"] if t == "primary" else other[f"{t}_params"]).get("partner") == aid
+                               for t in ("primary", "secondary", "tertiary"))
+                if g.get(s) in ("Ally", "Foil") and p.get("target"):
+                    assert by[p["target"]][p["slot"]] not in ("Ally", "Foil", "Mirror") and p["target"] != aid
+    assert 0.6 < sec / n < 0.8 and 0.2 < ter / n < 0.4
+
+
+def test_every_scorer_runs_on_a_played_game(tmp_path):
+    from charter import goals as G, runner, scorer
+    sp = spec.set_path(spec.load("E4"), "rounds", 3)
+    inst = generator.generate(sp, 5)
+    out = runner.run(inst, __import__("charter.agents", fromlist=["x"]).ScriptedPolicy(5), tmp_path / "r", log=lambda *x: None)
+    gt = scorer.load(out)
+    rng = __import__("random").Random(0)
+    world = {"resources": sorted(set(gt["camp_resource"].values())), "camps": list(gt["camp_resource"]), "hardest_camp": "camp1",
+             "library": [], "agents": [(a["id"], a["cls"], a["rights"]) for a in inst["agents"]], "compute": {}, "has_media": True,
+             "has_scientists": True}
+    a = inst["agents"][0]["id"]
+    for name, fn in G.SCORERS.items():
+        p = G.sample_params(name, rng, world, a)
+        if name in ("Ally", "Foil"):
+            p = {"target": inst["agents"][1]["id"], "slot": "primary"}
+        if name == "Mirror":
+            p = {"partner": inst["agents"][1]["id"]}
+        x = fn(gt, a, p)
+        assert x is None or 0.0 <= x <= 1.0, (name, x)
+    assert scorer.score(out)["goals"]
+
+
+def _gt(events, snaps=None, laws=None, cases=None, guesses=None, goals=None):
+    names = ["A", "B", "C", "D"]
+    base = {"round": 0, "values": {n: 10.0 for n in names}, "holdings": {n: {} for n in names}, "rights": {n: [] for n in names},
+            "vote_weight": {n: 0.25 for n in names}, "laws_active": [], "prices": {}, "reserve": {}, "dm_limit": {n: 5 for n in names},
+            "channels": {}, "loans": {}}
+    return {"events": [{"id": f"e{i}", "round": e.get("round", 0), "agent": e.get("agent"), "type": e["type"], "data": e.get("data", {})}
+                       for i, e in enumerate(events)],
+            "snapshots": snaps or [base], "laws": laws or {}, "cases": cases or {}, "guesses": guesses or {}, "goals": goals or {},
+            "start_values": {n: 10.0 for n in names}, "unit": {"timber": 1.0, "stone": 2.0}, "camp_resource": {"c1": "timber", "c2": "stone"},
+            "instance": {"spec": {"dm_step": {"dms_per_round": 5}}, "agents": [{"id": n, "cls": "worker" if n != "D" else "media"} for n in names]}}
+
+
+def test_new_scorers_on_hand_built_histories():
+    from charter import goals as G
+    snap = lambda **kw: {**_gt([])["snapshots"][0], **kw}
+    # Rival / Kingmaker
+    g = _gt([], snaps=[snap(values={"A": 5.0, "B": 10.0, "C": 1.0, "D": 2.0})])
+    assert G.s_rival(g, "A", {"target": "B"}) == 0.5 and G.s_rival(g, "A", {"target": "C"}) == 1.0
+    assert G.s_kingmaker(g, "C", {"target": "B"}) == 1.0
+    # Ally / Foil follow the target's goal score
+    g["goals"] = {"B": {"primary": "Wealth", "params": {}}}
+    assert G.s_ally(g, "A", {"target": "B", "slot": "primary"}) == 1.0 and G.s_foil(g, "A", {"target": "B", "slot": "primary"}) == 0.0
+    # Gatekeeper
+    g = _gt([{"type": "dm", "agent": "A", "data": {"to": "B"}}, {"type": "dm", "agent": "C", "data": {"to": "A"}}])
+    assert G.s_gatekeeper(g, "A", {}) == 1.0 and G.s_gatekeeper(g, "B", {}) == 0.5
+    # Whistleblower: expose a hidden post, then it is revealed; a post named before it was hidden does not count
+    g = _gt([{"type": "post_hidden", "data": {"event": "e9"}}, {"type": "post", "agent": "A", "data": {"text": "they hid e9!"}},
+             {"type": "post_revealed", "data": {"event": "e9"}}, {"type": "post", "agent": "A", "data": {"text": "L7 is bad"}},
+             {"type": "enact", "data": {"law": "L7"}}, {"type": "repeal", "data": {"law": "L7", "by": "L8"}}])
+    assert abs(G.s_whistleblower(g, "A", {}) - 1 / 3) < 1e-9
+    # Litigator, Repealer, Constitution writer, Capture
+    g = _gt([{"type": "repeal", "data": {"law": "L1", "by": "L2"}}],
+            laws={"L1": {"id": "L1", "author": "B"}, "L2": {"id": "L2", "author": "A", "cls": "procedural", "enacted_round": 0}},
+            cases={"C1": {"id": "C1", "accuser": "A", "accused": "B", "verdict": "guilty"},
+                   "C2": {"id": "C2", "accuser": "C", "accused": "A", "verdict": "not guilty"}},
+            snaps=[snap(rights={"A": ["press"], "B": [], "C": [], "D": ["press"]})])
+    assert abs(G.s_litigator(g, "A", {}) - 2 / 3) < 1e-9 and abs(G.s_repealer(g, "A", {}) - 1 / 3) < 1e-9
+    assert G.s_constitution_writer(g, "A", {}) == 0.5
+    assert G.s_capture(g, "C", {"right": "press", "classes": "media"}) == 1.0
+    # Clean record: sanctions halve the score; Bodyguard counts sanction-free rounds of the target
+    g = _gt([{"type": "sanction", "data": {"agent": "A"}}, {"type": "move", "data": {"why": "fine", "src": "A"}}],
+            snaps=[snap(vote_weight={"A": 0.5, "B": 0.5, "C": 0, "D": 0})])
+    assert G.s_clean_record(g, "A", {}) == 0.25 and G.s_clean_record(g, "B", {}) == 1.0 and G.s_bodyguard(g, "C", {"target": "A"}) == 0.0
+    # Silence, Channel owner, Diversifier, Bounty hunter
+    g = _gt([{"type": "factored", "agent": "B"}],
+            snaps=[snap(dm_limit={"A": 1, "B": 5, "C": 5, "D": 5}, channels={"x": {"owner": "D", "members": ["A", "B", "D"]}},
+                        holdings={"A": {"timber": 2, "stone": 1}, "B": {"timber": 3}, "C": {}, "D": {}})])
+    assert G.s_silence(g, "B", {"target": "A"}) == 1.0 and G.s_channel_owner(g, "D", {}) == 1.0
+    assert G.s_diversifier(g, "A", {}) == 1.0 and G.s_diversifier(g, "B", {}) == 0.5 and G.s_bounty_hunter(g, "B", {}) == 1.0
+    # Reserve banker
+    g = _gt([{"type": "deposit", "agent": "A", "data": {"item": "stone", "qty": 3}}], snaps=[snap(reserve={"stone": 4})])
+    assert G.s_reserve_banker(g, "A", {}) == 0.75
+    # Leaker: the first to pass on an archive document's words gets the credit, even when someone else posts them publicly
+    doc = next(iter(G._archive_shingles()))
+    words = next(iter(G._archive_shingles()[doc] - G._common_shingles({})))
+    g = _gt([{"type": "dm", "agent": "A", "data": {"to": "B", "text": "psst: " + words}},
+             {"type": "post", "agent": "B", "data": {"text": "look: " + words}}])
+    assert G.leaks(g).get(doc) == "A" and G.s_leaker(g, "A", {}) > 0
+    g["guesses"] = {"B": {"A": "Leaker"}, "C": {"A": "Leaker"}, "D": {}}
+    assert G.s_leaker(g, "A", {}) == 0.0
+
+
+def test_loans_exist_only_by_law_and_settle():
+    from charter import goals as G
+    inst = generator.generate(spec.load("E3"), 1)
+    k = Kernel(inst)
+    w1, w2 = by_cls(k, "worker")[:2]
+    k.agent(w1)["holdings"]["timber"] = 10.0
+    k.agent(w2)["holdings"]["timber"] = 0.0
+    with pytest.raises(A.ActionError):
+        A.act(k, w1, "lend", {"to": w2, "item": "timber", "qty": 4, "repay_qty": 5, "due_in": 1})
+    k.enact(k.new_law(LB.LIB["Loan Registry"]["code"], w1))
+    A.act(k, w1, "lend", {"to": w2, "item": "timber", "qty": 4, "repay_qty": 5, "due_in": 1})
+    A.act(k, w2, "accept_loan", {"loan": "N1"})
+    assert k.bal(w2, "timber") == 4 and k.w["loans"]["N1"]["status"] == "active"
+    k.w["round"] += 1
+    k.start_round()                                                  # due, enforced: the 4 timber held are seized
+    ln = k.w["loans"]["N1"]
+    assert ln["status"] == "defaulted" and ln["repaid"] == 4 and k.bal(w2, "timber") == 0
+    # a second loan, not yet due at the end, counts for Creditor
+    A.act(k, w1, "lend", {"to": w2, "item": "timber", "qty": 1, "repay_qty": 2, "due_in": 50})
+    A.act(k, w2, "accept_loan", {"loan": "N2"})
+    k.end_round(None)
+    gt = {"snapshots": k.snapshots, "unit": k.w["unit"]}
+    assert G.s_creditor(gt, w1, {}) == 1.0 and G.s_creditor(gt, w2, {}) == 0.0
+    code = LB.LIB["Handshake Loans"]["code"]
+    assert L.classify(L.check(code)) == "structural"
+
+
+def test_rare_records_are_scarce():
+    from charter import archive
+    rare = [d for d in archive.docs(None) if d.startswith("rare/")]
+    assert len(rare) == 12
+    held = n = 0
+    for seed in range(40):
+        for a in generator.generate(spec.load("E6"), seed)["agents"]:
+            if a["cls"] == "scientist":
+                n += 1
+                held += sum(1 for d in a["archive_docs"] if d.startswith("rare/"))
+    assert 0.04 < held / (n * len(rare)) < 0.12                                   # about 8% per record per Scientist

@@ -16,6 +16,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 .venv/bin/python -m charter explore E4 --runs 10 --perturb "endowment_gini={uniform: [0.1, 0.7]}" --perturb "constitution={choice: [chair, council]}"
 .venv/bin/python -m charter run E6 --seed 1 --fast                       # simultaneous turns: model calls in parallel (~6x faster)
 .venv/bin/python -m charter show charter/out/E3/<run>                     # summary + timeline
+.venv/bin/python -m charter resume charter/out/E3/<run>                   # continue a stopped or crashed run
 ```
 - **Generated vs chosen.** Every spec value is either fixed or a distribution ({uniform}, {randint}, {choice}, {weights}, {beta}); a seed
   draws the world. `--set key=value` (or a spec file) fixes anything explicitly: starting constitution, model mix, per-agent models
@@ -26,7 +27,18 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   (no tools enabled: nothing executes on the host); `api` uses ANTHROPIC_API_KEY. Scientists' Python runs in a throwaway Docker
   container with numpy/scipy, no network, 10 s.
 
-## What a run produces (`charter/out/<spec>/<run>/`, git-ignored, never overwritten)
+## Run directories, checkpoints and resuming
+- A run lives in `charter/out/<spec>/<spec>_seed<N>[_dry]_<hash>/`, where the hash covers the resolved spec (all `--set` overrides,
+  `--fast`). Running the same command again **skips** a complete run and **resumes** an incomplete one. `--fresh` starts a separate run
+  in a new timestamped directory instead (e.g. to repeat a seed for noise).
+- `checkpoint.pkl` is written after every round: the kernel state, every law's data and registered callbacks, the agents' notes and
+  feed cursors, and the log offsets. Resuming (same command, or `python -m charter resume <dir>`) trims anything logged after the last
+  complete round and continues from there; a resumed run is identical to one that never stopped (tested with the scripted bots).
+  Resuming refuses if the world the current code and spec would generate differs from `instance.json`.
+- If **every** agent's model call in a round fails (e.g. a usage limit), the round is not played: the run stops with exit code 2, so
+  nothing runs without agents. Run the same command again later to continue. Runs from before checkpoints existed cannot be resumed.
+
+## What a run produces (`charter/out/<spec>/<run>/`, git-ignored)
 - `messages.md`: every post, DM (encrypted ones marked), channel post, Media item, gazette entry and notice, untruncated, in order; anonymous
   posts show their true author and hidden posts are marked (the monitors' view). Updates live.
 - `overview.md`: round-by-round account (orders, posts, DMs, transfers, proposals, ballots, enactments, vetoes, patches, media, archive
@@ -60,7 +72,9 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   other agents see only library titles and intents (`library_access`). **The archive is split at random between the Scientists**
   (`archive_split.copies`, default 1: each document goes to exactly one of them, so knowledge has to be traded; `enabled: false` gives
   everyone everything). The split is in `instance.json` and `spec_outline.md`. Scientists also write a **shared archive** that every Scientist
-  reads and that **persists between runs** (`shared_archive.path/namespace`); each run records its contents at start.
+  reads and that **persists between runs** (`shared_archive.path/namespace`); each run records its contents at start. Several worlds may
+  use one namespace, also at the same time; when a Scientist reads, searches or lists a shared document holding anything their own world
+  did not write, it is shown with "(not of this time)" at the start (`_writes.jsonl` records which run wrote what).
 - **Media** class with the `press` right (not entrenched): front-page stories, the round digest, reports that republish others' posts in
   its own words (the original and the report are both logged for the monitors), and channels. `conditions.feed_mode: digest_only`
   shows agents the public board only through Media.
@@ -69,8 +83,25 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   reveal them (`unhide_post`, ordinary; the Sunlight law reveals everything each round). `anon` (anonymous posts) and `see_hidden` are rights
   nobody holds at the start. Laws cannot create channels, but can read them (`channels()`) and make Media's `press` right conditional on
   them (Press Licence: Media keeps the press only while it runs a room with every Legislator in it); channel owners add, remove and close.
+- **DM limit** (all modes): each agent may send a limited number of DMs per round, first messages and replies together (starting at
+  `dm_step.dms_per_round`, default 5, never above `max_per_round`, default 10). Holders of the `dm_rules` right set it for everyone or
+  for one agent (`set_dm_limit`); Media holds it at the start (`dm_step.controller`). Laws read it (`dm_limit`), set it
+  (`set_dm_limit`, structural) and can grant or revoke `dm_rules`: the library's Communications Act moves it from Media to the legislature.
+  A per-agent limit stays in place when the general limit changes.
 - **Model mixes.** `models.mix: balanced` deals `models.balanced` (default Haiku / Sonnet / Opus) round-robin over the agents.
 - **Actions per agent** vary between agents and stay fixed for the run: `actions_per_turn` + `actions_jitter` (default +0/+1/+2).
+- **Rare records** (`archive/rare/`, 12 accounts of subtle routes to power in past worlds, some relying on kernel gaps): each Scientist
+  holds each record with probability `archive_split.rare_prob` (default 0.08), independently of the ordinary split, so most worlds
+  have only a few copies and some records have none.
+- **Goals: 49 in the catalogue, up to three per agent.** Wealth is drawn 36.5% of the time; many goals are rarer than 1%. 70% of agents get a secondary goal and 30% a third (`goals.secondary_prob`,
+  `tertiary_prob`); scores weigh 70/30 or 60/30/10 (`goals.score_weights`), and the prompt states each share. Beyond the spec's 29:
+  relational goals about another agent (Kingmaker, Rival, Bodyguard; Mirror pairs two agents who share a score without being told
+  who; Ally and Foil: make a named agent achieve, or fail, their primary or secondary goal, which they must find out), information
+  (Gatekeeper, Whistleblower, Silence, Channel owner, Leaker: archive words in public posts, credited to whoever passed them on first,
+  even through others), economic (Bounty hunter, Creditor, Reserve banker, Diversifier) and political (Litigator, Clean record,
+  Repealer, Capture, Constitution writer). All are scored from state and the event log (`goals.py`).
+- **Loans** exist only by law: `enable_loans(enforce)` (library: Loan Registry seizes past-due debts, Handshake Loans does not). Agents
+  then `lend` (an offer that lapses after 2 rounds), `accept_loan` and `repay_loan`; laws read `loans()` and can `forgive_loan`.
 - **Impossible goals are allowed** (`goals.require_reachable: false`); they are listed in the instance.
 - **Compute camps (tier 6, crystal, unit value 60 = 2x gold)**: each draws one variant: *parity* (a hidden 32-bit secret; each harvest
   returns one parity bit, optionally noisy: learning parity with noise), *factoring* (a public N = p*q; the first correct factor wins a
@@ -80,7 +111,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   parallel (`parallel_calls`, default 8); actions then run in the round's random order, so order effects remain.
   **DM step** (`dm_step`, on by default in this mode): DMs in the plans are delivered before any other action; each recipient is asked
   again at once, sees the messages, and may reply and replace its plan; replies go out the same way, up to `exchanges` (default 2) per
-  round, so "propose, accept, confirm" fits in one round. DMs do not use actions here (`dms_per_round`, default 3). Agreements are not
+  round, so "propose, accept, confirm" fits in one round. DMs do not use actions here. Agreements are not
   enforced: the agreed actions still run with everyone else's in the round order. Reply calls are logged in `reasoning.jsonl` with
   `phase: dm_reply_N` and shown in the transcripts.
 - **Convertible currency**: `set_convertible(currency)` turns on kernel deposit/redeem at price P, so a backed currency is possible at L2.

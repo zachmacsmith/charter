@@ -1,7 +1,8 @@
 """Charter command line (run from agnet/):
 
   python -m charter generate E3 --seed 4 [--set constitution=council ...]       print / save the drawn world
-  python -m charter run E3 --seed 4 [--dry] [--set ...]                          generate, play, score, report -> charter/out/<spec>/<time>_seed4
+  python -m charter run E3 --seed 4 [--dry] [--set ...]                          generate, play, score, report -> charter/out/<spec>/E3_seed4_<hash>
+  python -m charter resume RUN_DIR                                               continue a stopped or crashed run from its last complete round
   python -m charter score RUN_DIR                                                (re)score a run
   python -m charter show RUN_DIR                                                 summary + timeline of what happened
   python -m charter report RUN_DIR                                               (re)build overview.md, spec_outline.md, agents/*
@@ -10,12 +11,18 @@
 
 SPEC is a preset name (E0..E7, base, example_E3) or a path to a YAML spec. --set applies explicit choices (they win over draws).
 Model calls go through LLM_BACKEND in agnet/.env: api (default) or claude_code (your Claude Code subscription). --dry uses free
-scripted bots instead of models. Runs never overwrite each other.
+scripted bots instead of models.
+
+Run directories are stable: <spec>_seed<N>[_dry]_<hash of the resolved spec>. Running the same command again skips a run that is
+complete and resumes one that is not (from checkpoint.pkl, written after every round). A run stops by itself if every model call
+in a round fails (e.g. a usage limit), so nothing is played without agents; run the same command again (or `resume`) later.
+--fresh starts a separate run in a new timestamped directory instead (e.g. to repeat a seed).
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import itertools
 import json
 import os
@@ -57,6 +64,17 @@ def new_dir(parent: Path, stem: str) -> Path:
     return d
 
 
+def run_stem(tag: str, sp: dict, seed: int, dry: bool) -> str:
+    """Stable run directory name: the same spec (after overrides), seed and mode always give the same directory."""
+    h = hashlib.sha256(json.dumps(sp, sort_keys=True, default=str).encode()).hexdigest()[:8]
+    return f"{tag}_seed{seed}" + ("_dry" if dry else "") + f"_{h}"
+
+
+def _same_instance(out: Path, inst: dict) -> bool:
+    f = out / "instance.json"
+    return f.exists() and f.read_text() == json.dumps(inst, indent=1, default=str)
+
+
 def policy_for(sp, dry, seed):
     if dry:
         return AG.ScriptedPolicy(seed)
@@ -71,19 +89,63 @@ def sandbox_for(dry, mode):
     return DockerSandbox()
 
 
-def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False):
+def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fresh=False):
     inst = generator.generate(sp, seed)
     tag = Path(spec_name).stem
-    out = new_dir(parent or RUNS / tag, time.strftime("%Y-%m-%dT%H-%M-%S") + f"_seed{seed}" + ("_dry" if dry else ""))
+    parent = parent or RUNS / tag
+    resume = False
+    if fresh:
+        out = new_dir(parent, time.strftime("%Y-%m-%dT%H-%M-%S") + f"_seed{seed}" + ("_dry" if dry else ""))
+    else:
+        out = parent / run_stem(tag, sp, seed, dry)
+        gt = out / "ground_truth.json"
+        if gt.exists() and json.loads(gt.read_text()).get("complete"):
+            print(f"[{out.name}] already complete; skipping (use --fresh for a separate run)")
+            res = json.loads((out / "score.json").read_text()) if (out / "score.json").exists() else scorer.score(out)
+            return out, res["summary"]
+        out.mkdir(parents=True, exist_ok=True)
+        if (out / "checkpoint.pkl").exists():
+            inst["run_id"] = out.name
+            if not _same_instance(out, inst):
+                raise SystemExit(f"[{out.name}] has a checkpoint but the world it would generate now differs from instance.json "
+                                 f"(spec or code changed). Use --fresh for a new run.")
+            resume = True
     inst["run_id"] = out.name
     backend = "scripted" if dry else os.environ.get("LLM_BACKEND", "api")
     print(f"[{out.name}] {len(inst['agents'])} agents x {inst['rounds']} rounds, constitution {inst['constitution']}, "
-          f"law level {inst['law_level']}, backend {backend}")
-    runner.run(inst, policy_for(inst["spec"], dry, seed), out, sandbox_for(dry, sandbox_mode), log=(lambda *a: None) if quiet else print)
+          f"law level {inst['law_level']}, backend {backend}" + (" (resuming)" if resume else ""))
+    _play(inst, out, dry, seed, sandbox_mode, quiet, resume)
     res = scorer.score(out)
     from charter import report
     report.build(out)
     return out, res["summary"]
+
+
+def _play(inst, out, dry, seed, sandbox_mode, quiet, resume):
+    try:
+        runner.run(inst, policy_for(inst["spec"], dry, seed), out, sandbox_for(dry, sandbox_mode),
+                   log=(lambda *a: None) if quiet else print, resume=resume)
+    except runner.RunStopped as e:
+        print(f"[{out.name}] stopped: {e}\nContinue later with the same command, or: python -m charter resume {out}")
+        raise SystemExit(2)
+
+
+def cmd_resume(a):
+    out = Path(a.run)
+    if not (out / "checkpoint.pkl").exists():
+        raise SystemExit(f"{out} has no checkpoint.pkl (runs from before checkpoints existed cannot be resumed)")
+    saved = json.loads((out / "instance.json").read_text())
+    inst = generator.generate(saved["spec"], saved["seed"])
+    inst["run_id"] = saved.get("run_id", out.name)
+    if not _same_instance(out, inst):
+        raise SystemExit(f"{out}: the world generated now differs from instance.json (spec or code changed); cannot resume")
+    dry = "_dry" in out.name
+    _play(inst, out, dry, saved["seed"], a.sandbox, False, resume=True)
+    res = scorer.score(out)
+    from charter import report
+    report.build(out)
+    print(json.dumps(res["summary"], indent=1))
+    print(f"run dir: {out}")
 
 
 def interest(s: dict) -> float:
@@ -122,7 +184,7 @@ def cmd_generate(a):
 
 def cmd_run(a):
     sp = build_spec(a.spec, a.set, getattr(a, 'fast', False))
-    out, s = run_one(a.spec, sp, a.seed, a.dry, a.sandbox)
+    out, s = run_one(a.spec, sp, a.seed, a.dry, a.sandbox, fresh=a.fresh)
     print(json.dumps(s, indent=1))
     print(f"run dir: {out}")
 
@@ -140,7 +202,7 @@ def cmd_sweep(a):
             sp = S.set_path(sp, k, v)
             label[k] = v
         for seed in range(a.seed, a.seed + a.seeds):
-            out, s = run_one(a.spec, sp, seed, a.dry, a.sandbox, parent=sweep, quiet=True)
+            out, s = run_one(a.spec, sp, seed, a.dry, a.sandbox, parent=sweep, quiet=True, fresh=a.fresh)
             rows.append({**{k: json.dumps(v) for k, v in label.items()}, **s, "interest": interest(s)})
             write_table(sweep, rows, extra_cols=tuple(label))
     print(f"sweep dir: {sweep}")
@@ -161,7 +223,7 @@ def cmd_explore(a):
             sp = S.set_path(sp, k, v)
             label[k] = round(v, 3) if isinstance(v, float) else v
         seed = rng.randrange(10**6)
-        out, s = run_one(a.spec, sp, seed, a.dry, a.sandbox, parent=exp, quiet=True)
+        out, s = run_one(a.spec, sp, seed, a.dry, a.sandbox, parent=exp, quiet=True, fresh=a.fresh)
         rows.append({**{k: json.dumps(v) for k, v in label.items()}, **s, "interest": interest(s)})
         rows.sort(key=lambda r: -r["interest"])
         write_table(exp, rows, extra_cols=tuple(label))
@@ -199,6 +261,8 @@ def main(argv=None):
         p.add_argument("--dry", action="store_true", help="scripted bots, no model calls")
         p.add_argument("--sandbox", choices=["docker", "off"], default="docker")
         p.add_argument("--fast", action="store_true", help="simultaneous turns: everyone decides from the same view, model calls in parallel")
+        p.add_argument("--fresh", action="store_true", help="a separate run in a new timestamped directory (default: stable directory; "
+                                                             "skip if complete, resume if not)")
 
     p = sub.add_parser("generate"); common(p); p.add_argument("--out"); p.set_defaults(fn=cmd_generate)
     p = sub.add_parser("run"); common(p); p.set_defaults(fn=cmd_run)
@@ -206,6 +270,8 @@ def main(argv=None):
     p.add_argument("--vary", action="append", default=[], help="key=v1,v2 (repeatable; grid over all)"); p.set_defaults(fn=cmd_sweep)
     p = sub.add_parser("explore"); common(p); p.add_argument("--runs", type=int, default=8)
     p.add_argument("--perturb", action="append", default=[], help="key=<distribution YAML> (repeatable)"); p.set_defaults(fn=cmd_explore)
+    p = sub.add_parser("resume"); p.add_argument("run"); p.add_argument("--sandbox", choices=["docker", "off"], default="docker")
+    p.set_defaults(fn=cmd_resume)
     p = sub.add_parser("score"); p.add_argument("run"); p.set_defaults(fn=cmd_score)
     p = sub.add_parser("show"); p.add_argument("run"); p.set_defaults(fn=cmd_show)
     p = sub.add_parser("report"); p.add_argument("run"); p.set_defaults(fn=lambda a: print(__import__("charter.report", fromlist=["build"]).build(a.run)))

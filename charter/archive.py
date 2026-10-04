@@ -5,6 +5,9 @@
 - the shared archive (spec shared_archive.path/namespace): documents Scientists write themselves (write_archive). It is shared by
   every Scientist and persists between runs, so later runs inherit what earlier Scientists recorded. Addressed as "shared/<name>".
 Documents are addressed by path without .md, e.g. "math/regrowth", "library/harvest-levy", "shared/silver-notes".
+
+Several worlds can share one shared archive (also at the same time). When a Scientist reads, searches or lists a shared document
+that holds anything their own world did not write, it is shown with "(not of this time)" at the start.
 """
 from __future__ import annotations
 
@@ -42,7 +45,38 @@ def docs(shared: Path | None = None) -> dict:
     return out
 
 
-def read(doc: str, shared: Path | None = None) -> str | None:
+NOT_OF_THIS_TIME = "(not of this time) "
+
+
+def foreign(shared: Path | None, doc: str, run_id: str | None) -> bool:
+    """True if the shared document holds content another world wrote: any write by another run since this run's last full
+    replacement, or no write record at all (placed there by hand)."""
+    if not shared or run_id is None or not doc.startswith("shared/"):
+        return False
+    name = doc.split("/", 1)[1]
+    log = shared / "_writes.jsonl"
+    hist = [w for w in (json.loads(l) for l in log.read_text().splitlines() if l.strip())] if log.exists() else []
+    hist = [w for w in hist if w.get("doc") == name]
+    if not hist:
+        return True
+    other = False
+    for w in hist:
+        if w.get("run") != run_id:
+            other = True
+        elif w.get("mode") != "append":
+            other = False                                              # this world replaced the whole document
+    return other
+
+
+def read(doc: str, shared: Path | None = None, run_id: str | None = None) -> str | None:
+    """run_id: the reading world; shared documents with content from other worlds come back tagged (see foreign)."""
+    text = _read(doc, shared)
+    if text is not None and foreign(shared, doc.removesuffix(".md").strip("/"), run_id):
+        return NOT_OF_THIS_TIME + text
+    return text
+
+
+def _read(doc: str, shared: Path | None = None) -> str | None:
     doc = doc.removesuffix(".md").strip("/")
     d = docs(shared)
     if doc not in d:
@@ -71,13 +105,13 @@ def write(shared: Path, doc: str, text: str, mode: str, author: str, run_id: str
     return "shared/" + name
 
 
-def index(shared: Path | None = None, only: list | None = None) -> str:
+def index(shared: Path | None = None, only: list | None = None, run_id: str | None = None) -> str:
     lines = []
     for d, p in docs(shared).items():
         if only is not None and d not in only and not d.startswith("shared/"):
             continue
         first = (p.read_text().splitlines()[0].lstrip("# ").strip() if p and p.read_text().strip() else d.split("/", 1)[1].replace("-", " ").title())
-        lines.append(f"- {d}: {first[:100]}")
+        lines.append(f"- {d}: {NOT_OF_THIS_TIME if foreign(shared, d, run_id) else ''}{first[:100]}")
     return "\n".join(lines)
 
 
@@ -90,15 +124,15 @@ def snapshot(shared: Path | None) -> dict:
             "hash": hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()[:16]}
 
 
-def search(query: str, shared: Path | None = None, limit: int = 8, only: list | None = None):
+def search(query: str, shared: Path | None = None, limit: int = 8, only: list | None = None, run_id: str | None = None):
     words = [w for w in re.findall(r"\w+", query.lower()) if len(w) > 2]
     scored = []
     for d in docs(shared):
         if only is not None and d not in only and not d.startswith("shared/"):
             continue
-        text = (read(d, shared) or "").lower()
+        text = (_read(d, shared) or "").lower()
         score = sum(text.count(w) for w in words)
         if score:
             i = min((text.find(w) for w in words if w in text), default=0)
             scored.append((score, d, text[max(0, i - 80): i + 160].replace("\n", " ")))
-    return [(d, snip) for _, d, snip in sorted(scored, key=lambda t: -t[0])[:limit]]
+    return [(d, (NOT_OF_THIS_TIME if foreign(shared, d, run_id) else "") + snip) for _, d, snip in sorted(scored, key=lambda t: -t[0])[:limit]]

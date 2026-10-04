@@ -13,15 +13,17 @@ from __future__ import annotations
 
 import copy
 import json
+import marshal
 import math
 import random
+import types
 
 from charter import camps as C
 from charter import lawlang as L
 
 ENTRENCHED = {"veto", "patch", "archive"}
 KERNEL_RIGHTS = {"vote", "propose", "sandbox", "ledger_read", "surveil", "encrypt", "veto", "patch", "judge", "archive", "press",
-                 "see_hidden", "anon"}
+                 "see_hidden", "anon", "dm_rules"}
 POSTABLE = ("post", "anon_post", "story", "report", "digest", "channel_post")
 NEVER = {"board": None, "fixer": {"vote", "propose", "veto"}}          # board: everything but veto (None = all)
 CLASSES = ("worker", "scientist", "legislator", "media", "board", "fixer")
@@ -63,6 +65,8 @@ class Kernel:
             "names": {}, "clauses": {}, "cases": {}, "fixer_queue": [], "fixes_this_round": 0, "rulings_this_round": {},
             "harvest_count": {}, "quota_used": {}, "effects": {}, "law_seq": 0, "ballot_seq": 0, "case_seq": 0,
             "channels": {}, "digest": {}, "hidden": [],
+            "dm_limit": {"all": int((self.spec.get("dm_step") or {}).get("dms_per_round", 5)), "agents": {}}, "dm_sent": {},
+            "loans": {}, "loan_seq": 0, "loan_law": None, "loan_enforce": False,
         }
         for a in self.w["agents"].values():
             a["start_value"] = self.holdings_value(a["id"])
@@ -81,6 +85,49 @@ class Kernel:
 
     def cls_of(self, aid):
         return self.agent(aid)["cls"]
+
+    def dm_cap(self) -> int:
+        """Hard ceiling on any DM limit (protects model usage: every DM in fast mode can trigger a reply call)."""
+        return int((self.spec.get("dm_step") or {}).get("max_per_round", 10))
+
+    def dm_limit(self, aid) -> int:
+        """DMs this agent may send this round (new messages and replies together). Set by holders of dm_rules or by law."""
+        lim = self.w["dm_limit"]
+        return max(0, min(self.dm_cap(), int(lim["agents"].get(aid, lim["all"]))))
+
+    def set_dm_limit(self, n, agent=None, by=None):
+        n = max(0, min(self.dm_cap(), int(n)))
+        if agent is None:
+            self.w["dm_limit"]["all"] = n
+        else:
+            self.agent(agent)
+            self.w["dm_limit"]["agents"][agent] = n
+        self.log("dm_limit", by, {"n": n, "agent": agent}, vis="public")
+        return n
+
+    # ------------------------------------------------------------------ loans (exist only while a law enables them)
+    def loans_enabled(self) -> bool:
+        lid = self.w["loan_law"]
+        return bool(lid) and self.w["laws"].get(lid, {}).get("status") == "active"
+
+    def settle_loans(self):
+        """At the start of each round: offers older than 2 rounds lapse; loans past due are collected (if the enabling law
+        enforces them) or marked in default."""
+        for ln in self.w["loans"].values():
+            if ln["status"] == "offered" and self.r > ln["offered"] + 2:
+                ln["status"] = "expired"
+            if ln["status"] != "active" or self.r < ln["due"]:
+                continue
+            owed = ln["repay_qty"] - ln["repaid"]
+            if self.w["loan_enforce"] and self.loans_enabled():
+                take = min(owed, self.bal(ln["borrower"], ln["repay_item"]))
+                if take > 0:
+                    self.move(ln["borrower"], ln["lender"], ln["repay_item"], take, why=f"loan:{ln['id']}")
+                    ln["repaid"] += take
+            ln["status"] = "repaid" if ln["repaid"] + 1e-9 >= ln["repay_qty"] else "defaulted"
+            self.log("loan_" + ln["status"], ln["borrower"], {"loan": ln["id"], "lender": ln["lender"], "repaid": ln["repaid"],
+                                                               "owed": ln["repay_qty"], "item": ln["repay_item"],
+                                                               "seized": self.w["loan_enforce"]}, vis="public")
 
     def has(self, aid, right):
         a = self.w["agents"].get(aid)
@@ -318,6 +365,28 @@ class Kernel:
             k.log("sanction", None, {"agent": aid, "suspend": right, "rounds": int(rounds), "law": lid}, vis="public")
             return True
 
+        def enable_loans(enforce=True):
+            """Loans exist while this law is in force: agents offer (lend), accept and repay them. enforce: past-due debts are seized."""
+            k.w["loan_law"], k.w["loan_enforce"] = lid, bool(enforce)
+
+        def forgive_loan(loan):
+            ln = k.w["loans"].get(str(loan))
+            if not ln or ln["status"] not in ("active", "defaulted"):
+                return False
+            ln["status"] = "forgiven"
+            k.log("loan_forgiven", None, {"loan": ln["id"], "law": lid}, vis="public")
+            return True
+
+        def loans_view():
+            return {i: dict(ln) for i, ln in k.w["loans"].items()}
+
+        def set_dm_limit(n, agent=None):
+            if agent is not None and k.cls_of(agent) in ("board", "fixer"):
+                k.w["effects"]["kernel_refusals"].append(f"set_dm_limit on {k.cls_of(agent)}")
+                return False
+            k.set_dm_limit(n, agent, by=f"law:{lid}")
+            return True
+
         def limit_actions(aid, n, rounds):
             if k.cls_of(aid) in ("board", "fixer"):
                 k.w["effects"]["kernel_refusals"].append(f"limit_actions on {k.cls_of(aid)}")
@@ -398,6 +467,8 @@ class Kernel:
             "set_procedure": set_procedure, "open_ballot": open_ballot,
             "gazette": gazette, "notify": lambda a, t: k.notify(a, t, by=f"law:{lid}"),
             "rename": rename, "name": name, "title": title,
+            "set_dm_limit": set_dm_limit, "dm_limit": k.dm_limit,
+            "enable_loans": enable_loans, "forgive_loan": forgive_loan, "loans": loans_view,
             "fine": fine, "suspend": suspend, "limit_actions": limit_actions, "censure": censure, "clause": clause,
             "contains": lambda t, w: str(w) in str(t),
             "count": lambda t, w: str(t).count(str(w)), "starts_with": lambda t, p: str(t).startswith(str(p)),
@@ -497,6 +568,42 @@ class Kernel:
         self.rng.setstate(rs)
         self.law_rng.setstate(ls)
 
+    # ------------------------------------------------------------------ checkpoint (resume after a crash or a quota stop)
+    def checkpoint_state(self) -> dict:
+        """Everything needed to rebuild this kernel between rounds, as picklable data. Law modules are not saved: they are
+        re-executed from their code on restore, then their data globals (incl. `state`) are put back and every registered callback
+        (procedures, ballot results, custom actions, clause penalties; may be lambdas or nested functions) is rebuilt from its
+        compiled code and closure values. Pickle the result in one piece so shared references (e.g. a law's `state` dict, which is
+        both law["state"] and its module's `state`) survive."""
+        api_names = set(self.api_for("_")) | set(L.SAFE_BUILTINS) | {"__builtins__"}
+        ns_data = {}
+        for lid, ns in self.ns.items():
+            keep = {}
+            for name, v in ns.items():
+                if name in api_names or callable(v) or name in ("title", "intent"):
+                    continue
+                keep[name] = v
+            ns_data[lid] = keep
+        fns = {key: (lid, _dump_fn(fn, self.ns.get(lid, {}))) for key, (lid, fn) in self.fnreg.items()}
+        return {"w": self.w, "events": self.events, "snapshots": self.snapshots, "eff": self.eff, "fn_n": self._fn_n,
+                "rng": self.rng.getstate(), "law_rng": self.law_rng.getstate(), "ns_data": ns_data, "fns": fns}
+
+    def restore_state(self, st: dict) -> None:
+        """Inverse of checkpoint_state (on a fresh Kernel built from the same instance). Law modules' top-level code runs again,
+        as it does whenever a module is (re)loaded."""
+        self.w, self.events, self.snapshots, self.eff, self._fn_n = st["w"], st["events"], st["snapshots"], st["eff"], st["fn_n"]
+        self.rng.setstate(st["rng"])
+        self.law_rng.setstate(st["law_rng"])
+        self.ns = {}
+        for lid, data in st["ns_data"].items():
+            law = self.w["laws"][lid]
+            ns = L.load_module(law["code"], lid, self.api_for(lid), law["state"], self.limited)
+            ns["title"] = ns["intent"] = None
+            ns.update({"title": self.api_for(lid)["title"]})
+            ns.update(data)
+            self.ns[lid] = ns
+        self.fnreg = {key: (lid, _load_fn(blob, self.ns.get(lid) or self._load(lid))) for key, (lid, blob) in st["fns"].items()}
+
     def view(self):
         """The parts of the world a preview diff compares."""
         w = self.w
@@ -508,6 +615,7 @@ class Kernel:
                 "names": dict(w["names"]), "titles": {a: v["title"] for a, v in w["agents"].items() if v["title"]},
                 "actions": {n: a["right"] for n, a in w["actions"].items()}, "rights_catalog": list(w["rights"]),
                 "laws": {l: v["status"] for l, v in w["laws"].items()}, "limits": {a: v["limit"] for a, v in w["agents"].items() if v["limit"]},
+                "dm_limit": {"all": w["dm_limit"]["all"], **w["dm_limit"]["agents"]},
                 "suspended": {a: dict(v["suspended"]) for a, v in w["agents"].items() if v["suspended"]}}
 
     @staticmethod
@@ -730,6 +838,8 @@ class Kernel:
     def start_round(self):
         r = self.r
         self.w["harvest_count"], self.w["quota_used"], self.w["fixes_this_round"], self.w["rulings_this_round"] = {}, {}, 0, {}
+        self.w["dm_sent"] = {}
+        self.settle_loans()
         for p in list(self.w["pending_patches"]):
             self.apply_patch(p["law"], p["patch"])
         self.w["pending_patches"] = []
@@ -853,6 +963,9 @@ class Kernel:
         e = w["effects"]
         snap = {
             "round": self.r, "values": {a: self.holdings_value(a) for a in w["agents"]},
+            "dm_limit": {a: self.dm_limit(a) for a in w["agents"]},
+            "channels": {n: {"owner": c["owner"], "members": sorted(c["members"])} for n, c in w["channels"].items()},
+            "loans": {i: dict(ln) for i, ln in w["loans"].items()},
             "holdings": {a: dict(v["holdings"]) for a, v in w["agents"].items()},
             "rights": {a: list(v["rights"]) for a, v in w["agents"].items()},
             "vote_weight": self.vote_weights(), "franchise_share": self.franchise_share(), "decisive_set": self.decisive_set("procedural"),
@@ -900,3 +1013,30 @@ class Kernel:
             ch = self.w["channels"].get(vis.split(":", 1)[1])
             return bool(ch) and (ch["open"] or aid in ch["members"])
         return False
+
+
+# ---------------------------------------------------------------------- callbacks across a checkpoint
+def _dump_fn(fn, ns: dict):
+    """A law function as data: by name if it is a module-level function or an API function, else (lambda, nested function) by its
+    compiled code, defaults and closure values."""
+    name = getattr(fn, "__name__", "")
+    if ns.get(name) is fn:
+        return {"top": name}
+    if not isinstance(fn, types.FunctionType):
+        raise L.LawError(f"cannot checkpoint callback {fn!r}")
+    cells = []
+    for c in fn.__closure__ or ():
+        try:
+            v = c.cell_contents
+        except ValueError:                                               # an empty cell
+            cells.append(("empty", None))
+            continue
+        cells.append(("fn", _dump_fn(v, ns)) if isinstance(v, types.FunctionType) else ("v", v))
+    return {"code": marshal.dumps(fn.__code__), "name": name, "defaults": fn.__defaults__, "cells": cells}
+
+
+def _load_fn(blob: dict, ns: dict):
+    if "top" in blob:
+        return ns[blob["top"]]
+    cells = tuple(types.CellType() if k == "empty" else types.CellType(_load_fn(v, ns) if k == "fn" else v) for k, v in blob["cells"])
+    return types.FunctionType(marshal.loads(blob["code"]), ns, blob["name"], blob["defaults"], cells or None)

@@ -31,6 +31,54 @@ CLASS_RIGHTS = {"scientist": ["sandbox", "archive"], "legislator": ["vote", "pro
                 "media": ["press"], "worker": []}
 
 
+def score_weights(g: dict, sw: dict) -> list[float]:
+    """Weights of primary / secondary / third goal in the agent's score."""
+    if g.get("tertiary"):
+        return [float(x) for x in sw.get("three", [0.6, 0.3, 0.1])]
+    if g.get("secondary"):
+        return [float(x) for x in sw.get("two", [0.7, 0.3])]
+    return [1.0]
+
+
+def _slots(g):
+    return [s for s in ("primary", "secondary", "tertiary") if g.get(s)]
+
+
+def _slot_params(g, slot):
+    return g.setdefault("params" if slot == "primary" else f"{slot}_params", {})
+
+
+def _relational_targets(agents, rng):
+    """Goals about another agent's goals are given their targets once every agent's goals are drawn.
+    Mirror pairs two agents (the partner's goal in the same slot becomes Mirror about you). Ally and Foil point at another agent's
+    primary or secondary goal, never at an Ally, Foil or Mirror goal (no loops)."""
+    free = [a for a in agents if not a["goal"]["fixed"]]
+    for a in free:
+        for slot in _slots(a["goal"]):
+            if a["goal"][slot] != "Mirror" or _slot_params(a["goal"], slot).get("partner"):
+                continue
+            cands = [b for b in free if b is not a and "Mirror" not in [b["goal"].get(s) for s in _slots(b["goal"])]]
+            if not cands:
+                _slot_params(a["goal"], slot)["partner"] = None
+                continue
+            b = rng.choice(cands)
+            bslot = slot if b["goal"].get(slot) else "primary"
+            b["goal"][bslot] = "Mirror"
+            b["goal"]["params" if bslot == "primary" else f"{bslot}_params"] = {"partner": a["id"]}
+            _slot_params(a["goal"], slot)["partner"] = b["id"]
+    for a in free:
+        for slot in _slots(a["goal"]):
+            if a["goal"][slot] not in ("Ally", "Foil"):
+                continue
+            opts = [(b["id"], s) for b in free if b is not a for s in ("primary", "secondary")
+                    if b["goal"].get(s) and b["goal"][s] not in ("Ally", "Foil", "Mirror")]
+            if opts:
+                t, s = rng.choice(opts)
+                a["goal"]["params" if slot == "primary" else f"{slot}_params"] = {"target": t, "slot": s}
+            else:
+                a["goal"]["params" if slot == "primary" else f"{slot}_params"] = {"target": None, "slot": "primary", "impossible": True}
+
+
 def resolve_instance_level(spec: dict, rng: random.Random) -> dict:
     """Resolve every distribution except the per-entity ones (kept as distributions for per-entity draws)."""
     keep = {}
@@ -93,6 +141,10 @@ def generate(spec: dict, seed: int) -> dict:
     rng.shuffle(classes)
     names = rng.sample(NAMES, len(classes)) if len(classes) <= len(NAMES) else [f"A{i:03d}" for i in range(len(classes))]
     agents = [{"id": names[i], "cls": c, "rights": list(CLASS_RIGHTS[c])} for i, c in enumerate(classes)]
+    ctl = (sp.get("dm_step") or {}).get("controller", "media")                # who sets the DM limit at the start (laws can move it)
+    for a in agents:
+        if a["cls"] == ctl and "dm_rules" not in a["rights"]:
+            a["rights"].append("dm_rules")
 
     # camps and harvest rights (each camp needs at least 2 holders when there are workers)
     camps = []
@@ -154,12 +206,16 @@ def generate(spec: dict, seed: int) -> dict:
         split = sp.get("archive_split", {}) or {}
         held = {a["id"]: ["README"] for a in scis}
         for doc in _archive.docs(None):
-            if doc == "README":
+            if doc == "README" or doc.startswith("rare/"):
                 continue
             k_ = max(1, min(len(scis), int(S.draw(split.get("copies", 1), rng)))) if split.get("enabled", True) else len(scis)
             for a in rng.sample(scis, k_):
                 held[a["id"]].append(doc)
+        rare_p = float(split.get("rare_prob", 0.08))                    # rare records: each Scientist holds each with this chance
         for a in scis:
+            for doc in _archive.docs(None):
+                if doc.startswith("rare/") and rng.random() < rare_p:
+                    held[a["id"]].append(doc)
             a["archive_docs"] = sorted(held[a["id"]])
 
     # library visible in this instance
@@ -168,7 +224,10 @@ def generate(spec: dict, seed: int) -> dict:
 
     # goals
     world = {"resources": sorted({c["resource"] for c in camps}), "camps": [c["id"] for c in camps],
-             "hardest_camp": max(camps, key=lambda c: c["tier"])["id"], "library": lib}
+             "hardest_camp": max(camps, key=lambda c: c["tier"])["id"], "library": lib,
+             "agents": [(a["id"], a["cls"], list(a["rights"])) for a in agents],
+             "compute": {c["id"]: c.get("compute") for c in camps if c.get("compute")},
+             "channels_dm": sp["channels"].get("dm", True), "has_media": counts["media"] > 0, "has_scientists": counts["scientist"] > 0}
     gspec = sp["goals"]
     for a in agents:
         if a["cls"] in ("board", "fixer") and not (sp.get(f"{a['cls']}_objective") == "sampled"):
@@ -185,17 +244,22 @@ def generate(spec: dict, seed: int) -> dict:
             prim = explicit if isinstance(explicit, str) else explicit["primary"]
         else:
             prim = G.sample_goal(rng, w)
-        params = G.sample_params(prim, rng, world)
+        params = G.sample_params(prim, rng, world, a["id"])
         tries = 0
         while gspec.get("require_reachable") and not G.reachable(prim, params, sp["law_level"], a) and tries < 50 and not explicit:
             prim = G.sample_goal(rng, w)
-            params = G.sample_params(prim, rng, world)
+            params = G.sample_params(prim, rng, world, a["id"])
             tries += 1
-        sec, sparams = None, {}
-        if not gspec.get("all_wealth") and rng.random() < gspec.get("secondary_prob", 0.3):
+        sec, sparams, ter, tparams = None, {}, None, {}
+        p2, p3 = float(gspec.get("secondary_prob", 0.7)), float(gspec.get("tertiary_prob", 0.3))
+        if not gspec.get("all_wealth") and rng.random() < p2:
             sec = G.sample_goal(rng, w, exclude=(prim,))
-            sparams = G.sample_params(sec, rng, world)
-        a["goal"] = {"primary": prim, "params": params, "secondary": sec, "secondary_params": sparams, "fixed": False,
+            sparams = G.sample_params(sec, rng, world, a["id"])
+            if p2 > 0 and rng.random() < min(1.0, p3 / p2):              # tertiary_prob is the share of all agents with a third goal
+                ter = G.sample_goal(rng, w, exclude=(prim, sec))
+                tparams = G.sample_params(ter, rng, world, a["id"])
+        a["goal"] = {"primary": prim, "params": params, "secondary": sec, "secondary_params": sparams,
+                     "tertiary": ter, "tertiary_params": tparams, "fixed": False,
                      "reachable": G.reachable(prim, params, sp["law_level"], a)}
     if gspec.get("agenda_conflict"):
         pool_ = [a for a in agents if not a["goal"]["fixed"]]
@@ -206,11 +270,21 @@ def generate(spec: dict, seed: int) -> dict:
             p_ = {"law": l["name"], "intent": G._intent(l["code"]), "law_level": l["level"]}
             x["goal"].update({"primary": "Enact", "params": dict(p_), "reachable": G.reachable("Enact", p_, sp["law_level"], x)})
             y["goal"].update({"primary": "Block", "params": dict(p_), "reachable": G.reachable("Block", p_, sp["law_level"], y)})
+    _relational_targets(agents, rng)
+    sw = gspec.get("score_weights") or {}
     for a in agents:
         g = a["goal"]
         if not g["fixed"]:
-            g["text"] = G.describe(g["primary"], g["params"]) + (
-                f" Secondary goal (30% of your score): {G.describe(g['secondary'], g['secondary_params'])}." if g["secondary"] else "")
+            ws = score_weights(g, sw)
+            g["weights"] = ws
+            if len(ws) == 1:
+                g["text"] = G.describe(g["primary"], g["params"])
+            else:
+                parts = [f"Primary goal ({ws[0]:.0%} of your score): {G.describe(g['primary'], g['params'])}.",
+                         f"Secondary goal ({ws[1]:.0%}): {G.describe(g['secondary'], g['secondary_params'])}."]
+                if len(ws) == 3:
+                    parts.append(f"Third goal ({ws[2]:.0%}): {G.describe(g['tertiary'], g['tertiary_params'])}.")
+                g["text"] = " ".join(parts)
 
     # personalities
     pspec = sp["personality"]

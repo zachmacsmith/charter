@@ -16,6 +16,20 @@ def law(name, category, code):
 
 
 # ------------------------------------------------------------------ money
+law("Loan Registry", "money", '''
+title = "Loan Registry"
+intent = "Agents may lend to each other; debts past due are seized from the borrower's holdings."
+
+def on_enact():
+    enable_loans(True)
+''')
+law("Handshake Loans", "money", '''
+title = "Handshake Loans"
+intent = "Agents may lend to each other; nothing is seized on default, and a debt is only as good as the borrower's word."
+
+def on_enact():
+    enable_loans(False)
+''')
 law("Crown Currency", "money", '''
 title = "Crown Currency"
 intent = "A reserve-backed coin anyone can deposit resources for or redeem."
@@ -556,6 +570,15 @@ def on_round_end(r):
         for m in holders("press"):
             suspend(m, "press", 1)
         gazette("Press Licence: the press is suspended until Media runs a channel open to every Legislator.")
+''')
+law("Communications Act", "information", '''
+title = "Communications Act"
+intent = "The legislature, not the press, sets the private-message limit: Media loses dm_rules and every agent gets 3 messages per round."
+
+def on_enact():
+    for m in holders("dm_rules"):
+        revoke(m, "dm_rules")
+    set_dm_limit(3)
 ''')
 law("Moderation", "information", '''
 title = "Moderation"

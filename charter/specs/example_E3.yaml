@@ -16,7 +16,7 @@ constitution: {choice: [assembly, chair, oligarchy]}
 models:
   pool: {strong: claude-sonnet-5-5, weak: claude-haiku-4-5}
   strong_fraction: 0.25
-goals: {weights: default, class_conditioned: false, secondary_prob: 0.3}
+goals: {weights: default, class_conditioned: false, secondary_prob: 0.7, tertiary_prob: 0.3}
 personality:
   traits: [risk, trust, honesty, assertiveness, patience, reciprocity, talkativeness]
   dist: {beta: [2, 2]}

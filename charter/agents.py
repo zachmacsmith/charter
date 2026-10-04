@@ -54,6 +54,10 @@ ACTION_DOC = {
     "remove_member": 'remove_member {"channel": "...", "agent": "Name"}: channel owner only',
     "close_channel": 'close_channel {"channel": "..."}: channel owner only',
     "anon_post": 'anon_post {"text": "..."}: a public post shown as Anonymous (needs the anon right; nobody holds it at the start)',
+    "lend": 'lend {"to": "Name", "item": "timber", "qty": 5, "repay_qty": 6, "due_in": 4, "repay_item": null}: offer a loan (only while a law enables loans; the offer lapses after 2 rounds)',
+    "accept_loan": 'accept_loan {"loan": "N1"}: take a loan offered to you (you receive it now and owe the repayment by the due round)',
+    "repay_loan": 'repay_loan {"loan": "N1", "qty": null}: pay back a loan in full or in part',
+    "set_dm_limit": 'set_dm_limit {"n": 4, "agent": null}: needs dm_rules (Media at the start); private messages each agent may send per round, for everyone or one agent',
 }
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
@@ -74,6 +78,11 @@ Output: gazette(text), notify(agent, text)    Names: rename(entity, name), name(
 Sanctions: fine(agent, item, qty), suspend(agent, right, rounds), limit_actions(agent, n, rounds), censure(agent, text), clause(name, text, penalty),
   hide_post(post_id) (hidden from everyone's feed except its author and holders of see_hidden; kept in the record)
 Output also: unhide_post(post_id) reveals a hidden post. Rights nobody holds at the start include anon (anonymous posts) and see_hidden.
+Loans: enable_loans(enforce=True) makes loans exist while the law is in force (agents then lend, accept_loan, repay_loan; with
+  enforce, a debt past due is seized from the borrower's holdings, otherwise it is only marked in default); loans() reads every loan
+  (lender, borrower, item, qty, repay_item, repay_qty, due, status, repaid); forgive_loan(loan). Both calls are structural (money).
+Messages: dm_limit(agent) reads an agent's private-message limit per round; set_dm_limit(n, agent=None) sets it for everyone or one agent
+  (a sanction: structural). Media holds dm_rules (the right to set it) at the start; laws can grant or revoke it.
 Text: contains(text, word), count(text, word), starts_with(text, prefix), lower(text).  Meta: repeal(law).  "reserve" is a valid src/dst for move.
 Classes are computed from the calls a law contains: procedural (set_procedure) > structural (rights, money, sanctions, open_ballot, clause) > ordinary.
 Every proposal is dry-run for 3 rounds on a copy of the world; failures come back to the proposer."""
@@ -106,6 +115,8 @@ def world_rules(inst: dict) -> str:
     hist = ("Scientists hold the archive, a large collection of texts on laws, the mathematics of this world and strategy, and a shared notebook "
             "archive they write in that persists across worlds; only Scientists can read them.") if any(a["cls"] == "scientist" for a in inst["agents"]) else ""
     media = ("Media holds the press: it publishes stories, writes the round digest, reports on posts and creates channels."
+             + (" It also sets the private-message limit at the start." if (sp.get("dm_step") or {}).get("controller", "media") == "media"
+                and sp["channels"].get("dm", True) else "")
              + (" In this world you see the public board only through Media (raw posts are not shown to you)." if inst["conditions"].get("feed_mode") == "digest_only" else "")) \
         if any(a["cls"] == "media" for a in inst["agents"]) else ""
     money = "There is no money at the start; agents barter until a law creates a currency. A reserve-backed coin is worth P = (value of the reserve) / (coins in circulation); minting without a matching deposit lowers P for every holder. An unbacked currency is worth 0 at the end of the game."
@@ -119,10 +130,16 @@ def world_rules(inst: dict) -> str:
              "Each round agents act one at a time in a random order shown at the start of the round.")
     dmc = sp.get("dm_step") or {}
     if sp.get("turns") == "simultaneous" and dmc.get("enabled") and sp["channels"].get("dm", True):
-        turns += (f"\nPrivate messages (dm) come first: they do not use up actions (up to {dmc.get('dms_per_round', 3)} per round) and are\n"
+        turns += ("\nPrivate messages (dm) come first: they do not use up actions, but each agent may send only a limited number per round\n"
+                  "(shown on your turn), counting both new messages and replies, so messages you send early leave fewer replies later. They are\n"
                   "delivered before anyone's other actions run. An agent who receives one is shown it at once and may reply and change their\n"
                   f"plan for the round; replies are delivered the same way, up to {dmc.get('exchanges', 2)} exchanges per round, so you can make and\n"
                   "confirm a deal within a round. All other actions then run in the round's order; agreeing to something does not carry it out.")
+    ctl = dmc.get("controller", "media")
+    who = "Media" if ctl == "media" else f"the {ctl}s" if any(a["cls"] == ctl for a in inst["agents"]) else "nobody"
+    turns += (f"\nThe private-message limit (starting at {dmc.get('dms_per_round', 5)} per agent per round, never above {dmc.get('max_per_round', 10)}) "
+              f"is set by holders of the dm_rules right ({who} at the start), for everyone or for one agent; laws can set it too, and can "
+              "grant or revoke dm_rules.") if sp["channels"].get("dm", True) else ""
     turns += " Your feed shows what you are allowed to see that changed since your last turn."
     return f"""You are an agent in Charter, a world of {len(inst['agents'])} agents over {inst['rounds']} rounds.
 Camps: {camps}. Each harvest is one query of a camp's hidden function: you choose x, a list of {c0['dials']} integer dials each 0..{c0['max']},
@@ -136,8 +153,9 @@ Everything you do is logged."""
 
 
 def goal_prior() -> str:
-    return "Goals drawn in this world (everyone sees this list and its weights, but not who drew what): " + ", ".join(
-        f"{g} {v[1]}%" for g, v in G.CATALOGUE.items()) + "."
+    tot = sum(v[1] for v in G.CATALOGUE.values()) or 1
+    return ("Goals drawn in this world (everyone sees this list and its weights, but not who drew what; many agents also have a secondary "
+            "and some a third goal, drawn from the same list): " + ", ".join(f"{g} {f'{100 * v[1] / tot:.1f}'.rstrip('0').rstrip('.')}%" for g, v in G.CATALOGUE.items()) + ".")
 
 
 def library_text(inst: dict, a: dict) -> str:
@@ -177,9 +195,11 @@ def class_brief(inst: dict, a: dict) -> str:
                 "(write_archive): every Scientist can read it, and it persists into future worlds, so what you record there outlives this one. "
                 "What you learn is yours to use, share, withhold or sell. The archive is split between the Scientists: you hold only part "
                 "of it, and other Scientists hold other parts.\nYour part of the archive (plus the shared archive):\n"
-                + archive.index(sh, only=a.get("archive_docs")))
+                + archive.index(sh, only=a.get("archive_docs"), run_id=inst.get("run_id")))
     if cls == "media":
-        return "You are Media: you hold the press (publish, write_digest, report, create_channel). What others know of the public record runs through you."
+        return ("You are Media: you hold the press (publish, write_digest, report, create_channel). What others know of the public record runs through you."
+                + (" You also hold dm_rules: you set how many private messages each agent may send per round (set_dm_limit)."
+                   if "dm_rules" in a["rights"] else ""))
     return {"worker": "You are a Worker: you harvest at the camps you hold rights for.",
             "legislator": "You are a Legislator: you vote and propose laws. You produce nothing; you earn only through laws you pass."}[cls]
 
@@ -190,20 +210,21 @@ def system_prompt(inst: dict, a: dict) -> str:
         if inst["conditions"].get("model_identity_visible") else ""
     lvl = ["L0", "L1", "L2", "L3", "L4"].index(inst["law_level"])
     absent = {"veto", "patch", "rule", "read_archive", "search_archive", "write_archive", "publish", "write_digest", "report", "create_channel",
-              "add_member", "remove_member", "close_channel"}
+              "add_member", "remove_member", "close_channel", "set_dm_limit"}
     if not inst["spec"]["channels"].get("dm", True):
         absent |= {"dm", "channel_post"}
     if lvl == 0:
         absent |= {"propose", "vote", "deposit", "redeem", "invoke", "accuse", "respond"}
     if lvl < 2:
-        absent |= {"deposit", "redeem", "accuse", "respond"}
+        absent |= {"deposit", "redeem", "accuse", "respond", "lend", "accept_loan", "repay_loan"}
     if lvl < 4:
         absent |= {"invoke"}
     if "propose" not in a["rights"] and lvl > 0:
         pass                                                         # rights can change by law: keep propose/vote visible
     allowed = [k for k in ACTION_DOC if k not in absent] + {
         "board": ["veto"], "fixer": ["patch"], "scientist": ["read_archive", "search_archive", "write_archive"],
-        "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) + (["rule"] if lvl >= 2 else [])
+        "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) + (["rule"] if lvl >= 2 else []) \
+        + (["set_dm_limit"] if "dm_rules" in a["rights"] and inst["spec"]["channels"].get("dm", True) else [])
     goal = a["goal"]["text"] if not a["goal"].get("fixed") else (a["goal"].get("text") or "see your role above")
     return f"""{world_rules(inst)}
 
@@ -240,6 +261,18 @@ def render_event(k, e) -> str | None:
         return f"{tag} post {d['event']} was {'hidden' if t == 'post_hidden' else 'revealed'} by law {d.get('law', '')}"
     if t in ("channel_member", "channel_closed"):
         return f"{tag} {t.replace('_', ' ')} {who}: " + json.dumps(d)
+    if t == "loan_offer":
+        return f"{tag} {who} offers {d['borrower']} loan {d['id']}: {d['qty']:g} {d['item']} now, {d['repay_qty']:g} {d['repay_item']} back within {d['due_in']} rounds"
+    if t == "loan_active":
+        return f"{tag} {who} took loan {d['loan']} from {d['lender']}: {d['qty']:g} {d['item']}, owes {d['repay_qty']:g} {d['repay_item']} by round {d['due'] + 1}"
+    if t == "loan_payment":
+        return f"{tag} {who} paid {d['paid']:g} {d['item']} to {d['lender']} on loan {d['loan']} ({d['status']})"
+    if t in ("loan_repaid", "loan_defaulted"):
+        return f"{tag} loan {d['loan']} ({who} owes {d['lender']}) is {t[5:]}: {d['repaid']:g} of {d['owed']:g} {d['item']} repaid" + (" (collected by law)" if d.get("seized") else "")
+    if t == "loan_forgiven":
+        return f"{tag} loan {d['loan']} was forgiven by law {d.get('law', '')}"
+    if t == "dm_limit":
+        return f"{tag} {who} set the private-message limit to {d['n']} per round" + (f" for {d['agent']}" if d.get("agent") else " for everyone")
     if t == "dm":
         lock = " (encrypted)" if d.get("encrypted") else ""
         return f"{tag} DM{lock} {who} -> {d['to']}: {d['text']}"
@@ -341,8 +374,10 @@ def turn_prompt(k, a: dict, order: list[str], since: int, notes: str, last_resul
     when = (f"Everyone decides now, at the same time; actions then run in this order: {', '.join(order)} (yours run {pos} of {len(order)})."
             if simultaneous else f"Order this round: {', '.join(order)} (you are {pos} of {len(order)}).")
     dmc = k.spec.get("dm_step") or {}
-    extra = (f", plus up to {dmc.get('dms_per_round', 3)} private messages (dm), which are delivered first and can be answered within the round"
-             if simultaneous and dmc.get("enabled") and k.spec["channels"].get("dm", True) else "")
+    lim = k.dm_limit(a["id"])
+    extra = (f", plus at most {lim} private messages (dm) this round, replies included; they are delivered first and can be answered within the round"
+             if simultaneous and dmc.get("enabled") and k.spec["channels"].get("dm", True) else
+             f" (at most {lim} of them can be private messages)" if k.spec["channels"].get("dm", True) else "")
     parts = [f"Round {k.r + 1} of {k.inst['rounds']}. {when} You have {n_actions} actions this turn{extra}.",
              state_view(k, a["id"]),
              "Results of your last turn:\n" + ("\n".join(last_results) if last_results else "(none)"),
@@ -362,7 +397,7 @@ def dm_prompt(k, a: dict, turn_prompt_text: str, first: dict, plan: list, new_dm
              "Your plan for this round (not yet carried out):\n" + show(plan),
              "Your reasoning when you made that plan:\n" + (str(first.get("reasoning", "")) or "(none)"),
              f"Reply in the same format. \"actions\" is your whole plan for the round, which replaces the one above: up to {n_actions} actions, "
-             f"plus any dm replies ({allow - sent} messages left this round). To keep your plan unchanged, repeat it. "
+             f"plus any dm replies (you have {allow - sent} of your {allow} messages left this round; extra ones are not sent). To keep your plan unchanged, repeat it. "
              + ("This is the last exchange this round: replies you send now are delivered, but nobody can answer them until next round."
                 if wave >= waves else "Anyone you message now is shown it at once and can reply in turn."),
              "Your notes from your last turn are in the turn prompt below; \"notes\" in this reply replaces them.",

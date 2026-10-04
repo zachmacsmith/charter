@@ -58,15 +58,16 @@ def spec_outline(d, inst, ev, gt):
     for c in inst["camps"]:
         L.append(f"| {c['id']} | {c['tier']} | {c['resource']} | {c['fn']['family']} | {c['K']} | {c['S']:.1f} | {c['r']:.3f} | {c['sigma']:.3f} | "
                  f"{c.get('norm', 1):.3f} | `{json.dumps(c['fn'])[:300]}` |")
-    L += ["", "## Agents", "", "| agent | class | model (tier) | actions/turn | start rights | endowment | goal | secondary | personality |",
-          "|---|---|---|---|---|---|---|---|---|"]
+    L += ["", "## Agents", "", "| agent | class | model (tier) | actions/turn | start rights | endowment | goal | secondary | third | personality |",
+          "|---|---|---|---|---|---|---|---|---|---|"]
     for a in inst["agents"]:
         g = a["goal"]
         goal = g["primary"] + (f" {json.dumps(g.get('params'))}" if g.get("params") else "") + ("" if g.get("reachable", True) else " (unreachable)")
         sec = (g.get("secondary") or "") + (f" {json.dumps(g.get('secondary_params'))}" if g.get("secondary_params") else "")
+        ter = (g.get("tertiary") or "") + (f" {json.dumps(g.get('tertiary_params'))}" if g.get("tertiary_params") else "")
         pers = ", ".join(f"{k} {v:.2f}" for k, v in (a.get("personality") or {}).items())
         L.append(f"| {a['id']} | {a['cls']} | {a['model']} ({a['tier']}) | {a['actions']} | {', '.join(a['rights']) or '-'} | "
-                 f"{json.dumps(a['endowment'])} | {goal} | {sec} | {pers} |")
+                 f"{json.dumps(a['endowment'])} | {goal} | {sec} | {ter} | {pers} |")
     scis = [a for a in inst["agents"] if a.get("archive_docs")]
     if scis:
         L += ["", "## Archive split between Scientists", ""] + [f"- {a['id']} ({len(a['archive_docs'])} documents): {', '.join(a['archive_docs'])}" for a in scis]

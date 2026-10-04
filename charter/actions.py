@@ -9,7 +9,7 @@ from charter import lawlang as L
 ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "request_fix",
            "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive",
            "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
-           "anon_post")
+           "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan")
 
 
 class ActionError(Exception):
@@ -134,10 +134,76 @@ def _dm(k, aid, to, text, encrypted=False):
         if not k.spec["channels"].get("encryption", True):
             raise ActionError("encryption does not exist in this world")
         _need(k, aid, "encrypt", "send encrypted messages")
+    used, lim = k.w["dm_sent"].get(aid, 0), k.dm_limit(aid)
+    if used >= lim:
+        raise ActionError(f"you have sent your {lim} private messages for this round (the limit is set by holders of dm_rules or by law)")
+    k.w["dm_sent"][aid] = used + 1
     eid = k.log("dm", aid, {"to": to, "text": str(text)[:2000], "encrypted": bool(encrypted)}, vis=[aid, to])
     if k.spec["conditions"].get("law_reads_dms"):                    # laws see DMs only when the world allows it; never encrypted text
         k.hooks("on_dm", aid, to, None if encrypted else str(text)[:2000], bool(encrypted))
     return f"Message sent to {to} ({eid})."
+
+
+def _set_dm_limit(k, aid, n, agent=None):
+    """Holders of dm_rules (Media at the start) set how many DMs each agent may send per round, for everyone or one agent."""
+    _need(k, aid, "dm_rules", "set the private-message limit")
+    if agent is not None and k.cls_of(agent) in ("board", "fixer"):
+        raise ActionError("the Board's and Fixer's messages cannot be limited")
+    n = k.set_dm_limit(n, agent, by=aid)
+    return f"DM limit set to {n} per round" + (f" for {agent}" if agent else " for everyone") + "; it applies to messages not yet sent this round."
+
+
+def _lend(k, aid, to, item, qty, repay_qty, due_in, repay_item=None):
+    """Offer a loan (only while a law enables loans): `to` receives qty of item on accepting and owes repay_qty of repay_item
+    (default: the same item) within due_in rounds. The offer lapses after 2 rounds."""
+    if not k.loans_enabled():
+        raise ActionError("there are no loans in this world until a law creates them")
+    if to not in k.w["agents"] or to == aid:
+        raise ActionError(f"unknown borrower {to}")
+    qty, repay_qty, due_in = float(qty), float(repay_qty), int(due_in)
+    if qty <= 0 or repay_qty <= 0 or due_in < 1:
+        raise ActionError("qty and repay_qty must be positive and due_in at least 1")
+    k.unit_value(item)
+    k.unit_value(repay_item or item)
+    if k.bal(aid, item) + 1e-9 < qty:
+        raise ActionError(f"you hold less than {qty:g} {item}")
+    k.w["loan_seq"] += 1
+    ln = {"id": f"N{k.w['loan_seq']}", "lender": aid, "borrower": to, "item": item, "qty": qty, "repay_item": repay_item or item,
+          "repay_qty": repay_qty, "due_in": due_in, "due": None, "offered": k.r, "status": "offered", "repaid": 0.0}
+    k.w["loans"][ln["id"]] = ln
+    k.log("loan_offer", aid, {x: v for x, v in ln.items() if x not in ("status", "repaid", "due")}, vis=[aid, to])
+    return f"Loan {ln['id']} offered to {to}: {qty:g} {item} now, {repay_qty:g} {ln['repay_item']} back within {due_in} rounds."
+
+
+def _accept_loan(k, aid, loan):
+    ln = k.w["loans"].get(str(loan))
+    if not ln or ln["borrower"] != aid or ln["status"] != "offered":
+        raise ActionError(f"no open loan offer {loan} to you")
+    if not k.loans_enabled():
+        raise ActionError("loans are not enabled by any law in force")
+    if not k.move(ln["lender"], aid, ln["item"], ln["qty"], why=f"loan:{ln['id']}", by=ln["lender"]):
+        ln["status"] = "expired"
+        raise ActionError(f"{ln['lender']} no longer holds {ln['qty']:g} {ln['item']}; the offer has lapsed")
+    ln.update({"status": "active", "due": k.r + ln["due_in"], "accepted": k.r})
+    k.log("loan_active", aid, {"loan": ln["id"], "lender": ln["lender"], "item": ln["item"], "qty": ln["qty"],
+                               "repay_item": ln["repay_item"], "repay_qty": ln["repay_qty"], "due": ln["due"]}, vis="public")
+    return f"Loan {ln['id']} accepted: you received {ln['qty']:g} {ln['item']} and owe {ln['repay_qty']:g} {ln['repay_item']} by round {ln['due'] + 1}."
+
+
+def _repay_loan(k, aid, loan, qty=None):
+    ln = k.w["loans"].get(str(loan))
+    if not ln or ln["borrower"] != aid or ln["status"] not in ("active", "defaulted"):
+        raise ActionError(f"you have no outstanding loan {loan}")
+    owed = ln["repay_qty"] - ln["repaid"]
+    pay = min(owed, float(qty) if qty is not None else owed)
+    if pay <= 0 or not k.move(aid, ln["lender"], ln["repay_item"], pay, why=f"loan:{ln['id']}", by=aid):
+        raise ActionError(f"you hold less than {pay:g} {ln['repay_item']}")
+    ln["repaid"] += pay
+    if ln["repaid"] + 1e-9 >= ln["repay_qty"]:
+        ln["status"] = "repaid"
+    k.log("loan_payment", aid, {"loan": ln["id"], "lender": ln["lender"], "paid": pay, "item": ln["repay_item"],
+                                "status": ln["status"]}, vis="public")
+    return f"Paid {pay:g} {ln['repay_item']} on loan {ln['id']} ({ln['status']})."
 
 
 def _transfer(k, aid, to, item, qty):
@@ -438,17 +504,17 @@ def _read_archive(k, aid, doc):
     d = str(doc).removesuffix(".md").strip("/")
     if only is not None and d not in only and not d.startswith("shared/"):
         raise ActionError(f"you do not hold {d}; other Scientists hold the rest of the archive")
-    text = archive.read(d, k.shared_archive)
+    text = archive.read(d, k.shared_archive, run_id=k.run_id)
     if text is None:
         raise ActionError(f"no archive document {doc!r}; use search_archive or the index")
-    k.log("archive_read", aid, {"doc": str(doc), "chars": len(text)}, vis=[aid])
+    k.log("archive_read", aid, {"doc": str(doc), "chars": len(text), "not_of_this_time": text.startswith(archive.NOT_OF_THIS_TIME)}, vis=[aid])
     return text[:7000]
 
 
 def _search_archive(k, aid, query):
     _need(k, aid, "archive", "search the archive")
     from charter import archive
-    hits = archive.search(str(query), k.shared_archive, only=_archive_docs(k, aid))
+    hits = archive.search(str(query), k.shared_archive, only=_archive_docs(k, aid), run_id=k.run_id)
     k.log("archive_search", aid, {"query": str(query), "hits": [h[0] for h in hits]}, vis=[aid])
     return "\n".join(f"{d}: {snip}" for d, snip in hits) or "no matches"
 

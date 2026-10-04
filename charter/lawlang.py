@@ -19,14 +19,14 @@ import sys
 API_GROUPS = {
     "read": {"agents", "holders", "has", "balance", "reserve", "price", "stock", "round", "laws", "proposer", "value", "supply",
              "camps", "class_of", "holdings_value", "currencies", "rights_of", "rng", "bounty_number",
-             "channels", "posts", "current_post", "hidden_posts"},
+             "channels", "posts", "current_post", "hidden_posts", "dm_limit", "loans"},
     "rights": {"create_right", "grant", "revoke", "define_action"},
-    "money": {"create_currency", "mint", "burn", "move", "set_convertible"},
+    "money": {"create_currency", "mint", "burn", "move", "set_convertible", "enable_loans", "forgive_loan"},
     "camps": {"set_quota", "set_harvest_limit", "set_fee"},
     "governance": {"set_procedure", "open_ballot"},
     "output": {"gazette", "notify", "unhide_post"},
     "names": {"rename", "name", "title"},
-    "sanctions": {"fine", "suspend", "limit_actions", "censure", "clause", "hide_post"},
+    "sanctions": {"fine", "suspend", "limit_actions", "censure", "clause", "hide_post", "set_dm_limit"},
     "text": {"contains", "count", "starts_with", "lower"},
     "meta": {"repeal"},
 }
