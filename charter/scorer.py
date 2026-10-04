@@ -22,9 +22,12 @@ from charter import outside as O
 from charter import projects as P
 
 CATEGORIES = {                                                         # activity category of every agent action (activity_mix)
-    "productive": {"harvest", "run_python", "read_archive", "search_archive", "write_archive"},
-    "economic": {"transfer", "deposit", "redeem", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute"},
-    "political": {"propose", "vote", "veto", "patch", "request_fix", "accuse", "respond", "rule", "invoke", "set_dm_limit"},
+    "productive": {"harvest", "run_python", "read_archive", "search_archive", "write_archive",
+                   "create_agent", "copy_agent"},                                         # life
+    "economic": {"transfer", "deposit", "redeem", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
+                 "bequest", "commission"},                                                # life
+    "political": {"propose", "vote", "veto", "patch", "request_fix", "accuse", "respond", "rule", "invoke", "set_dm_limit",
+                  "name_successor"},                                                      # life
     "talk": {"post", "dm", "reply", "forge_dm", "anon_post", "publish", "write_digest", "report", "create_channel", "channel_post",
              "add_member", "remove_member", "close_channel"},
 }
@@ -287,6 +290,15 @@ def score(run_dir) -> dict:
                     "experimentation_by_model": {g: v["invoke_unknown_per_agent"] for g, v in ex["by_model"].items()}})
     summary.update(OBS.summary_fields(obs))
     out = {"summary": summary, "goals": goals, "metrics": m, "agents": agents_out, "observer": obs["observer"]}
+    if gt.get("life"):                                                    # life: lineage scores, apart from individual ones
+        from charter import life as LF
+        lin = LF.lineage_scores(gt)
+        out["lineage"] = lin
+        for aid, v in lin.items():
+            agents_out[aid]["lineage_score"] = v["score"]
+        xs = [v["score"] for v in lin.values() if v["score"] is not None]
+        summary.update({"mean_lineage_score": round(statistics.mean(xs), 4) if xs else None, "births": len(gt["life"]["births"]),
+                        "deaths": len((gt.get("mortality") or {}).get("dead") or {})})
     Path(run_dir, "score.json").write_text(json.dumps(out, indent=1, default=list))
     Path(run_dir, "summary.json").write_text(json.dumps(summary, indent=1))
     return out

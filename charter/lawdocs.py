@@ -48,6 +48,7 @@ TOPICS = {
     "preview": ("How the dry-run preview works", "Every proposal is played forward on a copy of the world before anyone votes."),
     "bounty": ("Bounty numbers", "Factoring camps publish a number; laws can read it."),
     "powers": ("Powers and the law", "Some agents hold hidden powers (words used through invoke). Laws can expose or remove them."),
+    "succession": ("Board succession", "Board members name successors who take their seats when they leave the game."),   # life
 }
 
 # (name, topic, prompt group, prompt text, article detail, core tier, minimal tier)
@@ -189,8 +190,13 @@ E += [
      "holding any power). Unknown names give [].", "uncommon", "uncommon"),
     ("revoke_capability", "powers", "Powers", "revoke_capability(agent, name=None)", "takes a power (None: every power) from an agent; returns "
      "how many were taken. Structural.", "uncommon", "uncommon"),
+    ("set_succession_public", "succession", "Governance", "set_succession_public(public=True)", "makes Board members' successor "  # life
+     "namings public (each naming is announced, and the current ones are published) or private again. Structural.", "common", "common"),
 ]
-ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
+# life: entries that exist only in worlds with a module on (spec <module>.enabled); elsewhere they are left out of the mapping, so the
+# prompt and the codex are unchanged. mortality: Life or Conflict.
+REQUIRES = {"set_succession_public": lambda spec: bool((spec.get("life") or {}).get("enabled") or (spec.get("conflict") or {}).get("enabled"))}
+ENTRIES ={e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
 
@@ -209,8 +215,10 @@ def resolve(spec: dict) -> dict:
         raise ValueError(f"law_docs.preset must be full, core or minimal, not {preset!r}")
     mapping = {}
     for n, e in ENTRIES.items():
+        if n in REQUIRES and not REQUIRES[n](spec):                     # life: a module's entries only where it is on
+            continue
         if preset == "full":
-            mapping[n] = e["core"] if n in ALWAYS_ARTICLE else "prompt"
+            mapping[n] = e["core"] if n in ALWAYS_ARTICLE or n in REQUIRES else "prompt"   # life: module entries were never in the old prompt
         else:
             mapping[n] = e[preset]
     for n, t in (cfg.get("overrides") or {}).items():
@@ -229,7 +237,7 @@ def api_doc(resolved: dict, original: str) -> str:
         return original
     lines = [SKELETON]
     for g in GROUP_ORDER:
-        items = [ENTRIES[n]["prompt"] for n in ENTRIES if m[n] == "prompt" and ENTRIES[n]["group"] == g]
+        items = [ENTRIES[n]["prompt"] for n in ENTRIES if m.get(n) == "prompt" and ENTRIES[n]["group"] == g]   # life: m.get
         if items:
             lines.append(f"{g}: " + ", ".join(items))
     lines.append(FOOTER)
@@ -245,7 +253,7 @@ def articles(resolved: dict) -> dict:
     m = resolved["mapping"]
     by_topic: dict = {}
     for n, e in ENTRIES.items():
-        if m[n] != "prompt":
+        if n in m and m[n] != "prompt":                                 # life: entries left out of the mapping (REQUIRES)
             by_topic.setdefault(e["topic"], {}).setdefault(m[n], []).append(n)
     out = {}
     for topic, tiers in by_topic.items():

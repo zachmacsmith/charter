@@ -1,0 +1,15 @@
+extends: [base]
+# life_pilot: a small world with Life on (lifespans, a Maker, children, mutation, Board succession, lineage scoring; charter/life.py).
+# 20 rounds, lifespans scaled as if 40 rounds were full scale: 15-25 rounds with 0-7 already elapsed, so deaths, successions and
+# births all happen while some lineages live to the end.
+agents: {worker: 6, scientist: 2, legislator: 2, media: 1, board: 3, fixer: 1}
+rounds: 20
+camps: {tiers: [1, 2, 3, 5]}
+life:
+  enabled: true
+  full_scale_rounds: 40
+  prices: {base: 10}              # cheaper children than the spec's 30, so a short pilot sees births (calibrate in real runs)
+goals: {new_features: true}       # the update's goal weights: Seat and Dynasty can be drawn (Wealth's category gives up their share)
+personality:
+  archetypes: {weights: {protector: 1, nurturer: 1}}   # plus the base eight
+shared_archive: {namespace: life_pilot}

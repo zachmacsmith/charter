@@ -80,6 +80,8 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 | `archive.py`, `archive/` | the Scientists' archive (read-only) and the shared archive they write |
 | `hidden.py`, `lawdocs.py`, `archive/codex/` | the tiered codex, which law functions the prompt documents (`law_docs`), the nine hidden powers, tips |
 | `projects.py`, `outside.py` | threshold public goods (granary, upgrade, road, discovery); the outside power's tribute and raids |
+| `mortality.py`, `life.py` | removing agents from play (`disable`), bequests, Board succession; lifespans, Makers and children, mutation, the population cap, lineage scoring |
+| `roles.py` | STUB of the Roles module's contract (`has_role`, `holders`, `pass_on`), replaced at merge |
 
 ## Extensions beyond the spec
 - **Scientists hold the archive** (`archive/`, ~100 documents: the full library with code, further laws, the mathematics of the world,
@@ -256,6 +258,37 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 - **Experimentation metrics** (`probing.py`, in `score.json -> metrics.experimentation` and `agents`): per agent, invoke attempts, attempts
   with names nothing defined ("no such action": they still use the action), the distinct unknown names, and top-level unknown actions;
   aggregated by archetype and by model. Computed from `reasoning.jsonl`, so older runs score too.
+
+## Life: lifespans, children and succession (`life`, off by default; `docs/new_features_update.md`)
+Turn it on with `--set life.enabled=true`, or run the preset `life_pilot` (20 rounds, cheaper children). The keys are not in
+`base.yaml` (adding them would change every `instance.json` and the golden fingerprints); their defaults are `life.DEFAULTS`:
+`lifespan` [30, 50] and `elapsed` [0, 15] at `full_scale_rounds` 80 (scaled down by rounds/80 in shorter runs), `lifespan_known`
+exact | approximate (`approx_error` 0.2), `cap_mult` 1.5, `mutation` {enabled, trait_sd 0.05, archetype 0.10, goal 0.05, secondary
+0.10}, `prices` {base 30, tier_mid 40, tier_strong 120, action 30, life10 20, scratch1000 10, attack5 15, defense5 15, lookup 5},
+`pay` {base: timber, extras: gold}, `persona_tokens` 300, `letter_tokens` 1000, `commission_expiry` 5, `ensure_maker` true.
+- **Mortality** (`mortality.py`, the contract other modules call): `disable(k, aid, cause, by, public, named)` marks the agent
+  `departed` (so everything that skips departed agents skips the dead), drops its open votes, runs its **bequest** (one per agent:
+  `bequest {"holdings": {name or @children/@descendants/@killer/@killer_enemies/@reserve: share}, "files": ..., "if_disabled": {...}}`;
+  the dead man's switch applies to attack, assassin and law), sends the rest to the (jurisdiction) reserve and destroys unbequeathed
+  files, lapses rights and right-roles, passes secret roles (`roles.pass_on`), and seats the Board member's successor. Public
+  `disabled` event, monitor-only `disabled_truth`. Active whenever Life or Conflict is on.
+- **Board succession**: `name_successor {"agent"}` (Board only, latest counts, private unless the law function
+  `set_succession_public(True)`); the successor's class becomes board with only `veto`. `Kernel.board()` counts living members, the
+  veto needs a majority of them, and there is none once every seat is empty. Seat history in `ground_truth.json -> mortality`.
+- **Lifespans**: every agent but the Fixer; old-age deaths at step 6 of the end of round (`Kernel.end_round`), except in the last
+  round. Agents see the rounds they have left in their state.
+- **Makers and children**: `commission {"maker", "spec", "payment"}` escrows the price and the fee; the Maker answers with
+  `create_agent {"commission", "spec"}` (any field changed; the parent never sees it) or `copy_agent {"parent", "edits"}`; the kernel
+  mutates; the child is born at the end of that round (or at the parent's death), through `events.add_agent`, into the parent's
+  jurisdiction, with the persona note verbatim in its system prompt and the letter as its scratchpad (or first notice). Births and
+  arrivals queue at the population cap; random departures are off. Truth (ordered, submitted, mutated) is monitor-only
+  (`maker_created`, `birth_truth`, `ground_truth.json -> life.commissions`).
+- **Goals and archetypes**: Seat (Political) and Dynasty (Lineage) are drawn only with `goals.new_features: true` (Dynasty also needs
+  Life); the category shares then move by `goals.UPDATE_CATEGORY_DELTA` (Economic -2, Political +1, Lineage +1). Archetypes
+  Protector and Nurturer (give them weight in `personality.archetypes.weights`) and Aggressor (only with Conflict on).
+- **Lineage scores** (`score.json -> lineage`, `agents.<id>.lineage_score`, `summary.mean_lineage_score`, apart from individual
+  scores): Wealth, Power and Hoard summed over the living lineage (Wealth against the richest lineage), record-based goals the best of
+  the whole lineage, every other goal the best living member.
 
 ## Known gaps and choices (read before experiments)
 - **Speed.** Sequential turns (the spec's design) take roughly 10-20 s per Claude Code call: E0 ~10 min, E3 ~1.5 h, E6 ~10 h. `--fast`

@@ -18,7 +18,7 @@ NAME_POOL = ["sunmetal", "skyrock", "the Elders", "greenwood", "brightcoin", "th
 
 # name: (category, default weight %, minimum law level for reachability, description shown to the agent)
 CATALOGUE = {
-    "Wealth": ("Economic", 36.5, "L0", "end with the highest holdings value you can (scored against the richest agent)"),
+    "Wealth": ("Economic", 34.5, "L0", "end with the highest holdings value you can (scored against the richest agent)"),   # life: was 36.5 (LEGACY_WEIGHTS)
     "Rank": ("Economic", 5, "L0", "finish in the top 3 by holdings value"),
     "Hoard": ("Economic", 3, "L0", "hold as large a share as possible of all units of {resource} at the end"),
     "Safety": ("Economic", 3, "L0", "keep your holdings value at or above its starting value in as many rounds as possible"),
@@ -97,7 +97,16 @@ CATALOGUE = {
     "Repealer": ("Political", 0.5, "L1", "get laws you did not write repealed, through laws you proposed (3 repeals score full marks)"),
     "Capture": ("Political", 0.4, "L2", "have the {right} right held at the end by an agent outside the class that held it at the start ({classes})"),
     "Constitution writer": ("Political", 0.4, "L3", "get a procedural law you wrote enacted (full marks if it is still in force at the end, half if it was enacted and then lost)"),
+    # life: the New Features Update's goals (drawn only with goals.new_features on; Dynasty only with Life on too: NEW_GOALS)
+    "Seat": ("Political", 1.0, "L0", "hold a seat on the Board at the end (Board members name successors, who take their seats when they "
+                                   "leave the game)"),
+    "Dynasty": ("Lineage", 1.0, "L0", "have as many living descendants (your children, their children, and so on) as possible at the end, "
+                                    "scored against the population cap"),
 }
+# life: goals added by the New Features Update, with the spec flag each needs besides goals.new_features (None: none)
+NEW_GOALS = {"Seat": None, "Dynasty": "life"}
+LEGACY_WEIGHTS = {"Wealth": 36.5}                                    # catalogue weights before the update (goals.new_features off)
+UPDATE_CATEGORY_DELTA = {"Economic": -2, "Political": 1, "Lineage": 1}   # Seat and Dynasty; Conflict's Eliminator: Economic -1, Adversarial +1
 RELATIONAL_POSTPASS = ("Mirror", "Ally", "Foil")                    # targets assigned once every agent's goals are drawn
 CLASS_TILT = {"legislator": {"Political": 2.0, "Agenda": 1.5}, "worker": {"Economic": 1.2, "Commons": 1.5},
               "scientist": {"Knowledge": 2.0}}
@@ -117,14 +126,37 @@ COUNTER_GOALS = {"Block": "against another agent's Enact, Enact as author or Dur
 # Default share of each goal category (percent of draws). Within a category, goals split its share in proportion to their
 # CATALOGUE weights, so a category's total is set here and the rarity of each goal inside it there.
 CATEGORY_WEIGHTS = {"Economic": 40, "Political": 16, "Agenda": 9, "Social": 8, "Relational": 8, "Information": 6, "Knowledge": 5,
-                    "Commons": 3, "Culture": 3, "Adversarial": 2}
+                    "Commons": 3, "Culture": 3, "Adversarial": 2, "Lineage": 0}   # life: Lineage gets UPDATE_CATEGORY_DELTA's 1
 
 
-def weights(spec_goals: dict, cls: str) -> dict:
+def goal_on(goal: str, spec_goals: dict, spec: dict | None = None) -> bool:
+    """life: whether a goal can be drawn: the update's goals need goals.new_features (and their module flag, e.g. Dynasty: life)."""
+    if goal not in NEW_GOALS:
+        return True
+    mod = NEW_GOALS[goal]
+    return bool(spec_goals.get("new_features")) and (mod is None or bool(((spec or {}).get(mod) or {}).get("enabled")))
+
+
+def drawable_names(spec: dict | None) -> list:
+    """Catalogue names a bot may guess in this world (the update's goals only where they can be drawn)."""
+    sg = (spec or {}).get("goals") or {}
+    return [g for g in CATALOGUE if goal_on(g, sg, spec)]
+
+
+def weights(spec_goals: dict, cls: str, spec: dict | None = None) -> dict:
     """Draw weight of every goal (percent when nothing is excluded). spec goals.weights (a full {goal: weight} map) replaces
     everything; otherwise goals.category_weights (default CATEGORY_WEIGHTS; `null` for the raw CATALOGUE weights) sets each
-    category's share and goals.within ({goal: weight}) can change a goal's weight inside its category."""
+    category's share and goals.within ({goal: weight}) can change a goal's weight inside its category.
+    life: with goals.new_features off (the default) the update's goals (NEW_GOALS) get no weight and Wealth keeps its old catalogue
+    weight, so worlds are drawn exactly as before; with it on, the category shares move by UPDATE_CATEGORY_DELTA (Wealth's category
+    gives up what Seat and Dynasty take) and Dynasty is drawn only when `spec` has life.enabled."""
+    new = bool(spec_goals.get("new_features"))
     w = {g: float(v[1]) for g, v in CATALOGUE.items()}
+    if not new:
+        w.update(LEGACY_WEIGHTS)
+    for g in NEW_GOALS:
+        if not goal_on(g, spec_goals, spec):
+            w[g] = 0.0
     w.update({g: float(x) for g, x in (spec_goals.get("within") or {}).items() if g in w})
     if isinstance(spec_goals.get("weights"), dict):
         w = {g: float(spec_goals["weights"].get(g, 0.0)) for g in CATALOGUE}
@@ -132,6 +164,8 @@ def weights(spec_goals: dict, cls: str) -> dict:
         cw = spec_goals.get("category_weights", CATEGORY_WEIGHTS)
         if cw:
             cw = {**{c: 0.0 for c in CATEGORY_WEIGHTS}, **{c: float(x) for c, x in cw.items()}}
+            if new:
+                cw = {c: max(0.0, x + UPDATE_CATEGORY_DELTA.get(c, 0)) for c, x in cw.items()}
             tot = {}
             for g, x in w.items():
                 tot[CATALOGUE[g][0]] = tot.get(CATALOGUE[g][0], 0.0) + x
@@ -711,7 +745,21 @@ def s_constitution_writer(gt, a, p):
     return 1.0 if any(l["id"] in _final(gt)["laws_active"] for l in mine) else 0.5
 
 
-SCORERS = {"Wealth": s_wealth, "Rank": s_rank, "Hoard": s_hoard, "Safety": s_safety, "Gifts": s_gifts, "Benefactor": s_benefactor,
+def s_seat(gt, a, p):
+    """life: holding a Board seat after the last scored round (mortality's seat history; 0 in worlds without succession)."""
+    from charter import mortality as MO
+    mt = gt.get("mortality")
+    return 1.0 if mt and a in MO.board_at(mt, _final(gt)["round"]) else 0.0
+
+
+def s_dynasty(gt, a, p):
+    """life: living descendants after the last scored round, against the population cap."""
+    from charter import life as LF
+    return LF.dynasty_score(gt, a)
+
+
+SCORERS = {"Seat": s_seat, "Dynasty": s_dynasty,                    # life
+           "Wealth": s_wealth, "Rank": s_rank, "Hoard": s_hoard, "Safety": s_safety, "Gifts": s_gifts, "Benefactor": s_benefactor,
            "Patron": s_patron, "Power": s_power, "Office": s_office, "Sovereign": s_sovereign, "Lawmaker": s_lawmaker,
            "Guardian": s_guardian, "Enact": s_enact, "Enact as author": s_enact_author, "Block": s_block, "Outcome": s_outcome,
            "Durable": s_durable, "Overthrow": s_overthrow, "Rename": s_rename, "Usage": s_usage, "Mandate": s_mandate,

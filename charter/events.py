@@ -84,6 +84,8 @@ def attach_schedule(inst: dict) -> dict:
         m = S.draw(cfg.get("mean_interval"), rng)
         if not cfg.get("enabled", True) or not m:
             continue
+        if name == "agent_departs" and (inst["spec"].get("life") or {}).get("enabled"):
+            continue                                                    # life: agents die of age instead of departing at random
         t = 1.0
         while True:
             t += rng.expovariate(1.0 / float(m))
@@ -264,7 +266,7 @@ def draw_goals(k, inst, aid, cls, rights, rng, slots=None, keep=None):
     sp = inst["spec"]
     gspec = sp["goals"]
     world = _world(k, inst)
-    w = G.weights(gspec, cls)
+    w = G.weights(gspec, cls, spec=sp)                                  # life: spec gates the update's goals
     w["Mirror"] = 0.0
     if "vote" in rights:
         w["Office"] = 0.0
@@ -308,9 +310,11 @@ def _model(sp, cls, aid, rng):
     return (pool["strong"], "strong") if strong else (pool["weak"], "weak")
 
 
-def add_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None):
+def add_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None, child=None):
     """Create an agent mid-run (as the generator would) and add it to the kernel and the instance; the runner picks it up at the
-    next sync (turn order, system prompt, feed cursor). Returns the agent dict, or None if the class is not allowed."""
+    next sync (turn order, system prompt, feed cursor). Returns the agent dict, or None if the class is not allowed.
+    life: `child` (life.py births) gives what a made agent has instead of drawing it: model, tier, actions, personality(_text),
+    archetype(_text), goal (a dict, or a function of the new id returning one) and `extra` fields copied into the agent dict."""
     from charter import archive as _archive
     from charter import generator as GEN
     from charter import personality as P
@@ -331,21 +335,26 @@ def add_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None):
         camps = [c for c, v in k.w["camps"].items() if v.get("destroyed") is None and v.get("known_by") is None]
         n = min(len(camps), int(S.draw(sp["camps"].get("holders_per_worker", {"randint": [1, 2]}), rng)))
         rights += [f"harvest:{c}" for c in rng.sample(camps, n)]
-    model, tier = _model(sp, cls, aid, rng)
+    model, tier = (child["model"], child["tier"]) if child else _model(sp, cls, aid, rng)
     a = {"id": aid, "cls": cls, "rights": rights, "model": model, "tier": tier,
-         "actions": int(sp["actions_per_turn"]) + int(S.draw(sp.get("actions_jitter", 0), rng)),
+         "actions": int(child["actions"]) if child else int(sp["actions_per_turn"]) + int(S.draw(sp.get("actions_jitter", 0), rng)),
          "arrived": k.r, "sponsor": sponsor}
     if cls == "scientist":
         docs = [d for d in _archive.docs(None) if d != "README" and not d.startswith("rare/")]
         n_sci = max(1, sum(1 for v in k.w["agents"].values() if v["cls"] == "scientist"))
         a["archive_docs"] = sorted(["README"] + rng.sample(docs, min(len(docs), max(1, len(docs) // n_sci))))
-    a["goal"] = draw_goals(k, inst, aid, cls, rights, rng)
     pspec = sp["personality"]
-    if pspec.get("enabled", True):
-        a["personality"] = {t: round(S.draw(pspec["dist"], rng), 3) for t in pspec["traits"]}
-        a["personality_text"] = P.render(a["personality"])
+    if child:                                                           # life: a made agent (life.py)
+        a["goal"] = child["goal"](aid) if callable(child["goal"]) else child["goal"]
+        a.update({x: child[x] for x in ("personality", "personality_text", "archetype", "archetype_text")})
+        a.update(child.get("extra") or {})
     else:
-        a["personality"], a["personality_text"] = {}, ""
+        a["goal"] = draw_goals(k, inst, aid, cls, rights, rng)
+        if pspec.get("enabled", True):
+            a["personality"] = {t: round(S.draw(pspec["dist"], rng), 3) for t in pspec["traits"]}
+            a["personality_text"] = P.render(a["personality"])
+        else:
+            a["personality"], a["personality_text"] = {}, ""
     if endowment is None:
         vals = sorted(v.get("start_value", 0.0) for v in k.w["agents"].values())
         med = vals[len(vals) // 2] if vals else 30.0
@@ -359,7 +368,7 @@ def add_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None):
     st["arrivals"][aid] = k.r
     st["dirty"].append(aid)
     k.log("arrival", aid, {"agent": aid, "cls": cls, "model": model, "sponsor": sponsor, "endowment": a["endowment"],
-                           "goal": a["goal"]["primary"]}, vis="monitor")
+                           "goal": a["goal"]["primary"], **({"child": True} if child else {})}, vis="monitor")
     return a
 
 
@@ -443,6 +452,8 @@ def restore(k, inst, agents) -> None:
     for b in st["boundaries"]:
         if not b.get("skipped") and b["agent"] in byid:
             byid[b["agent"]]["goal"] = copy.deepcopy(b["new"])
+    from charter import mortality as MO                                 # life: successors who took Board seats
+    MO.restore(k, inst)
     for a in inst["agents"]:
         if k.w["agents"].get(a["id"], {}).get("departed") is None:
             agents.setdefault(a["id"], a)
@@ -537,6 +548,10 @@ def h_camp_blight(k, inst, ctx):
 
 
 def h_agent_arrives(k, inst, ctx):
+    if "life" in k.w:                                                   # life: immigration counts toward the population cap
+        from charter import life as LF
+        if LF.at_cap(k):
+            return None
     a = add_agent(k, inst, rng=ctx["rng"])
     if not a:
         return None
