@@ -301,13 +301,14 @@ def generate(spec: dict, seed: int) -> dict:
         w = G.weights(gspec, a["cls"], spec=sp)                     # life: spec gates the update's goals (Dynasty: life on)
         if "vote" in a["rights"]:
             w["Office"] = 0.0                                         # only drawn by agents who start without vote
+        wp = G.slot_weights(w, "primary", sp)                         # goals: slot rules (off: wp is w, draws unchanged)
         explicit = gspec.get("explicit", {}).get(a["id"])
         if gspec.get("all_wealth"):
             prim = "Wealth"
         elif explicit:
             prim = explicit if isinstance(explicit, str) else explicit["primary"]
         else:
-            prim = G.sample_goal(rng, w)
+            prim = G.sample_goal(rng, wp)
         params = G.sample_params(prim, rng, world, a["id"])          # drawn even when explicit params replace it, so other draws stay put
         if isinstance(explicit, dict) and explicit.get("params") is not None:
             params = dict(explicit["params"])
@@ -316,7 +317,7 @@ def generate(spec: dict, seed: int) -> dict:
                 params.update({"intent": G._intent(info["code"]), "law_level": info["level"]})
         tries = 0
         while gspec.get("require_reachable") and not G.reachable(prim, params, sp["law_level"], a) and tries < 50 and not explicit:
-            prim = G.sample_goal(rng, w)
+            prim = G.sample_goal(rng, wp)
             params = G.sample_params(prim, rng, world, a["id"])
             tries += 1
         sec, sparams, ter, tparams = None, {}, None, {}

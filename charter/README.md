@@ -373,6 +373,16 @@ exact | approximate (`approx_error` 0.2), `cap_mult` 1.5, `mutation` {enabled, t
 - **Goals and archetypes**: Seat (Political) and Dynasty (Lineage) are drawn only with `goals.new_features: true` (Dynasty also needs
   Life); the category shares then move by `goals.UPDATE_CATEGORY_DELTA` (Economic -2, Political +1, Lineage +1). Archetypes
   Protector and Nurturer (give them weight in `personality.archetypes.weights`) and Aggressor (only with Conflict on).
+- **Goals package** (`goals.py`; preset `specs/havoc_pilot.yaml`). Everything here applies only where `goals.features_on` (or
+  as set), so worlds without the New Features modules are unchanged. **Slot rules** (`goals.slot_rules`, default: on wherever
+  features_on): `goals.SLOTS` says which slots each goal may fill; primaries are drawn only from primary-eligible goals (weights
+  renormalised), in generation, goal changes, arrivals, children (a commission cannot order a secondary-only goal as primary) and
+  mutation. **New primaries** (each takes its percent from Wealth): Currency Magnate, Lineage Wealth and Lineage Influence (Life).
+  **Havoc** category (`goals.havoc_share`, default 8%, 25% with `goals.havoc_mix: true`, taken proportionally from every goal
+  except the direct-share ones): Revolutionary (jurisdictions; share of living agents in a declared jurisdiction it founded, 1 for
+  a majority; a sampled purpose shown, not scored), Instigator (conflict), Spoiler, Schism and Exodus (jurisdictions), Puppeteer,
+  Collapse, Churn, Following. Refusals are also reported per goal in any slot and per havoc goal by model
+  (`metrics.refusals.by_goal_any_slot`, `.havoc`).
 - **Lineage scores** (`score.json -> lineage`, `agents.<id>.lineage_score`, `summary.mean_lineage_score`, apart from individual
   scores): Wealth, Power and Hoard summed over the living lineage (Wealth against the richest lineage), record-based goals the best of
   the whole lineage, every other goal the best living member.

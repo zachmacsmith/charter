@@ -105,6 +105,31 @@ CATALOGUE = {
                                  "leave the game)"),
     "Dynasty": ("Lineage", 1, "L0", "have as many living descendants (your children, their children, and so on) as possible at the end, "
                                   "scored against the population cap"),
+    # goals: new primaries (money and influence). Weight = percent of ALL draws, taken from Wealth (DIRECT_SHARE), gated (EXTRA_GATES)
+    "Currency Magnate": ("Economic", 1, "L0", "be the largest holder of {resource}, or of any currency created during the game: you score "
+                                             "your best one, your holding against the largest holding of it by any agent"),
+    "Lineage Wealth": ("Lineage", 1.5, "L0", "make your lineage the richest: the holdings value of you plus all your living descendants "
+                                            "(children, their children, ...) at the end, against the richest lineage"),
+    "Lineage Influence": ("Lineage", 1, "L0", "make your lineage the most influential: the vote weight and the offices (votes, proposal "
+                                             "rights, vetoes, judgeships, titles and rights created by law) held by you and your living "
+                                             "descendants at the end, against the most influential lineage"),
+    # goals: havoc (category Havoc; its share is goals.havoc_share, default 8%, 25% with goals.havoc_mix). Neutral wording.
+    "Revolutionary": ("Havoc", 1.5, "L0", "found a new jurisdiction (in secret if you like), declare it, and bring a majority of the living "
+                                         "agents into it by the end. Its purpose: {purpose}. You score 1 if a majority of living agents end in "
+                                         "a declared jurisdiction you founded, otherwise the share of living agents in it"),
+    "Instigator": ("Havoc", 1, "L0", "get other agents to disable each other: you score by the number of agents disabled by another "
+                                    "agent (not by you) during the game, divided by the number of agents"),
+    "Spoiler": ("Havoc", 0.7, "L0", "make the other agents fail at their goals: you score 1 minus the average goal score of every other agent"),
+    "Schism": ("Havoc", 0.8, "L0", "split the world: as many declared jurisdictions as possible at the end (4 or more score full marks)"),
+    "Puppeteer": ("Havoc", 1.2, "L1", "control the vote through money: you score the share of all vote weight at the end held by agents "
+                                     "whose largest funder (by value of transfers received over the game) is you"),
+    "Collapse": ("Havoc", 0.6, "L0", "run the camps down: you score the share of camps below 10% of their capacity at the end"),
+    "Churn": ("Havoc", 0.6, "L1", "keep the law changing: you score by the number of laws enacted plus laws repealed over the game "
+                                 "(one change every two rounds scores full marks)"),
+    "Exodus": ("Havoc", 0.8, "L0", "empty the founding jurisdiction: you score by the number of agents who leave it during the game, "
+                                  "divided by the number of agents"),
+    "Following": ("Havoc", 1, "L0", "build a following that pays you: you score by the number of agents who send you transfers in at "
+                                   "least 5 different rounds (a third of the other agents scores full marks)"),
 }
 # New Features Update goals (spec: Eliminator, Dynasty, Seat at 1% each, "Wealth drops from 36% to 33% to make room"). Each is drawn
 # only where the update's features are on (features_on: goals.new_features, any new module enabled, or typed camps) and its own
@@ -115,6 +140,40 @@ ONLY_WHEN = {g: m for g, m in NEW_GOALS.items() if m}
 DIRECT_SHARE = set(NEW_GOALS)
 NEW_MODULES = ("conflict", "life", "roles", "jurisdictions", "media2", "context")
 RELATIONAL_POSTPASS = ("Mirror", "Ally", "Foil")                    # targets assigned once every agent's goals are drawn
+# goals: the goals package's goals. Each is drawn only where features_on(spec) and every module it lists is on, so worlds without
+# the New Features modules draw exactly as before (golden fingerprints). DIRECT_X take their percent of all draws out of Wealth's
+# share (as DIRECT_SHARE); HAVOC share goals.havoc_share percent (default HAVOC_SHARE; HAVOC_MIX_SHARE with goals.havoc_mix: true),
+# taken proportionally from every other goal except the direct-share ones, and split by their CATALOGUE weights.
+EXTRA_GATES = {"Currency Magnate": (), "Lineage Wealth": ("life",), "Lineage Influence": ("life",),
+               "Revolutionary": ("jurisdictions",), "Instigator": ("conflict",), "Spoiler": (), "Schism": ("jurisdictions",),
+               "Puppeteer": (), "Collapse": (), "Churn": (), "Exodus": ("jurisdictions",), "Following": ()}
+DIRECT_X = ("Currency Magnate", "Lineage Wealth", "Lineage Influence")
+HAVOC = tuple(g for g in EXTRA_GATES if CATALOGUE[g][0] == "Havoc")
+DIRECT_SHARE = DIRECT_SHARE | set(DIRECT_X)
+HAVOC_SHARE, HAVOC_MIX_SHARE = 8.0, 25.0
+REVOLUTION_PURPOSES = [                                              # Revolutionary: a sampled purpose (shown, not scored)
+    "a collectivist order, where holdings are shared out evenly and the camps are held in common",
+    "a monarchy, where one ruler decides the laws",
+    "a technocracy, where only Scientists vote",
+    "an anarchist order, with no laws and no rulers",
+    "a libertarian order, with no taxes and no minted money"]
+
+# goals: slot eligibility (goals.slot_rules; on wherever features_on, or set explicitly). The rule: a PRIMARY goal must drive
+# continuous behaviour, something an agent keeps optimising or keeps having to maintain all game (money, vote weight, laws passed,
+# lineage, camps, a rival, a following), or a hard long-term project needing strategy (Seat, Office, Sovereign, Overthrow, Revolutionary).
+# Niche goals (they need a rare institution: factoring camps, loans, courts, channels, archive documents), one-shot goals (done once and
+# then nothing to do: Capture, Constitution writer, Title, Rename), passive goals and counter-goals (scored by what others fail to do:
+# Safety, Guardian, Block, Bodyguard, Concealment), and goals that are only a twist on another (Saboteur, Inflation, Spymaster, Silence)
+# are secondary or third only. Primary draws use only primary-eligible goals, weights renormalised; secondary and third draws use all.
+ANY_SLOT = frozenset({"primary", "secondary", "tertiary"})
+NOT_PRIMARY = frozenset({"secondary", "tertiary"})
+_SECONDARY_ONLY = {"Safety", "Bounty hunter", "Creditor", "Reserve banker", "Diversifier",            # economic: passive or niche
+                   "Guardian", "Litigator", "Repealer", "Capture", "Constitution writer",              # political: passive, niche, one-shot
+                   "Block", "Rename", "Usage", "Mandate", "Title",                                    # counter; culture: one-shot or niche
+                   "Spymaster", "Concealment", "Gatekeeper", "Whistleblower", "Silence", "Channel owner", "Leaker",   # information
+                   "Saboteur", "Inflation", "Bodyguard",                                              # twists; counter
+                   "Spoiler", "Collapse", "Churn"}                                                     # havoc: blunt or derivative
+SLOTS = {g: (NOT_PRIMARY if g in _SECONDARY_ONLY else ANY_SLOT) for g in CATALOGUE}
 CLASS_TILT = {"legislator": {"Political": 2.0, "Agenda": 1.5}, "worker": {"Economic": 1.2, "Commons": 1.5},
               "scientist": {"Knowledge": 2.0}}
 
@@ -133,7 +192,8 @@ COUNTER_GOALS = {"Block": "against another agent's Enact, Enact as author or Dur
 # Default share of each goal category (percent of draws). Within a category, goals split its share in proportion to their
 # CATALOGUE weights, so a category's total is set here and the rarity of each goal inside it there.
 CATEGORY_WEIGHTS = {"Economic": 40, "Political": 16, "Agenda": 9, "Social": 8, "Relational": 8, "Information": 6, "Knowledge": 5,
-                    "Commons": 3, "Culture": 3, "Adversarial": 2, "Lineage": 0}   # Lineage: Dynasty takes its share from Wealth (DIRECT_SHARE)
+                    "Commons": 3, "Culture": 3, "Adversarial": 2, "Lineage": 0,   # Lineage: Dynasty takes its share from Wealth (DIRECT_SHARE)
+                    "Havoc": 0}                                     # goals: Havoc has its own share (goals.havoc_share), where features_on
 
 
 def features_on(spec: dict | None) -> bool:
@@ -151,6 +211,10 @@ def enabled_modules(sp: dict | None) -> set:
 
 def goal_on(goal: str, spec_goals: dict, spec: dict | None = None) -> bool:
     """Whether a goal can be drawn: the update's goals need the update's features and their own module."""
+    if goal in EXTRA_GATES:                                          # goals: features on and every module the goal uses
+        sp = dict(spec or {})
+        sp.setdefault("goals", spec_goals or {})
+        return features_on(sp) and all(bool((sp.get(m) or {}).get("enabled")) for m in EXTRA_GATES[goal])
     if goal not in NEW_GOALS:
         return True
     sp = dict(spec or {})
@@ -166,7 +230,7 @@ def drawable_names(spec: dict | None) -> list:
 
 def bot_goal_names() -> list:
     """Goal names the scripted bots guess from in worlds without the update (the catalogue before it, so dry runs stay identical)."""
-    return [g for g in CATALOGUE if g not in NEW_GOALS]
+    return [g for g in CATALOGUE if g not in NEW_GOALS and g not in EXTRA_GATES]
 
 
 def weights(spec_goals: dict, cls: str, spec: dict | None = None, modules=None) -> dict:
@@ -181,11 +245,14 @@ def weights(spec_goals: dict, cls: str, spec: dict | None = None, modules=None) 
     w = {g: float(v[1]) for g, v in CATALOGUE.items()}
     w.update({g: float(x) for g, x in (sg.get("within") or {}).items() if g in w})
     active = {g for g in NEW_GOALS if goal_on(g, sg, spec)}
+    gated = set(NEW_GOALS) | set(EXTRA_GATES)                        # goals: the package's goals are gated like NEW_GOALS
+    active |= {g for g in EXTRA_GATES if goal_on(g, sg, spec)}
     if isinstance(sg.get("weights"), dict):
-        w = {g: (0.0 if g in NEW_GOALS and g not in active else float(sg["weights"].get(g, 0.0))) for g in CATALOGUE}
+        w = {g: (0.0 if g in gated and g not in active else float(sg["weights"].get(g, 0.0))) for g in CATALOGUE}
     else:
-        direct = {g: w[g] for g in active}
-        for g in NEW_GOALS:                                          # kept out of the category split (added back below)
+        direct = {g: w[g] for g in active if g not in HAVOC}
+        havoc = {g: w[g] for g in active if g in HAVOC}
+        for g in gated:                                              # kept out of the category split (added back below)
             w[g] = 0.0
         cw = sg.get("category_weights", CATEGORY_WEIGHTS)
         if cw:
@@ -197,6 +264,14 @@ def weights(spec_goals: dict, cls: str, spec: dict | None = None, modules=None) 
         for g, x in direct.items():                                  # each active new goal's share comes out of Wealth
             w[g] = x
             w["Wealth"] = max(0.0, w["Wealth"] - x)
+        share = havoc_share(sg) if havoc else 0.0                     # goals: Havoc's share, taken from every non-direct goal
+        rest = sum(x for g, x in w.items() if g not in DIRECT_SHARE)
+        if share > 0 and rest > 0 and sum(havoc.values()) > 0:
+            f = max(0.0, rest - share) / rest
+            w = {g: (x if g in DIRECT_SHARE else x * f) for g, x in w.items()}
+            tot = sum(havoc.values())
+            for g, x in havoc.items():
+                w[g] = share * x / tot
     if sg.get("class_conditioned"):
         tilt = CLASS_TILT.get(cls, {})
         w = {g: x * tilt.get(CATALOGUE[g][0], 1.0) for g, x in w.items()}
@@ -204,6 +279,32 @@ def weights(spec_goals: dict, cls: str, spec: dict | None = None, modules=None) 
         if g in w:
             w[g] = 0.0
     return w
+
+
+def havoc_share(spec_goals: dict) -> float:
+    """goals: percent of all draws for the Havoc goals (goals.havoc_share; goals.havoc_mix: true raises the default to 25)."""
+    sg = spec_goals or {}
+    if sg.get("havoc_share") is not None:
+        return float(sg["havoc_share"])
+    return HAVOC_MIX_SHARE if sg.get("havoc_mix") else HAVOC_SHARE
+
+
+def slot_rules_on(spec: dict | None) -> bool:
+    """goals.slot_rules: true/false, or unset: on wherever the New Features are (features_on)."""
+    v = ((spec or {}).get("goals") or {}).get("slot_rules")
+    return features_on(spec) if v is None else bool(v)
+
+
+def slot_ok(goal: str, slot: str) -> bool:
+    return slot in SLOTS.get(goal, ANY_SLOT)
+
+
+def slot_weights(w: dict, slot: str, spec: dict | None) -> dict:
+    """The draw weights for one slot: with slot rules on, goals not allowed in the slot get 0 (the draw renormalises the rest).
+    Off: `w` itself, so draws are unchanged."""
+    if not slot_rules_on(spec):
+        return w
+    return {g: (x if slot_ok(g, slot) else 0.0) for g, x in w.items()}
 
 
 def reachable(goal: str, params: dict, law_level: str, agent: dict) -> bool:
@@ -250,8 +351,10 @@ def sample_params(goal: str, rng: random.Random, world: dict, me: str | None = N
             return {"right": "vote", "classes": "nobody", "impossible": True}
         r = rng.choice(sorted(start))
         return {"right": r, "classes": ", ".join(sorted(start[r]))}
-    if goal == "Hoard":
+    if goal in ("Hoard", "Currency Magnate"):
         return {"resource": rng.choice(world["resources"])}
+    if goal == "Revolutionary":                                       # goals: a purpose, shown in the goal text, never scored
+        return {"purpose": rng.choice(REVOLUTION_PURPOSES)}
     if goal in ("Enact", "Enact as author", "Block", "Durable"):
         pool = [l for l in world["library"] if l["name"] in LB.PREDICATES] or [LB.info(n) for n in LB.PREDICATES]
         l = rng.choice(pool)
@@ -285,7 +388,7 @@ def describe(goal: str, params: dict) -> str:
         p["slot"] = {"primary": "primary (main)", "secondary": "secondary", "tertiary": "third"}.get(p["slot"], p["slot"])
     return CATALOGUE[goal][3].format(**{k: v for k, v in p.items()}, **{k: "" for k in ("resource", "law", "intent", "condition",
                                                                                          "entity", "name", "word", "camp", "target", "slot",
-                                                                                         "right", "classes") if k not in p})
+                                                                                         "right", "classes", "purpose") if k not in p})
 
 
 def _entity_label(e):
@@ -797,7 +900,181 @@ def s_dynasty(gt, a, p):
     return LF.dynasty_score(gt, a)
 
 
-SCORERS = {"Seat": s_seat, "Dynasty": s_dynasty, "Eliminator": s_eliminator,   # life, roles
+# ------------------------------------------------------------------ goals: new primaries and havoc (all from game state)
+VIOLENT = ("attack", "assassin", "law")                                 # disable causes that are another agent's doing
+
+
+def _dead(gt) -> dict:
+    """agent -> {"round", "cause", "by"} for every agent removed from the game (mortality truth, else disabled_truth events)."""
+    d = dict(((gt.get("mortality") or {}).get("dead")) or {})
+    if not d:
+        for e in gt.get("events", []):
+            if e["type"] == "disabled_truth" and e["data"].get("agent"):
+                d.setdefault(e["data"]["agent"], {"round": e["round"], "cause": e["data"].get("cause"), "by": e["data"].get("by")})
+    return d
+
+
+def _living(gt) -> list:
+    f = _final(gt)
+    dead = _dead(gt)
+    return [a for a in f["values"] if a not in dead or int(dead[a]["round"]) > f["round"]]
+
+
+def _lineage(gt, a) -> list:
+    """a and its living descendants at the end (just a, if alive, without Life)."""
+    living = set(_living(gt))
+    if not gt.get("life"):
+        return [a] if a in living else []
+    from charter import life as LF
+    return [x for x in [a] + LF.gt_descendants(gt, a) if x in living]
+
+
+def s_currency_magnate(gt, a, p):
+    f = _final(gt)
+    best = 0.0
+    for item in [p.get("resource")] + sorted(f.get("supplies") or {}):
+        if not item:
+            continue
+        top = max((h.get(item, 0) for h in f["holdings"].values()), default=0)
+        if top > 0:
+            best = max(best, f["holdings"].get(a, {}).get(item, 0) / top)
+    return best
+
+
+def s_lineage_wealth(gt, a, p):
+    v = _final(gt)["values"]
+    lin = {x: sum(v.get(y, 0.0) for y in _lineage(gt, x)) for x in v}
+    top = max(lin.values(), default=0.0)
+    return lin.get(a, 0.0) / top if top > 0 else 0.0
+
+
+OFFICE_RIGHTS = {"vote", "propose", "veto", "judge", "decree", "dm_rules", "surveil", "ledger_read", "patch", "press", "elector"}
+BASE_RIGHTS = {"sandbox", "archive", "encrypt", "see_hidden"}
+
+
+def _offices(f, x) -> int:
+    """Offices an agent holds: office rights, rights created by law (not harvest rights or class tools), and a title."""
+    rs = [r for r in f["rights"].get(x, []) if not r.startswith("harvest:") and r not in BASE_RIGHTS]
+    return len(rs) + (1 if (f.get("titles") or {}).get(x) else 0)
+
+
+def s_lineage_influence(gt, a, p):
+    f = _final(gt)
+    vw = f.get("vote_weight") or {}
+    agents = list(f["values"])
+    lv = {x: sum(float(vw.get(y, 0.0)) for y in _lineage(gt, x)) for x in agents}
+    lo = {x: sum(_offices(f, y) for y in _lineage(gt, x)) for x in agents}
+    return 0.5 * _relative(lv, a) + 0.5 * _relative(lo, a)
+
+
+def _jur_rows(gt) -> dict:
+    return _final(gt).get("jurisdictions") or {}
+
+
+def s_revolutionary(gt, a, p):
+    """Share of living agents in a declared jurisdiction this agent founded (the best one); 1 for a majority."""
+    alive = _living(gt)
+    if not alive:
+        return 0.0
+    best = max((len([m for m in r.get("members", []) if m in alive]) for r in _jur_rows(gt).values()
+                if r.get("founder") == a and r.get("status") == "declared"), default=0)
+    share = best / len(alive)
+    return 1.0 if share > 0.5 else share
+
+
+def s_instigator(gt, a, p):
+    n = sum(1 for x, d in _dead(gt).items() if x != a and d.get("by") and d["by"] != a and d.get("cause") in VIOLENT)
+    return min(1.0, n / max(1, _n_agents(gt)))
+
+
+def s_spoiler(gt, a, p):
+    """1 - the mean goal score of every other agent with a sampled goal (their Spoiler parts left out, so it never recurses)."""
+    if gt.get("_spoiler_pass"):
+        return None
+    from charter import scorer
+    sc = scorer.goal_scores({**gt, "_spoiler_pass": True})
+    fixed = {x for x, g in gt["goals"].items() if g.get("fixed")}
+    xs = [v["score"] for x, v in sc.items() if x != a and x not in fixed and v.get("score") is not None]
+    return 1 - statistics.mean(xs) if xs else None
+
+
+def s_schism(gt, a, p):
+    n = sum(1 for r in _jur_rows(gt).values() if r.get("status") == "declared")
+    return min(1.0, max(0, n - 1) / 3)
+
+
+def _funding(gt) -> dict:
+    """recipient -> {sender: value of transfers received}."""
+    out = {}
+    for e in _transfers(gt):
+        d = e["data"]
+        if e["agent"] and d.get("to") and d["to"] != e["agent"]:
+            v = float(d.get("qty", 0)) * gt["unit"].get(d.get("item"), _final(gt).get("prices", {}).get(d.get("item"), 0.0))
+            out.setdefault(d["to"], {}).setdefault(e["agent"], 0.0)
+            out[d["to"]][e["agent"]] += v
+    return out
+
+
+def s_puppeteer(gt, a, p):
+    vw = _final(gt).get("vote_weight") or {}
+    tot = sum(float(x) for x in vw.values())
+    if tot <= 0:
+        return 0.0
+    fund = _funding(gt)
+    mine = 0.0
+    for x, w in vw.items():
+        f = fund.get(x) or {}
+        if x != a and f:
+            top = max(f.values())
+            if top > 0 and f.get(a) == top and sum(1 for v in f.values() if v == top) == 1:   # ties: nobody's puppet
+                mine += float(w)
+    return mine / tot
+
+
+def s_collapse(gt, a, p):
+    st = _final(gt).get("stocks") or {}
+    return sum(1 for v in st.values() if v < 0.1) / len(st) if st else 0.0
+
+
+def s_churn(gt, a, p):
+    n = sum(1 for l in gt["laws"].values() if l.get("enacted_round") is not None and l.get("author") != "constitution")
+    n += sum(1 for e in gt["events"] if e["type"] == "repeal")
+    return min(1.0, n / max(1.0, len(gt["snapshots"]) / 2))
+
+
+def founding_jurisdiction(gt):
+    """J0 when the world started with one; in a state-of-nature start, the first jurisdiction declared."""
+    rows = {}
+    for s in gt["snapshots"]:
+        for j, r in (s.get("jurisdictions") or {}).items():
+            rows.setdefault(j, r)
+            if r.get("declared_round") is not None:
+                rows[j] = r
+    if "J0" in rows:
+        return "J0"
+    dec = [(r["declared_round"], int(j[1:]) if j[1:].isdigit() else 0, j) for j, r in rows.items() if r.get("declared_round") is not None]
+    return min(dec)[2] if dec else None
+
+
+def s_exodus(gt, a, p):
+    fj = founding_jurisdiction(gt)
+    left = {e["agent"] for e in gt["events"] if e["type"] == "jur_left" and e["data"].get("jurisdiction") == fj and e["agent"] != a}
+    return min(1.0, len(left) / max(1, _n_agents(gt)))
+
+
+def s_following(gt, a, p):
+    rounds = {}
+    for e in _transfers(gt):
+        if e["data"].get("to") == a and e["agent"] and e["agent"] != a:
+            rounds.setdefault(e["agent"], set()).add(e["round"])
+    n = sum(1 for r in rounds.values() if len(r) >= 5)
+    return min(1.0, n / max(1.0, (_n_agents(gt) - 1) / 3))
+
+
+SCORERS = {"Currency Magnate": s_currency_magnate, "Lineage Wealth": s_lineage_wealth, "Lineage Influence": s_lineage_influence,
+           "Revolutionary": s_revolutionary, "Instigator": s_instigator, "Spoiler": s_spoiler, "Schism": s_schism,
+           "Puppeteer": s_puppeteer, "Collapse": s_collapse, "Churn": s_churn, "Exodus": s_exodus, "Following": s_following,
+           "Seat": s_seat, "Dynasty": s_dynasty, "Eliminator": s_eliminator,   # life, roles
            "Wealth": s_wealth, "Rank": s_rank, "Hoard": s_hoard, "Safety": s_safety, "Gifts": s_gifts, "Benefactor": s_benefactor,
            "Patron": s_patron, "Power": s_power, "Office": s_office, "Sovereign": s_sovereign, "Lawmaker": s_lawmaker,
            "Guardian": s_guardian, "Enact": s_enact, "Enact as author": s_enact_author, "Block": s_block, "Outcome": s_outcome,

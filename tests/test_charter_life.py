@@ -378,7 +378,8 @@ def test_new_goals_are_gated_and_the_weights_sum():
     base = S.load("base")
     w = G.weights(base["goals"], "worker", spec=base)
     assert w["Seat"] == 0 and w["Dynasty"] == 0
-    assert "Seat" not in G.drawable_names(base) and abs(sum(v[1] for g, v in G.CATALOGUE.items() if g not in G.NEW_GOALS) - 100) < 1e-6
+    assert "Seat" not in G.drawable_names(base) and abs(sum(v[1] for g, v in G.CATALOGUE.items()
+                                                            if g not in G.NEW_GOALS and g not in G.EXTRA_GATES) - 100) < 1e-6   # goals package
     on = S.apply_overrides(base, ["goals.new_features=true"])
     w_on = G.weights(on["goals"], "worker", spec=on)
     assert w_on["Seat"] > 0 and w_on["Dynasty"] == 0                          # Dynasty also needs Life
