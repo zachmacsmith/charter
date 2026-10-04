@@ -830,7 +830,7 @@ def scripted_actions(k, aid, n) -> list:
     if v["cls"] == "board" and others and (aid not in mst.get("successors", {}) or rng.random() < 0.1):
         a("name_successor", {"agent": rng.choice(others)})
     if others and rng.random() < 0.08:
-        a("bequest", {"holdings": {"@children": 0.5, rng.choice(others): 0.5}, "if_disabled": {"holdings": {"@killer_enemies": 1.0}}})
+        a("bequest", {"holdings": {"@children": 0.5, rng.choice(others): 0.5}, "if_disabled": {"holdings": {"@attacker_enemies": 1.0}}})
     makers = living_makers(k)
     busy = any(c["parent"] == aid and c["status"] in ("open", "waiting", "due") for c in st["commissions"].values())
     if makers and v["cls"] != "fixer" and not busy and rng.random() < 0.3:

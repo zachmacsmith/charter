@@ -10,6 +10,7 @@ import random
 
 from charter import archive
 from charter import context as CX                                     # context: fixed-layer prompts (charter/context.py)
+from charter import conflict as CF
 from charter import credit as CR
 from charter import goals as G
 from charter import hidden as H
@@ -90,11 +91,19 @@ ACTION_DOC = {
     "survey": 'survey {"camp": "camp2", "x": [dial values]}: at a camp that allows it, learn what a harvest with x would yield now (before noise) without harvesting; costs a fee',
     "invest": 'invest {"camp": "camp2", "qty": 3}: lock resources (usually stone) into a camp\'s infrastructure: more capacity, regrowth and safety for everyone who harvests there',
     # life (mortality.py, life.py)
-    "bequest": 'bequest {"holdings": {"Name": 0.5, "@children": 0.5}, "files": "Name", "if_disabled": {"holdings": {"@killer_enemies": 1}, "files": null}, "public": false}: what happens to your holdings and files when you leave the game (your latest bequest counts). Recipients: names, or @children, @descendants, @killer, @killer_enemies (agents with a record of hostility to whoever disabled you), @reserve; the rest goes to the reserve. if_disabled replaces the terms if someone disables you',
+    "bequest": 'bequest {"holdings": {"Name": 0.5, "@children": 0.5}, "files": "Name", "if_disabled": {"holdings": {"@attacker_enemies": 1}, "files": null}, "public": false}: what happens to your holdings and files when you leave the game (your latest bequest counts). Recipients: names, or @children, @descendants, @attacker, @attacker_enemies (agents with a record of hostility to whoever disabled you), @reserve; the rest goes to the reserve. if_disabled replaces the terms if someone disables you',
     "name_successor": 'name_successor {"agent": "Name"}: Board only; the agent (not on the Board) who takes your seat when you leave the game (the latest naming counts; private unless a law makes namings public)',
     "commission": 'commission {"maker": "Name", "spec": {"goal": "Wealth", "secondary": null, "traits": {"honesty": 0.8}, "archetype": null, "persona": "...", "letter": "...", "holdings": {"timber": 5}, "files": [], "stats": {"tier": "weak", "actions": 0, "lifespan": 0, "scratchpad": 0, "attack": 0, "defense": 0, "lookups": 0}, "timing": "next_round"}, "payment": {"timber": 2}}: order a new agent (your child) from a Maker; the price and the fee (payment) are held until it is made. Omitted fields default to your own goals and traits',
     "create_agent": 'create_agent {"commission": "K1", "spec": {...}}: Makers only; make the agent ordered in a commission, as ordered or with any field changed (you pay any extra price and keep any saving, plus the fee)',
     "copy_agent": 'copy_agent {"parent": "Name", "edits": {...}, "commission": "K1"}: Makers only; make the commissioned agent as a copy of its parent (goals, traits, class, model tier, actions) with edits',
+    # conflict (charter/conflict.py; listed only when conflict is on)
+    "attack": 'attack {"target": "Name", "units": 3}: uses 2 actions; commit weapons to disable the target (remove it from the game); the weapons are used up whether it succeeds or not',
+    "join_attack": 'join_attack {"attacker": "Name", "target": "Name", "units": 2}: pledge weapons to another agent\'s attack on a target this round (returned if no such attack happens)',
+    "forge": 'forge {"qty": 3}: turn copper into weapons, 1 for 1',
+    "fortify": 'fortify {"qty": 4, "unlock": false}: lock stone into your fort (your defense); with "unlock": true, stone comes back out after 2 rounds (it keeps defending until then)',
+    "guard": 'guard {"agent": "Name", "item": null, "qty": null}: your fort also defends that agent (one at a time); with item and qty it is an offer at that fee per round, which they accept with guard {"accept": "YourName"}; guard {"stop": true} ends it',
+    "buy_initiative": 'buy_initiative {"n": 1}: spend n quicksilver to act n places earlier next round than the published order shows (only where attacks resolve immediately)',
+    "contract": 'contract {"to": "Name", "target": "Name", "item": "timber", "qty": 10, "text": "..."}: a sealed private message offering payment (sent now) for removing the target from the game; only you and the recipient can ever see or cite it',
 }
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
@@ -317,6 +326,7 @@ def system_prompt(inst: dict, a: dict) -> str:
         absent |= {"survey", "invest"}
     if not CT.LS.enabled_spec(inst["spec"]):                            # camps: leasing is off
         absent |= {"lease", "accept_lease"}
+    absent |= CF.absent_actions(inst)                                # conflict: its actions only when conflict is on
     if not (sp.get("outside_power") or {}).get("enabled"):
         absent |= {"pay_tribute"}
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
@@ -343,7 +353,7 @@ Actions (you have {a['actions']} per turn; each item in "actions" uses one):
 """ + "\n".join("- " + action_doc(k, inst, a) for k in allowed) + f"""
 
 {H.api_doc(inst, API_DOC) if inst['law_level'] != 'L0' else ''}
-{H.prompt_section(inst, a)}{R.prompt_section(inst, a)}
+{H.prompt_section(inst, a)}{R.prompt_section(inst, a)}{(chr(10) + CF.prompt_section(inst, a)) if CF.enabled_inst(inst) else ''}
 
 {library_text(inst, a)}
 
@@ -438,6 +448,8 @@ def render_event(k, e, viewer=None) -> str | None:
         return f"{tag} #{d['channel']} {who}: {d['text']}"
     if t in P.EVENT_TYPES:
         return P.render_event(e, tag)
+    if t in CF.EVENT_TYPES:                                             # conflict: disables, failed attacks, revealed order, guards
+        return CF.render(k, e, tag)
     if t in O.EVENT_TYPES:
         return O.render_event(e, tag)
     if t in CT.EVENT_TYPES:                                             # camps: typed-camp results, leases
@@ -505,6 +517,7 @@ def state_view(k, aid: str) -> str:
     lines += CT.state_lines(k, aid)                                     # camps: typed camps' details, leases, upkeep ([] under legacy)
     from charter import life as LF
     lines += LF.state_lines(k, aid)                                    # life: lifespan left, population, children, commissions
+    lines += CF.state_lines(k, aid)                                    # conflict: weapons, fort, guards, role ([] when off)
     return "\n".join(lines)
 
 
@@ -562,7 +575,7 @@ class ScriptedPolicy:
             from charter import observer
             return observer.scripted_act(k, a, n_actions, final)
         r, aid, cls = self.rng, a["id"], a["cls"]
-        acts = []
+        acts = CF.scripted(k, aid, n_actions) if CF.on(k) else []     # conflict: own RNG stream, so other dry runs are unchanged
         mine = [x.split(":", 1)[1] for x in k.w["agents"][aid]["rights"] if x.startswith("harvest:")]
         for _ in range(n_actions):
             roll = r.random()

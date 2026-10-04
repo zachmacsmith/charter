@@ -50,6 +50,7 @@ TOPICS = {
     "powers": ("Powers and the law", "Some agents hold hidden powers (words used through invoke). Laws can expose or remove them."),
     "leases": ("Leasing harvest rights", "Harvest rights can be leased for a term; laws can tax, cap or ban leases."),   # camps
     "succession": ("Board succession", "Board members name successors who take their seats when they leave the game."),   # life
+    "conflict": ("Arms and force, read by law", "Laws can read forts, weapons and attacks, ban forging and oblige agents to guard each other."),
 }
 
 # (name, topic, prompt group, prompt text, article detail, core tier, minimal tier)
@@ -201,6 +202,11 @@ E += [                                                                  # camps:
     ("leases", "leases", "Read", "leases()", "every lease offered or in force: right, holder, tenant, rounds, fee, status, start, end.",
      "prompt", "common"),
 ]
+# conflict: its law functions are documented in conflict.prompt_section while the module is on (group "Conflict" is not in the
+# prompt's GROUP_ORDER) and kept out of the law_docs mapping, so worlds without conflict are unchanged
+from charter.conflict import LAW_DOCS as _CF_DOCS
+MODULE_ENTRIES = {n for n, _, _ in _CF_DOCS}
+E += [(n, "conflict", "Conflict", sig, detail, "prompt", "prompt") for n, sig, detail in _CF_DOCS]
 ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 
 
@@ -231,7 +237,7 @@ def resolve(spec: dict) -> dict:
     mapping = {}
     off = _gated_off(spec)
     for n, e in ENTRIES.items():
-        if n in off or (n in REQUIRES and not REQUIRES[n](spec)):     # camps: leasing off; life: a module's entries only where on
+        if n in off or (n in REQUIRES and not REQUIRES[n](spec)) or n in MODULE_ENTRIES:   # camps, life, conflict: module entries
             continue
         if preset == "full":
             mapping[n] = e["core"] if n in ALWAYS_ARTICLE or n in REQUIRES else "prompt"   # life: module entries were never in the old prompt
@@ -271,7 +277,7 @@ def articles(resolved: dict) -> dict:
     m = resolved["mapping"]
     by_topic: dict = {}
     for n, e in ENTRIES.items():
-        if n in m and m[n] != "prompt":
+        if m.get(n, "prompt") != "prompt":                               # conflict: module entries are not in the mapping
             by_topic.setdefault(e["topic"], {}).setdefault(m[n], []).append(n)
     out = {}
     for topic, tiers in by_topic.items():

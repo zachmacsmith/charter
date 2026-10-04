@@ -21,8 +21,8 @@ What disable does, in order:
 
 Bequest terms (agent action `bequest`, the latest replaces the earlier one; private unless "public": true):
     {"holdings": {"Ada": 0.5, "@children": 0.5}, "files": "Ada",
-     "if_disabled": {"holdings": {"@killer_enemies": 1}, "files": "@killer_enemies"}, "public": false}
-  Recipients: an agent's name, or "@children", "@descendants", "@killer" (`by`), "@killer_enemies" (agents with a hostile record
+     "if_disabled": {"holdings": {"@attacker_enemies": 1}, "files": "@attacker_enemies"}, "public": false}
+  Recipients: an agent's name, or "@children", "@descendants", "@attacker" (`by`), "@attacker_enemies" (agents with a hostile record
   against `by`: attacks or disables either way, court accusations either way), "@reserve". A group shares its part equally; a share
   whose recipient is gone or empty falls to the reserve; shares above 1 in total are scaled down.
 
@@ -94,7 +94,8 @@ def disable(k, aid, cause, by=None, public=True, named=True) -> bool:
             ch["members"] = [m for m in ch["members"] if m != aid]
     shown_by = by if (named and by) else None
     text = f"{aid} has been {CAUSE_TEXT[cause]}" + (f" by {shown_by}" if shown_by and cause in ("attack", "law") else "") + "."
-    k.log("disabled", None, {"agent": aid, "cause": cause, "by": shown_by, "text": text}, vis="public" if public else "monitor")
+    k.log("disabled", None, {"agent": aid, "cause": cause, **({"by": shown_by} if shown_by else {}), "text": text},   # unnamed: no "by" key
+          vis="public" if public else "monitor")
     from charter import life as LF
     reserved = LF.on_death(k, aid) if LF.enabled(k.spec) else {}       # children ordered for this death take their share first
     outcome = _run_bequest(k, aid, cause, by)
@@ -180,9 +181,9 @@ def _group(k, aid, who, cause, by) -> list:
     from charter import life as LF
     if who == "@reserve":
         return ["reserve"]
-    if who == "@killer":
+    if who in ("@attacker", "@killer"):
         return [by] if by and alive(k, by) else []
-    if who == "@killer_enemies":
+    if who in ("@attacker_enemies", "@killer_enemies"):              # @killer_enemies: old name, still accepted
         return enemies(k, by) if by else []
     if who == "@children":
         return [c for c in LF.children(k, aid) if alive(k, c)]

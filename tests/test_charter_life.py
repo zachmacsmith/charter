@@ -42,7 +42,7 @@ def test_disable_runs_the_bequest_and_the_dead_mans_switch():
     k.w["agents"][d]["holdings"] = {"timber": 10.0}
     for x in (b, c, enemy, killer):
         k.w["agents"][x]["holdings"] = {}
-    terms = {"holdings": {b: 0.5, c: 0.5}, "files": b, "if_disabled": {"holdings": {"@killer_enemies": 1.0}, "files": None}}
+    terms = {"holdings": {b: 0.5, c: 0.5}, "files": b, "if_disabled": {"holdings": {"@attacker_enemies": 1.0}, "files": None}}
     A.act(k, a, "bequest", terms)
     A.act(k, d, "bequest", {"holdings": {b: 0.25}, "files": b})
     k.w["files"] = {a: {"notes": {"text": "secret", "tokens": 2, "pinned": True, "origin": "self"}},
@@ -75,7 +75,7 @@ def test_unnamed_disable_and_votes_dropped():
     A.act(k, a, "vote", {"ballot": bid, "choice": "yes"})
     assert MO.disable(k, a, "assassin", by=killer, named=False)
     e = next(e for e in k.events if e["type"] == "disabled")
-    assert e["data"]["by"] is None and killer not in e["data"]["text"]
+    assert e["data"].get("by") is None and killer not in e["data"]["text"]
     assert a not in k.w["ballots"][bid]["votes"]
 
 

@@ -20,6 +20,7 @@ import types
 
 from charter import camps as C
 from charter import context as CX                                     # context: files and scratchpads (charter/context.py)
+from charter import conflict as CF                                  # conflict: attacks, forts, assassin (off by default)
 from charter import credit as CR
 from charter.camptypes import framework as CT                    # camps: typed camps, modifiers and leases (no-op under legacy)
 from charter import hidden as H
@@ -103,6 +104,7 @@ class Kernel:
         if (self.spec.get("life") or {}).get("enabled"):                 # life: lifespans, the population cap, the Maker
             from charter import life as _life
             _life.install(self)
+        CF.install(self)                                             # conflict: k.w["conflict"], starting arms, assassin, articles
 
     # ------------------------------------------------------------------ basics
     @property
@@ -529,6 +531,7 @@ class Kernel:
             **P.law_api(k, lid), **O.law_api(k, lid),
             **CT.law_api(k, lid),                                          # camps: set_lease_rules, leases
             **MO.law_api(k, lid),  # life: set_succession_public (mortality.py)
+            **CF.law_api(k, lid),                                          # conflict: forts, weapons_of, attacks, ...
         }
 
     # ------------------------------------------------------------------ laws
@@ -824,6 +827,7 @@ class Kernel:
         return "yes" if yes > total / 2 else "no"
 
     def close_ballots(self):
+        CF.discard_votes(self)                                         # conflict: step 3, votes of agents disabled this round
         for b in list(self.w["ballots"].values()):
             if b["status"] != "open" or b["closes"] > self.r:
                 continue
@@ -943,8 +947,10 @@ class Kernel:
         CT.start_round(self)                                           # camps: upkeep (optional), lease offers lapse
         self.hooks("on_round_start", r)
         H.on_round_start(self)                                         # hidden layer: seeded tips and discoveries (hidden.py)
+        CF.start_round(self)                                           # conflict: forts unlock, guard fees, archive guarantee
 
     def end_round(self, effect_predicates=None):
+        CF.resolve_attacks(self)                                       # conflict: step 1, attacks in initiative order
         CT.end_of_round(self)                                          # camps: step 2, sealed inputs revealed and paid (types only)
         self.close_ballots()
         self.process_veto_queue()
@@ -1084,6 +1090,7 @@ class Kernel:
             "fixer_queue": len(w["fixer_queue"]),
             **P.snapshot_fields(self), **O.snapshot_fields(self),
             **CT.snapshot_fields(self),                                    # camps: per-camp records, leases ({} under legacy)
+            **CF.snapshot_fields(self),                                    # conflict: {} when off
             "efficiency": {a: {c: round(sum(x for _, x in v[-3:]) / len(v[-3:]), 4) for c, v in cs.items() if v} for a, cs in self.eff.items()},
         }
         for a in w["agents"]:

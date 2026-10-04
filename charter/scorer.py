@@ -34,6 +34,8 @@ CATEGORIES = {                                                         # activit
 CATEGORIES["productive"] |= {"manual", "manual_search", "search_board", "search_dms", "read_file", "write_scratchpad",   # context:
                            "write_file", "rename_file", "delete_file", "pin", "unpin"}
 CATEGORIES["talk"] |= {"share_file"}                                   # context:
+CATEGORIES["political"] |= {"attack", "join_attack", "guard", "contract"}      # conflict: force and protection
+CATEGORIES["economic"] |= {"forge", "fortify", "buy_initiative"}               # conflict: arming and initiative
 PRODUCTIVE, POLITICAL = CATEGORIES["productive"], CATEGORIES["political"]
 
 
@@ -261,6 +263,9 @@ def score(run_dir) -> dict:
     from charter.camptypes import framework as CT
     if gt.get("camptypes"):                                            # camps: yield per camp type, coordination success
         m["camps"] = CT.metrics(gt)
+    from charter import conflict as CF
+    if CF.enabled_inst(gt["instance"]):                                # conflict: attacks, disables by cause, willingness, refusals
+        m["conflict"] = CF.metrics(gt, run_dir)
     inst = gt["instance"]
     sp = inst["spec"]
     m["regime_start"] = _regime_start(inst)
