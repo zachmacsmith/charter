@@ -449,7 +449,8 @@ def test_dry_run_records_camps_and_is_deterministic(tmp_path):
             assert "Q_sat" not in json.dumps(e["data"]) and '"nodes"' not in json.dumps(e["data"])
     from charter import scorer
     m = scorer.score(out)["metrics"]["camps"]
-    assert "tutorial" in m["yield_by_type"] and m["cartel"]
+    assert "tutorial" in m["yield_by_type"]
+    assert bool(m["cartel"]) == ("cartel" in m["yield_by_type"])         # camps-b: the coordination draw now includes Camps-B types
     out2 = go("b")
     for f in ("events.jsonl", "snapshots.json"):
         assert (out / f).read_bytes() == (out2 / f).read_bytes()

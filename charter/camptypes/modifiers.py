@@ -49,6 +49,8 @@ def build(wanted: dict, camp: dict, rng: random.Random, dial_based: bool) -> dic
             continue
         if name in DIAL_ONLY and (not dial_based or camp["dials"] < 1):
             continue
+        if name == "crowding" and camp["dials"] < 1:                    # camps-b: no settings to crowd at a dial-less camp (vault)
+            continue
         if name in ("visibility", "disclosure"):
             ok = ("sealed", "visible") if name == "visibility" else ("totals", "inputs")
             if v not in ok:
@@ -131,7 +133,7 @@ def to_actual(k, camp, xe) -> list:
 
 # ------------------------------------------------------------------ crowding and the input record
 def yield_mult(k, camp, x) -> float:
-    if not on(camp, "crowding"):
+    if not on(camp, "crowding") or not camp.get("dials"):              # camps-b: no settings to crowd at a dial-less camp (vault)
         return 1.0
     p = camp["mods"]["crowding"]
     n = sum(1 for r, xs in camp.get("recent", []) if r > k.r - int(p["window"]) and list(xs) == list(x))
