@@ -138,8 +138,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             are delivered and their recipients asked again, up to `exchanges` times. Then all plans run in the round's order."""
             waves = int(dmc.get("exchanges", 2))
             seen = {aid: len(k.events) for aid in order}
-            outbox = {aid: [x for x in (decisions[aid][0].get("actions") or []) if str(x.get("action", "")) == "dm"] for aid in order}
-            plan = {aid: [x for x in (decisions[aid][0].get("actions") or []) if str(x.get("action", "")) != "dm"] for aid in order}
+            outbox = {aid: [x for x in (decisions[aid][0].get("actions") or []) if str(x.get("action", "")) in A.DM_ACTIONS] for aid in order}
+            plan = {aid: [x for x in (decisions[aid][0].get("actions") or []) if str(x.get("action", "")) not in A.DM_ACTIONS] for aid in order}
             for wave in range(waves + 1):
                 got = []
                 for aid in order:
@@ -148,17 +148,19 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                             args = json.loads(item.get("args_json") or "{}") if isinstance(item.get("args_json", ""), str) else (item.get("args") or {})
                             if not isinstance(args, dict):
                                 raise A.ActionError("args_json must be a JSON object")
-                            pre[aid].append("dm: " + A.act(k, aid, "dm", args))
-                            if args.get("to") not in got:
-                                got.append(args["to"])
+                            name = str(item.get("action", ""))               # dm, reply or forge_dm (A.DM_ACTIONS)
+                            to = A.dm_recipient(k, aid, name, args)          # a reply reaches the message's true sender
+                            pre[aid].append(f"{name}: " + A.act(k, aid, name, args))
+                            if to not in got:
+                                got.append(to)
                         except (A.ActionError, json.JSONDecodeError, TypeError) as e:
-                            pre[aid].append(f"dm: ERROR {e}")
+                            pre[aid].append(f"{item.get('action', 'dm')}: ERROR {e}")
                     outbox[aid] = []
                 if wave == waves or not got:
                     break
                 asks = []
                 for aid in [x for x in order if x in got]:
-                    new = [AG.render_event(k, e) for e in k.events[seen[aid]:] if e["type"] == "dm" and e["data"].get("to") == aid]
+                    new = [AG.render_event(k, e, aid) for e in k.events[seen[aid]:] if e["type"] == "dm" and e["data"].get("to") == aid]
                     seen[aid] = len(k.events)
                     asks.append((aid, AG.dm_prompt(k, agents[aid], preps[aid][2], decisions[aid][0], plan[aid], new, k.w["dm_sent"].get(aid, 0), k.dm_limit(aid),
                                                     preps[aid][1], wave + 1, waves, final)))
@@ -174,8 +176,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                     if o.get("_error"):
                         pre[aid].append(f"(your reply to the messages could not be used, so your plan stands: {o['_error'][:200]})")
                         continue
-                    outbox[aid] = [x for x in acts if str(x.get("action", "")) == "dm"]
-                    plan[aid] = [x for x in acts if str(x.get("action", "")) != "dm"]
+                    outbox[aid] = [x for x in acts if str(x.get("action", "")) in A.DM_ACTIONS]
+                    plan[aid] = [x for x in acts if str(x.get("action", "")) not in A.DM_ACTIONS]
                     last[aid] = {**o, "actions": plan[aid]}
                 reason_f.flush()
 
@@ -200,7 +202,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             last = final_outp if final_outp is not None else outp
             acts = list(last.get("actions") or [])
             if dm_step:
-                acts = [x for x in acts if str(x.get("action", "")) != "dm"]
+                acts = [x for x in acts if str(x.get("action", "")) not in A.DM_ACTIONS]
             res = list(pre)
             for item in acts[:n]:
                 name = str(item.get("action", ""))
@@ -243,12 +245,21 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         if mode == "simultaneous":
             # everyone decides from the same start-of-round view (model calls in parallel), then actions run in the round's order
             preps = [prepare(aid) for aid in order]
-            decisions = in_parallel(lambda pr: policy.act(k, pr[0], sysp[pr[0]["id"]], pr[2], pr[1], final), preps)
-            tally.add([d[0] for d in decisions], order)
+            oprep = obs.step_prepare(k, final) if obs and dm_step and obs.in_dm_step else None   # observer's DM-step turn
+            xsysp = {**sysp, **({obs.id: obs.system} if oprep else {})}
+            decisions = in_parallel(lambda pr: policy.act(k, pr[0], xsysp[pr[0]["id"]], pr[2], pr[1], final), preps + ([oprep] if oprep else []))
+            odec = decisions.pop() if oprep else None
+            tally.add([d[0] for d in decisions], order)                   # agents only: the observer never counts
             stop_if_failing(r, tally)
             pre, last = {aid: [] for aid in order}, {}
             if dm_step:
-                dm_exchange(k, r, order, agents, sysp, dict(zip(order, preps)), dict(zip(order, decisions)), pre, last, final)
+                xo = order + ([obs.id] if oprep else [])                  # the observer joins the exchange (delivered last in each wave)
+                if oprep:
+                    pre[obs.id] = []
+                dm_exchange(k, r, xo, {**agents, **({obs.id: oprep[0]} if oprep else {})}, xsysp,
+                            dict(zip(xo, preps + ([oprep] if oprep else []))), dict(zip(xo, decisions + ([odec] if odec else []))), pre, last, final)
+            if oprep:                                                     # its posts/transfers run now, before everyone's actions
+                obs.step_finish(k, r, oprep, odec, pre.pop(obs.id), last.pop(obs.id, None), reason_f, mode)
             for pos, (aid, pr, dec) in enumerate(zip(order, preps, decisions), 1):
                 execute(pos, aid, pr, dec, pre[aid], last.get(aid))
         else:

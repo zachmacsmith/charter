@@ -1,4 +1,4 @@
-"""The law library (41 drafted laws, none enacted at start), the five starting constitutions, and effect predicates.
+"""The law library (58 drafted laws, none enacted at start), the five starting constitutions, and effect predicates.
 
 Every law is ordinary law-language source; its class is computed statically, never declared. A law's `level` is the lowest law
 level at which it can be proposed (laws using define_action need L4). Effect predicates judge a law by what the world does, not by

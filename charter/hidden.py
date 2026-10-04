@@ -439,14 +439,12 @@ def _quill(k, aid, as_agent, to, text):
     as_agent, to = _agent_arg(k, as_agent), _agent_arg(k, to)
     if as_agent == to:
         raise ActionError("the sender and the recipient must differ")
-    used, lim = k.w["dm_sent"].get(aid, 0), k.dm_limit(aid)
-    if used >= lim:
-        raise ActionError(f"you have sent your {lim} private messages for this round")
-    k.w["dm_sent"][aid] = used + 1
-    eid = k.log("dm", as_agent, {"to": to, "text": str(text)[:2000], "encrypted": False}, vis=[as_agent, to])
+    if to == aid:
+        raise ActionError("you cannot send a forged message to yourself")
+    from charter import actions as _A                                  # same convention as the observer's forge_dm: the event's agent is
+    _A._dm_check(k, aid, to)                                          # the TRUE sender, data["shown_as"] the apparent one, so `reply`
+    eid = _A._deliver(k, aid, to, text, False, {"shown_as": as_agent})   # routes answers (and payments) back to the forger
     k.log("forgery_truth", aid, {"event": eid, "as": as_agent, "to": to, "text": str(text)[:2000]}, vis="monitor")
-    if k.spec["conditions"].get("law_reads_dms"):
-        k.hooks("on_dm", as_agent, to, str(text)[:2000], False)
     return f"a message reached {to} as from {as_agent} ({eid}).", to
 
 

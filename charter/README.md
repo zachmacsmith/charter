@@ -64,7 +64,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 | `kernel.py` | world state, invariants, the law API, ballots, procedures, Board veto window, Fixer, courts, dry-run transactions, probes, snapshots |
 | `actions.py` | every agent action |
 | `credit.py` | loans, interest, default, credit records, par currencies, reserve ratio, bank runs, credit metrics |
-| `library.py` | 41 drafted laws, 5 constitutions, effect predicates |
+| `library.py` | 58 drafted laws, 5 constitutions, effect predicates |
 | `regimes.py` | 21 starting regimes: constitution + starting statutes + starting rights/offices + description |
 | `goals.py` | 29 goals with weights, samplers and state-based scores; Board/Fixer objectives |
 | `agents.py` | prompts, visibility-filtered feeds, scripted bots, the LLM policy |
@@ -231,6 +231,15 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   1 to the goal change, departure or end), each segment by the ordinary scorer on its own snapshots and events, combined weighted by
   rounds (`score.json -> goals.<agent>.segments`). `events.register(name, handler, **defaults)` adds a type with one entry;
   `events.add_agent(k, inst, cls, sponsor)` creates agents mid-run, and `k.w["spawn_requests"]` is processed through it every round.
+  It can **forge** DMs (`forge_dm {"as", "to", "text"}`, 1 copper each to the reserve, `observer.forge_cost`; it starts with 5
+  copper): the recipient sees the impersonated sender, who is not told (truth: monitor-only `forged_dm` event). In fast mode with
+  the DM step it also has a short **start-of-round action turn** whose DMs go out in wave 0, and it is asked again in the exchange
+  like everyone; its posts/transfers from that turn (`step_actions`) run right after the step. The DM limit applies to it.
+- **Reply with payment** (every agent): `reply {"message": "<DM id>", "text", "item", "qty"}` answers a DM and optionally pays, in
+  one action that counts as a DM. Both go to the message's TRUE sender (the event's `agent`); the replier is shown the apparent
+  sender (`data["shown_as"]` on forged DMs; the reply and payment carry `data["shown_to"]`). Feeds show apparent names except to the
+  true recipient; the payment is a transfer visible only to payer and true recipient. Money paid in replies to the observer's
+  forged DMs is its "con income" (`score.json["observer"]`).
 - **Convertible currency**: `set_convertible(currency)` turns on kernel deposit/redeem at price P, so a backed currency is possible at L2.
 - **Static class** also counts `on_harvest`/`on_transfer` that return a deduction, a tax or False as structural (they move holdings).
 - **Personality archetypes** (`personality.archetypes`, `archetypes.py`): half the agents (`prob`) also get a discrete temperament

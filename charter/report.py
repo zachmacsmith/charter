@@ -348,7 +348,11 @@ def messages(d, inst, ev):
         elif t == "anon_post":
             body = f"{head} Anonymous (public post; true author {anon.get(e['id'], '?')}):"
         elif t == "dm":
-            body = f"{head} {who} -> {x['to']} (DM{', encrypted' if x.get('encrypted') else ''}):"
+            body = (f"{head} {who} -> {x['to']} (DM{', encrypted' if x.get('encrypted') else ''}"
+                    + (f", FORGED: shown as from {x['shown_as']}" if x.get("shown_as") else "")
+                    + (f", reply to {x['reply_to']}" if x.get("reply_to") else "")
+                    + (f"; the sender believes it went to {x['shown_to']}" if x.get("shown_to") else "")
+                    + (f"; with {x['payment']['qty']:g} {x['payment']['item']}" if x.get("payment") else "") + "):")
         elif t == "channel_post":
             body = f"{head} {who} in #{x['channel']}:"
         elif t == "story":
