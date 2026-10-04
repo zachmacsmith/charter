@@ -397,7 +397,8 @@ def render_event(k, e, viewer=None) -> str | None:
     if t == "transfer_blocked":
         return f"{tag} a law blocked a transfer {who} -> {to}: {d['qty']:g} {d['item']}"
     if t == "harvest":
-        return f"{tag} your harvest at {d['camp']} with x={d['x']}: yield {d['yield']:.3g}" + (f" ({d['deducted']:.3g} deducted)" if d["deducted"] else "")
+        return f"{tag} your harvest at {d['camp']} with x={d['x']}: yield {d['yield']:.3g}" + (f" ({d['deducted']:.3g} deducted)" if d["deducted"] else "") + \
+            (f". {d['note']}" if d.get("note") else "")                 # camps-b: typed camps' private results (readings, pairings)
     if t == "sandbox":
         return f"{tag} your sandbox output:\n{d['output'][:2500]}"
     if t in ("archive_read", "archive_search"):

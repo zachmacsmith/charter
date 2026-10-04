@@ -55,12 +55,14 @@ def _need(k, aid, right, what):
 
 
 # ------------------------------------------------------------------ production
-def _harvest(k, aid, camp, x):
+def _harvest(k, aid, camp, x=None, **extra):
     if camp not in k.w["camps"]:
         raise ActionError(f"no such camp: {camp}. Camps: {', '.join(H.visible_camps(k))}")
     if k.w["camps"][camp].get("type"):                                 # camps: typed camps (camps.model: types) run in the framework
         from charter.camptypes import framework as CT
-        return CT.harvest_action(k, aid, camp, x)
+        return CT.harvest_action(k, aid, camp, x, extra)               # camps-b: non-dial args (submit, shift, partner, ...)
+    if extra or x is None:                                             # camps-b: legacy camps take exactly camp and x, as before
+        raise TypeError(f"_harvest() got unexpected or missing arguments: {sorted(extra) if extra else 'x'}")
     _need(k, aid, f"harvest:{camp}", f"harvest at {camp}")
     c = k.w["camps"][camp]
     x = [int(v) for v in (x if isinstance(x, list) else [x])]

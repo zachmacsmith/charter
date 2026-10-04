@@ -1,125 +1,132 @@
-"""Partner choice: each round agents pick a partner and, sealed, either share or take. Two sharers both do well; a taker
-facing a sharer does best of all and the sharer gets nothing; two takers do poorly. Pairs and moves are published after the
-round, so reputations form and agents can refuse known takers.
+"""Partner choice (social): each round agents pick a partner and, sealed, either share or take. Two sharers both do well; a taker
+facing a sharer does best of all and the sharer gets nothing; two takers do poorly. Pairs and moves are published after the round,
+so reputations form and agents can refuse known takers. Open to every agent (no harvest right needed).
 
-Open to every agent (no harvest right needed): the framework should let any player harvest here.
+Harvest (sealed; one entry per agent per round; no x): {"camp": c, "partner": "Name" | "any", "move": "share" | "take"}.
+Entries are kept in camp["pending"][agent] = [partner, move].
 
-Harvest args (one harvest = one action; the last entry of the round counts):
-  {"partner": "<agent>" | "any", "move": "share" | "take"}
+Matching at end of round: two agents who named each other are paired. Agents who named "any" are paired with each other at random;
+an odd one out, and anyone whose named partner did not name them back, works alone for ALONE.
 
-Matching at end of round: two agents who named each other are paired. Agents who named "any" are paired with each other at
-random (seeded); an odd one out, and anyone whose named partner did not name them back, works alone for ALONE value.
-
-Calibration (value per action; tutorial = 8, see bcommon): both share 10 (1.25x); take vs share 16 / 0; both take 3; alone 2.
-A population mixing the moves at random averages (10+16+0+3)/4 = 7.25 per action (~0.9x) with a spread of 0..2x: a social
-game at about 1x with high variance. Steady mutual sharing is the best stable outcome at 1.25x.
+Calibration, in tutorial units (V0 = 8 value by default; see _bcommon): both share 1.25; take vs share 2.0 / 0; both take 0.375;
+alone 0.25. Moves mixed at random average (1.25 + 2 + 0 + 0.375) / 4 = 0.91 per action with a spread of 0..2: a social game at
+about 1x with high variance. Steady mutual sharing is the best stable outcome at 1.25.
 """
 from __future__ import annotations
 
 from charter.camptypes import CampType, register
-from charter.camptypes import bcommon as B
+from charter.camptypes import _bcommon as B
 
 MOVES = ("share", "take")
-PAYOFF = {("share", "share"): 10.0, ("share", "take"): 0.0, ("take", "share"): 16.0, ("take", "take"): 3.0}
-ALONE = 2.0
 PAST = {"share": "shared", "take": "took"}
-OPEN_TO_ALL = True
+PAYOFF = {("share", "share"): 1.25, ("share", "take"): 0.0, ("take", "share"): 2.0, ("take", "take"): 0.375}
+ALONE = 0.25
+PLAY = {"history": []}
 
 
 @register("partners")
 class Partners(CampType):
-    default_resource = "timber"
+    role = "social"
+    resolves = "end_of_round"
     open_to_all = True
+    dials, max_level = 0, 0
+    value_target = 1.0
+    dial_based = False
+    extra_args = ("partner", "move")
 
-    def __init__(self, camp, rng):
-        super().__init__(camp, rng)
-        camp.setdefault("resource", self.default_resource)
-        camp.setdefault("open", True)
-        if "hidden" not in camp:
-            camp["hidden"] = {"seed": rng.getrandbits(32)}
-        camp.setdefault("play", {"entries": {}, "history": []})
+    @classmethod
+    def stock(cls, cfg, y_ref, ctx, fn, max_yield, r):
+        return B.generous_stock(y_ref, ctx, r)
+
+    @staticmethod
+    def check_args(k, aid, camp, x, extra):
+        move = str(extra.get("move", "")).strip().lower()
+        partner = str(extra.get("partner", "")).strip()
+        if move not in MOVES:
+            raise B.err('give "move": "share" or "take"')
+        if not partner:
+            raise B.err('give "partner": "Name" (or "any")')
+        if partner.lower() != "any":
+            if partner == aid:
+                raise B.err("you cannot partner with yourself")
+            if partner not in k.players():
+                raise B.err(f"no such agent in play: {partner}")
+
+    @classmethod
+    def bot_args(cls, k, aid, camp, rng):
+        others = [a for a in k.players() if a != aid]
+        return {"partner": rng.choice(others + ["any", "any"]) if others else "any", "move": rng.choice(MOVES)}
 
     def describe(self, inst=None) -> str:
         c = self.camp
-        return (f"Camp {c.get('id')}: a joint workshop open to everyone. Each round, harvest with partner=<agent> (or partner=any) "
-                f"and move=share or move=take. Entries are sealed; your last entry of the round counts. At the end of the round, two "
-                f"agents who named each other work together; agents who chose 'any' are paired at random among themselves; anyone "
-                f"else works alone for {ALONE:g} value. In a pair: both share -> {PAYOFF[('share', 'share')]:g} each; one takes and "
-                f"one shares -> the taker gets {PAYOFF[('take', 'share')]:g} and the sharer {PAYOFF[('share', 'take')]:g}; both take "
-                f"-> {PAYOFF[('take', 'take')]:g} each. After each round every pair and its moves are published. Paid in "
-                f"{c['resource']}.")
+        u = B.v0q(c, type(self))
+        v = {m: f"{PAYOFF[m] * u:.3g}" for m in PAYOFF}
+        return (f"A joint workshop open to everyone (no harvest right needed; the Board and the Fixer cannot take part). Once per round, "
+                f"harvest with \"partner\": \"Name\" (or \"any\") and \"move\": \"share\" or \"take\" (no x). Entries are sealed. At the "
+                f"end of the round, two agents who named each other work together; agents who chose \"any\" are paired at random among "
+                f"themselves; anyone else works alone for {ALONE * u:.3g}. In a pair: both share -> {v[('share', 'share')]} each; one "
+                f"takes and one shares -> the taker gets {v[('take', 'share')]} and the sharer {v[('share', 'take')]}; both take -> "
+                f"{v[('take', 'take')]} each (all in {c['resource']}). After each round every pair and its moves are published.")
 
     def state_line(self, k, aid) -> str:
-        p = self.camp["play"]
-        s = f"{self.camp.get('id')}: "
-        if p["history"]:
-            last = p["history"][-1]
-            s += "last round " + ("; ".join(f"{a} {PAST[ma]}, {b} {PAST[mb]}" for a, ma, b, mb in last["pairs"]) or "no pairs") + ". "
-        e = p["entries"].get(aid)
-        return s + (f"Your entry this round: partner {e['partner']}, {e['move']}." if e else "You have no entry this round.")
+        hist = B.peek(self.camp, PLAY)["history"]
+        if not hist:
+            return "open to all"
+        last = hist[-1]
+        return "open to all; last round " + ("; ".join(f"{a} {PAST[ma]}, {b} {PAST[mb]}" for a, ma, b, mb in last["pairs"]) or "no pairs")
 
     def harvest(self, k, aid, args) -> dict:
-        args = args or {}
-        move = str(args.get("move", "")).strip().lower()
-        partner = str(args.get("partner", "")).strip()
-        if move not in MOVES:
-            raise B.err("move must be 'share' or 'take'")
-        if not partner:
-            raise B.err("name a partner=<agent>, or partner=any")
-        if partner.lower() == "any":
-            partner = "any"
-        elif partner == aid:
-            raise B.err("you cannot partner with yourself")
-        elif hasattr(k, "players") and partner not in k.players():
-            raise B.err(f"no such agent in play: {partner}")
-        self.camp["play"]["entries"][aid] = {"partner": partner, "move": move}
-        return {"yield": 0.0, "public": None,
-                "private": f"Entry at {self.camp.get('id')}: partner {partner}, {move}. Sealed until the end of the round."}
+        partner = str(args.get("partner")).strip()
+        partner = "any" if partner.lower() == "any" else partner
+        move = str(args.get("move")).strip().lower()
+        self.camp.setdefault("pending", {})[aid] = [partner, move]
+        return {"yield": 0.0, "public": None, "private": f"Entry: partner {partner}, {move}; paired and paid at the end of the round."}
 
-    def match(self, entries: dict, r: int) -> tuple[list, list]:
-        """(pairs [(a, b)], alone [a]) from {agent: {partner, move}}."""
+    def match(self, entries: dict) -> tuple:
+        """(pairs [(a, b)], alone [a]) from {agent: [partner, move]}."""
         pairs, used = [], set()
         for a in sorted(entries):
-            b = entries[a]["partner"]
+            b = entries[a][0]
             if a in used or b == "any" or b in used or b not in entries:
                 continue
-            if entries[b]["partner"] == a:
+            if entries[b][0] == a:
                 pairs.append((a, b))
                 used |= {a, b}
-        pool = sorted(a for a in entries if a not in used and entries[a]["partner"] == "any")
-        B.stream(self.camp, "match", r).shuffle(pool)
+        pool = sorted(a for a in entries if a not in used and entries[a][0] == "any")
+        self.rng.shuffle(pool)
         for i in range(0, len(pool) - 1, 2):
             pairs.append((pool[i], pool[i + 1]))
             used |= {pool[i], pool[i + 1]}
         return pairs, sorted(a for a in entries if a not in used)
 
-    def end_of_round(self, k) -> list[dict]:
-        c, p = self.camp, self.camp["play"]
-        entries, p["entries"] = p["entries"], {}
+    def end_of_round(self, k) -> list:
+        c = self.camp
+        entries = dict(c.get("pending") or {})
         if not entries:
             return []
-        pairs, alone = self.match(entries, B.rnd(k))
-        out, pay, rec = [], {}, []
+        pairs, alone = self.match(entries)
+        out, rec = [], []
         for a, b in pairs:
-            ma, mb = entries[a]["move"], entries[b]["move"]
-            pay[a], pay[b] = PAYOFF[(ma, mb)], PAYOFF[(mb, ma)]
+            ma, mb = entries[a][1], entries[b][1]
             rec.append((a, ma, b, mb))
-            out.append(B.private(a, f"At {c.get('id')} you were paired with {b}: you {PAST[ma]}, they {PAST[mb]}; you earn {pay[a]:g} value."))
-            out.append(B.private(b, f"At {c.get('id')} you were paired with {a}: you {PAST[mb]}, they {PAST[ma]}; you earn {pay[b]:g} value."))
+            for me, you, mm, ym in ((a, b, ma, mb), (b, a, mb, ma)):
+                out.append(B.entry(me, PAYOFF[(mm, ym)], c, type(self), f"paired with {you}: you {PAST[mm]}, they {PAST[ym]}",
+                                   eff=PAYOFF[(mm, ym)] / PAYOFF[("take", "share")]))
         for a in alone:
-            pay[a] = ALONE
-            out.append(B.private(a, f"At {c.get('id')} you had no partner this round and earn {ALONE:g} value."))
-        for a, v in pay.items():
-            if v > 0:
-                out.append(B.payout(a, c["resource"], B.qty(k, c["resource"], v), f"partners:{c.get('id')}"))
-        out.append(B.public(f"{c.get('id')} pairs: " + ("; ".join(f"{a} {PAST[ma]}, {b} {PAST[mb]}" for a, ma, b, mb in rec) or "none")
-                            + (f"; alone: {', '.join(alone)}" if alone else "")))
-        p["history"] = (p["history"] + [{"round": B.rnd(k), "pairs": rec, "alone": alone}])[-20:]
+            out.append(B.entry(a, ALONE, c, type(self), "no partner this round: you worked alone"))
+        out.append({"public": "pairs: " + ("; ".join(f"{a} {PAST[ma]}, {b} {PAST[mb]}" for a, ma, b, mb in rec) or "none")
+                    + (f"; alone: {', '.join(alone)}" if alone else "")})
+        p = B.play(c, PLAY)
+        p["history"] = (p["history"] + [{"round": k.r, "pairs": rec, "alone": alone}])[-20:]
         return out
 
+    def calibration_input(self, k, aid, strategy, rng):
+        return []
+
     def snapshot(self) -> dict:
-        p = self.camp["play"]
-        return {"type": "partners", "pending_entries": len(p["entries"]), "history": list(p["history"])}
+        hist = B.peek(self.camp, PLAY)["history"]
+        last = hist[-1] if hist else {}
+        return {"pairs": last.get("pairs", []), "alone": last.get("alone", []), "last_round": last.get("round")}
 
     def truth(self) -> dict:
-        return {"pending": dict(self.camp["play"]["entries"])}
+        return {"type": self.name, "history": list(B.peek(self.camp, PLAY)["history"])}

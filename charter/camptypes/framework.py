@@ -93,7 +93,7 @@ def _rng_range(v, rng, integer=False):
 
 # ------------------------------------------------------------------ composition
 def compose(spec: dict, rng: random.Random, ctx: dict) -> tuple:
-    """The run's camp slots [{type, role, resource, modifiers}] and notes. ctx: {"eligible": Workers, "agents": players}."""
+    """The run's camp slots [{type, role, resource, modifiers}] and notes. ctx: {"eligible": Workers, "agents": players, "sandbox": sandbox holders}."""
     load_all()
     cfg = config(spec)
     notes = []
@@ -105,7 +105,8 @@ def compose(spec: dict, rng: random.Random, ctx: dict) -> tuple:
             slots.append({"type": T.name, "role": e.get("role") or T.role, "resource": e.get("resource"), "modifiers": e.get("modifiers")})
     elif cfg["set"] == "standard":
         def pick(role, n, avoid=(), pool=None):
-            names = sorted(pool if pool is not None else (nm for nm, T in TYPES.items() if T.role == role))
+            names = sorted(pool if pool is not None else (nm for nm, T in TYPES.items() if T.role == role
+                                                          and getattr(T, "standard", True)))   # camps-b: standard=False: wildcard only
             ok = [nm for nm in names if TYPES[nm].feasible(ctx)]
             if not ok and names:
                 notes.append(f"no {role} type is feasible with {ctx['eligible']} Workers; drew one anyway (rights topped up from other classes)")
@@ -124,7 +125,7 @@ def compose(spec: dict, rng: random.Random, ctx: dict) -> tuple:
         slots += [{"type": t, "role": "social"} for t in pick("social", 1)]
         if rng.random() < float(cfg["wildcard_prob"]):
             pool = [nm for nm, T in TYPES.items() if T.wildcard_ok and T.role != "tutorial"]
-            slots += [{"type": t, "role": "wildcard"} for t in pick("wildcard", 1, pool=pool)]
+            slots += [{"type": t, "role": "wildcard"} for t in pick("wildcard", 1, avoid=[s["type"] for s in slots], pool=pool)]   # camps-b: a different type
     else:
         raise ValueError(f"camps.typed.set must be 'standard' or a list, not {cfg['set']!r}")
     # resources by slot (resources.SLOTS after the placement factor); an explicit resource wins
@@ -155,7 +156,8 @@ def generate(sp: dict, seed: int, agents: list) -> tuple:
         a["rights"] = [r for r in a["rights"] if not r.startswith("harvest:")]
     workers = [a for a in agents if a["cls"] == "worker"]
     players = [a for a in agents if a["cls"] not in NO_CAMPS]
-    slots, notes = compose(sp, rng, {"eligible": len(workers), "agents": len(players)})
+    slots, notes = compose(sp, rng, {"eligible": len(workers), "agents": len(players),
+                                     "sandbox": sum(1 for a in players if "sandbox" in a["rights"])})   # camps-b: catalyst needs one
     for i, s in enumerate(slots):
         s["id"] = f"camp{i + 1}"
     # rights: each Worker holds 1-2 rights at camps that need one; then every such camp is topped up to its participation rule
@@ -268,15 +270,27 @@ def _check_x(c, x):
     return x
 
 
-def harvest_action(k, aid, cid, x) -> str:
+def harvest_action(k, aid, cid, x, extra=None) -> str:
+    """extra: non-dial harvest arguments (camps-b). A type lists the names it accepts in `extra_args` (e.g. consortium: submit;
+    weak link: shift; catalyst: catalyst, credit; partners: partner, move; vault: factor); they reach T.harvest in args next to
+    "x" and "x_eff". A type with dials = 0 takes no x (x defaults to [])."""
     c = k.w["camps"][cid]
     T = get(c["type"])
+    extra = dict(extra or {})
+    bad = sorted(set(extra) - set(getattr(T, "extra_args", ())))                       # camps-b: non-dial args
+    if bad:
+        ok = ", ".join(("x",) * bool(c["dials"]) + tuple(getattr(T, "extra_args", ())))
+        raise _err(f"{cid} does not take {', '.join(bad)} (it takes: {ok})")
+    if x is None and c["dials"] == 0:
+        x = []
     if c.get("open"):
         if not can_take_part(k, aid, cid):
             raise _err(f"the Board and the Fixer cannot take part at {cid}")
     elif not k.has(aid, f"harvest:{cid}"):
         raise _err(f"you need the 'harvest:{cid}' right to harvest at {cid}" + (" (rights can be leased: lease / accept_lease)" if LS.enabled(k) else ""))
     x = _check_x(c, x)
+    if hasattr(T, "check_args"):                                                          # camps-b: validate before any count or fee
+        T.check_args(k, aid, c, x, extra)
     split = M.on(c, "split")
     sealed = T.resolves == "end_of_round" or split
     key = f"{aid}|{cid}"
@@ -308,13 +322,14 @@ def harvest_action(k, aid, cid, x) -> str:
                                    + (f" to {[x[i] for i in grp]}" if vis_pub else "")}, vis="public" if vis_pub else [aid])
         return f"Set dials {grp} at {cid} to {[x[i] for i in grp]} (control is split: inputs are combined at the end of the round)."
     t = view(k, cid)
-    res = t.harvest(k, aid, {"x": x, "x_eff": M.to_effective(k, c, x)})
+    res = t.harvest(k, aid, {"x": x, "x_eff": M.to_effective(k, c, x), **extra})
     if T.resolves == "end_of_round":
         k.log("camp_submit", aid, {"camp": cid, "x": x, "text": f"{aid} submitted an input at {cid}" + (f": {x}" if vis_pub else "")},
               vis="public" if vis_pub else [aid])
         return f"Submitted x={x} at {cid}: sealed until the end of the round." + (f" {res['private']}" if res.get("private") and "sealed" not in res["private"] else "")
     y = float(res["yield"]) * M.yield_mult(k, c, x)
-    got, ded = pay_yield(k, aid, cid, x, y, res.get("efficiency", 0.0), res.get("noise", 0.0))
+    got, ded = pay_yield(k, aid, cid, x, y, res.get("efficiency", 0.0), res.get("noise", 0.0),
+                         note=res.get("private") or None)                  # camps-b: keep private results (e.g. readings) in the feed
     M.record(k, c, x)
     if vis_pub:
         k.log("camp_input", aid, {"camp": cid, "x": x, "yield": round(got, 4), "text": f"{aid} harvested at {cid} with x={x}: {got:.3g}"}, vis="public")
@@ -475,7 +490,8 @@ def rules_text(inst: dict) -> str:
     """The world-rules paragraph on camps (replaces the legacy one under camps.model: types)."""
     load_all()
     sp = inst["spec"]
-    lines = ["Camps (each works differently; harvest {\"camp\": ..., \"x\": [...]} uses one action):"]
+    lines = ["Camps (each works differently; harvest {\"camp\": ..., \"x\": [...]} uses one action; some camps take other "
+             "arguments instead of or besides x, named in their description):"]                           # camps-b
     for c in inst["camps"]:
         if not is_typed_camp(c):
             continue
@@ -617,6 +633,10 @@ def scripted_actions(k, aid) -> list:
     for cid in open_camps(k, aid):
         if r.random() < 0.6:
             c = k.w["camps"][cid]
+            T = get(c["type"])
+            if hasattr(T, "bot_args"):                                  # camps-b: types with non-dial args script their own entry
+                out.append({"action": "harvest", "args_json": json.dumps({"camp": cid, **T.bot_args(k, aid, c, r)})})
+                continue
             out.append({"action": "harvest", "args_json": json.dumps({"camp": cid, "x": [r.randint(0, c["max"]) for _ in range(c["dials"])]})})
     roll = r.random()
     surv = [cid for cid in typed_camps(k) if M.on(k.w["camps"][cid], "survey")]
