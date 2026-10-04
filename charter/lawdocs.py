@@ -51,6 +51,7 @@ TOPICS = {
     "leases": ("Leasing harvest rights", "Harvest rights can be leased for a term; laws can tax, cap or ban leases."),   # camps
     "succession": ("Board succession", "Board members name successors who take their seats when they leave the game."),   # life
     "conflict": ("Arms and force, read by law", "Laws can read forts, weapons and attacks, ban forging and oblige agents to guard each other."),
+    "jurisdictions": ("Jurisdictions", "A law binds only the members of the jurisdiction that passed it."),   # jurisdictions.py
 }
 
 # (name, topic, prompt group, prompt text, article detail, core tier, minimal tier)
@@ -207,6 +208,25 @@ E += [                                                                  # camps:
 from charter.conflict import LAW_DOCS as _CF_DOCS
 MODULE_ENTRIES = {n for n, _, _ in _CF_DOCS}
 E += [(n, "conflict", "Conflict", sig, detail, "prompt", "prompt") for n, sig, detail in _CF_DOCS]
+# jurisdictions (charter/jurisdictions.py): documented only in worlds where the module is on (see OPTIONAL)
+E += [
+    ("jurisdiction", "jurisdictions", "Jurisdictions", "jurisdiction()", "the id of the jurisdiction this law belongs to.", "prompt", "common"),
+    ("members", "jurisdictions", "Jurisdictions", "members()", "the members of this law's jurisdiction.", "prompt", "common"),
+    ("admit", "jurisdictions", "Jurisdictions", "admit(agent)", "makes an agent a member at the end of the round. Structural.", "prompt", "common"),
+    ("expel", "jurisdictions", "Jurisdictions", "expel(agent)", "removes a member at the end of the round (on_exit runs first). Structural.",
+     "prompt", "common"),
+    ("lawful_attack", "jurisdictions", "Jurisdictions", "lawful_attack(attacker, target, units)",
+     "an attack by a member (e.g. an office holder, inside a define_action function), paid from the jurisdiction's armory (the weapons "
+     "in its reserve), logged as lawful; the target can be anyone. Structural.", "prompt", "common"),
+    ("on_admission", "jurisdictions", "Hooks", "on_admission(agent) (return True to admit, False to refuse)",
+     "called when an agent asks to join; True admits, False refuses; with no answer the default admission rule applies.", "prompt", "common"),
+    ("on_exit", "jurisdictions", "Hooks", "on_exit(agent)", "called at the end of the round in which a member leaves, before it leaves "
+     "(so the law can still tax or seize).", "prompt", "common"),
+    ("on_birth", "jurisdictions", "Hooks", "on_birth(child, parent) (return a jurisdiction id, or False for none)",
+     "called when a member's child is born; by default the child joins its parent's jurisdiction.", "prompt", "common"),
+]
+OPTIONAL = {n: "jurisdictions" for n in ("jurisdiction", "members", "admit", "expel", "lawful_attack", "on_admission", "on_exit", "on_birth")}
+# ^ entry -> the spec key of the module that must be enabled for it to be documented (off: not in the mapping, prompt or codex)
 ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 
 
@@ -218,7 +238,8 @@ def _gated_off(spec: dict) -> set:
 # life: entries that exist only in worlds with a module on (spec <module>.enabled); elsewhere they are left out of the mapping, so the
 # prompt and the codex are unchanged. mortality: Life or Conflict.
 REQUIRES = {"set_succession_public": lambda spec: bool((spec.get("life") or {}).get("enabled") or (spec.get("conflict") or {}).get("enabled"))}
-GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers"]
+GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers",
+               "Jurisdictions"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
 
 SKELETON = ('Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set\n'
@@ -237,7 +258,8 @@ def resolve(spec: dict) -> dict:
     mapping = {}
     off = _gated_off(spec)
     for n, e in ENTRIES.items():
-        if n in off or (n in REQUIRES and not REQUIRES[n](spec)) or n in MODULE_ENTRIES:   # camps, life, conflict: module entries
+        if n in off or (n in REQUIRES and not REQUIRES[n](spec)) or n in MODULE_ENTRIES or (
+                n in OPTIONAL and not (spec.get(OPTIONAL[n]) or {}).get("enabled")):   # camps, life, conflict, jurisdictions
             continue
         if preset == "full":
             mapping[n] = e["core"] if n in ALWAYS_ARTICLE or n in REQUIRES else "prompt"   # life: module entries were never in the old prompt
@@ -246,6 +268,8 @@ def resolve(spec: dict) -> dict:
     for n, t in (cfg.get("overrides") or {}).items():
         if n not in ENTRIES:
             raise ValueError(f"law_docs.overrides: no law function, hook or feature {n!r}")
+        if n not in mapping:
+            continue                                                    # an entry of a module that is off
         if t not in ("prompt",) + TIERS:
             raise ValueError(f"law_docs.overrides.{n}: must be prompt or one of {TIERS}")
         if n in off:

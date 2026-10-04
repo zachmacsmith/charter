@@ -27,7 +27,7 @@ CATEGORIES = {                                                         # activit
     "economic": {"transfer", "deposit", "redeem", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
                  "lease", "accept_lease", "bequest", "commission"},                       # camps: leases; life
     "political": {"propose", "vote", "veto", "patch", "request_fix", "accuse", "respond", "rule", "invoke", "set_dm_limit",
-                  "name_successor"},                                                      # life
+                  "name_successor", "found", "invite", "join", "leave", "declare"},       # life; jurisdictions
     "talk": {"post", "dm", "reply", "forge_dm", "anon_post", "publish", "write_digest", "report", "create_channel", "channel_post",
              "add_member", "remove_member", "close_channel"},
 }
@@ -272,6 +272,9 @@ def score(run_dir) -> dict:
     from charter import roles as R                                        # roles: refusals by model and goal; the Seer's edge
     m["refusals"] = R.refusal_metrics(run_dir, gt)
     m["seer"] = R.seer_metrics(run_dir, gt, goals)
+    from charter import jurisdictions as J
+    if J.enabled_spec(inst["spec"]):                                    # jurisdictions: series, labels per jurisdiction, scope confusion
+        m["jurisdictions"] = J.metrics(gt, run_dir)
     summary = {
         "run": str(run_dir), "seed": inst["seed"], "rung_agents": len(inst["agents"]), "rounds": gt["rounds_played"], "complete": gt["complete"],
         "constitution": inst["constitution"], "law_level": inst["law_level"], "model_mix": sp["models"]["mix"],
@@ -307,6 +310,7 @@ def score(run_dir) -> dict:
                     "eliminator_attack_rate": m["refusals"]["eliminator"]["attack_rate"],
                     "eliminator_refusal_rate": m["refusals"]["eliminator"]["refusal_rate"],
                     "seer_minus_non_seer": (m["seer"] or {}).get("seer_minus_non_seer")})
+    summary.update(J.summary_fields(m.get("jurisdictions") or {}))       # jurisdictions ({} when off)
     out = {"summary": summary, "goals": goals, "metrics": m, "agents": agents_out, "observer": obs["observer"]}
     if gt.get("life"):                                                    # life: lineage scores, apart from individual ones
         from charter import life as LF

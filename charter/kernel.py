@@ -24,6 +24,7 @@ from charter import conflict as CF                                  # conflict: 
 from charter import credit as CR
 from charter.camptypes import framework as CT                    # camps: typed camps, modifiers and leases (no-op under legacy)
 from charter import hidden as H
+from charter import jurisdictions as J
 from charter import lawlang as L
 from charter import mortality as MO                                   # life: the mortality contract (disable, succession)
 from charter import outside as O
@@ -105,6 +106,7 @@ class Kernel:
             from charter import life as _life
             _life.install(self)
         CF.install(self)                                             # conflict: k.w["conflict"], starting arms, assassin, articles
+        J.install(self)                                              # jurisdictions: membership and per-jurisdiction state (off: nothing)
 
     # ------------------------------------------------------------------ basics
     @property
@@ -198,7 +200,8 @@ class Kernel:
         if c.get("par"):
             return CR.par_price(self, cur)
         res = c.get("reserve", "reserve")
-        pool = self.w["reserve"] if res == "reserve" else self.w.setdefault("reserves", {}).setdefault(res, {})
+        pool = self.w["reserve"] if res == "reserve" else J.pool(self, res) if str(res).startswith("reserve:") \
+            else self.w.setdefault("reserves", {}).setdefault(res, {})     # jurisdictions: "reserve:<jid>" is a jurisdiction's reserve
         backing = sum(self.w["unit"].get(k, 0) * v for k, v in pool.items())
         return backing / c["supply"] if c["supply"] > 1e-9 else 1.0
 
@@ -214,10 +217,13 @@ class Kernel:
     def bal(self, owner, item):
         if owner == "reserve":
             return self.w["reserve"].get(item, 0.0)
+        if isinstance(owner, str) and owner.startswith("reserve:"):         # jurisdictions: another jurisdiction's reserve
+            return J.pool(self, owner).get(item, 0.0)
         return self.agent(owner)["holdings"].get(item, 0.0)
 
     def _add(self, owner, item, qty):
-        tgt = self.w["reserve"] if owner == "reserve" else self.agent(owner)["holdings"]
+        tgt = self.w["reserve"] if owner == "reserve" else J.pool(self, owner) if isinstance(owner, str) and owner.startswith("reserve:") \
+            else self.agent(owner)["holdings"]                           # jurisdictions: "reserve:<jid>"
         tgt[item] = round(tgt.get(item, 0.0) + qty, 6)
         if abs(tgt[item]) < 1e-9:
             del tgt[item]
@@ -252,6 +258,8 @@ class Kernel:
     def log(self, kind, agent, data, vis="public"):
         if self.dry:
             return None
+        if vis == "public" and "jur" in self.w:                          # jurisdictions: events about a hidden one reach its members only
+            vis = J.vis(self, data, vis)
         e = {"id": f"e{len(self.events) + 1}", "round": self.r, "type": kind, "agent": agent, "data": data, "vis": vis}
         self.events.append(e)
         return e["id"]
@@ -502,7 +510,7 @@ class Kernel:
             if "harvest" in str(text).lower():
                 k.w["effects"]["harvests_gazetted"] += 1
 
-        return {
+        return J.scope_api(k, lid, {                                   # jurisdictions: a law reaches only its members (off: unchanged)
             "agents": agents, "holders": lambda r: k.holders(k.norm_right(r)), "has": lambda a, r: k.has(a, k.norm_right(r)), "balance": k.bal, "reserve": lambda: dict(k.w["reserve"]),
             "price": k.price, "stock": lambda c: camp_of(c)["S"], "round": lambda: k.r, "laws": laws,
             "proposer": lambda: law()["author"], "value": k.unit_value, "supply": lambda cur: k._cur(cur)["supply"],
@@ -532,7 +540,8 @@ class Kernel:
             **CT.law_api(k, lid),                                          # camps: set_lease_rules, leases
             **MO.law_api(k, lid),  # life: set_succession_public (mortality.py)
             **CF.law_api(k, lid),                                          # conflict: forts, weapons_of, attacks, ...
-        }
+            **J.law_api(k, lid),   # jurisdictions: jurisdiction, members, admit, expel, lawful_attack
+        })
 
     # ------------------------------------------------------------------ laws
     def active_laws(self):
@@ -558,6 +567,8 @@ class Kernel:
         return ns
 
     def enact(self, lid):
+        if "jur" in self.w and J.intercept_enact(self, lid):            # jurisdictions: void (no such jurisdiction) or dormant (hidden)
+            return
         law = self.w["laws"][lid]
         if law["repeal_target"]:
             law["status"] = "enacted_repeal"
@@ -596,6 +607,8 @@ class Kernel:
 
     def hooks(self, hook, *args):
         """Run a hook on every active law, in enactment order. Errors suspend the law and call the Fixer."""
+        if "jur" in self.w:                                             # jurisdictions: only laws that bind the agent concerned
+            return J.hooks(self, hook, *args)
         out = []
         for law in self.active_laws():
             ns = self.ns.get(law["id"]) or self._load(law["id"])
@@ -762,6 +775,8 @@ class Kernel:
     # ------------------------------------------------------------------ procedures and ballots
     def decide(self, lid):
         """Run the current procedure for a proposal: pass, fail, or open a ballot."""
+        if "jur" in self.w:                                             # jurisdictions: the procedure of the law's jurisdiction
+            return J.decide(self, lid)
         law = self.w["laws"][lid]
         key = self.w["procedures"].get(law["cls"])
         if not key:
@@ -860,6 +875,8 @@ class Kernel:
                     self.law_error(lid, str(e))
 
     def passed(self, lid):
+        if "jur" in self.w:                                             # jurisdictions: hidden -> dormant; Board scope
+            return J.passed(self, lid)
         law = self.w["laws"][lid]
         if law["cls"] == "ordinary":
             try:
@@ -955,6 +972,7 @@ class Kernel:
         self.close_ballots()
         self.process_veto_queue()
         self.hooks("on_round_end", self.r)
+        J.end_round(self)                                              # jurisdictions (step 4): leaving, joining, declarations
         for c in self.w["camps"].values():
             C.regrow(c)
         CT.world_update(self)                                          # camps: step 5, drift, next conditions, leases returned
@@ -1091,6 +1109,7 @@ class Kernel:
             **P.snapshot_fields(self), **O.snapshot_fields(self),
             **CT.snapshot_fields(self),                                    # camps: per-camp records, leases ({} under legacy)
             **CF.snapshot_fields(self),                                    # conflict: {} when off
+            **J.snapshot_fields(self),                                 # jurisdictions: per-jurisdiction members, labels (off: nothing)
             "efficiency": {a: {c: round(sum(x for _, x in v[-3:]) / len(v[-3:]), 4) for c, v in cs.items() if v} for a, cs in self.eff.items()},
         }
         for a in w["agents"]:

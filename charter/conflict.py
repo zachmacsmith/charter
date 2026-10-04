@@ -259,6 +259,9 @@ def chance(A: float, D: float, delta: float) -> float:
 
 def _take(k, owner, qty, armory=None):
     """Take weapons from an agent, an owner key ("reserve", a jurisdiction's armory owner) or an armory dict."""
+    if isinstance(armory, str) and armory != "reserve" and not armory.startswith("reserve:") and armory not in k.w["agents"]:
+        from charter import jurisdictions as _J                       # a jurisdiction id: its reserve is its armory
+        armory = _J.reserve_of(k, armory)
     if isinstance(armory, dict):
         if armory.get(WEAPONS, 0.0) + 1e-9 < qty:
             return False
@@ -313,6 +316,9 @@ def attack(k, attacker, target, units, lawful=False, armory=None, allies=None, b
     for a, u in al.items():
         if not alive(k, a) or float(u) <= 0 or k.bal(a, WEAPONS) + 1e-9 < float(u):
             return {"ok": False, "error": f"ally {a} cannot commit {u} weapons"}
+    if isinstance(armory, str) and armory != "reserve" and not armory.startswith("reserve:") and armory not in k.w["agents"]:
+        from charter import jurisdictions as _J                       # jurisdictions: an armory given by jurisdiction id
+        armory_label, armory = armory, _J.reserve_of(k, armory)
     if units > 0 and not _take(k, attacker, units, armory):
         have = armory.get(WEAPONS, 0.0) if isinstance(armory, dict) else k.bal(armory if armory is not None else attacker, WEAPONS)
         return {"ok": False, "error": f"you have only {have:g} weapons"}

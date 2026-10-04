@@ -122,6 +122,9 @@ def test_statutes_are_active_at_round_0(rung, name):
     inst = generator.generate(sp_for(rung, name), 3)
     k = start(inst)
     active = [l["title"] for l in k.active_laws()]
+    if name == "state_of_nature":                                      # jurisdictions: no jurisdiction, so the constitution is void
+        assert active == []
+        return
     assert active[0].startswith("Constitution")
     want = [RG.statute_code(s["name"]) for s in inst["regime"]["statutes"]]
     assert len(active) == 1 + len(want)

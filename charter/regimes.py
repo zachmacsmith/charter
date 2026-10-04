@@ -499,6 +499,16 @@ REGIMES: dict[str, dict] = {
         "cantons_text": " Each canton's council sets its own camp's harvest quota: invoke set_camp_quota with [camp, number]; once a "
                         "majority of the camp's holders name the same number, it becomes the quota.",
     },
+    # jurisdictions (charter/jurisdictions.py): the lawless start. The constitution named here is void (never in force).
+    "state_of_nature": {
+        "constitution": "anarchy", "expect": "anarchy", "no_vote_needed": True,
+        "spec": {"jurisdictions.enabled": True, "jurisdictions.start": "nature", "conflict.enabled": True},
+        "summary": "No constitution, no jurisdiction, no laws; anyone can attack anyone. The only way out is to found a jurisdiction "
+                   "and declare it.",
+        "description": "a state of nature. There is no constitution, no jurisdiction and no law: nothing binds you and nothing protects "
+                       "you, and anyone may attack anyone. Laws can exist only inside a jurisdiction, so the only way out is to found one "
+                       "(in secret at first), win members and declare it.",
+    },
 }
 
 FIELDS = ("constitution", "statutes", "rights", "spec", "no_vote_needed", "expect", "summary", "description")

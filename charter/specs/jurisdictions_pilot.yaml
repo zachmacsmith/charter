@@ -1,0 +1,19 @@
+extends: [base]
+# Jurisdictions pilot (charter/jurisdictions.py): a small world where laws bind only the members of the jurisdiction that passed
+# them. Everyone starts in J0 under the assembly. Variants: --set jurisdictions.start=nature (a state of nature, no laws until a
+# declaration), or --set regime=state_of_nature (the same, plus conflict on and the regime's description in the prompt).
+agents: {worker: 5, scientist: 1, legislator: 3, media: 1, board: 3, fixer: 1}
+rounds: 10
+turns: simultaneous
+camps: {tiers: [1, 2, 3, 4], dials: {count: 4, max: 7}}
+law_level: L4
+library: [money, taxes, commons, governance]
+constitution: assembly
+jurisdictions:
+  enabled: true
+  start: j0                       # j0: everyone in J0 under the constitution | nature: no jurisdiction, no constitution, no laws
+  board_scope: founding           # founding (J0, or the first declared in a state of nature) | all | none
+  admission: ballot               # with no on_admission answer: ballot (members vote within the round) | open | closed
+  j0_name: the Commonwealth
+  scripted_founder: null          # dry runs: the scripted bot that founds, invites, legislates and declares (null: first citizen)
+shared_archive: {namespace: jurisdictions_pilot}

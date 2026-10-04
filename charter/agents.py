@@ -14,6 +14,7 @@ from charter import conflict as CF
 from charter import credit as CR
 from charter import goals as G
 from charter import hidden as H
+from charter import jurisdictions as J
 from charter import library as LB
 from charter import outside as O
 from charter import projects as P
@@ -105,6 +106,7 @@ ACTION_DOC = {
     "buy_initiative": 'buy_initiative {"n": 1}: spend n quicksilver to act n places earlier next round than the published order shows (only where attacks resolve immediately)',
     "contract": 'contract {"to": "Name", "target": "Name", "item": "timber", "qty": 10, "text": "..."}: a sealed private message offering payment (sent now) for removing the target from the game; only you and the recipient can ever see or cite it',
 }
+ACTION_DOC.update(J.ACTION_DOC)                                         # jurisdictions: found, invite, join, leave, declare
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
 title = "..." and intent = "..." and may keep persistent data in the dict `state`. Hooks: on_enact(), on_repeal(), on_round_start(r),
@@ -202,6 +204,7 @@ def world_rules(inst: dict) -> str:
               "grant or revoke dm_rules.") if sp["channels"].get("dm", True) else ""
     turns += " Your feed shows what you are allowed to see that changed since your last turn."
     turns += P.rules_text(sp)                                           # projects and the outside power
+    turns += J.rules_text(inst)                                         # jurisdictions ("" when off)
     camp_text = f"""Camps: {camps}. Each harvest is one query of a camp's hidden function: you choose x, a list of {c0['dials']} integer dials each 0..{c0['max']},
 and receive yield = max(0, f(x) * stock/capacity + noise) (compute camps work differently: see their description). Harder camps have more valuable resources. Stocks regrow logistically; overharvesting
 lowers everyone's future yields. Each harvest right allows {sp['harvests_per_right']} harvests per round unless a law changes it."""
@@ -327,6 +330,7 @@ def system_prompt(inst: dict, a: dict) -> str:
     if not CT.LS.enabled_spec(inst["spec"]):                            # camps: leasing is off
         absent |= {"lease", "accept_lease"}
     absent |= CF.absent_actions(inst)                                # conflict: its actions only when conflict is on
+    absent |= J.absent_actions(inst)                                 # jurisdictions: its actions only when on
     if not (sp.get("outside_power") or {}).get("enabled"):
         absent |= {"pay_tribute"}
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
@@ -518,6 +522,7 @@ def state_view(k, aid: str) -> str:
     from charter import life as LF
     lines += LF.state_lines(k, aid)                                    # life: lifespan left, population, children, commissions
     lines += CF.state_lines(k, aid)                                    # conflict: weapons, fort, guards, role ([] when off)
+    lines += J.state_lines(k, aid)                                    # jurisdictions: yours, hidden ones, which laws bind you
     return "\n".join(lines)
 
 
@@ -637,6 +642,8 @@ class ScriptedPolicy:
         if mail and n_actions and k.spec["channels"].get("dm", True):
             pay = {"item": "timber", "qty": 1} if k.bal(aid, "timber") >= 1 else {}
             acts.insert(0, {"action": "reply", "args_json": json.dumps({"message": mail[0]["id"], "text": "Agreed.", **pay})})
+        if J.enabled(k):                                             # jurisdictions: a scripted founder (own RNG; only when on)
+            acts[:0] = J.scripted_actions(k, a, n_actions)
         guesses = {x: r.choice(G.drawable_names(k.spec)) for x in k.roster() if x != aid} if final else {}   # the goals drawable here
         out = {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
                "goal_guesses_json": json.dumps(guesses)}
