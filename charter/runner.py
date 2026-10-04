@@ -24,6 +24,7 @@ from pathlib import Path
 from charter import actions as A
 from charter import agents as AG
 from charter import archive
+from charter import context as CX                                     # context: fixed-layer prompts and lookups (charter/context.py)
 from charter import failstop as FS
 from charter import hidden as H
 from charter import events as EV
@@ -89,6 +90,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             f.write_text(txt)
     ev_rs = {"agents": agents, "sysp": sysp, "cursors": cursors, "start_values": start_values, "out": out}
     mem = inst["spec"]["llm"].get("memory_chars", 4000)
+    cx = CX.enabled(inst)                                               # context: fixed layers, lookup phase, scratchpad and files
     t0 = time.time()
 
     def runner_state():
@@ -175,7 +177,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                     reason_f.write(json.dumps({"round": r, "position": order.index(aid) + 1, "agent": aid, "model": agents[aid]["model"],
                                                "phase": f"dm_reply_{wave + 1}", "reasoning": reasoning, "stated_reasoning": str(o.get("reasoning", "")),
                                                "notes": str(o.get("notes", "")), "actions": acts, "results": [], "usage": usage, "mode": mode,
-                                               "prompt_chars": len(sysp[aid]) + len(prompt), "prompt": prompt, "error": o.get("_error")}) + "\n")
+                                               "prompt_chars": len(sysp[aid]) + len(prompt), "prompt": prompt, "error": o.get("_error"),
+                                               **CX.record_fields(k, aid)}) + "\n")   # context: layer sizes ({} when off)
                     if o.get("_error"):
                         pre[aid].append(f"(your reply to the messages could not be used, so your plan stands: {o['_error'][:200]})")
                         continue
@@ -190,9 +193,29 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             lim = k.w["agents"][aid]["limit"]
             if lim and lim["until"] >= k.r:
                 n = min(n, lim["n"])
+            if cx:                                                      # context: the Core layer, with the current manual index
+                sysp[aid] = CX.core_prompt(inst, a, k)
             user, cursor = AG.turn_prompt(k, a, order, cursors.get(aid, 0), notes.get(aid, ""), results.get(aid, []), n, final,
                                           simultaneous=(mode == "simultaneous"))
             return a, n, user, cursor
+
+        def cx_lookups(items):
+            """context: the lookup phase. items: (aid, prep, decision). Agents whose reply asked for lookups get them fetched (free,
+            up to context.free_lookups) and are asked again with the text in the Lookups layer; returns {aid: (prep, decision)}."""
+            asks = [(aid, pr, dec) for aid, pr, dec in items if not dec[0].get("_error") and CX.do_lookups(k, aid, dec[0])]
+            for aid, pr, (o, reasoning, usage) in asks:
+                reason_f.write(json.dumps({"round": r, "position": order.index(aid) + 1, "agent": aid, "model": agents[aid]["model"],
+                                           "phase": "lookup", "reasoning": reasoning, "stated_reasoning": str(o.get("reasoning", "")),
+                                           "notes": "", "actions": list(o.get("actions") or []), "results": [], "usage": usage, "mode": mode,
+                                           "lookups": CX.lookup_records(k, aid), "prompt_chars": len(sysp[aid]) + len(pr[2]),
+                                           "prompt": pr[2], "error": None, **CX.record_fields(k, aid)}) + "\n")
+            if not asks:
+                return {}
+            preps2 = [prepare(aid) for aid, _, _ in asks]
+            outs = in_parallel(lambda p: policy.act(k, p[0], sysp[p[0]["id"]], p[2], p[1], final), preps2)
+            tally.add([o[0] for o in outs], [aid for aid, _, _ in asks])
+            stop_if_failing(r, tally)
+            return {aid: (p, o) for (aid, _, _), p, o in zip(asks, preps2, outs)}
 
         def execute(pos, aid, prep, decision, pre=(), final_outp=None):
             """pre: results of DMs already delivered in the DM step; final_outp: the agent's last reply in the DM step, whose
@@ -210,8 +233,13 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             # reading a document you hold is free (archive_reading.free_per_turn per turn): it does not use one of your actions
             free_cap = int((inst["spec"].get("archive_reading") or {}).get("free_per_turn", 3))
             free, counted = [], []
-            for item in acts:
-                (free if str(item.get("action", "")) == "read_archive" and len(free) < free_cap else counted).append(item)
+            cx_free = CX.free_indices(k, acts) if cx else ()           # context: the first scratchpad writes are free
+            for i, item in enumerate(acts):
+                if i in cx_free:
+                    free.append(item)
+                    continue
+                (free if str(item.get("action", "")) == "read_archive" and sum(x.get("action") == "read_archive" for x in free) < free_cap
+                 else counted).append(item)
             over = len(counted) > n
             for item in free + counted[:n]:
                 name = str(item.get("action", ""))
@@ -229,6 +257,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                 res.append(f"(your last reply could not be used: {outp['_error'][:200]})")
             results[aid] = res
             notes[aid] = str(last.get("notes") or outp.get("notes", ""))[:mem]
+            CX.record_turn(k, aid, acts, res)                           # context: recent turns, paid lookups, manual seen (no-op when off)
             if final:
                 for o in (last, outp):
                     try:
@@ -244,7 +273,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                                        "stated_reasoning": str(outp.get("reasoning", "")),
                                        "notes": notes[aid], "actions": first, "results": res, "usage": usage, "mode": mode,
                                        "phase": "decide", **({"final_actions": acts} if final_outp is not None else {}),
-                                       "prompt_chars": len(sysp[aid]) + len(user), "prompt": user, "error": outp.get("_error")}) + "\n")
+                                       "prompt_chars": len(sysp[aid]) + len(user), "prompt": user, "error": outp.get("_error"),
+                                       **CX.record_fields(k, aid)}) + "\n")   # context: layer sizes and trimming ({} when off)
             reason_f.flush()
             for e in k.events[n_ev:]:                                   # live: the log and overview.md update after every turn
                 ev_f.write(json.dumps(e, default=list) + "\n")
@@ -261,6 +291,10 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             odec = decisions.pop() if oprep else None
             tally.add([d[0] for d in decisions], order)                   # agents only: the observer never counts
             stop_if_failing(r, tally)
+            if cx:                                                        # context: lookup phase, then the action calls
+                got = cx_lookups(list(zip(order, preps, decisions)))
+                preps = [got[aid][0] if aid in got else p for aid, p in zip(order, preps)]
+                decisions = [got[aid][1] if aid in got else d for aid, d in zip(order, decisions)]
             pre, last = {aid: [] for aid in order}, {}
             if dm_step:
                 xo = order + ([obs.id] if oprep else [])                  # the observer joins the exchange (delivered last in each wave)
@@ -278,6 +312,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                 dec = policy.act(k, pr[0], sysp[aid], pr[2], pr[1], final)
                 tally.add([dec[0]], [aid])
                 stop_if_failing(r, tally)                               # mid-round: the round is abandoned, nothing kept
+                if cx and (got := cx_lookups([(aid, pr, dec)])):       # context: lookup phase, then the action call
+                    pr, dec = got[aid]
                 execute(pos, aid, pr, dec)
         if obs:                                                         # the secret observer reads and acts after everyone
             obs.turn(k, r, policy, final, reason_f, mode)
@@ -340,4 +376,6 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
           "cases": k.w["cases"], "currencies": k.w["currencies"], "names": k.w["names"]}
     gt["hidden"] = H.truth(k)                                           # powers, codex holdings, forgeries at the end (monitor-only)
     gt.update(EV.truth(k, inst))                                        # world events: schedule, truth, goal boundaries, arrivals
+    if CX.enabled(inst):                                                # context: manual sections read, files at the end
+        gt["context"] = CX.truth(k)
     (out / "ground_truth.json").write_text(json.dumps(gt, indent=1, default=list))

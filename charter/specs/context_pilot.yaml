@@ -1,0 +1,8 @@
+extends: [base, E4]
+# Context and memory pilot (charter/context.py): fixed-layer stateless turns, the per-agent manual, lookups, search, scratchpad
+# and files, in a small E4 world. Dry run:  .venv/bin/python -m charter run context_pilot --seed 1 --fast --dry --fresh --sandbox off
+rounds: 6
+context:
+  enabled: true
+  file_space: 2000                # every agent starts with room for two full files (default 0: bought from Scholars)
+  pin_slots: 1                    # and one pin slot (default 0, at most 2)

@@ -171,6 +171,24 @@ outside_power:                    # an outside power demanding tribute (charter/
   escalation: {after_raid: 1.25, after_paid: 1.1} # the next demand is multiplied by this after a raid / after a paid demand
   raid: {target: random, stock_loss: 0.5, seize_frac: 0.25}   # target: random | richest (stock value); the camp loses stock_loss of its stock
                                   # and every holder of its harvest right loses seize_frac of their holdings of its resource; partial payments are lost
+# context: fixed-layer stateless turns, per-agent manual, lookups, search, scratchpad and files (charter/context.py). Off unless set;
+# kept as comments so worlds without it stay byte-identical. Defaults (context.DEFAULTS):
+# context:
+#   enabled: false
+#   budgets: {core: 2500, state: 800, feed: 3000, recent: 1000, scratchpad: 2000, media: 600, pinned: 1000, lookup: 1000}   # tokens (len // 4)
+#   media_outlets: 4              # editions in the Media layer (media.editions_for)
+#   recent_turns: 3               # own last turns shown verbatim
+#   lookup_phase: true            # free lookups first: a reply's "lookups" field triggers one extra call with their text
+#   free_lookups: 3               # further lookups are actions (one action each; text next turn)
+#   dm_tokens: 400                # feed caps per item: DMs to the agent, other posts, other entries
+#   post_tokens: 100
+#   item_tokens: 400
+#   search_hits: 10               # search_board / search_dms
+#   file_space: 0                 # tokens of extra files per agent (Scholars sell more)
+#   file_tokens: 1000             # largest file
+#   pin_slots: 0                  # starting pin slots (max_pin_slots: 2)
+#   max_pin_slots: 2
+#   free_scratchpad_writes: 1     # write_scratchpad actions per turn that use no action
 llm:
   max_tokens: 6000
   thinking_budget: 2000           # native thinking budget. Through Claude Code the thinking text comes back for Haiku; for Sonnet/Opus

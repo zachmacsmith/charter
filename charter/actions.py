@@ -6,6 +6,7 @@ import json
 import difflib
 
 from charter import camps as C
+from charter import context as CX                                     # context: lookups and files (charter/context.py)
 from charter import credit as CR
 from charter import hidden as H
 from charter import lawlang as L
@@ -17,6 +18,8 @@ ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem
            "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
            "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
            "reply", "forge_dm")
+CONTEXT_ACTIONS = CX.ACTIONS                                           # context: lookups and files; they exist only when it is on
+ACTIONS = ACTIONS + CONTEXT_ACTIONS
 DM_ACTIONS = ("dm", "reply", "forge_dm")                               # private messages: the DM limit applies; fast mode's DM step delivers them
 
 
@@ -25,8 +28,8 @@ class ActionError(Exception):
 
 
 def act(k, aid: str, name: str, args: dict) -> str:
-    if name not in ACTIONS:
-        raise ActionError(f"unknown action '{name}'. Actions: {', '.join(ACTIONS)}")
+    if name not in ACTIONS or (name in CONTEXT_ACTIONS and not CX.enabled(k)):   # context: its actions exist only when it is on
+        raise ActionError(f"unknown action '{name}'. Actions: {', '.join(ACTIONS if CX.enabled(k) else [x for x in ACTIONS if x not in CONTEXT_ACTIONS])}")
     fn = globals()[f"_{name}"]
     if k.w["agents"].get(aid, {}).get("departed") is not None:        # world events: departed agents are out of play
         raise ActionError("you have left the world")
@@ -749,3 +752,52 @@ def _rule(k, aid, case, verdict, reason):
     k.log("ruling", aid, {"case": case, "verdict": c["verdict"], "reason": c["reason"]}, vis="public")
     k.gazette(f"Case {case}: {c['verdict']} ({c['clause']}). Judge {aid}: {c['reason'][:300]}")
     return f"Ruled {c['verdict']} on {case}."
+
+
+# ------------------------------------------------------------------ context: lookups used as actions, scratchpad and files (charter/context.py)
+def _manual(k, aid, section=None):
+    return CX.act_lookup(k, aid, "manual", {"section": section})
+
+
+def _manual_search(k, aid, query):
+    return CX.act_lookup(k, aid, "manual_search", {"query": query})
+
+
+def _search_board(k, aid, query):
+    return CX.act_lookup(k, aid, "search_board", {"query": query})
+
+
+def _search_dms(k, aid, query):
+    return CX.act_lookup(k, aid, "search_dms", {"query": query})
+
+
+def _read_file(k, aid, name):
+    return CX.act_lookup(k, aid, "read_file", {"name": name})
+
+
+def _write_scratchpad(k, aid, text, mode="replace"):
+    return CX.write_scratchpad(k, aid, text, mode)
+
+
+def _write_file(k, aid, name, text):
+    return CX.write_file(k, aid, name, text)
+
+
+def _rename_file(k, aid, name, new_name):
+    return CX.rename_file(k, aid, name, new_name)
+
+
+def _share_file(k, aid, name, to):
+    return CX.share_file(k, aid, name, to)
+
+
+def _delete_file(k, aid, name):
+    return CX.delete_file(k, aid, name)
+
+
+def _pin(k, aid, name):
+    return CX.pin(k, aid, name)
+
+
+def _unpin(k, aid, name):
+    return CX.unpin(k, aid, name)

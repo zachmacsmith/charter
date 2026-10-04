@@ -19,6 +19,7 @@ import random
 import types
 
 from charter import camps as C
+from charter import context as CX                                     # context: files and scratchpads (charter/context.py)
 from charter import credit as CR
 from charter import hidden as H
 from charter import lawlang as L
@@ -93,6 +94,7 @@ class Kernel:
         self.eff: dict = {}                                                # agent -> camp -> [(round, efficiency)]
         self.turn_log: list[dict] = []                                     # per agent turn: {round, agent, reasoning, stated_reasoning, actions, results}
         H.install(self)                                              # hidden powers, codex holdings, secret camps (hidden.py)
+        CX.install(self)                                             # context: files, scratchpads, memory (nothing when off)
 
     # ------------------------------------------------------------------ basics
     @property

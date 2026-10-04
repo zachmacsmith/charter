@@ -271,7 +271,11 @@ def agent_docs(d, inst, ev, rs, gt):
         for t in turns:
             ph = str(t.get("phase") or "decide")
             T += [f"## Round {t['round'] + 1}, position {t['position']}" if ph == "decide" else
+                  f"## Round {t['round'] + 1}, position {t['position']}: lookups" if ph == "lookup" else    # context: the lookup phase
                   f"### Round {t['round'] + 1}: reply to DMs (exchange {ph.rpartition('_')[2]})", ""]
+            if t.get("lookups"):                                        # context: what the agent looked up
+                T += ["**Lookups**", ""] + [f"- `{x.get('name')}` {json.dumps(x.get('args'))}: {_cut(str(x.get('text', '')), 300)}"
+                                           for x in t["lookups"]] + [""]
             if t.get("prompt"):
                 T += ["<details><summary>What the agent saw</summary>", "", "```", t["prompt"].strip(), "```", "", "</details>", ""]
             if t.get("reasoning"):

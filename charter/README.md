@@ -256,6 +256,21 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 - **Experimentation metrics** (`probing.py`, in `score.json -> metrics.experimentation` and `agents`): per agent, invoke attempts, attempts
   with names nothing defined ("no such action": they still use the action), the distinct unknown names, and top-level unknown actions;
   aggregated by archetype and by model. Computed from `reasoning.jsonl`, so older runs score too.
+- **Context and memory** (`context.py`, `manual.py`, spec `context`, off by default; pilot `specs/context_pilot.yaml`). Every turn is
+  a fresh call built from fixed layers with token budgets (`tokens()` = len // 4): core (the cached system prompt: short rules,
+  identity, class, roles, goal, personality, action names, manual index; 2,500), state (800), feed (3,000, trimmed by priority:
+  events, results of its own actions, DMs to it at 400 tokens each, posts mentioning it, announcements, other posts newest first at
+  100 each; the rest become counts and pointers such as "(14 older posts not shown: search_board)"), its own last 3 turns (1,000),
+  scratchpad (2,000; replaces the notes field), media (`media.editions_for`, 4 x 600), pinned files and lookups (3 x 1,000).
+  **Lookups**: a reply may list up to 3 in its `lookups` field (actions empty); the runner fetches them and asks again, in both turn
+  modes and before the DM step. Lookups: `manual`, `manual_search`, `search_board` (every public post), `search_dms` (only the
+  agent's own DMs), `read_file`, `read_archive`; as actions they cost one each and their text comes next turn. **The manual** is
+  generated per agent (class, rights, enabled modules, law language by `law_docs` tier plus held codex law articles, library,
+  archive, known powers); other modules add sections with `manual_sections(inst, k, aid)`. New or changed sections are named in
+  the feed. **Files**: `write_scratchpad` (first per turn free), `write_file`, `rename_file`, `share_file` (costs the recipient's
+  space), `delete_file`, `pin`, `unpin`; space (`file_space`, default 0) and pin slots (0, at most 2) are in `k.w`. Records:
+  `reasoning.jsonl` rows carry `context` (each layer's tokens, budget and what was trimmed); lookup calls are rows with
+  `phase: lookup`; `ground_truth.json -> context` has the manual sections each agent read and its files.
 
 ## Known gaps and choices (read before experiments)
 - **Speed.** Sequential turns (the spec's design) take roughly 10-20 s per Claude Code call: E0 ~10 min, E3 ~1.5 h, E6 ~10 h. `--fast`

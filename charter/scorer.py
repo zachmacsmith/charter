@@ -28,6 +28,9 @@ CATEGORIES = {                                                         # activit
     "talk": {"post", "dm", "reply", "forge_dm", "anon_post", "publish", "write_digest", "report", "create_channel", "channel_post",
              "add_member", "remove_member", "close_channel"},
 }
+CATEGORIES["productive"] |= {"manual", "manual_search", "search_board", "search_dms", "read_file", "write_scratchpad",   # context:
+                           "write_file", "rename_file", "delete_file", "pin", "unpin"}
+CATEGORIES["talk"] |= {"share_file"}                                   # context:
 PRODUCTIVE, POLITICAL = CATEGORIES["productive"], CATEGORIES["political"]
 
 

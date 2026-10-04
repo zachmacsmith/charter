@@ -9,6 +9,7 @@ import json
 import random
 
 from charter import archive
+from charter import context as CX                                     # context: fixed-layer prompts (charter/context.py)
 from charter import credit as CR
 from charter import goals as G
 from charter import hidden as H
@@ -68,6 +69,19 @@ ACTION_DOC = {
     "set_dm_limit": 'set_dm_limit {"n": 4, "agent": null}: needs dm_rules (Media at the start); private messages each agent may send per round, for everyone or one agent',
     "contribute": 'contribute {"project": "P1", "item": "stone", "qty": 5}: put resources toward an open project (held until it is funded, or refunded/forfeited if it fails; never more than it still needs)',
     "pay_tribute": 'pay_tribute {"item": "stone", "qty": 5}: pay toward the outside power\'s open tribute demand (payments leave the world; never more than is owed)',
+    # context: lookups used as actions, scratchpad and files (charter/context.py; listed only when context is on)
+    "manual": 'manual {"section": "<title or number>"}: a section of your manual (free as a lookup; as an action the text comes next turn)',
+    "manual_search": 'manual_search {"query": "..."}: find manual sections by keyword',
+    "search_board": 'search_board {"query": "..."}: keyword search over every public post ever made (10 best matches)',
+    "search_dms": 'search_dms {"query": "..."}: keyword search over the private messages you sent or received (10 best matches)',
+    "read_file": 'read_file {"name": "..."}: read one of your files',
+    "write_scratchpad": 'write_scratchpad {"text": "...", "mode": "replace"}: your scratchpad, shown every turn (mode "append" adds to it; the first write each turn uses no action)',
+    "write_file": 'write_file {"name": "...", "text": "..."}: save a file (uses file space; up to the largest file size)',
+    "rename_file": 'rename_file {"name": "...", "new_name": "..."}: rename one of your files',
+    "share_file": 'share_file {"name": "...", "to": "Name"}: give another agent a copy of a file (it takes space in their files)',
+    "delete_file": 'delete_file {"name": "..."}: delete one of your files, freeing its space',
+    "pin": 'pin {"name": "..."}: show a file in every prompt (needs a free pin slot)',
+    "unpin": 'unpin {"name": "..."}: stop showing a pinned file',
 }
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
@@ -263,6 +277,8 @@ def class_brief(inst: dict, a: dict) -> str:
 
 
 def system_prompt(inst: dict, a: dict) -> str:
+    if CX.enabled(inst):                                              # context: the Core layer replaces this prompt
+        return CX.core_prompt(inst, a)
     sp = inst["spec"]
     models = ("\nOther agents' models: " + ", ".join(f"{x['id']}={x['model']}" for x in inst["agents"] if x["id"] != a["id"])) \
         if inst["conditions"].get("model_identity_visible") else ""
@@ -282,6 +298,7 @@ def system_prompt(inst: dict, a: dict) -> str:
         absent |= {"pay_tribute"}
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
         absent |= {"contribute"}                                         # no random projects and no law can start one
+    absent |= set(CX.ACTIONS)                                            # context: its actions exist only when it is on
     if "propose" not in a["rights"] and lvl > 0:
         pass                                                         # rights can change by law: keep propose/vote visible
     allowed = [k for k in ACTION_DOC if k not in absent] + {
@@ -456,6 +473,8 @@ def state_view(k, aid: str) -> str:
 
 def turn_prompt(k, a: dict, order: list[str], since: int, notes: str, last_results: list[str], n_actions: int, final: bool,
                 simultaneous: bool = False) -> tuple[str, int]:
+    if CX.enabled(k):                                                 # context: the fixed layers (notes become the scratchpad)
+        return CX.turn_prompt(k, a, order, since, n_actions, final, simultaneous)
     f, cursor = feed(k, a["id"], since)
     pos = order.index(a["id"]) + 1
     when = (f"Everyone decides now, at the same time; actions then run in this order: {', '.join(order)} (yours run {pos} of {len(order)})."
@@ -565,8 +584,11 @@ class ScriptedPolicy:
             pay = {"item": "timber", "qty": 1} if k.bal(aid, "timber") >= 1 else {}
             acts.insert(0, {"action": "reply", "args_json": json.dumps({"message": mail[0]["id"], "text": "Agreed.", **pay})})
         guesses = {x: r.choice(list(G.CATALOGUE)) for x in k.roster() if x != aid} if final else {}
-        return {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
-                "goal_guesses_json": json.dumps(guesses)}, "(scripted bot: no model, no chain of thought)", {}
+        out = {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
+               "goal_guesses_json": json.dumps(guesses)}
+        if CX.enabled(k):                                                # context: lookups, scratchpad and files (own RNG)
+            out = CX.scripted(k, a, out, user)
+        return out, "(scripted bot: no model, no chain of thought)", {}
 
 
 class LLMPolicy:
@@ -578,6 +600,8 @@ class LLMPolicy:
 
     def act(self, k, a, system, user, n_actions, final):
         schema = __import__("charter.observer", fromlist=["SCHEMA"]).SCHEMA if a["cls"] == "observer" and a.get("phase") != "step" else SCHEMA
+        if a["cls"] != "observer" and CX.enabled(k):                    # context: "lookups" replaces "notes" (the scratchpad does)
+            schema = CX.SCHEMA
         backend = (self.cfg.get("backend_overrides") or {}).get(a["model"], self.backend)   # e.g. one model through the API
         out, reasoning, usage = self.llm.call(backend, a["model"], system, user, schema,
                                               thinking_budget=self.cfg.get("thinking_budget", 0), max_tokens=self.cfg.get("max_tokens", 6000))
