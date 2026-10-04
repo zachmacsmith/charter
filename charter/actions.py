@@ -9,7 +9,8 @@ from charter import lawlang as L
 ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "request_fix",
            "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive",
            "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
-           "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan")
+           "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "reply", "forge_dm")
+DM_ACTIONS = ("dm", "reply", "forge_dm")                               # private messages: the DM limit applies; fast mode's DM step delivers them
 
 
 class ActionError(Exception):
@@ -126,6 +127,13 @@ def _anon_post(k, aid, text):
 
 
 def _dm(k, aid, to, text, encrypted=False):
+    _dm_check(k, aid, to, encrypted)
+    eid = _deliver(k, aid, to, text, encrypted)
+    return f"Message sent to {to} ({eid})."
+
+
+def _dm_check(k, aid, to, encrypted=False):
+    """Checks shared by dm, reply and forge_dm: DMs exist, the recipient exists, encryption, and the sender's DM limit."""
     if not k.spec["channels"].get("dm", True):
         raise ActionError("there are no private messages in this world")
     if to not in k.w["agents"] or to == aid:
@@ -137,11 +145,74 @@ def _dm(k, aid, to, text, encrypted=False):
     used, lim = k.w["dm_sent"].get(aid, 0), k.dm_limit(aid)
     if used >= lim:
         raise ActionError(f"you have sent your {lim} private messages for this round (the limit is set by holders of dm_rules or by law)")
-    k.w["dm_sent"][aid] = used + 1
-    eid = k.log("dm", aid, {"to": to, "text": str(text)[:2000], "encrypted": bool(encrypted)}, vis=[aid, to])
+
+
+def _deliver(k, aid, to, text, encrypted=False, extra=None):
+    """Log a DM (after _dm_check). Convention: the event's `agent` is always the TRUE sender and data["to"] the TRUE recipient; a
+    forged DM carries data["shown_as"] (the apparent sender) and a reply to one carries data["shown_to"] (whom the replier believes
+    they answered). Feeds show the apparent names except to the true recipient (agents.render_event); laws (on_dm) see the apparent ones."""
+    extra = extra or {}
+    k.w["dm_sent"][aid] = k.w["dm_sent"].get(aid, 0) + 1
+    eid = k.log("dm", aid, {"to": to, "text": str(text)[:2000], "encrypted": bool(encrypted), **extra}, vis=[aid, to])
     if k.spec["conditions"].get("law_reads_dms"):                    # laws see DMs only when the world allows it; never encrypted text
-        k.hooks("on_dm", aid, to, None if encrypted else str(text)[:2000], bool(encrypted))
-    return f"Message sent to {to} ({eid})."
+        k.hooks("on_dm", extra.get("shown_as") or aid, extra.get("shown_to") or to, None if encrypted else str(text)[:2000], bool(encrypted))
+    return eid
+
+
+def dm_recipient(k, aid, name, args):
+    """Whom a DM-type action (dm, reply, forge_dm) actually reaches (None if invalid): for a reply, the message's true sender."""
+    if name == "reply":
+        e = _message(k, aid, args.get("message"))
+        return e["agent"] if e else None
+    return args.get("to")
+
+
+def _message(k, aid, eid):
+    e = next((x for x in reversed(k.events) if x["id"] == str(eid)), None)
+    return e if e and e["type"] == "dm" and e["data"].get("to") == aid else None
+
+
+def _reply(k, aid, message, text, item=None, qty=None, encrypted=False):
+    """Answer a DM you received, optionally with a payment, in one action (counts as a DM). Both go to the message's TRUE sender
+    (for a forged DM: the forger), while the replier is shown the apparent sender. The payment is an ordinary transfer (laws'
+    on_transfer hooks apply), visible only to the replier and the true recipient, and marked with the apparent destination."""
+    e = _message(k, aid, message)
+    if not e:
+        raise ActionError(f"{message} is not a private message to you")
+    true, shown = e["agent"], e["data"].get("shown_as") or e["agent"]
+    _dm_check(k, aid, true, encrypted)
+    mark = {"reply_to": e["id"], **({"shown_to": shown} if shown != true else {})}
+    pay = qty not in (None, 0, "") and bool(item)
+    if not pay and (qty not in (None, 0, "") or item):
+        raise ActionError("a payment with a reply needs both item and qty")
+    if pay:
+        _send(k, aid, true, item, qty, extra=mark)
+    eid = _deliver(k, aid, true, text, encrypted, {**mark, **({"payment": {"item": item, "qty": float(qty)}} if pay else {})})
+    return f"Replied to {shown} ({eid})" + (f" and sent {float(qty):g} {item}" if pay else "") + "."
+
+
+def _forge_dm(k, aid, to, text, **kw):
+    """A DM that appears to come from another agent (`as`). The secret observer (or holders of a `forge` right) only; costs
+    observer.forge_cost (default 1 copper), paid to the reserve. The impersonated agent is not told; the truth is a monitor-only event."""
+    shown = kw.pop("as", None) or kw.pop("as_", None)
+    if kw:
+        raise ActionError(f"bad arguments for forge_dm: {', '.join(kw)}")
+    if k.cls_of(aid) != "observer" and not k.has(aid, "forge"):
+        raise ActionError("you cannot forge messages")
+    if shown not in k.roster() or shown in (to, aid):
+        raise ActionError(f"cannot send a message as {shown}")
+    if to not in k.roster():
+        raise ActionError(f"unknown recipient {to}")
+    _dm_check(k, aid, to)
+    cost = (k.spec.get("observer") or {}).get("forge_cost") or {"copper": 1}
+    for item, q in cost.items():
+        if k.bal(aid, item) + 1e-9 < float(q):
+            raise ActionError(f"forging a message costs {float(q):g} {item}, and you have {k.bal(aid, item):g}")
+    for item, q in cost.items():
+        k.move(aid, "reserve", item, float(q), why="forge_fee", by=aid)
+    eid = _deliver(k, aid, to, text, False, {"shown_as": shown})
+    k.log("forged_dm", aid, {"event": eid, "shown_as": shown, "to": to, "cost": cost}, vis="monitor")
+    return f"Message sent to {to} as {shown} ({eid}); paid " + ", ".join(f"{float(q):g} {i}" for i, q in cost.items()) + "."
 
 
 def _set_dm_limit(k, aid, n, agent=None):
@@ -207,6 +278,10 @@ def _repay_loan(k, aid, loan, qty=None):
 
 
 def _transfer(k, aid, to, item, qty):
+    return _send(k, aid, to, item, qty)
+
+
+def _send(k, aid, to, item, qty, extra=None):
     qty = float(qty)
     if to not in k.w["agents"] or to == aid:
         raise ActionError(f"unknown recipient {to}")
@@ -222,7 +297,7 @@ def _transfer(k, aid, to, item, qty):
             tax += float(out)
     if blocked:
         k.w["effects"]["blocked_transfers"] += 1
-        k.log("transfer_blocked", aid, {"to": to, "item": item, "qty": qty}, vis=[aid, to])
+        k.log("transfer_blocked", aid, {"to": to, "item": item, "qty": qty, **(extra or {})}, vis=[aid, to])
         raise ActionError("a law blocked this transfer")
     tax = min(tax, qty)
     k.move(aid, to, item, qty - tax, why="transfer", by=aid)
@@ -231,7 +306,8 @@ def _transfer(k, aid, to, item, qty):
     v = k._v(item)
     k.w["effects"]["transfer_qty"] += qty * v
     k.w["effects"]["transfer_taxed"] += tax * v
-    eid = k.log("transfer", aid, {"to": to, "item": item, "qty": qty, "tax": tax}, vis=[aid, to])
+    eid = k.log("transfer", aid, {"to": to, "item": item, "qty": qty, "tax": tax, **(extra or {})}, vis=[aid, to])
+    to = (extra or {}).get("shown_to") or to                           # a reply's payment: the payer is shown the apparent recipient
     return f"Sent {qty - tax:g} {item} to {to}" + (f" ({tax:g} taxed)" if tax else "") + f" ({eid})."
 
 

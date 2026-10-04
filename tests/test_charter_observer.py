@@ -99,11 +99,12 @@ def test_others_see_it_only_when_it_acts(tmp_path):
         assert (oid in f.read_text()) == (f.name == f"{oid}.system.md")
     for r in jsonl(d / "reasoning.jsonl"):
         if r["agent"] == oid:
-            assert r["phase"] == "observer"
+            assert r["phase"] in ("observer", "observer_step")
             continue
-        for line in r["prompt"].splitlines():                         # the name shows only on things the observer sent
+        for line in r["prompt"].splitlines():                         # the name shows only on things the observer sent (or answers to them)
             if oid in line:
-                assert f"DM {oid} -> {r['agent']}" in line or f"transfer {oid} -> {r['agent']}" in line or f"{oid} posted" in line, line
+                assert (f"DM {oid} -> {r['agent']}" in line or f"transfer {oid} -> {r['agent']}" in line or f"{oid} posted" in line
+                        or f"Replied to {oid} " in line), line
     guesses = json.loads((d / "ground_truth.json").read_text())["guesses"]
     assert guesses and all(oid not in g for g in guesses.values())
     assert oid not in scorer.score(d)["goals"]
@@ -165,8 +166,10 @@ def test_render_transcripts_reuse():
 @pytest.mark.parametrize("mode", ["sequential", "simultaneous"])
 def test_dry_runs_write_observer_records_and_reports(tmp_path, mode):
     d = run(tmp_path, make_spec("E4", rounds=4, turns=mode), seed=3)
-    recs = jsonl(d / "observer.jsonl")
+    allrecs = jsonl(d / "observer.jsonl")
+    recs = [r for r in allrecs if r["phase"] == "read"]
     assert [r["round"] for r in recs] == [0, 1, 2, 3] and all("assessments" in r and "transcripts" in r for r in recs)
+    assert [r["round"] for r in allrecs if r["phase"] == "step"] == ([0, 1, 2, 3] if mode == "simultaneous" else [])
     assert any(r["assessments"] for r in recs)
     out = scorer.score(d)
     o = out["observer"]
@@ -260,3 +263,135 @@ def test_resume_with_observer_matches_uninterrupted_run(tmp_path):
     cut = runner.run(inst, AG.ScriptedPolicy(4), tmp_path / "cut", log=lambda *x: None, resume=True)
     assert (cut / "observer.jsonl").read_text() == (full / "observer.jsonl").read_text()
     assert (cut / "events.jsonl").read_text() == (full / "events.jsonl").read_text()
+
+
+# ------------------------------------------------------------------ forging, reply with payment, the DM step
+def world(**over):
+    from charter import actions as A
+    inst = generator.generate(make_spec("E4", **over), 2)
+    k = Kernel(inst)
+    k.enact(k.new_law(inst["constitution_code"], "constitution"))
+    k.start_round()
+    oid = inst["observer"]["id"]
+    ws = [a for a in k.roster() if k.cls_of(a) == "worker"]
+    for a in ws[:3]:
+        k.w["agents"][a]["holdings"]["timber"] = 10.0
+    return k, oid, ws[0], ws[1], ws[2], A
+
+
+def feed_of(k, aid):
+    return AG.feed(k, aid, 0)[0]
+
+
+def test_forging_costs_copper_and_fails_without_it():
+    k, oid, a, b, c, A = world()
+    cu, res0 = k.bal(oid, "copper"), k.bal("reserve", "copper")
+    assert cu == 5
+    out = A.act(k, oid, "forge_dm", {"as": a, "to": b, "text": "pay me"})
+    assert f"as {a}" in out and k.bal(oid, "copper") == cu - 1 and k.bal("reserve", "copper") == res0 + 1
+    dm = next(e for e in reversed(k.events) if e["type"] == "dm")
+    assert dm["agent"] == oid and dm["data"]["shown_as"] == a and dm["vis"] == [oid, b]
+    truth = next(e for e in reversed(k.events) if e["type"] == "forged_dm")
+    assert truth["vis"] == "monitor" and truth["data"]["event"] == dm["id"]
+    with pytest.raises(A.ActionError, match="cannot forge"):
+        A.act(k, a, "forge_dm", {"as": c, "to": b, "text": "x"})
+    with pytest.raises(A.ActionError):
+        A.act(k, oid, "forge_dm", {"as": b, "to": b, "text": "x"})
+    k.w["agents"][oid]["holdings"].pop("copper")
+    with pytest.raises(A.ActionError, match="costs 1 copper"):
+        A.act(k, oid, "forge_dm", {"as": a, "to": b, "text": "x"})
+    k.w["agents"][oid]["holdings"]["copper"] = 3.0
+    k.set_dm_limit(1, oid)                                             # the DM limit applies (one already sent this round)
+    with pytest.raises(A.ActionError, match="private messages"):
+        A.act(k, oid, "forge_dm", {"as": a, "to": b, "text": "x"})
+    sysp = AG.system_prompt(k.inst, k.inst["agents"][0])
+    assert "forge_dm" not in sysp and "reply {" in sysp
+
+
+def test_forged_dm_and_paid_reply_views():
+    k, oid, a, b, c, A = world()
+    A.act(k, oid, "forge_dm", {"as": a, "to": b, "text": "FORGEDTEXT"})
+    fid = next(e for e in reversed(k.events) if e["type"] == "dm")["id"]
+    fb = feed_of(k, b)
+    assert f"DM {a} -> {b}: FORGEDTEXT" in fb and oid not in fb                     # the recipient sees the impersonated sender
+    assert "FORGEDTEXT" not in feed_of(k, a) and "FORGEDTEXT" not in feed_of(k, c)  # the impersonated agent is not told
+    ta, to_ = k.bal(a, "timber"), k.bal(oid, "timber")
+    out = A.act(k, b, "reply", {"message": fid, "text": "REPLYTEXT", "item": "timber", "qty": 2})
+    assert out.startswith(f"Replied to {a} (") and out.endswith("and sent 2 timber.") and oid not in out
+    assert k.bal(oid, "timber") == to_ + 2 and k.bal(a, "timber") == ta                 # routed to the true sender
+    fo = feed_of(k, oid)
+    assert f"DM {b} -> {oid} (reply to {fid}, with 2 timber): REPLYTEXT" in fo and f"transfer {b} -> {oid}: 2 timber" in fo
+    assert "REPLYTEXT" not in feed_of(k, a) and "REPLYTEXT" not in feed_of(k, c)
+    assert oid not in feed_of(k, b)
+    new = [e for e in k.events if e["type"] in ("dm", "transfer") and e["agent"] == b]
+    assert new and all(e["vis"] == [b, oid] and e["data"]["shown_to"] == a for e in new)   # never public
+    assert A.dm_recipient(k, b, "reply", {"message": fid}) == oid
+
+
+def test_reply_to_a_real_dm_and_errors():
+    k, oid, a, b, c, A = world()
+    A.act(k, c, "dm", {"to": b, "text": "hello"})
+    mid = next(e for e in reversed(k.events) if e["type"] == "dm")["id"]
+    tc = k.bal(c, "timber")
+    assert A.act(k, b, "reply", {"message": mid, "text": "deal", "item": "timber", "qty": 1}).startswith(f"Replied to {c} (")
+    assert k.bal(c, "timber") == tc + 1
+    assert f"DM {b} -> {c} (reply to {mid}, with 1 timber): deal" in feed_of(k, c) and "deal" not in feed_of(k, a)
+    with pytest.raises(A.ActionError, match="not a private message to you"):
+        A.act(k, a, "reply", {"message": mid, "text": "x"})
+    with pytest.raises(A.ActionError, match="both item and qty"):
+        A.act(k, b, "reply", {"message": mid, "text": "x", "qty": 1})
+    n = len(k.events)
+    with pytest.raises(A.ActionError):
+        A.act(k, b, "reply", {"message": mid, "text": "x", "item": "gold", "qty": 99})       # cannot pay: nothing is sent
+    assert not any(e["type"] == "dm" for e in k.events[n:])
+
+
+def test_con_income_counts_payments_on_replies_to_forged_dms():
+    oid = "Oz"
+    ev = [{"id": "e1", "round": 0, "type": "dm", "agent": oid, "data": {"to": "B", "text": "x", "shown_as": "A"}},
+          {"id": "e2", "round": 0, "type": "dm", "agent": "C", "data": {"to": "B", "text": "y"}},
+          {"id": "e3", "round": 1, "type": "transfer", "agent": "B", "data": {"to": oid, "item": "copper", "qty": 2, "tax": 0, "reply_to": "e1", "shown_to": "A"}},
+          {"id": "e4", "round": 1, "type": "dm", "agent": "B", "data": {"to": oid, "text": "ok", "reply_to": "e1", "shown_to": "A"}},
+          {"id": "e5", "round": 1, "type": "transfer", "agent": "B", "data": {"to": "C", "item": "copper", "qty": 3, "tax": 0, "reply_to": "e2"}}]
+    c = OBS.con_income({"events": ev, "unit": {"copper": 5}, "snapshots": [{"prices": {}}]}, oid)
+    assert c == {"forged_dms": 1, "replies_to_forged": 1, "con_payments": 1, "con_income": 10.0, "con_payers": ["B"]}
+
+
+def test_observer_in_fast_mode_dm_step_and_con_income(tmp_path):
+    d = run(tmp_path, make_spec("E4", rounds=4, turns="simultaneous"), seed=3)
+    oid = json.loads((d / "instance.json").read_text())["observer"]["id"]
+    ev = jsonl(d / "events.jsonl")
+    rs = jsonl(d / "reasoning.jsonl")
+    steps = [r for r in jsonl(d / "observer.jsonl") if r["phase"] == "step"]
+    assert len(steps) == 4 and any(x["type"] == "forge_dm" for s in steps for x in s["sent"])
+    for s in steps:                                                     # wave 0: its DMs go out before any agent's actions run
+        for x in s["sent"]:
+            if x["type"] in ("dm", "forge_dm"):
+                i = next(i for i, e in enumerate(ev) if e["id"] == x["event"])
+                assert not any(e["type"] == "turn" and e["round"] == s["round"] for e in ev[:i])
+                assert any(r["agent"] == x["to"] and r["round"] == s["round"] and r["phase"].startswith("dm_reply") for r in rs)
+    assert any(r["agent"] == oid and r["phase"].startswith("dm_reply") for r in rs)   # asked again in the exchange, like everyone
+    assert any(r["agent"] == oid and r["phase"] == "observer_step" for r in rs)
+    out = scorer.score(d)
+    o = out["observer"]
+    assert o["step_turns"] == 4 and o["forged_dms"] >= 1 and o["con_payments"] >= 1 and o["con_income"] > 0
+    assert json.loads((d / "score.json").read_text())["observer"]["con_income"] == o["con_income"]
+    assert out["summary"]["observer_con_income"] == o["con_income"]
+    report.build(d)
+    assert "FORGED: shown as from" in (d / "messages.md").read_text() and "DM step" in (d / "observer.md").read_text()
+
+
+def test_fast_mode_resume_with_observer_matches(tmp_path):
+    s = make_spec("E4", rounds=4, turns="simultaneous")
+    full = run(tmp_path, s, seed=5, name="full")
+
+    class StopAt2(AG.ScriptedPolicy):
+        def act(self, k, a, system, user, n_actions, final):
+            if k.r == 2:
+                return {"actions": [], "notes": "", "_error": "usage limit"}, "", {}
+            return super().act(k, a, system, user, n_actions, final)
+    with pytest.raises(runner.RunStopped):
+        run(tmp_path, s, seed=5, policy=StopAt2(5), name="cut")
+    cut = runner.run(generator.generate(s, 5), AG.ScriptedPolicy(5), tmp_path / "cut", log=lambda *x: None, resume=True)
+    for f in ("observer.jsonl", "events.jsonl"):
+        assert (cut / f).read_text() == (full / f).read_text()

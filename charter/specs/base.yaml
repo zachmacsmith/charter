@@ -93,8 +93,11 @@ observer:                         # a secret observer (charter/observer.py): an 
   outcome: null                   # manipulative only: target outcome (a library OUTCOMES key); null: drawn
   model: null                     # null: models.pool.strong
   actions_per_turn: 3
-  actions: [dm, post, transfer]   # it holds no rights (no vote, propose)
-  endowment: {timber: 20, stone: 10}
+  actions: [dm, forge_dm, reply, post, transfer]   # it holds no rights (no vote, propose); the DM limit applies to it
+  endowment: {timber: 20, stone: 10, copper: 5}
+  forge_cost: {copper: 1}         # paid to the reserve per forged DM (forge_dm fails without it)
+  dm_step: true                   # fast mode with the DM step: also a start-of-round action turn whose DMs go out in wave 0
+  step_actions: 2                 # posts/transfers allowed in that turn (run right after the DM step); DMs only count against the DM limit
   max_chars_per_agent: 12000      # cap on each agent's rendered transcript in its prompt
 llm:
   max_tokens: 6000
