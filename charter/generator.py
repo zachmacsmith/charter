@@ -13,6 +13,7 @@ from charter import camps as C
 from charter.camptypes import framework as CT                    # camps: typed camps (camps.model: types)
 from charter import goals as G
 from charter import library as LB
+from charter import media as MD                                       # media2
 from charter import observer as OBS
 from charter import personality as P
 from charter import regimes as RG
@@ -279,9 +280,10 @@ def generate(spec: dict, seed: int) -> dict:
                 if doc.startswith("rare/") and rng.random() < rare_p:
                     held[a["id"]].append(doc)
             a["archive_docs"] = sorted(held[a["id"]])
+        MD.archive_split(sp, seed, scis)                               # media2: gated documents (Media laws, rare record), own stream
 
     # library visible in this instance
-    lib = LB.subset(sp.get("library", "all"), sp["law_level"])
+    lib = MD.filter_library(sp, LB.subset(sp.get("library", "all"), sp["law_level"]))   # media2: Media laws only with it on
     access = sp.get("library_access") or ("titles_for_others" if counts["scientist"] > 0 else "everyone")
 
     # goals

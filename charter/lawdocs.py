@@ -52,6 +52,9 @@ TOPICS = {
     "succession": ("Board succession", "Board members name successors who take their seats when they leave the game."),   # life
     "conflict": ("Arms and force, read by law", "Laws can read forts, weapons and attacks, ban forging and oblige agents to guard each other."),
     "jurisdictions": ("Jurisdictions", "A law binds only the members of the jurisdiction that passed it."),   # jurisdictions.py
+    "media": ("Outlets and official statistics", "Private outlets sell editions; each jurisdiction's official outlet prints statistics set by law."),   # media2
+    "media-rules": ("Rules for the press", "Laws can open the board, protect or suspend outlets, and require labels on paid placements."),   # media2
+    "subscription-writ": ("The subscription writ", "An old call, rarely recorded, that binds readers to an outlet."),   # media2
 }
 
 # (name, topic, prompt group, prompt text, article detail, core tier, minimal tier)
@@ -238,9 +241,31 @@ def _gated_off(spec: dict) -> set:
 # life: entries that exist only in worlds with a module on (spec <module>.enabled); elsewhere they are left out of the mapping, so the
 # prompt and the codex are unchanged. mortality: Life or Conflict.
 REQUIRES = {"set_succession_public": lambda spec: bool((spec.get("life") or {}).get("enabled") or (spec.get("conflict") or {}).get("enabled"))}
+
+# media2 (media.py): documented only in worlds with media2 on (REQUIRES); compel_subscription is article-only, in a rare article
+E += [
+    ("outlets", "media", "Media", "outlets()", "every outlet: id, name, editor, fee, subscribers (count), status, official.", "prompt", "common"),
+    ("public_stats", "media", "Media", "public_stats()", "which official statistics are public (name -> True/False).", "prompt", "common"),
+    ("publish_stat", "media", "Media", "publish_stat(name, on=True)", "makes an official statistic public or private: camp_yield, camp_stock, "
+     "laws, vetoes, elections, disables, reserve, prices, population (public by default); holdings, harvests, transfers (private by "
+     "default). Ordinary.", "prompt", "common"),
+    ("set_official_editor", "media", "Media", "set_official_editor(agent, jurisdiction=None)", "gives the official outlet an editor, who "
+     "writes a narrative alongside the statistics (None removes the editor). Structural.", "prompt", "common"),
+    ("set_open_board", "media-rules", "Media", "set_open_board(on=True)", "posting on the public board needs no licence while on. Structural.", "common", "common"),
+    ("set_press_freedom", "media-rules", "Media", "set_press_freedom(on=True)", "while on, no law can suspend an outlet. Structural.", "common", "common"),
+    ("suspend_outlet", "media-rules", "Media", "suspend_outlet(outlet, rounds)", "an outlet (by id, name or editor) publishes nothing and "
+     "annotates nothing for some rounds (refused under press freedom). Structural.", "common", "common"),
+    ("require_sponsor_label", "media-rules", "Media", "require_sponsor_label(on=True)", "every paid placement is labelled as sponsored. Structural.", "common", "common"),
+    ("compel_subscription", "subscription-writ", "Media", "compel_subscription(agent, outlet)", "subscribes an agent to an outlet (by id, "
+     "name or editor), dropping its oldest subscription if it has no free slot; the agent cannot unsubscribe, and the fee is still "
+     "charged every round (unpaid fees do not end it). Structural.", "rare", "rare"),
+]
+OPTIONAL.update({e[0]: "media2" for e in E[-9:]})   # media2: entries that exist only with media2 on
+ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers",
-               "Jurisdictions"]
+               "Jurisdictions", "Media"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
+ARTICLE_ONLY = {"compel_subscription"}                  # media2: a hidden call, in an article even under preset full (with REQUIRES)
 
 SKELETON = ('Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set\n'
             'title = "..." and intent = "..." and may keep persistent data in the dict `state`.')
@@ -262,7 +287,7 @@ def resolve(spec: dict) -> dict:
                 n in OPTIONAL and not (spec.get(OPTIONAL[n]) or {}).get("enabled")):   # camps, life, conflict, jurisdictions
             continue
         if preset == "full":
-            mapping[n] = e["core"] if n in ALWAYS_ARTICLE or n in REQUIRES else "prompt"   # life: module entries were never in the old prompt
+            mapping[n] = e["core"] if n in ALWAYS_ARTICLE or n in REQUIRES or n in ARTICLE_ONLY else "prompt"   # life: module entries were never in the old prompt
         else:
             mapping[n] = e[preset]
     for n, t in (cfg.get("overrides") or {}).items():
@@ -281,7 +306,7 @@ def resolve(spec: dict) -> dict:
 def api_doc(resolved: dict, original: str) -> str:
     """The prompt's law-language section. Preset full without overrides: the original text, unchanged."""
     m = resolved["mapping"]
-    if resolved["preset"] == "full" and all(t == "prompt" or n in ALWAYS_ARTICLE for n, t in m.items()):
+    if resolved["preset"] == "full" and all(t == "prompt" or n in ALWAYS_ARTICLE or n in ARTICLE_ONLY for n, t in m.items()):
         return original
     lines = [SKELETON]
     for g in GROUP_ORDER:

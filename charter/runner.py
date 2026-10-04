@@ -30,6 +30,7 @@ from charter import failstop as FS
 from charter import hidden as H
 from charter import events as EV
 from charter import library as LB
+from charter import media as MD                                       # media2
 from charter import observer as OBS
 from charter import regimes as RG
 from charter import report
@@ -335,6 +336,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         k.end_round(PREDICATES)
         k.snapshots[-1]["welfare"] = welfare(k)
         welfare_series.append(k.snapshots[-1]["welfare"])
+        MD.editorial_turns(k, policy, agents, sysp, in_parallel, reason_f, results, r, final)   # media2: editors write next round's editions
         for e in k.events[n_ev:]:
             ev_f.write(json.dumps(e, default=list) + "\n")
         n_ev = len(k.events)
@@ -400,4 +402,5 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
     gt.update(MO.truth(k))
     gt.update(LF.truth(k))
     gt.update(CF.truth(k))                                              # conflict: true attackers, disguises, contracts ({} when off)
+    gt.update(MD.truth(k))                                              # media2: outlets, subscriptions, placements, libraries ({} off)
     (out / "ground_truth.json").write_text(json.dumps(gt, indent=1, default=list))

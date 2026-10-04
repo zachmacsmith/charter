@@ -27,6 +27,7 @@ from charter import hidden as H
 from charter import jurisdictions as J
 from charter import lawlang as L
 from charter import mortality as MO                                   # life: the mortality contract (disable, succession)
+from charter import media as MD                                       # media2
 from charter import outside as O
 from charter import projects as P
 
@@ -107,6 +108,7 @@ class Kernel:
             _life.install(self)
         CF.install(self)                                             # conflict: k.w["conflict"], starting arms, assassin, articles
         J.install(self)                                              # jurisdictions: membership and per-jurisdiction state (off: nothing)
+        MD.install(self)                                             # media2: outlets, subscriptions, Scholars (only with it on)
 
     # ------------------------------------------------------------------ basics
     @property
@@ -265,6 +267,8 @@ class Kernel:
         return e["id"]
 
     def gazette(self, text, by=None):
+        if MD.enabled(self):                                           # media2: the gazette is the jurisdiction's official outlet
+            return MD.official_post(self, MD.law_jurisdiction(self, by), text, by)
         self.log("gazette", by, {"text": str(text)[:2000]}, vis="public")
 
     def notify(self, aid, text, by=None):
@@ -541,6 +545,7 @@ class Kernel:
             **MO.law_api(k, lid),  # life: set_succession_public (mortality.py)
             **CF.law_api(k, lid),                                          # conflict: forts, weapons_of, attacks, ...
             **J.law_api(k, lid),   # jurisdictions: jurisdiction, members, admit, expel, lawful_attack
+            **MD.law_api(k, lid),  # media2: outlets, official statistics, licensing rules (no-ops with it off)
         })
 
     # ------------------------------------------------------------------ laws
@@ -965,6 +970,7 @@ class Kernel:
         self.hooks("on_round_start", r)
         H.on_round_start(self)                                         # hidden layer: seeded tips and discoveries (hidden.py)
         CF.start_round(self)                                           # conflict: forts unlock, guard fees, archive guarantee
+        MD.start_round(self)                                           # media2: fees charged, last round's editions published
 
     def end_round(self, effect_predicates=None):
         CF.resolve_attacks(self)                                       # conflict: step 1, attacks in initiative order
@@ -982,7 +988,10 @@ class Kernel:
         self._expire_cases()
         CR.end_round(self)
         self.snapshot(effect_predicates)
-        self.gazette(self.round_summary())
+        if MD.enabled(self):                                           # media2: the official outlets' statistics replace the round record
+            MD.compile_official(self)
+        else:
+            self.gazette(self.round_summary())
         self.w["round"] += 1
         self._reset_effects()
 
@@ -1110,6 +1119,7 @@ class Kernel:
             **CT.snapshot_fields(self),                                    # camps: per-camp records, leases ({} under legacy)
             **CF.snapshot_fields(self),                                    # conflict: {} when off
             **J.snapshot_fields(self),                                 # jurisdictions: per-jurisdiction members, labels (off: nothing)
+            **MD.snapshot_fields(self),                                    # media2: {} with it off
             "efficiency": {a: {c: round(sum(x for _, x in v[-3:]) / len(v[-3:]), 4) for c, v in cs.items() if v} for a, cs in self.eff.items()},
         }
         for a in w["agents"]:

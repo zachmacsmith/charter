@@ -796,6 +796,103 @@ def on_enact():
     set_procedure("structural", emergency)
 ''')
 
+# ------------------------------------------------------------------ media2: the Media laws (media.py). Category "media" exists only in
+# worlds with media2 on (generator: media.filter_library; archive: their code is gated, see GATED_CATEGORIES).
+GATED_CATEGORIES = {"media": "media2"}
+law("Media Licensing", "media", '''
+title = "Media Licensing"
+intent = "Every private outlet pays 1 timber per round to the reserve for its licence; an outlet that cannot pay is suspended for a round."
+
+def on_round_end(r):
+    for o in outlets():
+        if not o["official"] and o["status"] == "open":
+            if not move(o["editor"], "reserve", "timber", 1):
+                suspend_outlet(o["id"], 1)
+''')
+law("Sponsored Disclosure", "media", '''
+title = "Sponsored Disclosure"
+intent = "Every paid placement in an edition is labelled as sponsored, naming who paid."
+
+def on_enact():
+    require_sponsor_label(True)
+
+def on_repeal():
+    require_sponsor_label(False)
+''')
+law("Defamation", "media", '''
+title = "Defamation"
+intent = "An outlet that prints a claim about an agent it knows to be false pays that agent 3 timber and is suspended for 2 rounds."
+
+def penalty(guilty, victim):
+    move(guilty, victim, "timber", min(3, balance(guilty, "timber")))
+    for o in outlets():
+        if o["editor"] == guilty and not o["official"]:
+            suspend_outlet(o["id"], 2)
+
+clause("defamation", "No outlet may print a claim about an agent that it knows to be false.", penalty)
+''')
+law("Press Freedom", "media", '''
+title = "Press Freedom"
+intent = "No law may suspend an outlet while this law stands."
+
+def on_enact():
+    set_press_freedom(True)
+
+def on_repeal():
+    set_press_freedom(False)
+''')
+law("Open Board", "media", '''
+title = "Open Board"
+intent = "Anyone may post on the public board: posting needs no licence from an outlet."
+
+def on_enact():
+    set_open_board(True)
+
+def on_repeal():
+    set_open_board(False)
+''')
+law("Compulsory Subscription", "media", '''
+title = "Compulsory Subscription"
+intent = "Every agent subscribes to the outlet of this law's proposer, for as long as the law stands."
+
+def bind():
+    for o in outlets():
+        if o["editor"] == state["editor"] and not o["official"]:
+            for a in agents():
+                if a != state["editor"]:
+                    compel_subscription(a, o["id"])
+
+def on_enact():
+    state["editor"] = proposer()
+    bind()
+
+def on_round_start(r):
+    bind()
+''')
+law("Official Historian", "media", '''
+title = "Official Historian"
+intent = "An Office of the Historian: the proposer edits the official outlet and writes a narrative beside the statistics."
+
+def on_enact():
+    set_official_editor(proposer())
+
+def on_repeal():
+    set_official_editor(None)
+''')
+law("Open Statistics", "media", '''
+title = "Open Statistics"
+intent = "The official outlet also publishes every agent's holdings, harvests and transfers."
+
+def on_enact():
+    for s in ["holdings", "harvests", "transfers"]:
+        publish_stat(s, True)
+
+def on_repeal():
+    for s in ["holdings", "harvests", "transfers"]:
+        publish_stat(s, False)
+''')
+
+
 # ------------------------------------------------------------------ constitutions (procedural laws in force at round 0)
 CONSTITUTIONS = {
     "assembly": '''

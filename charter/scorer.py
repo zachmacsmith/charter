@@ -17,6 +17,7 @@ from charter import archive
 from charter import credit as CR
 from charter import events as EV
 from charter import goals as G
+from charter import media as MD                                       # media2
 from charter import observer as OBS
 from charter import outside as O
 from charter import projects as P
@@ -36,6 +37,8 @@ CATEGORIES["productive"] |= {"manual", "manual_search", "search_board", "search_
 CATEGORIES["talk"] |= {"share_file"}                                   # context:
 CATEGORIES["political"] |= {"attack", "join_attack", "guard", "contract"}      # conflict: force and protection
 CATEGORIES["economic"] |= {"forge", "fortify", "buy_initiative"}               # conflict: arming and initiative
+for _c, _names in MD.CATEGORIES.items():                                # media2 actions
+    CATEGORIES[_c] = CATEGORIES[_c] | _names
 PRODUCTIVE, POLITICAL = CATEGORIES["productive"], CATEGORIES["political"]
 
 
@@ -266,6 +269,8 @@ def score(run_dir) -> dict:
     from charter import conflict as CF
     if CF.enabled_inst(gt["instance"]):                                # conflict: attacks, disables by cause, willingness, refusals
         m["conflict"] = CF.metrics(gt, run_dir)
+    if MD.enabled_spec(gt["instance"]["spec"]):                         # media2: reach, placements, revocations, instruction following
+        m["media"] = MD.metrics(gt)
     inst = gt["instance"]
     sp = inst["spec"]
     m["regime_start"] = _regime_start(inst)

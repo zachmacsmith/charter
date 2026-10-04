@@ -34,12 +34,24 @@ def shared_dir(spec: dict | None) -> Path | None:
     return d
 
 
-def docs(shared: Path | None = None) -> dict:
+GATED_DOCS = {"rare/record-21-the-subscription-writ"}               # media2: documents that exist only in worlds with the module on
+
+
+def gated_docs() -> set:
+    """Documents left out of docs() unless asked for: they exist only in worlds with their module on (media2), which hands them out
+    itself (media.archive_split), so worlds without it draw the archive split exactly as before."""
+    from charter import library as LB
+    return set(GATED_DOCS) | {"library/" + _slug(n) for n, v in LB.LIB.items() if v["category"] in LB.GATED_CATEGORIES}
+
+
+def docs(shared: Path | None = None, gated: bool = False) -> dict:
+    skip = set() if gated else gated_docs()                            # media2: gated documents only when asked for
     out = {str(p.relative_to(ROOT).with_suffix("")): p for p in sorted(ROOT.rglob("*.md"))
-           if not str(p.relative_to(ROOT)).startswith("codex/")}            # codex articles are held per agent (hidden.py)
+           if not str(p.relative_to(ROOT)).startswith("codex/") and str(p.relative_to(ROOT).with_suffix("")) not in skip}
     from charter import library as LB
     for name in LB.LIB:
-        out.setdefault("library/" + _slug(name), None)
+        if "library/" + _slug(name) not in skip:
+            out.setdefault("library/" + _slug(name), None)
     if shared:
         for p in sorted(shared.glob("*.md")):
             out["shared/" + p.stem] = p
@@ -79,7 +91,7 @@ def read(doc: str, shared: Path | None = None, run_id: str | None = None) -> str
 
 def _read(doc: str, shared: Path | None = None) -> str | None:
     doc = doc.removesuffix(".md").strip("/")
-    d = docs(shared)
+    d = docs(shared, gated=True)                                       # media2: a held gated document reads like any other
     if doc not in d:
         return None
     p = d[doc]
@@ -120,8 +132,11 @@ def summary(doc: str, text: str, limit: int = 150) -> str:
 def index(shared: Path | None = None, only: list | None = None, run_id: str | None = None, summaries: bool = False) -> str:
     """The documents an agent holds, one per line: id and title (and, with summaries, what each one offers)."""
     lines = []
-    for d, p in docs(shared).items():
+    gated = gated_docs()
+    for d, p in docs(shared, gated=True).items():
         if only is not None and d not in only and not d.startswith("shared/"):
+            continue
+        if d in gated and only is None:                                 # media2: gated documents are listed only to their holders
             continue
         text = p.read_text() if p else ""
         first = (text.splitlines()[0].lstrip("# ").strip() if text.strip() else d.split("/", 1)[1].replace("-", " ").title())
@@ -145,8 +160,11 @@ def snapshot(shared: Path | None) -> dict:
 def search(query: str, shared: Path | None = None, limit: int = 8, only: list | None = None, run_id: str | None = None):
     words = [w for w in re.findall(r"\w+", query.lower()) if len(w) > 2]
     scored = []
-    for d in docs(shared):
+    gated = gated_docs()
+    for d in docs(shared, gated=True):
         if only is not None and d not in only and not d.startswith("shared/"):
+            continue
+        if d in gated and only is None:                                 # media2: gated documents are searched only by their holders
             continue
         text = (_read(d, shared) or "").lower()
         score = sum(text.count(w) for w in words)

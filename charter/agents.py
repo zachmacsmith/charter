@@ -16,6 +16,7 @@ from charter import goals as G
 from charter import hidden as H
 from charter import jurisdictions as J
 from charter import library as LB
+from charter import media as MD                                       # media2
 from charter import outside as O
 from charter import projects as P
 from charter import regimes as RG
@@ -107,6 +108,7 @@ ACTION_DOC = {
     "contract": 'contract {"to": "Name", "target": "Name", "item": "timber", "qty": 10, "text": "..."}: a sealed private message offering payment (sent now) for removing the target from the game; only you and the recipient can ever see or cite it',
 }
 ACTION_DOC.update(J.ACTION_DOC)                                         # jurisdictions: found, invite, join, leave, declare
+ACTION_DOC.update(MD.ACTION_DOC)                                        # media2: listed only in worlds with it on (MD.absent_actions)
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
 title = "..." and intent = "..." and may keep persistent data in the dict `state`. Hooks: on_enact(), on_repeal(), on_round_start(r),
@@ -331,6 +333,7 @@ def system_prompt(inst: dict, a: dict) -> str:
         absent |= {"lease", "accept_lease"}
     absent |= CF.absent_actions(inst)                                # conflict: its actions only when conflict is on
     absent |= J.absent_actions(inst)                                 # jurisdictions: its actions only when on
+    absent |= MD.absent_actions(inst, a)                             # media2: its actions only with it on, editors'/Scholars' only for them
     if not (sp.get("outside_power") or {}).get("enabled"):
         absent |= {"pay_tribute"}
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
@@ -357,7 +360,7 @@ Actions (you have {a['actions']} per turn; each item in "actions" uses one):
 """ + "\n".join("- " + action_doc(k, inst, a) for k in allowed) + f"""
 
 {H.api_doc(inst, API_DOC) if inst['law_level'] != 'L0' else ''}
-{H.prompt_section(inst, a)}{R.prompt_section(inst, a)}{(chr(10) + CF.prompt_section(inst, a)) if CF.enabled_inst(inst) else ''}
+{H.prompt_section(inst, a) + MD.prompt_section(inst, a)}{R.prompt_section(inst, a)}{(chr(10) + CF.prompt_section(inst, a)) if CF.enabled_inst(inst) else ''}
 
 {library_text(inst, a)}
 
@@ -454,6 +457,8 @@ def render_event(k, e, viewer=None) -> str | None:
         return P.render_event(e, tag)
     if t in CF.EVENT_TYPES:                                             # conflict: disables, failed attacks, revealed order, guards
         return CF.render(k, e, tag)
+    if t in MD.EVENT_TYPES:                                             # media2: editions, licences, annotations, libraries
+        return MD.render_event(k, e, tag, viewer)
     if t in O.EVENT_TYPES:
         return O.render_event(e, tag)
     if t in CT.EVENT_TYPES:                                             # camps: typed-camp results, leases
@@ -478,7 +483,7 @@ def feed(k, aid: str, since: int, max_items: int = 80) -> tuple[str, int]:
             continue                                            # your own actions are summarised in "Results of your last turn"
         s = render_event(k, e, aid)
         if s:
-            lines.append(s)
+            lines.append(s + MD.annotation_suffix(k, e, aid))             # media2: [Outlet: text] commentary on posts
     return "\n".join(lines[-max_items:]) or "(nothing new)", len(k.events)
 
 
@@ -523,6 +528,7 @@ def state_view(k, aid: str) -> str:
     lines += LF.state_lines(k, aid)                                    # life: lifespan left, population, children, commissions
     lines += CF.state_lines(k, aid)                                    # conflict: weapons, fort, guards, role ([] when off)
     lines += J.state_lines(k, aid)                                    # jurisdictions: yours, hidden ones, which laws bind you
+    lines += MD.state_lines(k, aid)                                   # media2: outlets, subscriptions, licences, Scholars
     return "\n".join(lines)
 
 
@@ -544,6 +550,8 @@ def turn_prompt(k, a: dict, order: list[str], since: int, notes: str, last_resul
              "Results of your last turn:\n" + ("\n".join(last_results) if last_results else "(none)"),
              "What changed since your last turn:\n" + f,
              "Your notes from last turn:\n" + (notes or "(none)")]
+    if MD.enabled(k) and not (k.spec.get("context") or {}).get("enabled"):   # media2: editions at the top of the feed (the
+        parts.insert(3, MD.editions_block(k, a["id"]))                       # Context module's prompt calls editions_for itself)
     if final:
         parts.append("This is the final round. In goal_guesses_json, map each other agent to the goal name from the list that best fits what they did.")
     return "\n\n".join(parts), cursor
@@ -579,6 +587,8 @@ class ScriptedPolicy:
         if a["cls"] == "observer":                                       # the secret observer (own RNG: bots behave the same without it)
             from charter import observer
             return observer.scripted_act(k, a, n_actions, final)
+        if a.get("phase") == "editorial":                                # media2: scripted editors (own RNG stream)
+            return MD.scripted_editorial(k, a)
         r, aid, cls = self.rng, a["id"], a["cls"]
         acts = CF.scripted(k, aid, n_actions) if CF.on(k) else []     # conflict: own RNG stream, so other dry runs are unchanged
         mine = [x.split(":", 1)[1] for x in k.w["agents"][aid]["rights"] if x.startswith("harvest:")]
@@ -644,6 +654,7 @@ class ScriptedPolicy:
             acts.insert(0, {"action": "reply", "args_json": json.dumps({"message": mail[0]["id"], "text": "Agreed.", **pay})})
         if J.enabled(k):                                             # jurisdictions: a scripted founder (own RNG; only when on)
             acts[:0] = J.scripted_actions(k, a, n_actions)
+        acts = MD.scripted_extra(k, a, acts)                             # media2 only (own RNG stream): media and library actions
         guesses = {x: r.choice(G.drawable_names(k.spec)) for x in k.roster() if x != aid} if final else {}   # the goals drawable here
         out = {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
                "goal_guesses_json": json.dumps(guesses)}
