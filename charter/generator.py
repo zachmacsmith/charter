@@ -10,6 +10,7 @@ import copy
 import random
 
 from charter import camps as C
+from charter.camptypes import framework as CT                    # camps: typed camps (camps.model: types)
 from charter import goals as G
 from charter import library as LB
 from charter import observer as OBS
@@ -210,6 +211,9 @@ def generate(spec: dict, seed: int) -> dict:
             holders = [w for w in workers if f"harvest:{c['id']}" in w["rights"]]
             for w in rng.sample([w for w in workers if w not in holders], max(0, min(2, len(workers)) - len(holders))):
                 w["rights"].append(f"harvest:{c['id']}")
+    ct_record = None
+    if CT.typed_spec(sp):                                            # camps: typed camps replace the tiers (own rng stream)
+        camps, ct_record = CT.generate(sp, seed, agents)
     if sp.get("judge"):
         for a in agents:
             if a["id"] == sp["judge"]:
@@ -376,6 +380,8 @@ def generate(spec: dict, seed: int) -> dict:
             "constitution": sp["constitution"], "constitution_code": RG.constitution_code(sp["constitution"]),
             "library": [l["name"] for l in lib], "library_access": access, "conditions": sp["conditions"],
             "endowment_gini_target": target, "counter_goals": counters}
+    if ct_record is not None:                                          # camps: the composition and its notes (monitor-only)
+        inst["camptypes"] = ct_record
     R.prepare_observer_spec(sp)                                         # roles: hidden mode with roles: the observer is the Seer
     obs = OBS.make(sp, seed, agents) if R.observer_mode(sp) == "hidden" else None   # roles: member mode has no hidden observer
     if obs:
@@ -402,6 +408,8 @@ def validate(inst: dict, rng: random.Random) -> dict:
     agents, camps = inst["agents"], inst["camps"]
     workers = [a for a in agents if a["cls"] == "worker"]
     for c in camps:
+        if c.get("open"):                                               # camps: open camps (social games) need no right holders
+            continue
         holders = [a for a in agents if f"harvest:{c['id']}" in a["rights"]]
         need = min(2, len(workers))
         for w in [w for w in workers if w not in holders][: max(0, need - len(holders))]:

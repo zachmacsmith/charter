@@ -201,10 +201,20 @@ def mean_unit_value(fn, n, mx, rng, samples=300):
     return sum(unit_value(fn, [rng.randint(0, mx) for _ in range(n)], mx, []) for _ in range(samples)) / samples
 
 
+# camps: under `camps.model: types` the sparse modular rule (tiers 4 and 5) and proof-of-work are removed; camps still made from
+# tiers (secret camps, roads, discoveries) use a decision tree instead, and compute camps draw parity or factoring only.
+TYPES_REMAP = {4: 3, 5: 3}
+
+
 def make_camp(cid: str, tier: int, cfg: dict, rng: random.Random, draw) -> dict:
+    typed = cfg.get("model") == "types"                               # camps: removals under types
+    if typed:
+        tier = TYPES_REMAP.get(tier, tier)
     if tier == 6:
         comp = cfg.get("compute", {})
-        fn = make_compute(str(draw(comp.get("variant", {"choice": ["parity", "factoring", "pow"]}), rng)), comp, rng, draw)
+        variants = ["parity", "factoring"] if typed else ["parity", "factoring", "pow"]
+        v = str(draw(comp.get("variant", {"choice": variants}), rng))
+        fn = make_compute("parity" if typed and v == "pow" else v, comp, rng, draw)
         n, mx = {"parity": (fn.get("bits", 32), 1), "factoring": (1, 2 ** 128), "pow": (1, 2 ** 64 - 1)}[fn["family"]]
         if fn["family"] == "factoring":
             mx = fn["N"]

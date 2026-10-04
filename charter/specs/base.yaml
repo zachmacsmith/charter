@@ -25,6 +25,12 @@ camps:
   max_yield: 8                    # f(x) at the optimum, before stock scaling
   drift_every: 20
   holders_per_worker: {randint: [1, 2]}
+  # model: legacy                 # camps: legacy (default: the tiers above) | types (New Features camp types; charter/camptypes/).
+  #                               #   Under types: typed: {set: standard, wildcard_prob: 0.5, value_per_action: 8, targets: {...},
+  #                               #   sustain_harvests: 1, regrowth_r: [0.05, 0.2], start_stock: [0.7, 1.0], noise: 0.1,
+  #                               #   holders_per_worker: [1, 2], visibility: sealed, disclosure: totals, modifiers: {<role>: {...}},
+  #                               #   types: {<type>: {...}}}; leases: {enabled: null, offer_lapse: 2, max_rounds: 20}.
+  #                               #   Defaults live in camptypes/framework.py (kept out of this file so legacy worlds are unchanged).
   compute:                        # tier-6 camps
     variant: {choice: [parity, factoring, pow]}
     parity_bits: 32
@@ -254,3 +260,6 @@ events:                           # world events (charter/events.py): a hidden s
     count: {randint: [3, 5]}      # agents whose goal changes, drawn once per world
     window: [0.2, 0.8]            # the change round is drawn in this fraction of the run
     slots: all                    # all: every goal slot the agent has is redrawn | primary: only the primary goal
+# resources:                      # camps (charter/resources.py; defaults in code, so legacy worlds are unchanged)
+#   placement: default            # default | copper_solo | gold_solo: which resource the solo-science camp makes (types only)
+#   upkeep: {enabled: false, every: 5, item: timber, qty: 1}   # each agent consumes 1 timber every 5 rounds or loses an action until paid

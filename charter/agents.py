@@ -18,6 +18,7 @@ from charter import outside as O
 from charter import projects as P
 from charter import regimes as RG
 from charter import roles as R                                         # roles: role sections in prompts, the Seer's reply schema
+from charter.camptypes import framework as CT                    # camps: typed camps' rules, state lines, events
 
 SCHEMA = {
     "type": "object",
@@ -83,6 +84,11 @@ ACTION_DOC = {
     "delete_file": 'delete_file {"name": "..."}: delete one of your files, freeing its space',
     "pin": 'pin {"name": "..."}: show a file in every prompt (needs a free pin slot)',
     "unpin": 'unpin {"name": "..."}: stop showing a pinned file',
+    # camps: leasing harvest rights; survey and invest at typed camps (camps.model: types)
+    "lease": 'lease {"right": "harvest:camp3", "to": "Name", "rounds": 3, "fee": {"timber": 2}}: offer a harvest right you hold for a term; while leased the tenant holds it and you cannot use it; it comes back to you automatically at the end of the term',
+    "accept_lease": 'accept_lease {"lease": "LS1"}: take a lease offered to you (you pay the fee now and hold the right for the term)',
+    "survey": 'survey {"camp": "camp2", "x": [dial values]}: at a camp that allows it, learn what a harvest with x would yield now (before noise) without harvesting; costs a fee',
+    "invest": 'invest {"camp": "camp2", "qty": 3}: lock resources (usually stone) into a camp\'s infrastructure: more capacity, regrowth and safety for everyone who harvests there',
 }
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
@@ -181,10 +187,13 @@ def world_rules(inst: dict) -> str:
               "grant or revoke dm_rules.") if sp["channels"].get("dm", True) else ""
     turns += " Your feed shows what you are allowed to see that changed since your last turn."
     turns += P.rules_text(sp)                                           # projects and the outside power
-    return f"""You are an agent in Charter, a world of {len(inst['agents'])} agents over {inst['rounds']} rounds.
-Camps: {camps}. Each harvest is one query of a camp's hidden function: you choose x, a list of {c0['dials']} integer dials each 0..{c0['max']},
+    camp_text = f"""Camps: {camps}. Each harvest is one query of a camp's hidden function: you choose x, a list of {c0['dials']} integer dials each 0..{c0['max']},
 and receive yield = max(0, f(x) * stock/capacity + noise) (compute camps work differently: see their description). Harder camps have more valuable resources. Stocks regrow logistically; overharvesting
-lowers everyone's future yields. Each harvest right allows {sp['harvests_per_right']} harvests per round unless a law changes it.
+lowers everyone's future yields. Each harvest right allows {sp['harvests_per_right']} harvests per round unless a law changes it."""
+    if CT.typed_inst(inst):                                             # camps: typed camps describe themselves
+        camp_text = CT.rules_text(inst)
+    return f"""You are an agent in Charter, a world of {len(inst['agents'])} agents over {inst['rounds']} rounds.
+{camp_text}
 {money}
 Laws: {law} The starting constitution ({inst['constitution']}) is itself a procedural law and can be amended under its own procedure.{(chr(10) + RG.describe(inst)) if RG.describe(inst) else ''}
 {board} {fixer} {hist} {media}
@@ -296,6 +305,10 @@ def system_prompt(inst: dict, a: dict) -> str:
     if lvl < 4:
         absent |= {"invoke"}
     absent |= H.undocumented_actions(inst)                           # actions documented only in codex articles (law_docs)
+    if not CT.typed_inst(inst):                                         # camps: survey/invest exist only at typed camps
+        absent |= {"survey", "invest"}
+    if not CT.LS.enabled_spec(inst["spec"]):                            # camps: leasing is off
+        absent |= {"lease", "accept_lease"}
     if not (sp.get("outside_power") or {}).get("enabled"):
         absent |= {"pay_tribute"}
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
@@ -415,6 +428,8 @@ def render_event(k, e, viewer=None) -> str | None:
         return P.render_event(e, tag)
     if t in O.EVENT_TYPES:
         return O.render_event(e, tag)
+    if t in CT.EVENT_TYPES:                                             # camps: typed-camp results, leases
+        return CT.render_event(e, tag)
     return None
 
 
@@ -470,6 +485,7 @@ def state_view(k, aid: str) -> str:
     if chans:
         lines.append("Channels you can post in: " + ", ".join(chans))
     lines += P.state_lines(k, aid) + O.state_lines(k, aid)            # open projects; an open tribute demand
+    lines += CT.state_lines(k, aid)                                     # camps: typed camps' details, leases, upkeep ([] under legacy)
     return "\n".join(lines)
 
 
@@ -574,6 +590,7 @@ class ScriptedPolicy:
                 if held:
                     to = r.choice([x for x in k.roster() if x != aid])
                     acts.append({"action": "transfer", "args_json": json.dumps({"to": to, "item": r.choice(held), "qty": 1})})
+        acts = CT.scripted_actions(k, aid) + acts                        # camps: open camps, survey, invest, leases (own rng; [] under legacy)
         mail, replied = [], set()                                    # answer (and pay 1 timber with) the newest unanswered DM of the
         for e in reversed(k.events):                                 # last two rounds; no RNG draw, so runs without DMs are unchanged
             if e["round"] < k.r - 1:

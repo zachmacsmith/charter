@@ -22,8 +22,9 @@ from charter import outside as O
 from charter import projects as P
 
 CATEGORIES = {                                                         # activity category of every agent action (activity_mix)
-    "productive": {"harvest", "run_python", "read_archive", "search_archive", "write_archive"},
-    "economic": {"transfer", "deposit", "redeem", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute"},
+    "productive": {"harvest", "run_python", "read_archive", "search_archive", "write_archive", "survey", "invest"},   # camps: survey, invest
+    "economic": {"transfer", "deposit", "redeem", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
+                 "lease", "accept_lease"},                                  # camps: leases
     "political": {"propose", "vote", "veto", "patch", "request_fix", "accuse", "respond", "rule", "invoke", "set_dm_limit"},
     "talk": {"post", "dm", "reply", "forge_dm", "anon_post", "publish", "write_digest", "report", "create_channel", "channel_post",
              "add_member", "remove_member", "close_channel"},
@@ -255,6 +256,9 @@ def score(run_dir) -> dict:
     m["watch_mentions"] = obs["watch"]
     from charter import hidden as H
     m["capabilities"] = H.metrics(gt)                                  # per-agent power uses and attempts at words
+    from charter.camptypes import framework as CT
+    if gt.get("camptypes"):                                            # camps: yield per camp type, coordination success
+        m["camps"] = CT.metrics(gt)
     inst = gt["instance"]
     sp = inst["spec"]
     m["regime_start"] = _regime_start(inst)

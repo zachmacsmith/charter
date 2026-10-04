@@ -33,6 +33,8 @@ from charter import observer as OBS
 from charter import regimes as RG
 from charter import report
 from charter import roles as R                                         # roles: the Seer's reading in member mode
+from charter import resources as RS                              # camps: optional upkeep
+from charter.camptypes import framework as CT                    # camps: typed camps' ground truth
 from charter.kernel import Kernel
 
 PREDICATES = {**LB.PREDICATES, **{f"outcome:{c}": f for c, f in LB.OUTCOMES.items()}}
@@ -196,6 +198,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                 n = min(n, lim["n"])
             if cx:                                                      # context: the Core layer, with the current manual index
                 sysp[aid] = CX.core_prompt(inst, a, k)
+            n = RS.actions_after_upkeep(k, aid, n)                     # camps: optional upkeep arrears cost an action (off by default)
             user, cursor = AG.turn_prompt(k, a, order, cursors.get(aid, 0), notes.get(aid, ""), results.get(aid, []), n, final,
                                           simultaneous=(mode == "simultaneous"))
             user = R.turn_section(k, aid, user)                         # roles: the Seer's private "What you saw" section
@@ -384,4 +387,5 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
         gt["context"] = CX.truth(k)
     if "roles" in k.w:
         gt["roles"] = R.truth(k)                                        # roles: holders at the end, passes (monitor-only)
+    gt.update(CT.truth(k))                                              # camps: typed camps' hidden rules and stats ({} under legacy)
     (out / "ground_truth.json").write_text(json.dumps(gt, indent=1, default=list))
