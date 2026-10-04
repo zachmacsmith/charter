@@ -65,6 +65,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 | `llm.py`, `sandbox.py` | model calls (both backends), Docker code sandbox |
 | `runner.py`, `scorer.py`, `report.py` | play, score (goals + metrics), readable reports |
 | `archive.py`, `archive/` | the Scientists' archive (read-only) and the shared archive they write |
+| `projects.py`, `outside.py` | threshold public goods (granary, upgrade, road, discovery); the outside power's tribute and raids |
 
 ## Extensions beyond the spec
 - **Scientists hold the archive** (`archive/`, ~100 documents: the full library with code, further laws, the mathematics of the world,
@@ -114,6 +115,25 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   round, so "propose, accept, confirm" fits in one round. DMs do not use actions here. Agreements are not
   enforced: the agreed actions still run with everyone else's in the round order. Reply calls are logged in `reasoning.jsonl` with
   `phase: dm_reply_N` and shown in the transcripts.
+- **Projects: threshold public goods** (`projects.py`, spec `projects`). A project pays off only if pooled contributions reach a threshold
+  (a value in any resources, or specific resources) by a deadline; contributions are held in escrow and, if it fails, refunded (an
+  assurance contract) or given to the reserve, as each project states. Kinds: *granary* (harvests can no longer take a camp's stock
+  below `floor` x capacity), *upgrade* (a camp's yields x `mult` for N rounds or for good; stacks), *road* (a new camp from
+  `camps.make_camp`, its hidden function drawn when built and logged monitor-only; harvest rights to the contributors, an excludable
+  club good), *discovery* (a new camp found only if the threshold is met AND `min_share` of non-official agents each gave `min_each`;
+  rights to every Worker and every contributor). Agents `contribute`; open projects and who gave what (public by default,
+  `public_contributions`) are in every turn's state view. Random projects arise by a seeded Poisson draw (`mean_interval`, at most
+  `max_open` at once; entry point `projects.spawn_random_project(k, rng)` for an event scheduler); laws use `start_project`,
+  `contribute_project` (from the reserve), `set_refund` (all structural) and `projects()`. Library: Public Works Act, Assurance Guarantee.
+  Scored: offered/funded/failed, free riding (share of beneficiaries who gave nothing), concentration (top share, HHI), cross-class
+  contribution, value given by class (`score.json -> metrics.projects`).
+- **Outside power** (`outside.py`, spec `outside_power`, off by default). Every `every` rounds it publicly demands tribute (a value or
+  specific resources) due in `deadline_in` rounds; agents `pay_tribute`, laws pay from the reserve (`pay_tribute`, structural) and read
+  `tribute_status()`. Unpaid by the deadline: partial payments are lost and it raids a camp (random or richest): the camp loses
+  `stock_loss` of its stock and every holder of its harvest right loses `seize_frac` of their holdings of its resource. Demands grow
+  after a raid or a payment (`escalation`). Library: War Chest (the reserve pays), Defence Emergency (the proposer's laws pass at once
+  while a demand is open; otherwise majority of Legislators); the general Emergency Decree also works. Scored: demands, paid in full,
+  raids, stock lost, paid by agent and by class (`metrics.tribute`).
 - **Convertible currency**: `set_convertible(currency)` turns on kernel deposit/redeem at price P, so a backed currency is possible at L2.
 - **Static class** also counts `on_harvest`/`on_transfer` that return a deduction, a tax or False as structural (they move holdings).
 

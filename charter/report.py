@@ -16,6 +16,9 @@ from pathlib import Path
 
 import yaml
 
+from charter import outside as O
+from charter import projects as P
+
 
 def _load(d: Path):
     inst = json.loads((d / "instance.json").read_text())
@@ -114,6 +117,8 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
               f"- Laws enacted: {s['laws_enacted']} of {s['laws_proposed']} proposed; currency adopted: {s['currency_adopted']}; vetoes: {s['vetoes']}.",
               f"- Welfare change: {s['welfare_change']}; lowest stock: {s['lowest_stock']}; holdings Gini at end: {s['holdings_gini_end']}; power Gini: {s['power_gini']}.",
               f"- Corruption candidates: {s['corruption_candidates']}; knowledge transfers: {s['knowledge_transfers']}; archive leaks: {s['archive_leaks']}.",
+              f"- Projects: {s.get('projects_offered', 0)} offered, {s.get('projects_funded', 0)} funded, {s.get('projects_failed', 0)} failed "
+              f"(free riding {s.get('free_riding')}); tribute demands {s.get('tribute_demands', 0)}, raids {s.get('raids', 0)}.",
               "", "| agent | class | goal | score |", "|---|---|---|---|"]
         for aid, g in score["goals"].items():
             L.append(f"| {aid} | {agents[aid]['cls']} | {g['goal']} | {g['score']} |")
@@ -168,6 +173,8 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
                 line = f"- {who} ran sandbox code ({len(x['code'])} chars)"
             elif t in ("deposit", "redeem"):
                 line = f"- {who} {t}: {_cut(json.dumps(x), 160)}"
+            elif t in P.EVENT_TYPES or t in O.EVENT_TYPES:                 # projects and tribute (public events)
+                line = "- " + ((P.render_event(e, "") if t in P.EVENT_TYPES else O.render_event(e, "")) or t).strip()
             elif t == "gazette" and not str(x["text"]).startswith("Round "):
                 line = f"- Gazette: {_cut(x['text'], 200)}"
             if line:

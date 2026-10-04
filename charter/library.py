@@ -639,6 +639,65 @@ def on_ruling(case, verdict, accuser, accused):
         move(accuser, accused, "timber", min(2, balance(accuser, "timber")))
 ''')
 
+# ------------------------------------------------------------------ projects and outside pressure (charter/projects.py, outside.py)
+law("Public Works Act", "spending", '''
+title = "Public Works Act"
+intent = "Opens a road to a new camp (refunded if not funded within 6 rounds) and each round pays a quarter of the reserve toward the open project closest to its threshold."
+
+def on_enact():
+    start_project("road", 40, 6, True, None)
+
+def on_round_end(r):
+    best = None
+    for pid, p in projects().items():
+        if p["status"] == "open":
+            if best is None or p["pooled_value"] / p["threshold_value"] > best["pooled_value"] / best["threshold_value"]:
+                best = p
+    if best is None:
+        return
+    for item, qty in reserve().items():
+        if qty > 0:
+            contribute_project(best["id"], item, qty / 4)
+''')
+law("Assurance Guarantee", "commons", '''
+title = "Assurance Guarantee"
+intent = "Every open project becomes an assurance contract: if it is not funded by its deadline, every contribution is refunded."
+
+def guarantee():
+    for pid, p in projects().items():
+        if p["status"] == "open" and not p["refund"]:
+            set_refund(pid, True)
+
+def on_enact():
+    guarantee()
+
+def on_round_start(r):
+    guarantee()
+''')
+law("War Chest", "spending", '''
+title = "War Chest"
+intent = "When an outside power demands tribute, the reserve pays as much of it as it can, at once."
+
+def on_round_start(r):
+    if tribute_status()["open"]:
+        for item, qty in reserve().items():
+            pay_tribute(item, qty)
+''')
+law("Defence Emergency", "governance", '''
+title = "Defence Emergency"
+intent = "While an outside power's tribute demand is open, ordinary and structural laws proposed by this law's proposer pass at once; otherwise all Legislators vote by majority."
+
+def emergency(p):
+    if tribute_status()["open"] and p.author == state["chair"]:
+        return True
+    return {"electorate": holders("vote"), "rule": "majority"}
+
+def on_enact():
+    state["chair"] = proposer()
+    set_procedure("ordinary", emergency)
+    set_procedure("structural", emergency)
+''')
+
 # ------------------------------------------------------------------ constitutions (procedural laws in force at round 0)
 CONSTITUTIONS = {
     "assembly": '''

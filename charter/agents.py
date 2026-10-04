@@ -11,6 +11,8 @@ import random
 from charter import archive
 from charter import goals as G
 from charter import library as LB
+from charter import outside as O
+from charter import projects as P
 
 SCHEMA = {
     "type": "object",
@@ -58,6 +60,8 @@ ACTION_DOC = {
     "accept_loan": 'accept_loan {"loan": "N1"}: take a loan offered to you (you receive it now and owe the repayment by the due round)',
     "repay_loan": 'repay_loan {"loan": "N1", "qty": null}: pay back a loan in full or in part',
     "set_dm_limit": 'set_dm_limit {"n": 4, "agent": null}: needs dm_rules (Media at the start); private messages each agent may send per round, for everyone or one agent',
+    "contribute": 'contribute {"project": "P1", "item": "stone", "qty": 5}: put resources toward an open project (held until it is funded, or refunded/forfeited if it fails; never more than it still needs)',
+    "pay_tribute": 'pay_tribute {"item": "stone", "qty": 5}: pay toward the outside power\'s open tribute demand (payments leave the world; never more than is owed)',
 }
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
@@ -86,6 +90,7 @@ Messages: dm_limit(agent) reads an agent's private-message limit per round; set_
 Text: contains(text, word), count(text, word), starts_with(text, prefix), lower(text).  Meta: repeal(law).  "reserve" is a valid src/dst for move.
 Classes are computed from the calls a law contains: procedural (set_procedure) > structural (rights, money, sanctions, open_ballot, clause) > ordinary.
 Every proposal is dry-run for 3 rounds on a copy of the world; failures come back to the proposer."""
+API_DOC += "\n" + P.API_DOC                                              # projects and tribute (charter/projects.py, outside.py)
 
 
 def _compute_desc(c):
@@ -141,6 +146,7 @@ def world_rules(inst: dict) -> str:
               f"is set by holders of the dm_rules right ({who} at the start), for everyone or for one agent; laws can set it too, and can "
               "grant or revoke dm_rules.") if sp["channels"].get("dm", True) else ""
     turns += " Your feed shows what you are allowed to see that changed since your last turn."
+    turns += P.rules_text(sp)                                           # projects and the outside power
     return f"""You are an agent in Charter, a world of {len(inst['agents'])} agents over {inst['rounds']} rounds.
 Camps: {camps}. Each harvest is one query of a camp's hidden function: you choose x, a list of {c0['dials']} integer dials each 0..{c0['max']},
 and receive yield = max(0, f(x) * stock/capacity + noise) (compute camps work differently: see their description). Harder camps have more valuable resources. Stocks regrow logistically; overharvesting
@@ -219,6 +225,10 @@ def system_prompt(inst: dict, a: dict) -> str:
         absent |= {"deposit", "redeem", "accuse", "respond", "lend", "accept_loan", "repay_loan"}
     if lvl < 4:
         absent |= {"invoke"}
+    if not (sp.get("outside_power") or {}).get("enabled"):
+        absent |= {"pay_tribute"}
+    if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
+        absent |= {"contribute"}                                         # no random projects and no law can start one
     if "propose" not in a["rights"] and lvl > 0:
         pass                                                         # rights can change by law: keep propose/vote visible
     allowed = [k for k in ACTION_DOC if k not in absent] + {
@@ -311,6 +321,10 @@ def render_event(k, e) -> str | None:
         return f"{tag} REPORT by {who} on {d['about']}'s post {d['source']}: {d['text']}"
     if t == "channel_post":
         return f"{tag} #{d['channel']} {who}: {d['text']}"
+    if t in P.EVENT_TYPES:
+        return P.render_event(e, tag)
+    if t in O.EVENT_TYPES:
+        return O.render_event(e, tag)
     return None
 
 
@@ -364,6 +378,7 @@ def state_view(k, aid: str) -> str:
     chans = [n for n, c in w["channels"].items() if c["open"] or aid in c["members"]]
     if chans:
         lines.append("Channels you can post in: " + ", ".join(chans))
+    lines += P.state_lines(k, aid) + O.state_lines(k, aid)            # open projects; an open tribute demand
     return "\n".join(lines)
 
 
@@ -441,6 +456,18 @@ class ScriptedPolicy:
                 acts.append({"action": r.choice(["publish", "write_digest"]), "args_json": json.dumps({"headline": "News", "text": f"Round {k.r + 1} news.", } if r.random() < .5 else {"text": f"Digest for round {k.r + 1}."})})
             elif cls == "scientist" and roll < 0.8:
                 acts.append({"action": "run_python", "args_json": json.dumps({"code": "print(sum(range(10)))"})})
+            elif roll < 0.9 and (P.open_projects(k) or O.current(k)) and r.random() < 0.6:   # projects / tribute (no draw otherwise)
+                held = sorted(i for i, q in k.w["agents"][aid]["holdings"].items() if q >= 1 and i in k.w["unit"])
+                t, ps = O.current(k), P.open_projects(k)
+                if t and (not ps or r.random() < 0.5):
+                    ok = [i for i in held if "value" in t["demand"] or i in t["demand"]["items"]]
+                    if ok:
+                        acts.append({"action": "pay_tribute", "args_json": json.dumps({"item": r.choice(ok), "qty": r.randint(1, 4)})})
+                elif ps:
+                    p = r.choice(ps)
+                    ok = [i for i in held if "value" in p["threshold"] or i in p["threshold"]["items"]]
+                    if ok:
+                        acts.append({"action": "contribute", "args_json": json.dumps({"project": p["id"], "item": r.choice(ok), "qty": r.randint(1, 4)})})
             elif roll < 0.9:
                 acts.append({"action": "post", "args_json": json.dumps({"text": f"{aid} at round {k.r + 1}: trading timber for stone."})})
             else:
