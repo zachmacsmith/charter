@@ -36,11 +36,35 @@ class ActionError(Exception):
     pass
 
 
+_CAMP_REF = __import__("re").compile(r"^\s*(?:camp)?\s*(\d+)\s*$", __import__("re").I)
+_ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to"}, "reply": {"message_id": "message"},
+            "post": {"message": "text"}, "transfer": {"recipient": "to", "amount": "qty", "quantity": "qty"}}
+_IGNORED = {"propose": {"title", "name"}}
+
+
+def _normalise_args(name: str, args):
+    """Forgiving argument names seen from models: a camp given as 4 or "camp 4" means "camp4"; common synonyms (message for
+    text, amount for qty) when the proper name is absent; a law's title passed beside its code is ignored (it is set in the code)."""
+    if not isinstance(args, dict):
+        return args
+    out, alias = {}, _ALIASES.get(name, {})
+    for key, v in args.items():
+        if key in alias and alias[key] not in args:
+            key = alias[key]
+        if key in _IGNORED.get(name, ()):
+            continue
+        if key == "camp" and isinstance(v, (int, str)) and _CAMP_REF.match(str(v)):
+            v = "camp" + _CAMP_REF.match(str(v)).group(1)
+        out[key] = v
+    return out
+
+
 def act(k, aid: str, name: str, args: dict) -> str:
     hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MD.ACTIONS))   # context, media2: off = unknown
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     fn = globals()[f"_{name}"]
+    args = _normalise_args(name, args)
     if k.w["agents"].get(aid, {}).get("departed") is not None:        # world events: departed agents are out of play
         raise ActionError("you have left the world")
     for key in ("to", "agent"):

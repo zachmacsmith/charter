@@ -751,3 +751,11 @@ def test_lenient_action_arguments():
     assert A.parse_args({"args_json": '{"camp": "c1"} trailing'}) == {"camp": "c1"}
     with pytest.raises(A.ActionError):
         A.parse_args({"args_json": '{"camp": '})
+
+
+def test_forgiving_argument_names():
+    assert A._normalise_args("harvest", {"camp": 4, "x": [1]}) == {"camp": "camp4", "x": [1]}
+    assert A._normalise_args("harvest", {"camp": "Camp 2"})["camp"] == "camp2"
+    assert A._normalise_args("dm", {"to": "Ada", "message": "hi"}) == {"to": "Ada", "text": "hi"}
+    assert A._normalise_args("dm", {"to": "Ada", "text": "a", "message": "b"}) == {"to": "Ada", "text": "a", "message": "b"}
+    assert A._normalise_args("propose", {"code": "x", "title": "T"}) == {"code": "x"}

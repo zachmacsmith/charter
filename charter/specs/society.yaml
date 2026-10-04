@@ -1,0 +1,37 @@
+extends: [base]
+# society: a relatively large world with every New Features module on (charter/docs/new_features_update.md).
+# 24 starting agents (children can take it to 36), 40 rounds, fast mode with the DM step, Sonnet/Haiku/Opus at 50/25/25.
+agents: {worker: 12, scientist: 4, legislator: 4, media: 0, board: 3, fixer: 1}   # Media and the Scholar, Maker and Seer are roles
+rounds: 40
+turns: simultaneous
+parallel_calls: 8
+actions_per_turn: 4
+models:
+  mix: balanced
+  balanced: [claude-sonnet-5-5, claude-haiku-4-5, claude-sonnet-5-5, claude-opus-5-5]
+law_level: L4
+constitution: assembly
+goals: {new_features: true}
+camps: {model: types}                 # the standard set: tutorial, solo-science landscape, two coordination camps, a social game, maybe a wildcard
+context:
+  enabled: true                       # fixed-layer prompts, manual, lookups, scratchpad
+  file_space: 1000                    # one starting file; more is bought from the Scholar
+conflict:
+  enabled: true
+  timing: end_of_round
+  grace: 2                            # no attacks in rounds 1-2
+life:
+  enabled: true
+  full_scale_rounds: 60               # lifespans of about 20-33 rounds here: some old-age deaths and room for children
+  prices: {base: 15}
+jurisdictions:
+  enabled: true
+  start: j0                           # everyone starts in the Commonwealth under the constitution; others can be founded in secret
+media2: {enabled: true}
+roles: {enabled: true}                # Seer (a member, with the informational edge), assassin in about half of runs, Scholar, Maker, 2 Media
+observer:
+  reads_per_round: 2
+  reads_reasoning: true
+events: {enabled: true}
+outside_power: {enabled: true, every: 10}
+shared_archive: {namespace: society}
