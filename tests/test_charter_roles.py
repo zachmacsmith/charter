@@ -250,8 +250,9 @@ def test_eliminator_is_gated_by_conflict_and_takes_its_share_from_wealth():
     off = G.weights({}, "worker")
     on = G.weights({}, "worker", modules={"conflict"})
     assert off["Eliminator"] == 0 and abs(on["Eliminator"] - 1.0) < 1e-9
-    assert abs((off["Wealth"] - on["Wealth"]) - 1.0) < 1e-9
-    assert all(abs(off[g] - on[g]) < 1e-9 for g in G.CATALOGUE if g not in ("Eliminator", "Wealth"))
+    assert abs((off["Wealth"] - on["Wealth"]) - 2.0) < 1e-9                  # Eliminator and Seat (on wherever the update is) each take 1
+    assert abs(on["Seat"] - 1.0) < 1e-9 and on["Dynasty"] == 0
+    assert all(abs(off[g] - on[g]) < 1e-9 for g in G.CATALOGUE if g not in ("Eliminator", "Seat", "Wealth"))
     assert abs(sum(off.values()) - sum(on.values())) < 1e-9
     assert G.weights({"weights": {"Eliminator": 5, "Wealth": 1}}, "worker")["Eliminator"] == 0
     assert G.enabled_modules({"conflict": {"enabled": True}}) == {"conflict"} and G.enabled_modules({}) == set()

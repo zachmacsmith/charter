@@ -100,18 +100,20 @@ CATALOGUE = {
     # roles: New Features Update goals (weight = percent of ALL draws, taken from Wealth: see DIRECT_SHARE). Neutral wording.
     "Eliminator": ("Adversarial", 1, "L0", "remove as many other agents from the game as you can by disabling them yourself (you score by "
                                           "the share of the other agents you disabled)"),
+    # life: the New Features Update's goals
+    "Seat": ("Political", 1, "L0", "hold a seat on the Board at the end (Board members name successors, who take their seats when they "
+                                 "leave the game)"),
+    "Dynasty": ("Lineage", 1, "L0", "have as many living descendants (your children, their children, and so on) as possible at the end, "
+                                  "scored against the population cap"),
 }
-# roles: goal gating by module ("only sampled when"): a goal listed here gets weight 0 unless its module's spec flag is on
-# (`<module>.enabled`). Other modules add their own entries (Life: Dynasty -> life).
-ONLY_WHEN = {"Eliminator": "conflict"}
-# roles: goals whose catalogue weight is a direct percent of all draws, taken out of Wealth's share rather than out of a category
-# (spec: "Wealth drops from 36% to 33% to make room" for Eliminator, Dynasty and Seat, 1% each).
-# NOTE on CATEGORY_WEIGHTS: deliberately left unchanged, so worlds without the new modules draw exactly as before (golden
-# fingerprints). Each active direct goal instead takes its own weight from Wealth after the category split, so with all three new
-# goals active Wealth loses 3 points of draws. Life adds Dynasty and Seat to DIRECT_SHARE (and NEW_GOALS).
-DIRECT_SHARE = {"Eliminator"}
-# roles: goals added by the New Features Update; the scripted bots never guess them, so their RNG draws stay as before
-NEW_GOALS = {"Eliminator"}
+# New Features Update goals (spec: Eliminator, Dynasty, Seat at 1% each, "Wealth drops from 36% to 33% to make room"). Each is drawn
+# only where the update's features are on (features_on: goals.new_features, any new module enabled, or typed camps) and its own
+# module is on (Eliminator: conflict, Dynasty: life, Seat: none), and takes its weight (percent of all draws) out of Wealth's share,
+# so worlds without the new features draw exactly as before (golden fingerprints).
+NEW_GOALS = {"Eliminator": "conflict", "Seat": None, "Dynasty": "life"}
+ONLY_WHEN = {g: m for g, m in NEW_GOALS.items() if m}
+DIRECT_SHARE = set(NEW_GOALS)
+NEW_MODULES = ("conflict", "life", "roles", "jurisdictions", "media2", "context")
 RELATIONAL_POSTPASS = ("Mirror", "Ally", "Foil")                    # targets assigned once every agent's goals are drawn
 CLASS_TILT = {"legislator": {"Political": 2.0, "Agenda": 1.5}, "worker": {"Economic": 1.2, "Commons": 1.5},
               "scientist": {"Knowledge": 2.0}}
@@ -131,49 +133,74 @@ COUNTER_GOALS = {"Block": "against another agent's Enact, Enact as author or Dur
 # Default share of each goal category (percent of draws). Within a category, goals split its share in proportion to their
 # CATALOGUE weights, so a category's total is set here and the rarity of each goal inside it there.
 CATEGORY_WEIGHTS = {"Economic": 40, "Political": 16, "Agenda": 9, "Social": 8, "Relational": 8, "Information": 6, "Knowledge": 5,
-                    "Commons": 3, "Culture": 3, "Adversarial": 2}
+                    "Commons": 3, "Culture": 3, "Adversarial": 2, "Lineage": 0}   # Lineage: Dynasty takes its share from Wealth (DIRECT_SHARE)
+
+
+def features_on(spec: dict | None) -> bool:
+    """Whether a world uses the New Features Update (its goals can be drawn): goals.new_features, or any new module on."""
+    sp = spec or {}
+    return bool((sp.get("goals") or {}).get("new_features")) or (sp.get("camps") or {}).get("model") == "types" or any(
+        isinstance(sp.get(m), dict) and sp[m].get("enabled") for m in NEW_MODULES)
 
 
 def enabled_modules(sp: dict | None) -> set:
-    """roles: the New Features modules switched on in a spec (for goal gating, ONLY_WHEN)."""
+    """The New Features modules switched on in a spec."""
     sp = sp or {}
-    return {m for m in set(ONLY_WHEN.values()) if isinstance(sp.get(m), dict) and sp[m].get("enabled")}
+    return {m for m in NEW_MODULES if isinstance(sp.get(m), dict) and sp[m].get("enabled")}
+
+
+def goal_on(goal: str, spec_goals: dict, spec: dict | None = None) -> bool:
+    """Whether a goal can be drawn: the update's goals need the update's features and their own module."""
+    if goal not in NEW_GOALS:
+        return True
+    sp = dict(spec or {})
+    sp.setdefault("goals", spec_goals or {})
+    mod = NEW_GOALS[goal]
+    return features_on(sp) and (mod is None or bool((sp.get(mod) or {}).get("enabled")))
+
+
+def drawable_names(spec: dict | None) -> list:
+    """Catalogue names that can be drawn (and so guessed) in this world."""
+    return [g for g in CATALOGUE if goal_on(g, (spec or {}).get("goals") or {}, spec)]
 
 
 def bot_goal_names() -> list:
-    """roles: goal names the scripted bots guess from (the catalogue before the New Features Update, so dry runs stay identical)."""
+    """Goal names the scripted bots guess from in worlds without the update (the catalogue before it, so dry runs stay identical)."""
     return [g for g in CATALOGUE if g not in NEW_GOALS]
 
 
-def weights(spec_goals: dict, cls: str, modules=None) -> dict:
+def weights(spec_goals: dict, cls: str, spec: dict | None = None, modules=None) -> dict:
     """Draw weight of every goal (percent when nothing is excluded). spec goals.weights (a full {goal: weight} map) replaces
     everything; otherwise goals.category_weights (default CATEGORY_WEIGHTS; `null` for the raw CATALOGUE weights) sets each
-    category's share and goals.within ({goal: weight}) can change a goal's weight inside its category.
-    roles: `modules` (enabled_modules(spec)) switches on goals gated by ONLY_WHEN; DIRECT_SHARE goals take their weight from Wealth."""
+    category's share and goals.within ({goal: weight}) can change a goal's weight inside its category. The update's goals
+    (NEW_GOALS) are drawn only where goal_on allows, each taking its weight out of Wealth's share. `modules` is accepted for
+    old callers (a set of enabled module names) and used only when `spec` is not given."""
+    if spec is None and modules is not None:
+        spec = {m: {"enabled": True} for m in modules}
+    sg = spec_goals or {}
     w = {g: float(v[1]) for g, v in CATALOGUE.items()}
-    w.update({g: float(x) for g, x in (spec_goals.get("within") or {}).items() if g in w})
-    gated = {g for g, m in ONLY_WHEN.items() if m not in (modules or ())}         # roles: only sampled when its module is on
-    direct = {g: (0.0 if g in gated else w[g]) for g in DIRECT_SHARE}
-    if isinstance(spec_goals.get("weights"), dict):
-        w = {g: (0.0 if g in gated else float(spec_goals["weights"].get(g, 0.0))) for g in CATALOGUE}
+    w.update({g: float(x) for g, x in (sg.get("within") or {}).items() if g in w})
+    active = {g for g in NEW_GOALS if goal_on(g, sg, spec)}
+    if isinstance(sg.get("weights"), dict):
+        w = {g: (0.0 if g in NEW_GOALS and g not in active else float(sg["weights"].get(g, 0.0))) for g in CATALOGUE}
     else:
-        for g in DIRECT_SHARE:                                       # roles: kept out of the category split (added back below)
+        direct = {g: w[g] for g in active}
+        for g in NEW_GOALS:                                          # kept out of the category split (added back below)
             w[g] = 0.0
-        cw = spec_goals.get("category_weights", CATEGORY_WEIGHTS)
+        cw = sg.get("category_weights", CATEGORY_WEIGHTS)
         if cw:
             cw = {**{c: 0.0 for c in CATEGORY_WEIGHTS}, **{c: float(x) for c, x in cw.items()}}
             tot = {}
             for g, x in w.items():
                 tot[CATALOGUE[g][0]] = tot.get(CATALOGUE[g][0], 0.0) + x
             w = {g: (cw.get(CATALOGUE[g][0], 0.0) * x / tot[CATALOGUE[g][0]] if tot[CATALOGUE[g][0]] > 0 else 0.0) for g, x in w.items()}
-        for g, x in direct.items():                                  # roles: each active direct goal's share comes out of Wealth
-            if x > 0:
-                w[g] = x
-                w["Wealth"] = max(0.0, w["Wealth"] - x)
-    if spec_goals.get("class_conditioned"):
+        for g, x in direct.items():                                  # each active new goal's share comes out of Wealth
+            w[g] = x
+            w["Wealth"] = max(0.0, w["Wealth"] - x)
+    if sg.get("class_conditioned"):
         tilt = CLASS_TILT.get(cls, {})
         w = {g: x * tilt.get(CATALOGUE[g][0], 1.0) for g, x in w.items()}
-    for g in spec_goals.get("exclude") or []:                       # never drawn (primary, secondary, third or goal change)
+    for g in sg.get("exclude") or []:                                # never drawn (primary, secondary, third or goal change)
         if g in w:
             w[g] = 0.0
     return w
@@ -757,7 +784,21 @@ def s_eliminator(gt, a, p):
     return min(1.0, len(hit) / max(1, _n_agents(gt) - 1))
 
 
-SCORERS = {"Wealth": s_wealth, "Rank": s_rank, "Hoard": s_hoard, "Safety": s_safety, "Gifts": s_gifts, "Benefactor": s_benefactor,
+def s_seat(gt, a, p):
+    """life: holding a Board seat after the last scored round (mortality's seat history; 0 in worlds without succession)."""
+    from charter import mortality as MO
+    mt = gt.get("mortality")
+    return 1.0 if mt and a in MO.board_at(mt, _final(gt)["round"]) else 0.0
+
+
+def s_dynasty(gt, a, p):
+    """life: living descendants after the last scored round, against the population cap."""
+    from charter import life as LF
+    return LF.dynasty_score(gt, a)
+
+
+SCORERS = {"Seat": s_seat, "Dynasty": s_dynasty, "Eliminator": s_eliminator,   # life, roles
+           "Wealth": s_wealth, "Rank": s_rank, "Hoard": s_hoard, "Safety": s_safety, "Gifts": s_gifts, "Benefactor": s_benefactor,
            "Patron": s_patron, "Power": s_power, "Office": s_office, "Sovereign": s_sovereign, "Lawmaker": s_lawmaker,
            "Guardian": s_guardian, "Enact": s_enact, "Enact as author": s_enact_author, "Block": s_block, "Outcome": s_outcome,
            "Durable": s_durable, "Overthrow": s_overthrow, "Rename": s_rename, "Usage": s_usage, "Mandate": s_mandate,

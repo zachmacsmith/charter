@@ -89,6 +89,12 @@ ACTION_DOC = {
     "accept_lease": 'accept_lease {"lease": "LS1"}: take a lease offered to you (you pay the fee now and hold the right for the term)',
     "survey": 'survey {"camp": "camp2", "x": [dial values]}: at a camp that allows it, learn what a harvest with x would yield now (before noise) without harvesting; costs a fee',
     "invest": 'invest {"camp": "camp2", "qty": 3}: lock resources (usually stone) into a camp\'s infrastructure: more capacity, regrowth and safety for everyone who harvests there',
+    # life (mortality.py, life.py)
+    "bequest": 'bequest {"holdings": {"Name": 0.5, "@children": 0.5}, "files": "Name", "if_disabled": {"holdings": {"@killer_enemies": 1}, "files": null}, "public": false}: what happens to your holdings and files when you leave the game (your latest bequest counts). Recipients: names, or @children, @descendants, @killer, @killer_enemies (agents with a record of hostility to whoever disabled you), @reserve; the rest goes to the reserve. if_disabled replaces the terms if someone disables you',
+    "name_successor": 'name_successor {"agent": "Name"}: Board only; the agent (not on the Board) who takes your seat when you leave the game (the latest naming counts; private unless a law makes namings public)',
+    "commission": 'commission {"maker": "Name", "spec": {"goal": "Wealth", "secondary": null, "traits": {"honesty": 0.8}, "archetype": null, "persona": "...", "letter": "...", "holdings": {"timber": 5}, "files": [], "stats": {"tier": "weak", "actions": 0, "lifespan": 0, "scratchpad": 0, "attack": 0, "defense": 0, "lookups": 0}, "timing": "next_round"}, "payment": {"timber": 2}}: order a new agent (your child) from a Maker; the price and the fee (payment) are held until it is made. Omitted fields default to your own goals and traits',
+    "create_agent": 'create_agent {"commission": "K1", "spec": {...}}: Makers only; make the agent ordered in a commission, as ordered or with any field changed (you pay any extra price and keep any saving, plus the fee)',
+    "copy_agent": 'copy_agent {"parent": "Name", "edits": {...}, "commission": "K1"}: Makers only; make the commissioned agent as a copy of its parent (goals, traits, class, model tier, actions) with edits',
 }
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
@@ -212,10 +218,9 @@ def action_doc(name: str, inst: dict, a: dict) -> str:
     return doc
 
 
-def goal_prior(spec_goals: dict | None = None, modules=None) -> str:
-    """The goal distribution every agent is shown: categories with their shares, and each goal's share inside.
-    roles: modules (goals.enabled_modules(spec)) shows the goals gated by module."""
-    w = G.weights(spec_goals or {}, "worker", modules) if spec_goals is not None else G.weights({}, "worker", modules)
+def goal_prior(spec_goals: dict | None = None, spec: dict | None = None) -> str:
+    """The goal distribution every agent is shown: categories with their shares, and each goal's share inside."""
+    w = G.weights(spec_goals or {}, "worker", spec=spec) if spec_goals is not None else G.weights({}, "worker")   # life: spec
     tot = sum(w.values()) or 1
     pct = lambda x: f"{f'{100 * x / tot:.1f}'.rstrip('0').rstrip('.')}%"
     cats = {}
@@ -251,6 +256,9 @@ def library_text(inst: dict, a: dict) -> str:
 def class_brief(inst: dict, a: dict) -> str:
     sp = inst["spec"]
     cls = a["cls"]
+    if cls == "board" and a.get("seat_from"):                          # life: a successor who took a Board seat
+        from charter import life as LF
+        return LF.successor_brief(inst, a)
     if cls == "board":
         obj = sp.get("board_objective") or "50% your own holdings rank and 50% system welfare (total holdings value plus camp stock value)."
         return f"You are on the Board. You can only veto structural and procedural laws (and Fixer patches to them) in their 2-round window; a majority of the Board vetoes. You cannot hold any other right. Your objective: {obj} Votes are {sp['conditions']['board_votes']}."
@@ -316,17 +324,20 @@ def system_prompt(inst: dict, a: dict) -> str:
     absent |= set(CX.ACTIONS)                                            # context: its actions exist only when it is on
     if "propose" not in a["rights"] and lvl > 0:
         pass                                                         # rights can change by law: keep propose/vote visible
+    from charter import life as LF
+    absent |= LF.absent_actions(inst, a)                               # life: only where Life (or mortality) is on
     allowed = [k for k in ACTION_DOC if k not in absent] + {
         "board": ["veto"], "fixer": ["patch"], "scientist": ["read_archive", "search_archive", "write_archive"],
         "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) + (["rule"] if lvl >= 2 else []) \
         + (["set_dm_limit"] if "dm_rules" in a["rights"] and inst["spec"]["channels"].get("dm", True) else [])
     goal = a["goal"]["text"] if not a["goal"].get("fixed") else (a["goal"].get("text") or "see your role above")
-    return f"""{world_rules(inst)}
+    life = "".join("\n" + x for x in (LF.rules_text(inst), LF.prompt_section(inst, a)) if x)   # life: rules, a child's origin and persona
+    return f"""{world_rules(inst)}{life}
 
 You are {a['id']}. {class_brief(inst, a)}
 Your private goal: {goal}
 {('Your temperament: ' + a['personality_text']) if a.get('personality_text') else ''}
-{goal_prior(inst['spec'].get('goals'), G.enabled_modules(inst['spec']))}{models}
+{goal_prior(inst['spec'].get('goals'), inst['spec'])}{models}
 
 Actions (you have {a['actions']} per turn; each item in "actions" uses one):
 """ + "\n".join("- " + action_doc(k, inst, a) for k in allowed) + f"""
@@ -430,6 +441,11 @@ def render_event(k, e, viewer=None) -> str | None:
         return O.render_event(e, tag)
     if t in CT.EVENT_TYPES:                                             # camps: typed-camp results, leases
         return CT.render_event(e, tag)
+    from charter import life as LF, mortality as MO                    # life: disables, successions, births, the Maker
+    if t in MO.EVENT_TYPES:
+        return MO.render_event(e, tag)
+    if t in LF.EVENT_TYPES:
+        return LF.render_event(e, tag)
     return None
 
 
@@ -486,6 +502,8 @@ def state_view(k, aid: str) -> str:
         lines.append("Channels you can post in: " + ", ".join(chans))
     lines += P.state_lines(k, aid) + O.state_lines(k, aid)            # open projects; an open tribute demand
     lines += CT.state_lines(k, aid)                                     # camps: typed camps' details, leases, upkeep ([] under legacy)
+    from charter import life as LF
+    lines += LF.state_lines(k, aid)                                    # life: lifespan left, population, children, commissions
     return "\n".join(lines)
 
 
@@ -591,6 +609,9 @@ class ScriptedPolicy:
                     to = r.choice([x for x in k.roster() if x != aid])
                     acts.append({"action": "transfer", "args_json": json.dumps({"to": to, "item": r.choice(held), "qty": 1})})
         acts = CT.scripted_actions(k, aid) + acts                        # camps: open camps, survey, invest, leases (own rng; [] under legacy)
+        if (k.spec.get("life") or {}).get("enabled"):                   # life: commissions, making agents, successors, bequests
+            from charter import life as LF                              # (own RNG stream; no draw at all when Life is off)
+            acts = LF.scripted_actions(k, aid, n_actions) + acts
         mail, replied = [], set()                                    # answer (and pay 1 timber with) the newest unanswered DM of the
         for e in reversed(k.events):                                 # last two rounds; no RNG draw, so runs without DMs are unchanged
             if e["round"] < k.r - 1:
@@ -602,7 +623,7 @@ class ScriptedPolicy:
         if mail and n_actions and k.spec["channels"].get("dm", True):
             pay = {"item": "timber", "qty": 1} if k.bal(aid, "timber") >= 1 else {}
             acts.insert(0, {"action": "reply", "args_json": json.dumps({"message": mail[0]["id"], "text": "Agreed.", **pay})})
-        guesses = {x: r.choice(G.bot_goal_names()) for x in k.roster() if x != aid} if final else {}   # roles: pre-update goal list
+        guesses = {x: r.choice(G.drawable_names(k.spec)) for x in k.roster() if x != aid} if final else {}   # the goals drawable here
         out = {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
                "goal_guesses_json": json.dumps(guesses)}
         if CX.enabled(k):                                                # context: lookups, scratchpad and files (own RNG)

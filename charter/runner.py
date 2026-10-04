@@ -312,9 +312,13 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             if oprep:                                                     # its posts/transfers run now, before everyone's actions
                 obs.step_finish(k, r, oprep, odec, pre.pop(obs.id), last.pop(obs.id, None), reason_f, mode)
             for pos, (aid, pr, dec) in enumerate(zip(order, preps, decisions), 1):
+                if k.w["agents"][aid].get("departed") is not None:      # life: removed from the game earlier this round
+                    continue
                 execute(pos, aid, pr, dec, pre[aid], last.get(aid))
         else:
             for pos, aid in enumerate(order, 1):
+                if k.w["agents"][aid].get("departed") is not None:      # life: removed from the game earlier this round
+                    continue
                 pr = prepare(aid)
                 dec = policy.act(k, pr[0], sysp[aid], pr[2], pr[1], final)
                 tally.add([dec[0]], [aid])
@@ -388,4 +392,7 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
     if "roles" in k.w:
         gt["roles"] = R.truth(k)                                        # roles: holders at the end, passes (monitor-only)
     gt.update(CT.truth(k))                                              # camps: typed camps' hidden rules and stats ({} under legacy)
+    from charter import life as LF, mortality as MO                     # life: deaths, seats, lineage, commissions (monitor-only)
+    gt.update(MO.truth(k))
+    gt.update(LF.truth(k))
     (out / "ground_truth.json").write_text(json.dumps(gt, indent=1, default=list))

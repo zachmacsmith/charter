@@ -49,6 +49,7 @@ TOPICS = {
     "bounty": ("Bounty numbers", "Factoring camps publish a number; laws can read it."),
     "powers": ("Powers and the law", "Some agents hold hidden powers (words used through invoke). Laws can expose or remove them."),
     "leases": ("Leasing harvest rights", "Harvest rights can be leased for a term; laws can tax, cap or ban leases."),   # camps
+    "succession": ("Board succession", "Board members name successors who take their seats when they leave the game."),   # life
 }
 
 # (name, topic, prompt group, prompt text, article detail, core tier, minimal tier)
@@ -190,6 +191,8 @@ E += [
      "holding any power). Unknown names give [].", "uncommon", "uncommon"),
     ("revoke_capability", "powers", "Powers", "revoke_capability(agent, name=None)", "takes a power (None: every power) from an agent; returns "
      "how many were taken. Structural.", "uncommon", "uncommon"),
+    ("set_succession_public", "succession", "Governance", "set_succession_public(public=True)", "makes Board members' successor "  # life
+     "namings public (each naming is announced, and the current ones are published) or private again. Structural.", "common", "common"),
 ]
 E += [                                                                  # camps: leasing harvest rights (camptypes/leases.py)
     ("set_lease_rules", "leases", "Camps", "set_lease_rules(allowed=True, tax=0.0, max_rounds=None, max_fee=None)",
@@ -206,6 +209,9 @@ def _gated_off(spec: dict) -> set:
     articles and tips about) exactly what they did before. camps: the lease functions exist only with leasing on."""
     from charter.camptypes import leases as _LS
     return set() if _LS.enabled_spec(spec) else {"set_lease_rules", "leases"}
+# life: entries that exist only in worlds with a module on (spec <module>.enabled); elsewhere they are left out of the mapping, so the
+# prompt and the codex are unchanged. mortality: Life or Conflict.
+REQUIRES = {"set_succession_public": lambda spec: bool((spec.get("life") or {}).get("enabled") or (spec.get("conflict") or {}).get("enabled"))}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
 
@@ -225,10 +231,10 @@ def resolve(spec: dict) -> dict:
     mapping = {}
     off = _gated_off(spec)
     for n, e in ENTRIES.items():
-        if n in off:
+        if n in off or (n in REQUIRES and not REQUIRES[n](spec)):     # camps: leasing off; life: a module's entries only where on
             continue
         if preset == "full":
-            mapping[n] = e["core"] if n in ALWAYS_ARTICLE else "prompt"
+            mapping[n] = e["core"] if n in ALWAYS_ARTICLE or n in REQUIRES else "prompt"   # life: module entries were never in the old prompt
         else:
             mapping[n] = e[preset]
     for n, t in (cfg.get("overrides") or {}).items():

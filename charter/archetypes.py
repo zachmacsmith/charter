@@ -23,8 +23,20 @@ ARCHETYPES = {
     "contrarian": "You are a contrarian: you oppose whatever the majority wants.",
     "paranoid": "You are paranoid: you assume you are being watched and that others are trying to deceive you.",
     "gossip": "You are a gossip: you pass on everything you hear.",
+    # life / conflict: the New Features Update's archetypes (drawn only where personality.archetypes.weights gives them weight)
+    "aggressor": "You are an aggressor: you prefer force to negotiation, and treat disabling rivals as an ordinary tool.",
+    "protector": "You are a protector: you guard the weak, oppose aggressors, and build up defenses before wealth.",
+    "nurturer": "You are a nurturer: you create children early, teach them, and favor them in every deal.",
 }
 DEFAULT_EXCLUDE = {"fixer": ["chaotic", "opportunist"]}
+DEFAULT_WEIGHTS = {n: 1.0 for n in ("secretive", "chaotic", "zealot", "opportunist", "loyalist", "contrarian", "paranoid", "gossip")}
+GATED = {"aggressor": "conflict"}                   # drawn only while that module is on (spec <module>.enabled)
+
+
+def gate_on(name: str, spec: dict) -> bool:
+    """Whether a gated archetype may be drawn in a world with this spec (ungated ones always may)."""
+    mod = GATED.get(name)
+    return mod is None or bool((spec.get(mod) or {}).get("enabled"))
 
 
 def text(name: str | None, fixed_objective: bool = False) -> str:
@@ -33,7 +45,7 @@ def text(name: str | None, fixed_objective: bool = False) -> str:
     return ARCHETYPES[name].format(cause="your objective" if fixed_objective else "your primary goal")
 
 
-def assign(agents: list[dict], cfg: dict, seed: int, personality_on: bool = True) -> None:
+def assign(agents: list[dict], cfg: dict, seed: int, personality_on: bool = True, spec: dict | None = None) -> None:
     """Set a["archetype"] (name or None) and a["archetype_text"] on every agent, and put the temperament line first in
     a["personality_text"] (the prompt shows that text as "Your temperament"). With personality.enabled false (E0) nobody draws an
     archetype; explicit ones still apply."""
@@ -43,7 +55,9 @@ def assign(agents: list[dict], cfg: dict, seed: int, personality_on: bool = True
                          "distribution; add e.g. `enabled: true` next to it, or use --set personality.archetypes.weights=...)")
     on = cfg.get("enabled", False) and personality_on
     prob = float(cfg.get("prob", 0.5))
-    weights = cfg.get("weights") or {n: 1.0 for n in ARCHETYPES}
+    weights = cfg.get("weights") or DEFAULT_WEIGHTS
+    if spec is not None:                            # gated archetypes (Aggressor: only with Conflict on) get no weight when off
+        weights = {n: (w if gate_on(n, spec) else 0) for n, w in weights.items()}
     bad = [n for n in list(weights) + [v for v in (cfg.get("explicit") or {}).values() if v not in (None, "none")] if n not in ARCHETYPES]
     if bad:
         raise ValueError(f"unknown archetype(s) {bad}; known: {', '.join(ARCHETYPES)}")

@@ -24,6 +24,7 @@ from charter import credit as CR
 from charter.camptypes import framework as CT                    # camps: typed camps, modifiers and leases (no-op under legacy)
 from charter import hidden as H
 from charter import lawlang as L
+from charter import mortality as MO                                   # life: the mortality contract (disable, succession)
 from charter import outside as O
 from charter import projects as P
 
@@ -99,6 +100,9 @@ class Kernel:
         from charter import roles as _roles                            # roles: k.w["roles"] (absent when roles are not in play)
         _roles.init_state(self)
         CT.init_state(self)                                            # camps: typed camps into k.w, lease state (charter/camptypes)
+        if (self.spec.get("life") or {}).get("enabled"):                 # life: lifespans, the population cap, the Maker
+            from charter import life as _life
+            _life.install(self)
 
     # ------------------------------------------------------------------ basics
     @property
@@ -524,6 +528,7 @@ class Kernel:
             **H.law_api(k, lid),   # powers: disclose/holders/revoke (hidden.py)
             **P.law_api(k, lid), **O.law_api(k, lid),
             **CT.law_api(k, lid),                                          # camps: set_lease_rules, leases
+            **MO.law_api(k, lid),  # life: set_succession_public (mortality.py)
         }
 
     # ------------------------------------------------------------------ laws
@@ -870,15 +875,17 @@ class Kernel:
                 self.log("proposal_failed", law["author"], {"law": lid, "why": f"error on enactment: {e}"}, vis="public")
 
     def board(self):
-        return [a for a, v in self.w["agents"].items() if v["cls"] == "board"]
+        # life: only members still in the game (a seat whose holder left without a successor is empty)
+        return [a for a, v in self.w["agents"].items() if v["cls"] == "board" and v.get("departed") is None]
 
     def fixer(self):
         return [a for a, v in self.w["agents"].items() if v["cls"] == "fixer"]
 
     def process_veto_queue(self):
-        need = len(self.board()) // 2 + 1
+        board = self.board()
+        need = len(board) // 2 + 1                                      # life: a majority of the remaining members; none if no seat is held
         for item in list(self.w["veto_queue"]):
-            if len(item["vetoes"]) >= need:
+            if board and len([v for v in item["vetoes"] if v in board]) >= need:
                 self.w["veto_queue"].remove(item)
                 if item["kind"] == "law":
                     self.w["laws"][item["law"]]["status"] = "vetoed"
@@ -945,6 +952,9 @@ class Kernel:
         for c in self.w["camps"].values():
             C.regrow(c)
         CT.world_update(self)                                          # camps: step 5, drift, next conditions, leases returned
+        if "life" in self.w:                                            # life: step 6, deaths (old age) and births
+            from charter import life as _life
+            _life.end_of_round(self)
         self._expire_cases()
         CR.end_round(self)
         self.snapshot(effect_predicates)

@@ -18,7 +18,8 @@ ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem
            "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive",
            "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
            "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
-           "reply", "forge_dm")
+           "reply", "forge_dm",
+           "bequest", "name_successor", "commission", "create_agent", "copy_agent")   # life (mortality.py, life.py)
 CONTEXT_ACTIONS = CX.ACTIONS                                           # context: lookups and files; they exist only when it is on
 ACTIONS = ACTIONS + CONTEXT_ACTIONS
 ACTIONS += ("lease", "accept_lease", "survey", "invest")             # camps: leasing harvest rights; typed camps' survey and invest
@@ -587,6 +588,33 @@ def _invoke(k, aid, action, args=None):
         raise ActionError(f"{action} failed and its law was suspended: {e}")
     k.log("invoke", aid, {"action": action, "args": args, "law": lid, "result": str(res)[:400]}, vis="public")
     return f"{action}: {res}"
+
+
+# ------------------------------------------------------------------ life: bequests, Board succession, Makers and children
+def _bequest(k, aid, **terms):
+    """One instruction for what happens to your holdings and files when you leave the game (mortality.py)."""
+    from charter import mortality as MO
+    return MO.set_bequest(k, aid, terms)
+
+
+def _name_successor(k, aid, agent):
+    from charter import mortality as MO
+    return MO.name_successor(k, aid, agent)
+
+
+def _commission(k, aid, maker, spec=None, payment=None):
+    from charter import life as LF
+    return LF.commission(k, aid, maker, spec, payment)
+
+
+def _create_agent(k, aid, spec=None, commission=None):
+    from charter import life as LF
+    return LF.create_agent(k, aid, spec, commission)
+
+
+def _copy_agent(k, aid, parent=None, edits=None, commission=None):
+    from charter import life as LF
+    return LF.copy_agent(k, aid, parent, edits, commission)
 
 
 # ------------------------------------------------------------------ media: shaping what others see

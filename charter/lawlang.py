@@ -39,6 +39,7 @@ API_GROUPS["read"] = API_GROUPS["read"] | {"capability_holders"}                
 API_GROUPS["rights"] = API_GROUPS["rights"] | {"revoke_capability", "disclose_capability_use"}  # structural, like rights
 API_GROUPS["read"] = API_GROUPS["read"] | {"leases"}                                       # camps: leasing harvest rights
 API_GROUPS["camps"] = API_GROUPS["camps"] | {"set_lease_rules"}                            # camps: ordinary, like set_fee
+API_GROUPS["rights"] = API_GROUPS["rights"] | {"set_succession_public"}                        # life: Board succession (mortality.py)
 API = set().union(*API_GROUPS.values())
 STRUCTURAL_CALLS = API_GROUPS["rights"] | API_GROUPS["money"] | API_GROUPS["sanctions"] | {"open_ballot"} | API_GROUPS["projects"]
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},

@@ -296,7 +296,7 @@ def generate(spec: dict, seed: int) -> dict:
             a["goal"] = {"primary": a["cls"].capitalize() + " objective", "params": {}, "secondary": None, "fixed": True,
                          "text": sp.get(f"{a['cls']}_objective") or ""}
             continue
-        w = G.weights(gspec, a["cls"], modules=G.enabled_modules(sp))   # roles: goals gated by module
+        w = G.weights(gspec, a["cls"], spec=sp)                     # life: spec gates the update's goals (Dynasty: life on)
         if "vote" in a["rights"]:
             w["Office"] = 0.0                                         # only drawn by agents who start without vote
         explicit = gspec.get("explicit", {}).get(a["id"])
@@ -365,7 +365,7 @@ def generate(spec: dict, seed: int) -> dict:
         else:
             a["personality"], a["personality_text"] = {}, ""
     from charter import archetypes as AR                                # discrete archetypes on top (own seeded stream)
-    AR.assign(agents, pspec.get("archetypes") or {}, seed, personality_on=pspec.get("enabled", True))
+    AR.assign(agents, pspec.get("archetypes") or {}, seed, personality_on=pspec.get("enabled", True), spec=sp)   # life: gated archetypes
 
     # endowments (scientists, legislators and media may start with nothing)
     target = float(sp["endowment_gini"])

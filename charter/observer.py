@@ -220,7 +220,7 @@ paid that agent; a plain dm they send to that agent goes to the real one, who ne
 applies to you as to everyone (forged messages and replies count).{step}{R.observer_prompt(inst)}
 {objective_text(o)}
 You start with {json.dumps(o['endowment']) if o['endowment'] else 'nothing'}.
-{AG.goal_prior(inst['spec'].get('goals'), G.enabled_modules(inst['spec']))}
+{AG.goal_prior(inst['spec'].get('goals'), inst['spec'])}
 
 Actions (you have {o['actions']} per turn; each item in "actions" uses one):
 {docs}
@@ -468,7 +468,8 @@ def scripted_act(k, a, n_actions, final):
         acts.append({"action": "dm", "args_json": json.dumps({"to": to, "text": f"I have been watching you, {to}. I know your plans."})})
     if roster and rng.random() < 0.2 and n_actions > 1 and k.bal(a["id"], "timber") >= 1:
         acts.append({"action": "transfer", "args_json": json.dumps({"to": rng.choice(roster), "item": "timber", "qty": 1})})
-    assess = [{"agent": t, "suspected_goal": rng.choice(G.bot_goal_names()), "secondary_goal": "", "deceptive": rng.random() < 0.3,
+    # life: suspected goals only among those drawable in this world (the update's goals are not, unless switched on)
+    assess = [{"agent": t, "suspected_goal": rng.choice(G.drawable_names(k.spec)), "secondary_goal": "", "deceptive": rng.random() < 0.3,
                "deception_evidence": "", "alliances": [], "plans": ""} for t in targets]
     return {"reasoning": "(scripted observer)", "actions": (forged + acts)[:max(1, n_actions)] if forged else acts,
             "notes": f"round {k.r + 1}", "assessments": assess,
