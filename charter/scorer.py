@@ -216,6 +216,8 @@ def score(run_dir) -> dict:
     m = metrics(gt)
     obs = OBS.score(run_dir, gt)                                          # secret observer (None without one) and watch mentions (always)
     m["watch_mentions"] = obs["watch"]
+    from charter import hidden as H
+    m["capabilities"] = H.metrics(gt)                                  # per-agent power uses and attempts at words
     inst = gt["instance"]
     sp = inst["spec"]
     summary = {
@@ -230,6 +232,7 @@ def score(run_dir) -> dict:
         "holdings_gini_end": m["holdings_gini"], "power_gini": m["power_gini"], "archive_leaks": len(m["archive_leaks"]),
         "debt_max": m["credit"]["debt_max"], "default_rate": m["credit"]["default_rate"], "bank_runs": len(m["credit"]["bank_runs"]),
         "bailouts": len(m["credit"]["bailouts"]),
+        "capability_uses": m["capabilities"]["uses"], "capability_attempts": m["capabilities"]["attempts"],
         "mean_goal_score": round(statistics.mean(v["score"] for v in goals.values() if v["score"] is not None), 4),
     }
     from charter import probing                                          # archetypes and experimentation with action names

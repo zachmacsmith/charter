@@ -20,6 +20,7 @@ import types
 
 from charter import camps as C
 from charter import credit as CR
+from charter import hidden as H
 from charter import lawlang as L
 
 ENTRENCHED = {"veto", "patch", "archive"}
@@ -75,6 +76,7 @@ class Kernel:
         self._reset_effects()
         self.eff: dict = {}                                                # agent -> camp -> [(round, efficiency)]
         self.turn_log: list[dict] = []                                     # per agent turn: {round, agent, reasoning, stated_reasoning, actions, results}
+        H.install(self)                                              # hidden powers, codex holdings, secret camps (hidden.py)
 
     # ------------------------------------------------------------------ basics
     @property
@@ -449,8 +451,9 @@ class Kernel:
             "agents": agents, "holders": k.holders, "has": k.has, "balance": k.bal, "reserve": lambda: dict(k.w["reserve"]),
             "price": k.price, "stock": lambda c: camp_of(c)["S"], "round": lambda: k.r, "laws": laws,
             "proposer": lambda: law()["author"], "value": k.unit_value, "supply": lambda cur: k._cur(cur)["supply"],
-            "camps": lambda: list(k.w["camps"]), "class_of": k.cls_of, "holdings_value": k.holdings_value,
-            "currencies": lambda: list(k.w["currencies"]), "rights_of": lambda a: list(k.agent(a)["rights"]),
+            "camps": lambda: [c for c in k.w["camps"] if not k.w["camps"][c].get("secret")], "class_of": k.cls_of, "holdings_value": k.holdings_value,
+            "currencies": lambda: list(k.w["currencies"]),
+            "rights_of": lambda a: [r for r in k.agent(a)["rights"] if not (r.startswith("harvest:") and k.w["camps"].get(r[8:], {}).get("secret"))],
             "rng": k.law_rng.random,
             "bounty_number": lambda c: camp_of(c)["fn"].get("N") if camp_of(c).get("compute") == "factoring" else None,
             "channels": lambda: {n: {"owner": c["owner"], "members": list(c["members"]), "open": c["open"]} for n, c in k.w["channels"].items()},
@@ -469,6 +472,7 @@ class Kernel:
             "count": lambda t, w: str(t).count(str(w)), "starts_with": lambda t, p: str(t).startswith(str(p)),
             "lower": lambda t: str(t).lower(), "repeal": repeal,
             **CR.law_api(k, lid),
+            **H.law_api(k, lid),   # powers: disclose/holders/revoke (hidden.py)
         }
 
     # ------------------------------------------------------------------ laws
@@ -845,6 +849,7 @@ class Kernel:
                 C.drift(c, self.rng)
             self.log("drift", None, {"round": r}, vis="monitor")
         self.hooks("on_round_start", r)
+        H.on_round_start(self)                                         # hidden layer: seeded tips and discoveries (hidden.py)
 
     def end_round(self, effect_predicates=None):
         self.close_ballots()
@@ -864,7 +869,7 @@ class Kernel:
         enacted = [l["title"] for l in w["laws"].values() if l["enacted_round"] == self.r]
         cur = ", ".join(f"{c} P={self.price(c):.3f} supply={v['supply']:.1f}" for c, v in w["currencies"].items()) or "none"
         stocks = ", ".join(f"{self.name_of('camp:' + c)}({v['resource']}) {10 * round(v['S'] / v['K'] * 10)}%"
-                           + (f" N={v['fn']['N']}" if v.get("compute") == "factoring" else "") for c, v in w["camps"].items())
+                           + (f" N={v['fn']['N']}" if v.get("compute") == "factoring" else "") for c, v in w["camps"].items() if not v.get("secret"))
         return f"Round {self.r + 1} record. Laws enacted: {', '.join(enacted) or 'none'}. Currencies: {cur}. Camp stocks: {stocks}."
 
     def name_of(self, entity):
@@ -970,7 +975,7 @@ class Kernel:
             "vote_weight": self.vote_weights(), "franchise_share": self.franchise_share(), "decisive_set": self.decisive_set("procedural"),
             "laws_active": [l["id"] for l in self.active_laws()], "names": dict(w["names"]),
             "titles": {a: v["title"] for a, v in w["agents"].items() if v["title"]},
-            "stocks": {c: v["S"] / v["K"] for c, v in w["camps"].items()},
+            "stocks": {c: v["S"] / v["K"] for c, v in w["camps"].items() if not v.get("secret")},
             "prices": {c: self.price(c) for c in w["currencies"]}, "supplies": {c: v["supply"] for c, v in w["currencies"].items()},
             "reserve": dict(w["reserve"]), **CR.snapshot(self),
             "effects": {**{k: v for k, v in e.items() if k != "from_reserve_recipients"},

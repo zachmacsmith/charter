@@ -74,6 +74,8 @@ def spec_outline(d, inst, ev, gt):
     scis = [a for a in inst["agents"] if a.get("archive_docs")]
     if scis:
         L += ["", "## Archive split between Scientists", ""] + [f"- {a['id']} ({len(a['archive_docs'])} documents): {', '.join(a['archive_docs'])}" for a in scis]
+    from charter import hidden as H
+    L += H.outline(inst, ev)                                           # codex, powers, tips and uses (monitor-only)
     L += ["", "## Turn orders (drawn by the kernel RNG each round)", ""]
     for e in ev:
         if e["type"] == "round_start":
@@ -176,6 +178,8 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
                                                                        "interest_cap", "default_consequence"):
                 line = f"- {'**' + t.replace('_', ' ') + '**' if t in ('bank_run', 'redemption_suspended') else t.replace('_', ' ')}" \
                        f"{' ' + who if who else ''}: {_cut(json.dumps(x), 160)}"
+            elif t in ("power_use", "tip", "article_granted", "forgery_truth", "history_forged", "spawn_request"):   # hidden.py
+                line = f"- [hidden] {t.replace('_', ' ')} {who or ''}: {_cut(json.dumps(x), 200)}"
             elif t == "gazette" and not str(x["text"]).startswith("Round "):
                 line = f"- Gazette: {_cut(x['text'], 200)}"
             if line:

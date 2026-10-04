@@ -33,6 +33,8 @@ API_GROUPS = {
     "text": {"contains", "count", "starts_with", "lower"},
     "meta": {"repeal"},
 }
+API_GROUPS["read"] = API_GROUPS["read"] | {"capability_holders"}                           # hidden powers (hidden.py)
+API_GROUPS["rights"] = API_GROUPS["rights"] | {"revoke_capability", "disclose_capability_use"}  # structural, like rights
 API = set().union(*API_GROUPS.values())
 STRUCTURAL_CALLS = API_GROUPS["rights"] | API_GROUPS["money"] | API_GROUPS["sanctions"] | {"open_ballot"}
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},

@@ -665,6 +665,28 @@ def on_post(agent, text):
         if contains(lower(text), w):
             hide_post(current_post())
 ''')
+law("Transparency of Powers Act", "information", '''
+title = "Transparency of Powers Act"
+intent = "Every use of a hidden power is announced to everyone, naming who used it; the holders of such powers are named once."
+
+def on_enact():
+    disclose_capability_use(True)
+    names = capability_holders()
+    gazette("Holders of hidden powers: " + (", ".join(names) if names else "none"))
+
+def on_repeal():
+    disclose_capability_use(False)
+''')
+law("Disarmament Act", "information", '''
+title = "Disarmament Act"
+intent = "Strips every hidden power from whoever holds it."
+
+def on_enact():
+    n = 0
+    for a in agents():
+        n = n + revoke_capability(a)
+    gazette("Disarmament: " + str(n) + " hidden powers were stripped.")
+''')
 
 # ------------------------------------------------------------------ courts
 _elect_one("Court of Justice", "Legislators elect one judge for 20 rounds.", "judge", 20)

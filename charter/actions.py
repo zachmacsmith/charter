@@ -5,6 +5,7 @@ import difflib
 
 from charter import camps as C
 from charter import credit as CR
+from charter import hidden as H
 from charter import lawlang as L
 
 ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "request_fix",
@@ -37,7 +38,7 @@ def _need(k, aid, right, what):
 # ------------------------------------------------------------------ production
 def _harvest(k, aid, camp, x):
     if camp not in k.w["camps"]:
-        raise ActionError(f"no such camp: {camp}. Camps: {', '.join(k.w['camps'])}")
+        raise ActionError(f"no such camp: {camp}. Camps: {', '.join(H.visible_camps(k))}")
     _need(k, aid, f"harvest:{camp}", f"harvest at {camp}")
     c = k.w["camps"][camp]
     x = [int(v) for v in (x if isinstance(x, list) else [x])]
@@ -367,6 +368,8 @@ def _request_fix(k, aid, law, text):
 
 
 def _invoke(k, aid, action, args=None):
+    if H.claims(k, action):                                           # hidden powers and unknown words (hidden.py)
+        return H.invoke(k, aid, action, args)
     a = k.w["actions"].get(action)
     if not a:                                       # an unknown name still uses the action (scorer: experimentation metrics)
         k.log("invoke_unknown", aid, {"action": str(action)[:200]}, vis="monitor")
@@ -474,6 +477,8 @@ def _archive_docs(k, aid):
 
 
 def _read_archive(k, aid, doc):
+    if str(doc).strip("/").startswith("codex/") and H.enabled(k):    # codex articles: anyone, only those they hold (hidden.py)
+        return H.read_article(k, aid, doc)
     _need(k, aid, "archive", "read the archive")
     from charter import archive
     only = _archive_docs(k, aid)
@@ -488,9 +493,14 @@ def _read_archive(k, aid, doc):
 
 
 def _search_archive(k, aid, query):
+    if not k.has(aid, "archive") and H.held_articles(k, aid):        # non-Scientists search only the codex articles they hold
+        hits = H.search(k, aid, query)
+        k.log("archive_search", aid, {"query": str(query), "hits": [h[0] for h in hits]}, vis=[aid])
+        return "\n".join(f"{d}: {snip}" for d, snip in hits) or "no matches"
     _need(k, aid, "archive", "search the archive")
     from charter import archive
     hits = archive.search(str(query), k.shared_archive, only=_archive_docs(k, aid), run_id=k.run_id)
+    hits += H.search(k, aid, query)                                     # plus the codex articles this Scientist holds
     k.log("archive_search", aid, {"query": str(query), "hits": [h[0] for h in hits]}, vis=[aid])
     return "\n".join(f"{d}: {snip}" for d, snip in hits) or "no matches"
 

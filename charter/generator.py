@@ -316,6 +316,8 @@ def generate(spec: dict, seed: int) -> dict:
     obs = OBS.make(sp, seed, agents)                                    # the secret observer (own RNG; absent unless observer.enabled)
     if obs:
         inst["observer"] = obs
+    from charter import hidden as _hidden
+    inst["hidden"] = _hidden.generate(sp, seed, agents)                # codex articles, hidden powers, secret camps (own RNG stream)
     return validate(inst, rng)
 
 
