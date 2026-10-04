@@ -357,7 +357,7 @@ def state_view(k, aid: str) -> str:
     if a["cls"] == "fixer":
         lines.append("Fixer queue: " + ("; ".join(f"{q['law']}: {q['reason']} (from {q['by']})" for q in w["fixer_queue"]) or "empty"))
     if k.has(aid, "ledger_read"):
-        lines.append("Ledger: " + "; ".join(f"{x}: {k.holdings_value(x):.4g}" for x in w["agents"]))
+        lines.append("Ledger: " + "; ".join(f"{x}: {k.holdings_value(x):.4g}" for x in k.roster()))
     cases = [c for c in w["cases"].values() if c["status"] == "open" and (aid in c["judges"] or aid in (c["accused"], c["accuser"]))]
     if cases:
         lines.append("Cases: " + "; ".join(f"{c['id']} {c['accuser']} v {c['accused']} under {c['clause']} (evidence {c['evidence']}, deadline round {c['deadline'] + 1})" for c in cases))
@@ -415,6 +415,9 @@ class ScriptedPolicy:
         self.rng = random.Random(seed)
 
     def act(self, k, a, system, user, n_actions, final):
+        if a["cls"] == "observer":                                       # the secret observer (own RNG: bots behave the same without it)
+            from charter import observer
+            return observer.scripted_act(k, a, n_actions, final)
         r, aid, cls = self.rng, a["id"], a["cls"]
         acts = []
         mine = [x.split(":", 1)[1] for x in k.w["agents"][aid]["rights"] if x.startswith("harvest:")]
@@ -446,9 +449,9 @@ class ScriptedPolicy:
             else:
                 held = [i for i, q in k.w["agents"][aid]["holdings"].items() if q >= 1]
                 if held:
-                    to = r.choice([x for x in k.w["agents"] if x != aid])
+                    to = r.choice([x for x in k.roster() if x != aid])
                     acts.append({"action": "transfer", "args_json": json.dumps({"to": to, "item": r.choice(held), "qty": 1})})
-        guesses = {x: r.choice(list(G.CATALOGUE)) for x in k.w["agents"] if x != aid} if final else {}
+        guesses = {x: r.choice(list(G.CATALOGUE)) for x in k.roster() if x != aid} if final else {}
         return {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
                 "goal_guesses_json": json.dumps(guesses)}, "(scripted bot: no model, no chain of thought)", {}
 
@@ -461,6 +464,7 @@ class LLMPolicy:
         self.llm, self.backend, self.cfg = llm, backend, llm_cfg
 
     def act(self, k, a, system, user, n_actions, final):
-        out, reasoning, usage = self.llm.call(self.backend, a["model"], system, user, SCHEMA,
+        schema = __import__("charter.observer", fromlist=["SCHEMA"]).SCHEMA if a["cls"] == "observer" else SCHEMA
+        out, reasoning, usage = self.llm.call(self.backend, a["model"], system, user, schema,
                                               thinking_budget=self.cfg.get("thinking_budget", 0), max_tokens=self.cfg.get("max_tokens", 6000))
         return out, reasoning, usage

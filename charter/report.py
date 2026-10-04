@@ -16,6 +16,8 @@ from pathlib import Path
 
 import yaml
 
+from charter import observer as OBS
+
 
 def _load(d: Path):
     inst = json.loads((d / "instance.json").read_text())
@@ -118,6 +120,7 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
         for aid, g in score["goals"].items():
             L.append(f"| {aid} | {agents[aid]['cls']} | {g['goal']} | {g['score']} |")
         L.append("")
+    L += OBS.overview_lines(d, score)
     L.append("## Round by round")
     for r in sorted(by_round):
         es = by_round[r]
@@ -315,6 +318,9 @@ def build(run_dir, status=None) -> Path:
     (d / "spec_outline.md").write_text(spec_outline(d, inst, ev, gt))
     (d / "overview.md").write_text(overview(d, inst, ev, rs, snaps, gt, score, status))
     agent_docs(d, inst, ev, rs, gt)
+    obs_md = OBS.report_md(d)                                           # secret observer: observer.md
+    if obs_md:
+        (d / "observer.md").write_text(obs_md)
     return d
 
 

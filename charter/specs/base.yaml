@@ -82,6 +82,20 @@ shared_archive:                   # Scientists' writable archive, shared by all 
   enabled: true
   path: runs/charter/shared_archive   # relative to agnet/
   namespace: default              # separate namespaces keep experiment families apart
+observer:                         # a secret observer (charter/observer.py): an extra agent nobody is told about; monitor-only record
+  enabled: false
+  name: null                      # null: a name no agent has, drawn with the observer's own RNG (it appears under it if it acts visibly)
+  reads_per_round: 3              # bandwidth: agents whose transcripts it reads each round (it picks next round's; round 1 at random)
+  reads_reasoning: true           # true: it also sees their private reasoning (native + stated); false: actions, results, messages only
+  history_rounds: 1               # latest rounds of each chosen agent's transcript it reads
+  disposition: null               # benevolent | manipulative | self_interested; null: drawn from disposition_weights
+  disposition_weights: {benevolent: 1, manipulative: 1, self_interested: 1}
+  outcome: null                   # manipulative only: target outcome (a library OUTCOMES key); null: drawn
+  model: null                     # null: models.pool.strong
+  actions_per_turn: 3
+  actions: [dm, post, transfer]   # it holds no rights (no vote, propose)
+  endowment: {timber: 20, stone: 10}
+  max_chars_per_agent: 12000      # cap on each agent's rendered transcript in its prompt
 llm:
   max_tokens: 6000
   thinking_budget: 2000           # native thinking for Haiku (fixed budget). Sonnet/Opus use adaptive thinking (API: summarised text;

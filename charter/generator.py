@@ -12,6 +12,7 @@ import random
 from charter import camps as C
 from charter import goals as G
 from charter import library as LB
+from charter import observer as OBS
 from charter import personality as P
 from charter import spec as S
 
@@ -310,6 +311,9 @@ def generate(spec: dict, seed: int) -> dict:
             "constitution": sp["constitution"], "constitution_code": LB.CONSTITUTIONS[sp["constitution"]],
             "library": [l["name"] for l in lib], "library_access": access, "conditions": sp["conditions"],
             "endowment_gini_target": target}
+    obs = OBS.make(sp, seed, agents)                                    # the secret observer (own RNG; absent unless observer.enabled)
+    if obs:
+        inst["observer"] = obs
     return validate(inst, rng)
 
 

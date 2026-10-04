@@ -24,6 +24,7 @@ from charter import actions as A
 from charter import agents as AG
 from charter import archive
 from charter import library as LB
+from charter import observer as OBS
 from charter import report
 from charter.kernel import Kernel
 
@@ -69,6 +70,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         reason_f, ev_f = open(out / "reasoning.jsonl", "w"), open(out / "events.jsonl", "w")
         n_ev = 0
         first_round = 0
+    obs = OBS.start(inst, out, k, ck["runner"].get("observer") if resume and ckpt_path.exists() else None)   # secret observer or None
     sysp = {aid: AG.system_prompt(inst, a) for aid, a in agents.items()}
     (out / "prompts").mkdir(exist_ok=True)
     for aid, txt in sysp.items():
@@ -193,6 +195,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                     if guesses[aid]:
                         break
             k.log("turn", aid, {"position": pos, "n_actions": n, "actions": acts[:n], "results": res}, vis="monitor")
+            k.turn_log.append({"round": r, "agent": aid, "reasoning": reasoning, "stated_reasoning": str(outp.get("reasoning", "")),
+                               "actions": acts[:n], "results": res})
             reason_f.write(json.dumps({"round": r, "position": pos, "agent": aid, "model": a["model"], "reasoning": reasoning,
                                        "stated_reasoning": str(outp.get("reasoning", "")),
                                        "notes": notes[aid], "actions": first, "results": res, "usage": usage, "mode": mode,
@@ -223,6 +227,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                 outs.append(dec[0])
                 execute(pos, aid, pr, dec)
             stop_if_all_failed(r, outs)
+        if obs:                                                         # the secret observer reads and acts after everyone
+            obs.turn(k, r, policy, final, reason_f, mode)
         k.end_round(PREDICATES)
         k.snapshots[-1]["welfare"] = welfare(k)
         welfare_series.append(k.snapshots[-1]["welfare"])
@@ -235,13 +241,16 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         reason_f.flush()
         _checkpoint(ckpt_path, r, k, {"notes": notes, "cursors": cursors, "results": results, "guesses": guesses,
                                       "welfare_series": welfare_series, "start_values": start_values, "shared_snap": shared_snap,
-                                      "const": const, "policy_rng": policy.rng.getstate() if hasattr(policy, "rng") else None},
-                    {"events.jsonl": _size(ev_f), "reasoning.jsonl": _size(reason_f)})
+                                      "const": const, "policy_rng": policy.rng.getstate() if hasattr(policy, "rng") else None,
+                                      "observer": obs.state() if obs else None},
+                    {"events.jsonl": _size(ev_f), "reasoning.jsonl": _size(reason_f), **({"observer.jsonl": _size(obs.f)} if obs else {})})
         _live(out, f"round {r + 1} of {inst['rounds']} complete", full=True)
         log(f"  round {r + 1}/{inst['rounds']} done ({time.time() - t0:.0f}s): laws {len(k.active_laws())}, "
             f"currencies {list(k.w['currencies'])}, decisive set {len(k.snapshots[-1]['decisive_set'])}")
     reason_f.close()
     ev_f.close()
+    if obs:
+        obs.close()
     _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=True)
     return out
 
