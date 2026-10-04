@@ -20,6 +20,7 @@ import types
 
 from charter import camps as C
 from charter import credit as CR
+from charter.camptypes import framework as CT                    # camps: typed camps, modifiers and leases (no-op under legacy)
 from charter import hidden as H
 from charter import lawlang as L
 from charter import outside as O
@@ -93,6 +94,7 @@ class Kernel:
         self.eff: dict = {}                                                # agent -> camp -> [(round, efficiency)]
         self.turn_log: list[dict] = []                                     # per agent turn: {round, agent, reasoning, stated_reasoning, actions, results}
         H.install(self)                                              # hidden powers, codex holdings, secret camps (hidden.py)
+        CT.init_state(self)                                            # camps: typed camps into k.w, lease state (charter/camptypes)
 
     # ------------------------------------------------------------------ basics
     @property
@@ -517,6 +519,7 @@ class Kernel:
             **CR.law_api(k, lid),
             **H.law_api(k, lid),   # powers: disclose/holders/revoke (hidden.py)
             **P.law_api(k, lid), **O.law_api(k, lid),
+            **CT.law_api(k, lid),                                          # camps: set_lease_rules, leases
         }
 
     # ------------------------------------------------------------------ laws
@@ -677,6 +680,8 @@ class Kernel:
                  "loan_law": w.get("loan_law"), "loan_enforce": w.get("loan_enforce"),
                  "tribute": (out.get("current") or {}).get("paid") if out.get("current") else None, "tribute_mult": out.get("mult"),
                  "powers_disclosed": (w.get("hidden_caps") or {}).get("disclose")}   # who holds powers is never previewed
+        if "leases" in w:                                              # camps: lease rules show in previews
+            rules["lease_rules"] = dict(w["leases"]["rules"])
         return {"holdings": {a: dict(v["holdings"]) for a, v in ag.items()},
                 "rights": {a: list(v["rights"]) for a, v in ag.items()}, "rules": rules,
                 "reserve": dict(w["reserve"]), "currencies": {c: dict(v) for c, v in w["currencies"].items()},
@@ -924,15 +929,18 @@ class Kernel:
             for c in self.w["camps"].values():
                 C.drift(c, self.rng)
             self.log("drift", None, {"round": r}, vis="monitor")
+        CT.start_round(self)                                           # camps: upkeep (optional), lease offers lapse
         self.hooks("on_round_start", r)
         H.on_round_start(self)                                         # hidden layer: seeded tips and discoveries (hidden.py)
 
     def end_round(self, effect_predicates=None):
+        CT.end_of_round(self)                                          # camps: step 2, sealed inputs revealed and paid (types only)
         self.close_ballots()
         self.process_veto_queue()
         self.hooks("on_round_end", self.r)
         for c in self.w["camps"].values():
             C.regrow(c)
+        CT.world_update(self)                                          # camps: step 5, drift, next conditions, leases returned
         self._expire_cases()
         CR.end_round(self)
         self.snapshot(effect_predicates)
@@ -1061,6 +1069,7 @@ class Kernel:
                         "transfer_tax_frac": e["transfer_taxed"] / e["transfer_qty"] if e["transfer_qty"] else None},
             "fixer_queue": len(w["fixer_queue"]),
             **P.snapshot_fields(self), **O.snapshot_fields(self),
+            **CT.snapshot_fields(self),                                    # camps: per-camp records, leases ({} under legacy)
             "efficiency": {a: {c: round(sum(x for _, x in v[-3:]) / len(v[-3:]), 4) for c, v in cs.items() if v} for a, cs in self.eff.items()},
         }
         for a in w["agents"]:
