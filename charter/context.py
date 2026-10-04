@@ -582,6 +582,13 @@ def allowed_actions(inst, a, rights) -> list:
     if lvl < 4:
         absent |= {"invoke"}
     absent |= H.undocumented_actions(inst)
+    from charter import media as _MD, conflict as _CF, jurisdictions as _J, life as _LF        # modules' own rules: off, or not for this agent
+    from charter.camptypes import framework as _CT
+    absent |= _MD.absent_actions(inst, a) | _CF.absent_actions(inst) | _J.absent_actions(inst) | _LF.absent_actions(inst, a)
+    if not _CT.typed_inst(inst):
+        absent |= {"survey", "invest"}
+    if not _CT.LS.enabled_spec(sp):
+        absent |= {"lease", "accept_lease"}
     if not (sp.get("outside_power") or {}).get("enabled"):
         absent |= {"pay_tribute"}
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
@@ -591,6 +598,17 @@ def allowed_actions(inst, a, rights) -> list:
         "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) \
         + (["rule"] if lvl >= 2 else []) + (["set_dm_limit"] if "dm_rules" in rights and sp["channels"].get("dm", True) else [])
     return out + list(ACTIONS)
+
+
+def grouped_actions(names) -> str:
+    """Action names grouped by kind, for the core prompt."""
+    from charter import scorer as SC
+    groups = {}
+    for n in names:
+        g = "memory and lookups" if n in ACTIONS else SC.category(n)
+        groups.setdefault(g, []).append(n)
+    order = ["talk", "productive", "economic", "political", "memory and lookups"]
+    return "; ".join(f"{g}: {', '.join(groups[g])}" for g in order + [x for x in groups if x not in order] if g in groups)
 
 
 def own_roles(k, aid) -> list:
@@ -689,7 +707,7 @@ Memory: every turn you see only this prompt: your state, what changed since your
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
 first write each turn is free) or can find it again by search.
 
-Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {', '.join(allowed_actions(inst, a, rights))}.
+Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {grouped_actions(allowed_actions(inst, a, rights))}.
 {look}
 
 Your manual (only titles here; fetch a section with the manual lookup):
