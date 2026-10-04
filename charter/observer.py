@@ -219,7 +219,7 @@ paid that agent; a plain dm they send to that agent goes to the real one, who ne
 applies to you as to everyone (forged messages and replies count).{step}
 {objective_text(o)}
 You start with {json.dumps(o['endowment']) if o['endowment'] else 'nothing'}.
-{AG.goal_prior()}
+{AG.goal_prior(inst['spec'].get('goals'))}
 
 Actions (you have {o['actions']} per turn; each item in "actions" uses one):
 {docs}
@@ -293,7 +293,9 @@ class Observer:
                       "rights": [], "goal": {"primary": "Observer objective", "fixed": True, "text": objective_text(self.o)}}
         self.system = system_prompt(inst)
         (self.out / "prompts").mkdir(parents=True, exist_ok=True)
-        (self.out / "prompts" / f"{self.id}.system.md").write_text(self.system)
+        f = self.out / "prompts" / f"{self.id}.system.md"
+        if not f.exists():
+            f.write_text(self.system)
         self.in_dm_step = in_dm_step(inst)
         if state:
             self.reads, self.notes, self.results, self.cursor = state["reads"], state["notes"], state["results"], state["cursor"]
@@ -335,7 +337,7 @@ class Observer:
         _, n, user, cursor = prep
         outp, reasoning, usage = decision
         plan = list((last_outp if last_outp is not None else outp).get("actions") or [])
-        acts = [x for x in plan if str(x.get("action", "")) not in A.DM_ACTIONS]
+        acts = [x for x in plan if not A.is_dm_item(x)]
         res = list(pre)
         for item in acts[:n]:
             name = str(item.get("action", ""))

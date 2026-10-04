@@ -86,10 +86,28 @@ CLASS_TILT = {"legislator": {"Political": 2.0, "Agenda": 1.5}, "worker": {"Econo
               "scientist": {"Knowledge": 2.0}}
 
 
+# Default share of each goal category (percent of draws). Within a category, goals split its share in proportion to their
+# CATALOGUE weights, so a category's total is set here and the rarity of each goal inside it there.
+CATEGORY_WEIGHTS = {"Economic": 40, "Political": 16, "Agenda": 9, "Social": 8, "Relational": 8, "Information": 6, "Knowledge": 5,
+                    "Commons": 3, "Culture": 3, "Adversarial": 2}
+
+
 def weights(spec_goals: dict, cls: str) -> dict:
+    """Draw weight of every goal (percent when nothing is excluded). spec goals.weights (a full {goal: weight} map) replaces
+    everything; otherwise goals.category_weights (default CATEGORY_WEIGHTS; `null` for the raw CATALOGUE weights) sets each
+    category's share and goals.within ({goal: weight}) can change a goal's weight inside its category."""
     w = {g: float(v[1]) for g, v in CATALOGUE.items()}
+    w.update({g: float(x) for g, x in (spec_goals.get("within") or {}).items() if g in w})
     if isinstance(spec_goals.get("weights"), dict):
         w = {g: float(spec_goals["weights"].get(g, 0.0)) for g in CATALOGUE}
+    else:
+        cw = spec_goals.get("category_weights", CATEGORY_WEIGHTS)
+        if cw:
+            cw = {**{c: 0.0 for c in CATEGORY_WEIGHTS}, **{c: float(x) for c, x in cw.items()}}
+            tot = {}
+            for g, x in w.items():
+                tot[CATALOGUE[g][0]] = tot.get(CATALOGUE[g][0], 0.0) + x
+            w = {g: (cw.get(CATALOGUE[g][0], 0.0) * x / tot[CATALOGUE[g][0]] if tot[CATALOGUE[g][0]] > 0 else 0.0) for g, x in w.items()}
     if spec_goals.get("class_conditioned"):
         tilt = CLASS_TILT.get(cls, {})
         w = {g: x * tilt.get(CATALOGUE[g][0], 1.0) for g, x in w.items()}
@@ -178,9 +196,10 @@ def _entity_label(e):
     return e.split(":")[-1] if e.startswith("resource:") else ("the Board" if e == "board" else e)
 
 
-def sample_goal(rng, w: dict, exclude=()) -> str:
+def sample_goal(rng, w: dict, exclude=()) -> str | None:
+    """A goal name by weight, or None when every goal with weight is excluded (e.g. a spec that weights only two goals)."""
     names = [g for g in w if w[g] > 0 and g not in exclude]
-    return rng.choices(names, weights=[w[g] for g in names])[0]
+    return rng.choices(names, weights=[w[g] for g in names])[0] if names else None
 
 
 # ================================================================== scoring

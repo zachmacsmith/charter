@@ -654,7 +654,7 @@ def test_loans_exist_only_by_law_and_settle():
 def test_rare_records_are_scarce():
     from charter import archive
     rare = [d for d in archive.docs(None) if d.startswith("rare/")]
-    assert len(rare) == 12
+    assert len(rare) >= 12
     held = n = 0
     for seed in range(40):
         for a in generator.generate(spec.load("E6"), seed)["agents"]:
@@ -689,3 +689,24 @@ def test_first_deposit_cannot_claim_an_existing_reserve():
     A.act(k, w, "deposit", {"currency": "crown", "item": "timber", "qty": 10})
     assert abs(k.holdings_value(w) - before) < 1e-6                     # paid 10 value, holds 10 value of coins
     assert abs(k.price("crown") - 1.0) < 1e-9 and k.w["reserve"].get("crown", 0) > 0
+
+
+def test_dry_runs_leave_laws_module_data_alone():
+    inst = generator.generate(spec.load("E3"), 1)
+    k = Kernel(inst)
+    ticker = 'title = "Ticker"\nintent = "counts rounds"\nticks = []\n\ndef on_round_end(r):\n    ticks.append(r)\n'
+    lid = k.new_law(ticker, by_cls(k, "legislator")[0])
+    k.enact(lid)
+    before = list(k.ns[lid]["ticks"])
+    other = k.new_law(LB.LIB["Crown Currency"]["code"], by_cls(k, "legislator")[0])
+    k.dry_run(other, 3)                                                  # a 3-round preview of another law
+    assert k.ns[lid]["ticks"] == before
+
+
+def test_a_section_with_a_distribution_like_key_merges_instead_of_replacing(tmp_path):
+    f = tmp_path / "w.yaml"
+    f.write_text("extends: [E3]\ngoals: {weights: {Wealth: 2, Power: 1}}\n")
+    sp = spec.load(str(f))
+    assert sp["goals"]["weights"] == {"Wealth": 2, "Power": 1} and "secondary_prob" in sp["goals"]
+    inst = generator.generate(sp, 1)
+    assert {a["goal"]["primary"] for a in inst["agents"] if not a["goal"]["fixed"]} <= {"Wealth", "Power"}

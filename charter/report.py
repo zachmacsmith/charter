@@ -213,7 +213,7 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
                                                                        "interest_cap", "default_consequence"):
                 line = f"- {'**' + t.replace('_', ' ') + '**' if t in ('bank_run', 'redemption_suspended') else t.replace('_', ' ')}" \
                        f"{' ' + who if who else ''}: {_cut(json.dumps(x), 160)}"
-            elif t in ("power_use", "tip", "article_granted", "forgery_truth", "history_forged", "spawn_request"):   # hidden.py
+            elif t in ("power_use", "tip", "article_granted", "forgery_truth", "forged_dm", "history_forged", "spawn_request"):   # hidden.py
                 line = f"- [hidden] {t.replace('_', ' ')} {who or ''}: {_cut(json.dumps(x), 200)}"
             elif t in P.EVENT_TYPES or t in O.EVENT_TYPES:                 # projects and tribute (public events)
                 line = "- " + ((P.render_event(e, "") if t in P.EVENT_TYPES else O.render_event(e, "")) or t).strip()

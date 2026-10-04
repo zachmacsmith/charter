@@ -110,7 +110,7 @@ def _range(v, rng, integer=False):
 
 def eligible(k) -> list[str]:
     """Agents who count for participation and may receive harvest rights (everyone but the Board and the Fixer)."""
-    return [a for a, v in k.w["agents"].items() if v["cls"] not in OFFICIALS]
+    return [a for a in k.players() if k.w["agents"][a]["cls"] not in OFFICIALS]
 
 
 def world_value(k) -> float:

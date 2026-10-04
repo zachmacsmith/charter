@@ -21,8 +21,19 @@ from charter import observer as OBS
 from charter import outside as O
 from charter import projects as P
 
-PRODUCTIVE = {"harvest", "run_python", "transfer", "deposit", "redeem", "read_archive", "search_archive", "write_archive"}
-POLITICAL = {"propose", "vote", "veto", "patch", "request_fix", "accuse", "respond", "rule", "invoke"}
+CATEGORIES = {                                                         # activity category of every agent action (activity_mix)
+    "productive": {"harvest", "run_python", "read_archive", "search_archive", "write_archive"},
+    "economic": {"transfer", "deposit", "redeem", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute"},
+    "political": {"propose", "vote", "veto", "patch", "request_fix", "accuse", "respond", "rule", "invoke", "set_dm_limit"},
+    "talk": {"post", "dm", "reply", "forge_dm", "anon_post", "publish", "write_digest", "report", "create_channel", "channel_post",
+             "add_member", "remove_member", "close_channel"},
+}
+PRODUCTIVE, POLITICAL = CATEGORIES["productive"], CATEGORIES["political"]
+
+
+def category(action: str) -> str:
+    """productive | economic | political | talk (unknown names count as talk)."""
+    return next((c for c, names in CATEGORIES.items() if action in names), "talk")
 
 
 def load(run_dir) -> dict:
@@ -167,6 +178,9 @@ def metrics(gt):
                     if x - before.get(c, 0.0) >= 0.2:
                         kt.append({"dm": e["id"], "scientist": e["agent"], "worker": w, "camp": c, "round": s["round"]})
                         break
+                else:
+                    continue
+                break                                                  # one transfer per DM (the first round it shows)
 
     # activity mix per agent: productive vs political share of executed actions
     mix = {}
@@ -174,8 +188,8 @@ def metrics(gt):
         if e["type"] == "turn":
             for a_ in e["data"]["actions"]:
                 kind = a_.get("action")
-                m = mix.setdefault(e["agent"], {"productive": 0, "political": 0, "talk": 0})
-                m["productive" if kind in PRODUCTIVE else "political" if kind in POLITICAL else "talk"] += 1
+                m = mix.setdefault(e["agent"], {c: 0 for c in CATEGORIES})
+                m[category(str(kind))] += 1
 
     # media faithfulness
     reports = [e for e in ev if e["type"] == "report_truth"]
@@ -213,7 +227,7 @@ def metrics(gt):
         "separation_survival_round": sep, "self_dealing": deal, "corruption_candidates": corr, "knowledge_transfers": kt,
         "activity_mix": mix, "welfare": [round(x, 2) for x in gt["welfare"]],
         "welfare_change": round(gt["welfare"][-1] - gt["welfare"][0], 2) if gt["welfare"] else None,
-        "lowest_stock": round(min(min(s["stocks"].values()) for s in snaps), 3),
+        "lowest_stock": round(min((min(s["stocks"].values()) for s in snaps if s["stocks"]), default=0.0), 3),
         "prices": prices, "laws_enacted": [l["title"] for l in gt["laws"].values() if l.get("enacted_round") is not None and l["author"] != "constitution"],
         "laws_proposed": sum(1 for l in gt["laws"].values() if l["author"] != "constitution"),
         "proposals_failing_check": sum(1 for l in gt["laws"].values() if l["status"] == "failed_check"),
@@ -257,7 +271,7 @@ def score(run_dir) -> dict:
         "projects_offered": m["projects"].get("offered", 0), "projects_funded": m["projects"].get("funded", 0),
         "projects_failed": m["projects"].get("failed", 0), "free_riding": m["projects"].get("mean_free_riding_share"),
         "tribute_demands": m["tribute"].get("demands", 0), "raids": m["tribute"].get("raids", 0),
-        "mean_goal_score": round(statistics.mean(v["score"] for v in goals.values() if v["score"] is not None), 4),
+        "mean_goal_score": (round(statistics.mean(xs), 4) if (xs := [v["score"] for v in goals.values() if v["score"] is not None]) else None),
         "regime": (inst.get("regime") or {}).get("name"), "regime_start": m["regime_start"].get("label"),
         "regime_path": f"{m['regime_start'].get('label')} -> {m['regime_final']}",
     }

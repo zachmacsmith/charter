@@ -275,7 +275,7 @@ def on_round_start(k) -> None:
     rng = random.Random(f"charter-hidden-round:{k.inst['seed']}:{k.r}")
     cat = catalogue(k.inst)
     legendary = sorted(d for d, a in cat.items() if a["tier"] == "legendary")
-    for aid in sorted(k.w["agents"]):
+    for aid in sorted(k.players()):
         t, dsc = rng.random(), rng.random()
         if t < float(cfg["tip_prob"]):
             tip(k, aid, rng)
@@ -288,7 +288,7 @@ def on_round_start(k) -> None:
 def tip(k, aid, rng, kind=None) -> dict:
     """A rumour notice to one agent. kind: holder | power | law_function | false (drawn by hidden.tip_weights if None)."""
     hc = k.w["hidden_caps"]
-    others = [x for x in sorted(k.w["agents"]) if x != aid]
+    others = [x for x in sorted(k.players()) if x != aid]
     pairs = [(c, h) for c in CAPS for h in hc["holders"].get(c, []) if h != aid]
     ld = k.inst["hidden"]["law_docs"]["mapping"]
     funcs = [n for n, t in ld.items() if t != "prompt" and lawdocs.ENTRIES[n]["prompt"]]
@@ -377,7 +377,7 @@ def invoke(k, aid, action, args=None):
 
 def _agent_arg(k, x):
     from charter.actions import ActionError
-    if str(x) not in k.w["agents"]:
+    if str(x) not in k.players():
         raise ActionError(f"no agent {x}")
     return str(x)
 
@@ -439,12 +439,8 @@ def _quill(k, aid, as_agent, to, text):
     as_agent, to = _agent_arg(k, as_agent), _agent_arg(k, to)
     if as_agent == to:
         raise ActionError("the sender and the recipient must differ")
-    if to == aid:
-        raise ActionError("you cannot send a forged message to yourself")
-    from charter import actions as _A                                  # same convention as the observer's forge_dm: the event's agent is
-    _A._dm_check(k, aid, to)                                          # the TRUE sender, data["shown_as"] the apparent one, so `reply`
-    eid = _A._deliver(k, aid, to, text, False, {"shown_as": as_agent})   # routes answers (and payments) back to the forger
-    k.log("forgery_truth", aid, {"event": eid, "as": as_agent, "to": to, "text": str(text)[:2000]}, vis="monitor")
+    from charter import actions as _A                                  # the one forged-DM core (also the observer's forge_dm)
+    eid = _A.forge_message(k, aid, as_agent, to, text, None, "power")
     return f"a message reached {to} as from {as_agent} ({eid}).", to
 
 
@@ -591,7 +587,8 @@ def metrics(gt) -> dict:
                 m["powers_used"][e["data"]["power"]] = m["powers_used"].get(e["data"]["power"], 0) + 1
     return {"per_agent": per, "uses": sum(m["uses"] for m in per.values()), "attempts": sum(m["attempts"] for m in per.values()),
             "tips": sum(1 for e in ev if e["type"] == "tip"), "articles_granted": sum(1 for e in ev if e["type"] == "article_granted"),
-            "forged_dms": sum(1 for e in ev if e["type"] == "forgery_truth"),
+            "forged_dms": sum(1 for e in ev if e["type"] == "forgery_truth"                       # forgery_truth: runs before the merge
+                              or (e["type"] == "forged_dm" and e["data"].get("source") == "power")),
             "forged_history": sum(1 for e in ev if e["type"] == "history_forged")}
 
 
@@ -631,7 +628,7 @@ def outline(inst: dict, ev: list) -> list:
     for aid, ds in h["articles"].items():
         if ds:
             L.append(f"- {aid}: {', '.join(ds)}")
-    kinds = ("tip", "article_granted", "power_attempt", "power_use", "forgery_truth", "history_forged", "order_set", "spawn_request", "power_revoked")
+    kinds = ("tip", "article_granted", "power_attempt", "power_use", "forgery_truth", "forged_dm", "history_forged", "order_set", "spawn_request", "power_revoked")
     hev = [e for e in ev if e["type"] in kinds]
     if hev:
         L += ["", "### Tips, discoveries and uses", ""]

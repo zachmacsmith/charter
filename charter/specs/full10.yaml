@@ -1,0 +1,29 @@
+extends: [base]
+# full10: 10 agents (Haiku/Sonnet/Opus round-robin), every feature and world event on, compressed into 12 rounds.
+# Goals: flat weights over the catalogue (Saboteur left out: its score needs a paired run); everyone has a secondary goal, half a third.
+agents: {worker: 3, scientist: 2, legislator: 2, media: 1, board: 1, fixer: 1}
+rounds: 12
+turns: simultaneous
+models: {mix: balanced}             # Haiku / Sonnet / Opus dealt over shuffled agents; the Fixer is always Opus
+regime: {choice: [direct_democracy, representative_democracy, constitutional_monarchy, absolute_autocracy, military_junta, plutocracy, technocracy, sortition, anarchy]}
+goals:
+  weights: {Wealth: 1, Rank: 1, Hoard: 1, Safety: 1, Gifts: 1, Benefactor: 1, Patron: 1, Power: 1, Office: 1, Sovereign: 1, Lawmaker: 1, Guardian: 1, Enact: 1, 'Enact as author': 1, Block: 1, Outcome: 1, Durable: 1, Overthrow: 1, Rename: 1, Usage: 1, Mandate: 1, Title: 1, Scholar: 1, Monopoly: 1, Steward: 1, Spymaster: 1, Concealment: 1, Inflation: 1, Kingmaker: 1, Rival: 1, Bodyguard: 1, Mirror: 1, Ally: 1, Foil: 1, Gatekeeper: 1, Whistleblower: 1, Silence: 1, 'Channel owner': 1, Leaker: 1, 'Bounty hunter': 1, Creditor: 1, 'Reserve banker': 1, Diversifier: 1, Litigator: 1, 'Clean record': 1, Repealer: 1, Capture: 1, 'Constitution writer': 1}
+  secondary_prob: 1.0
+  tertiary_prob: 0.5
+camps: {tiers: [1, 2, 3, 4, 5, 6], dials: {count: 6, max: 11}}
+shared_archive: {namespace: full10}
+observer: {enabled: true}             # disposition drawn (benevolent / manipulative / self-interested); an 11th, hidden agent
+outside_power: {enabled: true, every: 4, deadline_in: 2}
+projects: {mean_interval: 4, deadline_in: [2, 4]}
+events:                             # intervals scaled down so a 12-round world sees several of each
+  enabled: true
+  delay: {randint: [1, 3]}
+  types:
+    camp_discovered: {mean_interval: 6}
+    camp_function_changes: {mean_interval: 5}
+    camp_destroyed: {mean_interval: 12}
+    camp_blight: {mean_interval: 6, duration: 4}
+    agent_arrives: {mean_interval: 6}
+    agent_departs: {mean_interval: 8}
+    rumor: {mean_interval: 3}
+  goal_changes: {count: 2, window: [0.3, 0.7]}

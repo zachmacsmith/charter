@@ -125,6 +125,11 @@ class Kernel:
         """Every agent the world knows of: all but the secret observer (charter/observer.py)."""
         return [a for a, v in self.w["agents"].items() if v["cls"] != "observer"]
 
+    def players(self, include_departed=False):
+        """Agents in play, for every pool a feature draws from (tips, rumours, events, records): the roster minus departed agents.
+        Features must use this (or roster) rather than k.w["agents"], which also holds the secret observer."""
+        return [a for a in self.roster() if include_departed or self.w["agents"][a].get("departed") is None]
+
     def dm_cap(self) -> int:
         """Hard ceiling on any DM limit (protects model usage: every DM in fast mode can trigger a reply call)."""
         return int((self.spec.get("dm_step") or {}).get("max_per_round", 10))
@@ -590,13 +595,22 @@ class Kernel:
         self.w["fixer_queue"].append({"law": lid, "reason": f"runtime error: {msg}", "by": "kernel", "round": self.r})
 
     # ------------------------------------------------------------------ dry run (transaction)
+    def _module_data(self):
+        """Laws' module-level data (lists, dicts, counters a law keeps outside `state`): copied by dry runs so a preview, probe or
+        procedure check cannot leave changes in laws already in force."""
+        skip = L.API | set(L.SAFE_BUILTINS) | {"__builtins__", "title", "intent", "state"}
+        return {lid: {n: copy.deepcopy(v) for n, v in ns.items() if n not in skip and not callable(v)} for lid, ns in self.ns.items()}
+
     def _snapshot(self):
         return (copy.deepcopy(self.w), dict(self.fnreg), dict(self.ns),
                 {lid: copy.deepcopy(l["state"]) for lid, l in self.w["laws"].items()}, self.rng.getstate(), self.law_rng.getstate(),
-                copy.deepcopy(self.eff))
+                copy.deepcopy(self.eff), self._module_data())
 
     def _restore(self, snap):
-        self.w, self.fnreg, self.ns, states, rs, ls, self.eff = snap
+        self.w, self.fnreg, self.ns, states, rs, ls, self.eff, mdata = snap
+        for lid, data in mdata.items():
+            if lid in self.ns:
+                self.ns[lid].update(copy.deepcopy(data))
         self.w = copy.deepcopy(self.w)
         for lid, ns in self.ns.items():
             if lid in self.w["laws"]:
@@ -645,16 +659,26 @@ class Kernel:
     def view(self):
         """The parts of the world a preview diff compares."""
         w = self.w
-        return {"holdings": {a: dict(v["holdings"]) for a, v in w["agents"].items()},
-                "rights": {a: list(v["rights"]) for a, v in w["agents"].items()},
+        ag = {a: w["agents"][a] for a in self.roster()}                 # never the secret observer: previews are public
+        cr = w.get("credit") or {}
+        out = w.get("outside") or {}
+        rules = {"interest_cap": cr.get("cap"), "default_consequence": cr.get("consequence"),
+                 "redemption": {c: v for c, v in (cr.get("redemption") or {}).items() if v},
+                 "loans": {i: (ln["status"], ln.get("repay_qty"), ln.get("due"), ln.get("lender"))
+                           for i, ln in w["loans"].items() if ln.get("lender") in ag or ln.get("lender") == "reserve"},
+                 "loan_law": w.get("loan_law"), "loan_enforce": w.get("loan_enforce"),
+                 "tribute": (out.get("current") or {}).get("paid") if out.get("current") else None, "tribute_mult": out.get("mult"),
+                 "powers_disclosed": (w.get("hidden_caps") or {}).get("disclose")}   # who holds powers is never previewed
+        return {"holdings": {a: dict(v["holdings"]) for a, v in ag.items()},
+                "rights": {a: list(v["rights"]) for a, v in ag.items()}, "rules": rules,
                 "reserve": dict(w["reserve"]), "currencies": {c: dict(v) for c, v in w["currencies"].items()},
                 "procedures": {c: k.split("#")[0] for c, k in w["procedures"].items()},
                 "camps": {c: {"quota": v["quota"], "harvest_limit": v["harvest_limit"], "fee": v["fee"]} for c, v in w["camps"].items()},
-                "names": dict(w["names"]), "titles": {a: v["title"] for a, v in w["agents"].items() if v["title"]},
+                "names": dict(w["names"]), "titles": {a: v["title"] for a, v in ag.items() if v["title"]},
                 "actions": {n: a["right"] for n, a in w["actions"].items()}, "rights_catalog": list(w["rights"]),
-                "laws": {l: v["status"] for l, v in w["laws"].items()}, "limits": {a: v["limit"] for a, v in w["agents"].items() if v["limit"]},
-                "dm_limit": {"all": w["dm_limit"]["all"], **w["dm_limit"]["agents"]},
-                "suspended": {a: dict(v["suspended"]) for a, v in w["agents"].items() if v["suspended"]},
+                "laws": {l: v["status"] for l, v in w["laws"].items()}, "limits": {a: v["limit"] for a, v in ag.items() if v["limit"]},
+                "dm_limit": {"all": w["dm_limit"]["all"], **{a: n for a, n in w["dm_limit"]["agents"].items() if a in ag}},
+                "suspended": {a: dict(v["suspended"]) for a, v in ag.items() if v["suspended"]},
                 "projects": P.view(self)}
 
     @staticmethod
@@ -673,7 +697,7 @@ class Kernel:
             gained = set(b["rights"][a_id]) - set(a["rights"].get(a_id, []))
             lost = set(a["rights"].get(a_id, [])) - set(b["rights"][a_id])
             out += [f"{a_id} gains right {g}" for g in sorted(gained)] + [f"{a_id} loses right {g}" for g in sorted(lost)]
-        for key in ("currencies", "procedures", "camps", "names", "titles", "actions", "limits", "suspended", "projects"):
+        for key in ("currencies", "procedures", "camps", "names", "titles", "actions", "limits", "suspended", "projects", "rules", "dm_limit"):
             for k in sorted(set(a[key]) | set(b[key])):
                 if a[key].get(k) != b[key].get(k):
                     out.append(f"{key}: {k}: {a[key].get(k)} -> {b[key].get(k)}")

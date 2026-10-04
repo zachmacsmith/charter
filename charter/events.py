@@ -117,7 +117,7 @@ def state(k) -> dict:
 
 
 def active(k, officials=True) -> list:
-    return [a for a, v in k.w["agents"].items() if v.get("departed") is None and (officials or v["cls"] not in OFFICIALS)]
+    return [a for a in k.players() if officials or k.w["agents"][a]["cls"] not in OFFICIALS]
 
 
 def round_start(k, inst, rs) -> None:
@@ -225,7 +225,7 @@ def _world(k, inst):
     return {"resources": sorted({c["resource"] for c in camps}) or ["timber"], "camps": [c["id"] for c in camps],
             "hardest_camp": max(camps, key=lambda c: c["tier"])["id"] if camps else None,
             "library": LB.subset(sp.get("library", "all"), sp["law_level"]),
-            "agents": [(a, v["cls"], list(v["rights"])) for a, v in k.w["agents"].items() if v.get("departed") is None],
+            "agents": [(a, k.w["agents"][a]["cls"], list(k.w["agents"][a]["rights"])) for a in k.players()],
             "compute": {c["id"]: c.get("compute") for c in camps if c.get("compute")},
             "channels_dm": sp["channels"].get("dm", True), "has_media": any(v["cls"] == "media" for v in k.w["agents"].values()),
             "has_scientists": any(v["cls"] == "scientist" for v in k.w["agents"].values())}
@@ -612,7 +612,8 @@ def _r_holdings(k, inst, rng, false):
 
 
 def _r_deal(k, inst, rng, false):
-    tr = [e for e in k.events if e["type"] == "transfer" and e["round"] >= k.r - 10]
+    play = set(k.players(include_departed=True))                       # never a transfer to or from the secret observer
+    tr = [e for e in k.events if e["type"] == "transfer" and e["round"] >= k.r - 10 and e["agent"] in play and e["data"]["to"] in play]
     pairs = {(e["agent"], e["data"]["to"]) for e in k.events if e["type"] == "transfer"}
     if not false:
         if not tr:

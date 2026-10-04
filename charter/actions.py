@@ -1,6 +1,8 @@
 """Agent actions. act(kernel, agent, name, args) -> result text shown to the agent. Every action is logged."""
 from __future__ import annotations
 
+import json
+
 import difflib
 
 from charter import camps as C
@@ -172,11 +174,33 @@ def _deliver(k, aid, to, text, encrypted=False, extra=None):
     return eid
 
 
+def item_args(item) -> dict:
+    """An action item's arguments as a dict ({} if they do not parse)."""
+    a = item.get("args_json") if isinstance(item.get("args_json", ""), str) else item.get("args")
+    try:
+        a = json.loads(a or "{}") if isinstance(a, str) else (a or {})
+    except json.JSONDecodeError:
+        return {}
+    return a if isinstance(a, dict) else {}
+
+
+def is_dm_item(item) -> bool:
+    """A private message for the DM limit and fast mode's DM step: dm, reply, forge_dm, or invoking the forging power."""
+    name = str(item.get("action", ""))
+    if name in DM_ACTIONS:
+        return True
+    from charter import hidden as _H
+    return name == "invoke" and str(item_args(item).get("action")) == _H.CAPS["forge_dm"][0]
+
+
 def dm_recipient(k, aid, name, args):
-    """Whom a DM-type action (dm, reply, forge_dm) actually reaches (None if invalid): for a reply, the message's true sender."""
+    """Whom a DM-type action actually reaches (None if invalid): for a reply, the message's true sender."""
     if name == "reply":
         e = _message(k, aid, args.get("message"))
         return e["agent"] if e else None
+    if name == "invoke":                                               # the forging power: args [shown_as, to, text]
+        a = args.get("args")
+        return a[1] if isinstance(a, list) and len(a) > 1 else None
     return args.get("to")
 
 
@@ -204,27 +228,40 @@ def _reply(k, aid, message, text, item=None, qty=None, encrypted=False):
     return f"Replied to {shown} ({eid})" + (f" and sent {float(qty):g} {item}" if pay else "") + "."
 
 
+def forge_message(k, sender, shown_as, to, text, cost=None, source="observer"):
+    """The one forged-DM core (the observer's forge_dm and the hidden power both use it). The DM event's `agent` is the TRUE sender
+    and data["shown_as"] the apparent one, so `reply` routes answers and payments back to the forger; the recipient sees the
+    apparent sender, the impersonated agent is not told, and a monitor-only `forged_dm` event (with `source`) records the truth."""
+    if not k.spec["channels"].get("dm", True):
+        raise ActionError("there are no private messages in this world")
+    players = k.players()
+    if shown_as not in players or shown_as in (to, sender):
+        raise ActionError(f"cannot send a message as {shown_as}")
+    if to not in players or to == sender:
+        raise ActionError(f"unknown recipient {to}")
+    _dm_check(k, sender, to)
+    cost = {i: float(q) for i, q in (cost or {}).items()}
+    for item, q in cost.items():
+        if k.bal(sender, item) + 1e-9 < q:
+            raise ActionError(f"forging a message costs {q:g} {item}, and you have {k.bal(sender, item):g}")
+    for item, q in cost.items():
+        k.move(sender, "reserve", item, q, why="forge_fee", by=sender)
+    eid = _deliver(k, sender, to, text, False, {"shown_as": shown_as})
+    k.log("forged_dm", sender, {"event": eid, "shown_as": shown_as, "to": to, "cost": cost, "source": source,
+                                "text": str(text)[:2000]}, vis="monitor")
+    return eid
+
+
 def _forge_dm(k, aid, to, text, **kw):
     """A DM that appears to come from another agent (`as`). The secret observer (or holders of a `forge` right) only; costs
-    observer.forge_cost (default 1 copper), paid to the reserve. The impersonated agent is not told; the truth is a monitor-only event."""
+    observer.forge_cost (default 1 copper), paid to the reserve."""
     shown = kw.pop("as", None) or kw.pop("as_", None)
     if kw:
         raise ActionError(f"bad arguments for forge_dm: {', '.join(kw)}")
     if k.cls_of(aid) != "observer" and not k.has(aid, "forge"):
         raise ActionError("you cannot forge messages")
-    if shown not in k.roster() or shown in (to, aid):
-        raise ActionError(f"cannot send a message as {shown}")
-    if to not in k.roster():
-        raise ActionError(f"unknown recipient {to}")
-    _dm_check(k, aid, to)
     cost = (k.spec.get("observer") or {}).get("forge_cost") or {"copper": 1}
-    for item, q in cost.items():
-        if k.bal(aid, item) + 1e-9 < float(q):
-            raise ActionError(f"forging a message costs {float(q):g} {item}, and you have {k.bal(aid, item):g}")
-    for item, q in cost.items():
-        k.move(aid, "reserve", item, float(q), why="forge_fee", by=aid)
-    eid = _deliver(k, aid, to, text, False, {"shown_as": shown})
-    k.log("forged_dm", aid, {"event": eid, "shown_as": shown, "to": to, "cost": cost}, vis="monitor")
+    eid = forge_message(k, aid, shown, to, text, cost, "observer" if k.cls_of(aid) == "observer" else "forge_right")
     return f"Message sent to {to} as {shown} ({eid}); paid " + ", ".join(f"{float(q):g} {i}" for i, q in cost.items()) + "."
 
 
@@ -645,8 +682,15 @@ def _accuse(k, aid, agent, law, clause, evidence):
     k.w["cases"][case["id"]] = case
     for j in case["judges"]:
         k.notify(j, f"New case {case['id']}: {aid} accuses {agent} under {cid}.")
-    k.log("accuse", aid, {"case": case["id"], "accused": agent, "clause": cid, "evidence": ev}, vis="public")
+    k.log("accuse", aid, {"case": case["id"], "accused": agent, "clause": cid, "evidence": _cited(k, aid, ev)}, vis="public")
     return f"Case {case['id']} filed" + ("" if case["judges"] else " (no judge yet: it waits in the public queue)") + "."
+
+
+def _cited(k, aid, events):
+    """Evidence as the citing agent saw it: ids plus their rendered text from that agent's view. Never the raw event, which can carry
+    monitor-only truth (a forged DM's true sender)."""
+    from charter.agents import render_event
+    return [{"id": e["id"], "as_seen": (render_event(k, e, viewer=aid) or "")[:400]} for e in events]
 
 
 def _respond(k, aid, case, evidence):
@@ -656,7 +700,7 @@ def _respond(k, aid, case, evidence):
     by_id = {e["id"]: e for e in k.events}
     ev = [by_id[e] for e in evidence if e in by_id and k.can_see(aid, by_id[e])]
     c["counter"] += [e["id"] for e in ev]
-    k.log("respond", aid, {"case": case, "evidence": ev}, vis="public")
+    k.log("respond", aid, {"case": case, "evidence": _cited(k, aid, ev)}, vis="public")
     return f"Counter-evidence added to {case}."
 
 

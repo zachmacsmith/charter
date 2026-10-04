@@ -84,7 +84,9 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
     sysp = {aid: AG.system_prompt(inst, a) for aid, a in agents.items()}
     (out / "prompts").mkdir(exist_ok=True)
     for aid, txt in sysp.items():
-        (out / "prompts" / f"{aid}.system.md").write_text(txt)
+        f = out / "prompts" / f"{aid}.system.md"
+        if not f.exists():                                              # a resume never overwrites the prompt the agent started with
+            f.write_text(txt)
     ev_rs = {"agents": agents, "sysp": sysp, "cursors": cursors, "start_values": start_values, "out": out}
     mem = inst["spec"]["llm"].get("memory_chars", 4000)
     t0 = time.time()
@@ -138,8 +140,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             are delivered and their recipients asked again, up to `exchanges` times. Then all plans run in the round's order."""
             waves = int(dmc.get("exchanges", 2))
             seen = {aid: len(k.events) for aid in order}
-            outbox = {aid: [x for x in (decisions[aid][0].get("actions") or []) if str(x.get("action", "")) in A.DM_ACTIONS] for aid in order}
-            plan = {aid: [x for x in (decisions[aid][0].get("actions") or []) if str(x.get("action", "")) not in A.DM_ACTIONS] for aid in order}
+            outbox = {aid: [x for x in (decisions[aid][0].get("actions") or []) if A.is_dm_item(x)] for aid in order}
+            plan = {aid: [x for x in (decisions[aid][0].get("actions") or []) if not A.is_dm_item(x)] for aid in order}
             for wave in range(waves + 1):
                 got = []
                 for aid in order:
@@ -148,7 +150,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                             args = json.loads(item.get("args_json") or "{}") if isinstance(item.get("args_json", ""), str) else (item.get("args") or {})
                             if not isinstance(args, dict):
                                 raise A.ActionError("args_json must be a JSON object")
-                            name = str(item.get("action", ""))               # dm, reply or forge_dm (A.DM_ACTIONS)
+                            name = str(item.get("action", ""))               # dm, reply, forge_dm, or the forging power (A.is_dm_item)
                             to = A.dm_recipient(k, aid, name, args)          # a reply reaches the message's true sender
                             pre[aid].append(f"{name}: " + A.act(k, aid, name, args))
                             if to not in got:
@@ -165,7 +167,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                     asks.append((aid, AG.dm_prompt(k, agents[aid], preps[aid][2], decisions[aid][0], plan[aid], new, k.w["dm_sent"].get(aid, 0), k.dm_limit(aid),
                                                     preps[aid][1], wave + 1, waves, final)))
                 outs = in_parallel(lambda q: policy.act(k, agents[q[0]], sysp[q[0]], q[1], preps[q[0]][1], final), asks)
-                tally.add([o[0] for o in outs], [q[0] for q in asks])
+                agent_calls = [(o, q[0]) for o, q in zip(outs, asks) if not (obs and q[0] == obs.id)]   # the observer never counts
+                tally.add([o[0] for o, _ in agent_calls], [a for _, a in agent_calls])
                 stop_if_failing(r, tally)
                 for (aid, prompt), (o, reasoning, usage) in zip(asks, outs):
                     acts = list(o.get("actions") or [])
@@ -176,8 +179,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                     if o.get("_error"):
                         pre[aid].append(f"(your reply to the messages could not be used, so your plan stands: {o['_error'][:200]})")
                         continue
-                    outbox[aid] = [x for x in acts if str(x.get("action", "")) in A.DM_ACTIONS]
-                    plan[aid] = [x for x in acts if str(x.get("action", "")) not in A.DM_ACTIONS]
+                    outbox[aid] = [x for x in acts if A.is_dm_item(x)]
+                    plan[aid] = [x for x in acts if not A.is_dm_item(x)]
                     last[aid] = {**o, "actions": plan[aid]}
                 reason_f.flush()
 
@@ -202,7 +205,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             last = final_outp if final_outp is not None else outp
             acts = list(last.get("actions") or [])
             if dm_step:
-                acts = [x for x in acts if str(x.get("action", "")) not in A.DM_ACTIONS]
+                acts = [x for x in acts if not A.is_dm_item(x)]
             res = list(pre)
             for item in acts[:n]:
                 name = str(item.get("action", ""))

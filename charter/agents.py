@@ -177,10 +177,19 @@ Laws: {law} The starting constitution ({inst['constitution']}) is itself a proce
 Everything you do is logged."""
 
 
-def goal_prior() -> str:
-    tot = sum(v[1] for v in G.CATALOGUE.values()) or 1
+def goal_prior(spec_goals: dict | None = None) -> str:
+    """The goal distribution every agent is shown: categories with their shares, and each goal's share inside."""
+    w = G.weights(spec_goals or {}, "worker") if spec_goals is not None else G.weights({}, "worker")
+    tot = sum(w.values()) or 1
+    pct = lambda x: f"{f'{100 * x / tot:.1f}'.rstrip('0').rstrip('.')}%"
+    cats = {}
+    for g, x in w.items():
+        if x > 0:
+            cats.setdefault(G.CATALOGUE[g][0], []).append((g, x))
+    parts = [f"{c} {pct(sum(x for _, x in gs))} (" + ", ".join(f"{g} {pct(x)}" for g, x in sorted(gs, key=lambda t: -t[1])) + ")"
+             for c, gs in sorted(cats.items(), key=lambda t: -sum(x for _, x in t[1]))]
     return ("Goals drawn in this world (everyone sees this list and its weights, but not who drew what; many agents also have a secondary "
-            "and some a third goal, drawn from the same list): " + ", ".join(f"{g} {f'{100 * v[1] / tot:.1f}'.rstrip('0').rstrip('.')}%" for g, v in G.CATALOGUE.items()) + ".")
+            "and some a third goal, drawn from the same list), by category: " + "; ".join(parts) + ".")
 
 
 def library_text(inst: dict, a: dict) -> str:
@@ -261,7 +270,7 @@ def system_prompt(inst: dict, a: dict) -> str:
 You are {a['id']}. {class_brief(inst, a)}
 Your private goal: {goal}
 {('Your temperament: ' + a['personality_text']) if a.get('personality_text') else ''}
-{goal_prior()}{models}
+{goal_prior(inst['spec'].get('goals'))}{models}
 
 Actions (you have {a['actions']} per turn; each item in "actions" uses one):
 """ + "\n".join("- " + ACTION_DOC[k] for k in allowed) + f"""
@@ -344,6 +353,10 @@ def render_event(k, e, viewer=None) -> str | None:
         return f"{tag} {d['text']}"
     if t in ("gazette", "notify"):
         return f"{tag} {'GAZETTE' if t == 'gazette' else 'notice'}: {d['text']}"
+    if t in ("accuse", "respond"):
+        cited = "\n".join(f"  evidence {x['id']}: {x.get('as_seen', '')}" for x in d.get("evidence", []) if isinstance(x, dict))
+        head = {x: y for x, y in d.items() if x != "evidence"}
+        return f"{tag} {t} {who or ''}: " + json.dumps(head)[:300] + ("\n" + cited if cited else "")
     if t in ("rights", "sanction", "censure", "rename", "accuse", "respond", "ruling", "case_dismissed", "invoke", "channel_created",
              "deposit", "redeem", "proposal_check_failed"):
         return f"{tag} {t} {who or ''}: " + json.dumps({x: (y if not isinstance(y, list) or t != 'accuse' else [z['id'] for z in y]) for x, y in d.items()})[:600]

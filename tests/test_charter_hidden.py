@@ -276,7 +276,7 @@ def test_forge_dm_power():
     inv(k, a, "forge_dm", b, c, "meet me at camp2")
     assert f"DM {b} -> {c}: meet me at camp2" in feed_text(k, c, n0)
     assert "meet me" not in feed_text(k, b, n0) and "meet me" not in feed_text(k, a, n0)
-    truth = [e for e in k.events if e["type"] == "forgery_truth"]
+    truth = [e for e in k.events if e["type"] == "forged_dm" and e["data"]["source"] == "power"]
     assert truth and truth[0]["agent"] == a and truth[0]["vis"] == "monitor" and k.w["dm_sent"][a] == 1
 
 

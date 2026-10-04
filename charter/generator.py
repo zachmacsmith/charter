@@ -261,10 +261,10 @@ def generate(spec: dict, seed: int) -> dict:
         p2, p3 = float(gspec.get("secondary_prob", 0.7)), float(gspec.get("tertiary_prob", 0.3))
         if not gspec.get("all_wealth") and rng.random() < p2:
             sec = G.sample_goal(rng, w, exclude=(prim,))
-            sparams = G.sample_params(sec, rng, world, a["id"])
-            if p2 > 0 and rng.random() < min(1.0, p3 / p2):              # tertiary_prob is the share of all agents with a third goal
+            sparams = G.sample_params(sec, rng, world, a["id"]) if sec else {}
+            if sec and p2 > 0 and rng.random() < min(1.0, p3 / p2):      # tertiary_prob is the share of all agents with a third goal
                 ter = G.sample_goal(rng, w, exclude=(prim, sec))
-                tparams = G.sample_params(ter, rng, world, a["id"])
+                tparams = G.sample_params(ter, rng, world, a["id"]) if ter else {}
         a["goal"] = {"primary": prim, "params": params, "secondary": sec, "secondary_params": sparams,
                      "tertiary": ter, "tertiary_params": tparams, "fixed": False,
                      "reachable": G.reachable(prim, params, sp["law_level"], a)}

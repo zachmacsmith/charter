@@ -102,7 +102,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 - **Rare records** (`archive/rare/`, 12 accounts of subtle routes to power in past worlds, some relying on kernel gaps): each Scientist
   holds each record with probability `archive_split.rare_prob` (default 0.08), independently of the ordinary split, so most worlds
   have only a few copies and some records have none.
-- **Goals: 49 in the catalogue, up to three per agent.** Wealth is drawn 36.5% of the time; many goals are rarer than 1%. 70% of agents get a secondary goal and 30% a third (`goals.secondary_prob`,
+- **Goals: 49 in the catalogue, up to three per agent.** Goals are drawn by category (`goals.category_weights`: Economic 40%, Political 16%, Agenda 9%, Social 8%, Relational 8%, Information 6%, Knowledge 5%, Commons 3%, Culture 3%, Adversarial 2%), then by each goal's weight within its category (`goals.within`): Wealth is about 29%, and many goals are rarer than 1%. The prompt shows the distribution grouped by category. 70% of agents get a secondary goal and 30% a third (`goals.secondary_prob`,
   `tertiary_prob`); scores weigh 70/30 or 60/30/10 (`goals.score_weights`), and the prompt states each share. Beyond the spec's 29:
   relational goals about another agent (Kingmaker, Rival, Bodyguard; Mirror pairs two agents who share a score without being told
   who; Ally and Foil: make a named agent achieve, or fail, their primary or secondary goal, which they must find out), information

@@ -525,7 +525,7 @@ def state_lines(k, aid) -> list[str]:
                f"{outstanding(ln):.4g} {ln['repay_item']}, due round {ln['due'] + 1}, {ln['status']}" + (f", rate {ln['rate']:g}" if ln.get("rate") else ""))
             for ln in mine))
     recs = []
-    for x in list(k.w["agents"]) + ["reserve"]:
+    for x in k.players(include_departed=True) + ["reserve"]:
         r = record(k, x)
         if r["loans_taken"] or r["loans_made"]:
             recs.append(f"{x}: owes {r['outstanding']:.4g}, owed {r['lent_outstanding']:.4g}, repaid {r['repaid']} ({r['repaid_late']} late), "

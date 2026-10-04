@@ -24,7 +24,9 @@ DIST_KEYS = {"uniform", "randint", "choice", "weights", "beta"}
 def deep_merge(base: dict, top: dict) -> dict:
     out = copy.deepcopy(base)
     for k, v in (top or {}).items():
-        if isinstance(v, dict) and isinstance(out.get(k), dict) and not (set(v) & DIST_KEYS):
+        # A mapping merges into a section (a dict in the parent that is not itself a distribution), even if its only key looks like
+        # a distribution: `goals: {weights: {...}}` sets goals.weights, it does not replace the goals block.
+        if isinstance(v, dict) and isinstance(out.get(k), dict) and (not is_dist(out[k]) or not (set(v) & DIST_KEYS)):
             out[k] = deep_merge(out[k], v)
         else:
             out[k] = copy.deepcopy(v)
