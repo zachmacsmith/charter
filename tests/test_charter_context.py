@@ -116,7 +116,7 @@ def test_lookups_free_up_to_three():
     recs = CX.do_lookups(k, me, req)
     assert len(recs) == 5 and sum(1 for r in recs if r.get("skipped")) == 2
     assert all(r["tokens"] <= 1000 for r in recs if not r.get("skipped"))
-    assert k.w["context"]["manual_reads"][me] == {"How your turn works": 2}
+    assert k.w["context"]["manual_reads"][me] == {"World rules": 2}                    # section 1 is the full rules
     assert CX.do_lookups(k, me, {"lookups": []}) == []
 
 
@@ -274,3 +274,15 @@ def test_module_off_changes_nothing():
         A.act(k, k.roster()[0], "manual", {})
     assert "write_file" not in str(e.value)
     assert CX.record_fields(k, k.roster()[0]) == {}
+
+
+def test_core_prompt_never_loses_the_agent_with_every_module_on():
+    from charter import spec as _S, generator as _G, context as _CX
+    from charter.kernel import Kernel as _K
+    inst = _G.generate(_S.load("society"), 5)
+    k = _K(inst)
+    for a in inst["agents"]:
+        p = _CX.core_prompt(inst, a, k)
+        assert f"You are {a['id']}" in p and "Reply with a JSON object" in p and " post," in p
+        assert (a["goal"].get("text") or "")[:40] in p
+        assert _CX.tokens(p) <= int(_CX.cfg(inst)["budgets"]["core"]) + 2500      # essentials are never cut; the overview fits around them

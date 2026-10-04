@@ -60,6 +60,12 @@ def sections(inst, k, aid) -> list:
     lvl = ["L0", "L1", "L2", "L3", "L4"].index(inst["law_level"])
     out = []
 
+    out.append(("World rules", AG.world_rules(inst)))                   # the full rules (the core prompt carries what fits)
+    from charter import conflict as _CF, media as _MD, life as _LF
+    for title, txt in (("Conflict", _CF.prompt_section(inst, a) if _CF.enabled_inst(inst) else ""), ("Media", _MD.prompt_section(inst, a)),
+                       ("Life and children", _LF.prompt_section(inst, a))):
+        if txt and txt.strip():
+            out.append((title, txt.strip()))
     out.append(("How your turn works", (
         f"Each turn is built fresh from fixed parts: your state, what changed since your last turn (trimmed to a budget: the most important "
         f"first, then counts and pointers such as \"(14 older posts not shown: search_board)\"), your own last {c['recent_turns']} turns, "

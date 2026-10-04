@@ -610,6 +610,55 @@ def _class_line(inst, a) -> str:
     return AG.class_brief(inst, a)
 
 
+CAMP_SHORT = {
+    "tutorial": "a few dials, a steady and simple rule",
+    "landscape": "8 dials; the best setting follows a hidden rule that shifts with public conditions (modelling pays)",
+    "cartel": "the price falls as total extraction rises; demand is hidden (quotas pay if kept)",
+    "consortium": "noisy readings of a hidden vector; submitting the vector wins a shared pool (pool your data)",
+    "weak_link": "crews in shifts produce at their lowest effort; some workers are secretly faulty",
+    "catalyst": "needs a per-round number that only code can compute (pair a harvester with a sandbox)",
+    "minority": "open to all; pick a side, and the less crowded side is paid",
+    "partners": "open to all; pick a partner, share or take",
+    "guess": "guess a fraction of the average guess",
+    "vault": "a one-time bounty for factoring a number",
+}
+
+
+def overview(inst) -> str:
+    """A short overview of the world's rules for the core prompt: one or two lines per topic, each pointing to the manual section
+    with the details. The full rules are the manual's "World rules" section (and module sections)."""
+    sp = inst["spec"]
+    on = lambda m: bool((sp.get(m) or {}).get("enabled"))
+    camps = "; ".join(f"{c['id']} {c['resource']}" + (f" ({CAMP_SHORT.get(c.get('type'), 'dials and a hidden rule')})" if c.get("type")
+                                                      else f" (tier {c.get('tier')}: dials and a hidden rule)") for c in inst["camps"])
+    lines = [f"Charter: {len(inst['agents'])} agents, {inst['rounds']} rounds. Your score is your goal (below), computed from the final state.",
+             f"Camps: {camps}. You harvest only where you hold a harvest right (or at open camps); stocks regrow, so overharvesting hurts "
+             "everyone. [manual: World rules]",
+             "Money: barter until a law creates a currency; a backed coin is worth its reserve per coin; unbacked coins are worth 0 at the end. "
+             "[manual: World rules]",
+             f"Laws: restricted Python ({inst['law_level']}); the constitution ({inst['constitution']}) decides how laws pass; a Board of three "
+             "can veto structural and procedural laws; a Fixer patches broken ones. [manual: Law language, Law library]",
+             ("Turns: everyone decides at once, then actions run in a shown order. " if sp.get("turns") == "simultaneous" else
+              "Turns: agents act one at a time in a shown order. ")
+             + "Talk: post (public), dm (private, a few per round, delivered first and answerable within the round). [manual: Private messages]"]
+    mods = []
+    if on("conflict"):
+        mods.append("agents can disable each other (attack with weapons forged from copper; forts of stone; guards) [manual: Conflict]")
+    if on("jurisdictions"):
+        mods.append("a law binds only members of the jurisdiction that passed it; jurisdictions can be founded in secret and declared [manual: World rules]")
+    if on("life"):
+        mods.append("lives are limited (your rounds left are in your state); children are commissioned from a Maker [manual: Life and children]")
+    if on("media2"):
+        mods.append("outlets publish editions you subscribe to; posting needs a licence from an outlet [manual: Media]")
+    if (sp.get("projects") or {}).get("enabled", True):
+        mods.append("projects are funded together and pay only if they reach their threshold [manual: Projects and tribute]")
+    if on("outside_power"):
+        mods.append("an outside power demands tribute and raids if unpaid [manual: Projects and tribute]")
+    if mods:
+        lines.append("Also: " + "; ".join(mods) + ".")
+    return "\n".join(lines)
+
+
 def core_prompt(inst, a, k=None) -> str:
     """The Core layer: the system prompt when the module is on. With a kernel, the manual index and rights are current."""
     from charter import agents as AG
@@ -627,9 +676,12 @@ def core_prompt(inst, a, k=None) -> str:
         "Lookups: manual {\"section\": \"<title or number>\"}, manual_search {\"query\": \"...\"}, search_board {\"query\": \"...\"} "
         "(every public post ever made), search_dms {\"query\": \"...\"} (your own private messages only), read_file {\"name\": \"...\"}, "
         "read_archive {\"doc\": \"...\"} (documents you hold). Used as actions they cost an action each, and their text comes next turn.")
-    text = f"""{AG.world_rules(inst)}
-
-You are {aid}. {_class_line(inst, a)}{(' Your roles: ' + ', '.join(roles) + '.') if roles else ''}
+    # Who the agent is, its goal, its actions and the reply format come first and are never cut; the world rules fill what is left
+    # of the core budget (the full rules are the manual's "World rules" section).
+    from charter import roles as _RO, hidden as _H
+    secret = "\n".join(x.strip() for x in (_RO.prompt_section(inst, a), _H.prompt_section(inst, a)) if x and x.strip())
+    essentials = f"""You are {aid}. {_class_line(inst, a)}{(' Your roles: ' + ', '.join(roles) + '.') if roles else ''}
+{secret}
 Your private goal: {goal}
 {('Your temperament: ' + a['personality_text']) if a.get('personality_text') else ''}{models}
 
@@ -649,7 +701,10 @@ Reply with a JSON object with these fields:
 - "actions": a list of up to {a['actions']} actions, each {{"action": "<name>", "args_json": "<the arguments as a JSON object string>"}}.
 - "goal_guesses_json": on the final round, a JSON object mapping each other agent to the goal name from the goals section of your
   manual that best fits what they did; on other rounds, "{{}}"."""
-    text, cut = clip(text, int(c["budgets"]["core"]), "...(trimmed: see your manual)")
+    room = max(200, int(c["budgets"]["core"]) - tokens(essentials) - 10)
+    rules, cut = clip(overview(inst), room, '...(more: manual section "World rules")')
+    text = rules + "\n\n" + essentials
+
     if k is not None:
         _st(k, aid)["core"][aid] = {"tokens": tokens(text), "budget": int(c["budgets"]["core"]), "trimmed": cut, "sections": len(secs)}
     return text
