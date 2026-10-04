@@ -117,7 +117,7 @@ archive_split:                    # the fixed archive is split between Scientist
   enabled: true
   copies: 1                       # e.g. {randint: [1, 2]} for some overlap; enabled: false gives every Scientist everything
   rare_prob: 0.08                 # archive/rare/*: each Scientist holds each rare record with this chance (independently; often nobody does)
-  required: [math/camp-mechanics]   # documents at least one Scientist always holds (game-critical knowledge nobody else starts with)
+  required: [math/camp-mechanics, math/voting-power, strategy/entry-02-procedure-is-the-master-key]   # documents at least one Scientist always holds (game-critical knowledge nobody else starts with)
 hidden:                           # codex articles, hidden powers (secret actions), tips (charter/hidden.py)
   enabled: true                   # false: no codex, no powers, full law documentation in the prompt
   start_prob: {common: 0.30, uncommon: 0.10, rare: 0.03, legendary: 0.0, 'false': 0.05}   # per Scientist, per codex article of the tier

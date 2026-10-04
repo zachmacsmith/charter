@@ -1,0 +1,117 @@
+"""Prompts are efficient and deliberately unequal: each agent gets what it needs to act, not to understand everything.
+
+Checked on a world with every New Features module on (specs/society.yaml):
+- the core prompt fits its budget and always carries who the agent is, its goal, its actions and the reply format;
+- an agent sees only the actions it can use (editors', Scholars' and the Maker's tools, veto, patch and name_successor only for them);
+- camps are described by their interface only: how they pay is never stated (that is in a Scientist-only archive document);
+- knowledge is uneven on purpose: required archive documents are held by at least one Scientist and by nobody else;
+- secret roles appear only in their holder's prompt.
+"""
+from __future__ import annotations
+
+import re
+
+import pytest
+
+from charter import context as CX
+from charter import generator, manual as MN, media as MD
+from charter import spec as S
+from charter.camptypes import framework as CT
+from charter.kernel import Kernel
+
+MECHANICS = ("lowest", "fewer agents", "less crowded", "sha-256", "hash", "least squares", "faulty", "weights", "dot product",
+             "times its weight", "falls as the total", "both share", "the taker", "fraction of the average", "redrawn", "crowd")
+
+
+@pytest.fixture(scope="module")
+def world():
+    inst = generator.generate(S.load("society"), 5)
+    return inst, Kernel(inst)
+
+
+def _actions_line(p: str) -> str:
+    return next(l for l in p.splitlines() if l.startswith("Actions ("))
+
+
+def test_core_prompts_fit_and_carry_the_agent(world):
+    inst, k = world
+    budget = int(CX.cfg(inst)["budgets"]["core"])
+    for a in inst["agents"]:
+        p = CX.core_prompt(inst, a, k)
+        assert CX.tokens(p) <= budget, (a["id"], CX.tokens(p))
+        assert f"You are {a['id']}" in p and "Your private goal" in p and "Reply with a JSON object" in p
+        assert re.search(r"\bpost\b", _actions_line(p)) and re.search(r"\bdm\b", _actions_line(p))
+
+
+def test_agents_see_only_actions_they_can_use(world):
+    inst, k = world
+    for a in inst["agents"]:
+        acts = set(re.findall(r"[a-z_]+", _actions_line(CX.core_prompt(inst, a, k)).split(":", 1)[1]))
+        rights = k.w["agents"][a["id"]]["rights"]
+        if not MD.inst_editor(inst, a):
+            assert not acts & set(MD.EDITOR_ACTIONS), a["id"]
+        if not MD.inst_scholar(inst, a):
+            assert not acts & set(MD.SCHOLAR_ACTIONS), a["id"]
+        if "maker" not in rights:
+            assert not acts & {"create_agent", "copy_agent"}, a["id"]
+        if a["cls"] != "board":
+            assert not acts & {"veto", "name_successor"}, a["id"]
+        if a["cls"] != "fixer":
+            assert "patch" not in acts, a["id"]
+
+
+def test_camps_are_described_by_their_interface_only(world):
+    inst, k = world
+    texts = [CX.overview(inst), CT.rules_text(inst)] + [CT.view(k, c, fresh=False).describe(inst) for c in k.w["camps"]
+                                                         if k.w["camps"][c].get("type")]
+    for t in texts:
+        low = t.lower()
+        for word in MECHANICS:
+            assert word not in low, (word, t[:200])
+
+
+def test_required_documents_reach_a_scientist_and_nobody_else(world):
+    inst, k = world
+    req = inst["spec"]["archive_split"]["required"]
+    scis = [a for a in inst["agents"] if a["cls"] == "scientist"]
+    for doc in req:
+        assert any(doc in (a.get("archive_docs") or []) for a in scis), doc
+    for a in inst["agents"]:
+        if a["cls"] == "scientist":
+            continue
+        assert not set(req) & set(a.get("archive_docs") or [])
+        text = " ".join(t for _, t in MN.sections(inst, k, a["id"])).lower()
+        assert "sha-256" not in text and "least squares" not in text, a["id"]       # camp mechanics stay with the Scientists
+
+
+def test_required_document_is_guaranteed_across_seeds():
+    for seed in range(1, 8):
+        inst = generator.generate(S.load("society"), seed)
+        holders = [a["id"] for a in inst["agents"] if "math/camp-mechanics" in (a.get("archive_docs") or [])]
+        assert holders and all(next(x for x in inst["agents"] if x["id"] == h)["cls"] == "scientist" for h in holders)
+
+
+def test_manuals_differ_by_role(world):
+    inst, k = world
+    titles = {a["id"]: [t for t, _ in MN.sections(inst, k, a["id"])] for a in inst["agents"]}
+    for a in inst["agents"]:
+        has_archive = "Your archive" in titles[a["id"]]
+        assert has_archive == (a["cls"] == "scientist"), a["id"]
+    assert len({tuple(t) for t in titles.values()}) > 3                     # not one manual for everyone
+
+
+def test_secret_roles_only_in_their_holders_prompt(world):
+    inst, k = world
+    secret = {r: hs for r, hs in (k.w.get("roles") or {}).items() if r in ("assassin", "seer")}
+    for a in inst["agents"]:
+        p = CX.core_prompt(inst, a, k).lower()
+        for role, hs in secret.items():
+            if a["id"] not in hs:
+                assert f"secretly hold the {role}" not in p and f"you are the {role}" not in p, (a["id"], role)
+
+
+def test_every_non_rare_document_reaches_some_scientist(world):
+    from charter import archive as A
+    inst, _ = world
+    held = {d for a in inst["agents"] if a["cls"] == "scientist" for d in a.get("archive_docs") or []}
+    assert not {d for d in A.docs(None) if not d.startswith("rare/")} - held     # only rare records may go unheld
