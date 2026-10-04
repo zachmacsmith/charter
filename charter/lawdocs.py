@@ -48,6 +48,7 @@ TOPICS = {
     "preview": ("How the dry-run preview works", "Every proposal is played forward on a copy of the world before anyone votes."),
     "bounty": ("Bounty numbers", "Factoring camps publish a number; laws can read it."),
     "powers": ("Powers and the law", "Some agents hold hidden powers (words used through invoke). Laws can expose or remove them."),
+    "jurisdictions": ("Jurisdictions", "A law binds only the members of the jurisdiction that passed it."),   # jurisdictions.py
 }
 
 # (name, topic, prompt group, prompt text, article detail, core tier, minimal tier)
@@ -190,8 +191,28 @@ E += [
     ("revoke_capability", "powers", "Powers", "revoke_capability(agent, name=None)", "takes a power (None: every power) from an agent; returns "
      "how many were taken. Structural.", "uncommon", "uncommon"),
 ]
+# jurisdictions (charter/jurisdictions.py): documented only in worlds where the module is on (see OPTIONAL)
+E += [
+    ("jurisdiction", "jurisdictions", "Jurisdictions", "jurisdiction()", "the id of the jurisdiction this law belongs to.", "prompt", "common"),
+    ("members", "jurisdictions", "Jurisdictions", "members()", "the members of this law's jurisdiction.", "prompt", "common"),
+    ("admit", "jurisdictions", "Jurisdictions", "admit(agent)", "makes an agent a member at the end of the round. Structural.", "prompt", "common"),
+    ("expel", "jurisdictions", "Jurisdictions", "expel(agent)", "removes a member at the end of the round (on_exit runs first). Structural.",
+     "prompt", "common"),
+    ("lawful_attack", "jurisdictions", "Jurisdictions", "lawful_attack(attacker, target, units)",
+     "an attack by a member (e.g. an office holder, inside a define_action function), paid from the jurisdiction's armory (the weapons "
+     "in its reserve), logged as lawful; the target can be anyone. Structural.", "prompt", "common"),
+    ("on_admission", "jurisdictions", "Hooks", "on_admission(agent) (return True to admit, False to refuse)",
+     "called when an agent asks to join; True admits, False refuses; with no answer the default admission rule applies.", "prompt", "common"),
+    ("on_exit", "jurisdictions", "Hooks", "on_exit(agent)", "called at the end of the round in which a member leaves, before it leaves "
+     "(so the law can still tax or seize).", "prompt", "common"),
+    ("on_birth", "jurisdictions", "Hooks", "on_birth(child, parent) (return a jurisdiction id, or False for none)",
+     "called when a member's child is born; by default the child joins its parent's jurisdiction.", "prompt", "common"),
+]
+OPTIONAL = {n: "jurisdictions" for n in ("jurisdiction", "members", "admit", "expel", "lawful_attack", "on_admission", "on_exit", "on_birth")}
+# ^ entry -> the spec key of the module that must be enabled for it to be documented (off: not in the mapping, prompt or codex)
 ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
-GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers"]
+GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers",
+               "Jurisdictions"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
 
 SKELETON = ('Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set\n'
@@ -209,6 +230,8 @@ def resolve(spec: dict) -> dict:
         raise ValueError(f"law_docs.preset must be full, core or minimal, not {preset!r}")
     mapping = {}
     for n, e in ENTRIES.items():
+        if n in OPTIONAL and not (spec.get(OPTIONAL[n]) or {}).get("enabled"):
+            continue                                                    # a module that is off: its entries are not documented
         if preset == "full":
             mapping[n] = e["core"] if n in ALWAYS_ARTICLE else "prompt"
         else:
@@ -216,6 +239,8 @@ def resolve(spec: dict) -> dict:
     for n, t in (cfg.get("overrides") or {}).items():
         if n not in ENTRIES:
             raise ValueError(f"law_docs.overrides: no law function, hook or feature {n!r}")
+        if n not in mapping:
+            continue                                                    # an entry of a module that is off
         if t not in ("prompt",) + TIERS:
             raise ValueError(f"law_docs.overrides.{n}: must be prompt or one of {TIERS}")
         mapping[n] = t
@@ -229,7 +254,7 @@ def api_doc(resolved: dict, original: str) -> str:
         return original
     lines = [SKELETON]
     for g in GROUP_ORDER:
-        items = [ENTRIES[n]["prompt"] for n in ENTRIES if m[n] == "prompt" and ENTRIES[n]["group"] == g]
+        items = [ENTRIES[n]["prompt"] for n in ENTRIES if m.get(n) == "prompt" and ENTRIES[n]["group"] == g]
         if items:
             lines.append(f"{g}: " + ", ".join(items))
     lines.append(FOOTER)
@@ -245,7 +270,7 @@ def articles(resolved: dict) -> dict:
     m = resolved["mapping"]
     by_topic: dict = {}
     for n, e in ENTRIES.items():
-        if m[n] != "prompt":
+        if n in m and m[n] != "prompt":
             by_topic.setdefault(e["topic"], {}).setdefault(m[n], []).append(n)
     out = {}
     for topic, tiers in by_topic.items():

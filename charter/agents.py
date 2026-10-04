@@ -12,6 +12,7 @@ from charter import archive
 from charter import credit as CR
 from charter import goals as G
 from charter import hidden as H
+from charter import jurisdictions as J
 from charter import library as LB
 from charter import outside as O
 from charter import projects as P
@@ -69,6 +70,7 @@ ACTION_DOC = {
     "contribute": 'contribute {"project": "P1", "item": "stone", "qty": 5}: put resources toward an open project (held until it is funded, or refunded/forfeited if it fails; never more than it still needs)',
     "pay_tribute": 'pay_tribute {"item": "stone", "qty": 5}: pay toward the outside power\'s open tribute demand (payments leave the world; never more than is owed)',
 }
+ACTION_DOC.update(J.ACTION_DOC)                                         # jurisdictions: found, invite, join, leave, declare
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
 title = "..." and intent = "..." and may keep persistent data in the dict `state`. Hooks: on_enact(), on_repeal(), on_round_start(r),
@@ -166,6 +168,7 @@ def world_rules(inst: dict) -> str:
               "grant or revoke dm_rules.") if sp["channels"].get("dm", True) else ""
     turns += " Your feed shows what you are allowed to see that changed since your last turn."
     turns += P.rules_text(sp)                                           # projects and the outside power
+    turns += J.rules_text(inst)                                         # jurisdictions ("" when off)
     return f"""You are an agent in Charter, a world of {len(inst['agents'])} agents over {inst['rounds']} rounds.
 Camps: {camps}. Each harvest is one query of a camp's hidden function: you choose x, a list of {c0['dials']} integer dials each 0..{c0['max']},
 and receive yield = max(0, f(x) * stock/capacity + noise) (compute camps work differently: see their description). Harder camps have more valuable resources. Stocks regrow logistically; overharvesting
@@ -278,6 +281,7 @@ def system_prompt(inst: dict, a: dict) -> str:
     if lvl < 4:
         absent |= {"invoke"}
     absent |= H.undocumented_actions(inst)                           # actions documented only in codex articles (law_docs)
+    absent |= J.absent_actions(inst)                                 # jurisdictions: its actions only when on
     if not (sp.get("outside_power") or {}).get("enabled"):
         absent |= {"pay_tribute"}
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
@@ -451,6 +455,7 @@ def state_view(k, aid: str) -> str:
     if chans:
         lines.append("Channels you can post in: " + ", ".join(chans))
     lines += P.state_lines(k, aid) + O.state_lines(k, aid)            # open projects; an open tribute demand
+    lines += J.state_lines(k, aid)                                    # jurisdictions: yours, hidden ones, which laws bind you
     return "\n".join(lines)
 
 
@@ -564,6 +569,8 @@ class ScriptedPolicy:
         if mail and n_actions and k.spec["channels"].get("dm", True):
             pay = {"item": "timber", "qty": 1} if k.bal(aid, "timber") >= 1 else {}
             acts.insert(0, {"action": "reply", "args_json": json.dumps({"message": mail[0]["id"], "text": "Agreed.", **pay})})
+        if J.enabled(k):                                             # jurisdictions: a scripted founder (own RNG; only when on)
+            acts[:0] = J.scripted_actions(k, a, n_actions)
         guesses = {x: r.choice(list(G.CATALOGUE)) for x in k.roster() if x != aid} if final else {}
         return {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
                 "goal_guesses_json": json.dumps(guesses)}, "(scripted bot: no model, no chain of thought)", {}

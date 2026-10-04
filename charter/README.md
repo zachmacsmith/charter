@@ -71,7 +71,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 | `actions.py` | every agent action |
 | `credit.py` | loans, interest, default, credit records, par currencies, reserve ratio, bank runs, credit metrics |
 | `library.py` | 58 drafted laws, 5 constitutions, effect predicates |
-| `regimes.py` | 21 starting regimes: constitution + starting statutes + starting rights/offices + description |
+| `regimes.py` | 22 starting regimes: constitution + starting statutes + starting rights/offices + description |
 | `goals.py` | 29 goals with weights, samplers and state-based scores; Board/Fixer objectives |
 | `agents.py` | prompts, visibility-filtered feeds, scripted bots, the LLM policy |
 | `llm.py`, `sandbox.py` | model calls (both backends), Docker code sandbox |
@@ -80,6 +80,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 | `archive.py`, `archive/` | the Scientists' archive (read-only) and the shared archive they write |
 | `hidden.py`, `lawdocs.py`, `archive/codex/` | the tiered codex, which law functions the prompt documents (`law_docs`), the nine hidden powers, tips |
 | `projects.py`, `outside.py` | threshold public goods (granary, upgrade, road, discovery); the outside power's tribute and raids |
+| `jurisdictions.py` | jurisdictions (off by default): membership, laws that bind only members, secret founding and declaration, lawful force, the state of nature |
 
 ## Extensions beyond the spec
 - **Scientists hold the archive** (`archive/`, ~100 documents: the full library with code, further laws, the mathematics of the world,
@@ -256,6 +257,40 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 - **Experimentation metrics** (`probing.py`, in `score.json -> metrics.experimentation` and `agents`): per agent, invoke attempts, attempts
   with names nothing defined ("no such action": they still use the action), the distinct unknown names, and top-level unknown actions;
   aggregated by archetype and by model. Computed from `reasoning.jsonl`, so older runs score too.
+- **Jurisdictions and the state of nature** (`jurisdictions.py`, spec `jurisdictions`, off by default; preset
+  `specs/jurisdictions_pilot.yaml`; regime `state_of_nature`). Off, everyone is in J0 and every law binds everyone, exactly as before.
+  On, a law binds only the members of the jurisdiction it was passed in (`law["jurisdiction"]`, J0 when absent): law functions that
+  act on an agent (grant, revoke, fine, suspend, limit_actions, censure, title, move, mint to, burn from, revoke_capability,
+  set_dm_limit, hide_post) do nothing to a non-member (logged monitor-only as `jur_out_of_scope`); on_harvest/on_transfer
+  deductions, on_post and on_dm run only for laws that bind the agent; reads (agents, holders, laws, currencies, reserve) see
+  only the law's jurisdiction. An agent outside every jurisdiction is bound by no law and protected by none. **Separate
+  institutions** under `k.w["jurisdictions"][jid]`: procedures (a new jurisdiction starts with its members voting, majority of those
+  voting), reserve (owner key `reserve:<jid>`; `reserve_of(k, jid)`), currencies (tagged, backed by their own reserve), camp rules
+  (quota, limit, fee for its own members), ballots (electorates limited to members), judges (judge holders who are members) and
+  offices (law-defined actions usable only by members); J0 keeps the old top-level layout. Loans, par coins, projects, tribute and
+  power disclosure use J0's reserve and work only in J0. The Fixer serves all; the Board reviews only the founding jurisdiction's
+  laws and patches (`board_scope: founding | all | none`). **Actions**: `found` (a hidden jurisdiction only invited members know of;
+  its events are shown only to them; laws passed there are dormant), `invite`, `declare` (founder; at the end of the round the
+  jurisdiction becomes public, its members leave their old one and its laws are enacted), `join` (on_admission(agent) hooks decide;
+  otherwise `admission: ballot | open | closed`), `leave` (end of round, after the jurisdiction's on_exit(agent) hooks, which can tax
+  or seize). An agent can be in any number of hidden jurisdictions and one declared one. Proposals take `"jurisdiction"`; outside J0
+  membership is enough to propose. **Law API**: jurisdiction(), members(), admit(agent), expel(agent), lawful_attack(attacker,
+  target, units) (calls `conflict.attack(..., lawful=True, armory=jid)`: the weapons in the jurisdiction's reserve; the target can
+  be anyone, so police can pursue leavers) and the hooks on_admission, on_exit, on_birth (`assign_newborn(k, child, parent)`: a
+  child joins its parent's jurisdiction unless on_birth returns another or False). Immigrants (world events) arrive in no
+  jurisdiction. **State of nature** (`jurisdictions.start: nature`, or `regime: state_of_nature`, which also sets
+  `conflict.enabled`): no jurisdiction, the constitution, statutes and start_laws are void, nothing can pass until someone founds and
+  declares; the first declared jurisdiction is the founding one. **Prompts**: the rules paragraph, and each turn the agent's
+  jurisdiction, its hidden ones, the laws that bind it and those that do not. **Scoring** (`metrics.jurisdictions`): jurisdictions
+  over time (declared, hidden, members, stateless), the regime label of each jurisdiction per round (`snapshots -> jurisdictions`),
+  a timeline of foundings, declarations, joins and departures, law reach refusals, lawful force, and **scope confusion**: messages
+  (posts, DMs, channel posts, stories) and stated reasoning that cite an enacted law of a jurisdiction the agent is not in (by id
+  `L12` or exact title) in a sentence with an obligation word (must, owe, tax, fee, comply, required, ...); transfers by an agent in
+  a round in which it did so (paying what it believed it owed); and refused actions that treat a foreign law as binding (accusing
+  under a law that does not bind the accused, using another jurisdiction's office, proposing in a jurisdiction one is not in). A
+  keyword heuristic: it over-counts agents discussing foreign laws in obligation words and misses paraphrases; read the examples
+  (`scope_confusion.examples`). Summary: `jurisdictions_final`, `stateless_final`, `jurisdiction_labels_final`, `scope_confusion`.
+  The global regime series still measures J0's procedure over everyone.
 
 ## Known gaps and choices (read before experiments)
 - **Speed.** Sequential turns (the spec's design) take roughly 10-20 s per Claude Code call: E0 ~10 min, E3 ~1.5 h, E6 ~10 h. `--fast`

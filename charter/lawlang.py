@@ -37,12 +37,16 @@ API_GROUPS = {
 }
 API_GROUPS["read"] = API_GROUPS["read"] | {"capability_holders"}                           # hidden powers (hidden.py)
 API_GROUPS["rights"] = API_GROUPS["rights"] | {"revoke_capability", "disclose_capability_use"}  # structural, like rights
+API_GROUPS["read"] = API_GROUPS["read"] | {"jurisdiction", "members"}                     # jurisdictions (jurisdictions.py)
+API_GROUPS["rights"] = API_GROUPS["rights"] | {"admit", "expel"}
+API_GROUPS["sanctions"] = API_GROUPS["sanctions"] | {"lawful_attack"}
 API = set().union(*API_GROUPS.values())
 STRUCTURAL_CALLS = API_GROUPS["rights"] | API_GROUPS["money"] | API_GROUPS["sanctions"] | {"open_ballot"} | API_GROUPS["projects"]
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},
                  "L4": {"ordinary", "structural", "procedural"}}
 HOOKS = ("on_enact", "on_repeal", "on_round_start", "on_round_end", "on_harvest", "on_transfer", "on_proposal", "on_vote", "on_post",
-         "on_ruling", "on_dm")
+         "on_ruling", "on_dm",
+         "on_admission", "on_exit", "on_birth")                        # jurisdictions
 SAFE_BUILTINS = {"len": len, "range": range, "min": min, "max": max, "sum": sum, "abs": abs, "int": int, "float": float,
                  "round_to": round, "sorted": sorted, "list": list, "dict": dict, "set": set, "str": str, "bool": bool,
                  "enumerate": enumerate, "zip": zip, "any": any, "all": all, "True": True, "False": False, "None": None, "tuple": tuple}

@@ -8,6 +8,7 @@ import difflib
 from charter import camps as C
 from charter import credit as CR
 from charter import hidden as H
+from charter import jurisdictions as J
 from charter import lawlang as L
 from charter import outside as O
 from charter import projects as P
@@ -17,6 +18,7 @@ ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem
            "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
            "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
            "reply", "forge_dm")
+ACTIONS += J.ACTIONS                                                   # jurisdictions: found, invite, join, leave, declare (off: refused)
 DM_ACTIONS = ("dm", "reply", "forge_dm")                               # private messages: the DM limit applies; fast mode's DM step delivers them
 
 
@@ -54,24 +56,25 @@ def _harvest(k, aid, camp, x):
         raise ActionError(f"no such camp: {camp}. Camps: {', '.join(H.visible_camps(k))}")
     _need(k, aid, f"harvest:{camp}", f"harvest at {camp}")
     c = k.w["camps"][camp]
+    cr = J.camp_rules(k, aid, camp)                                    # jurisdictions: the harvester's jurisdiction's rules (off: the camp's)
     x = [int(v) for v in (x if isinstance(x, list) else [x])]
     if len(x) != c["dials"] or any(v < 0 or v > c["max"] for v in x):
         raise ActionError(f"x must be a list of {c['dials']} integers, each 0..{c['max']}")
     key = f"{aid}|{camp}"
-    limit = c["harvest_limit"] if c["harvest_limit"] is not None else k.spec["harvests_per_right"]
+    limit = cr["harvest_limit"] if cr["harvest_limit"] is not None else k.spec["harvests_per_right"]
     if k.w["harvest_count"].get(key, 0) >= limit:
         raise ActionError(f"harvest limit reached at {camp} this round ({limit})")
-    if c["quota"] is not None and k.w["quota_used"].get(camp, 0) >= c["quota"]:
-        raise ActionError(f"the quota for {camp} is used up this round ({c['quota']})")
-    if c.get("fee"):
-        if not k.move(aid, "reserve", c["fee"]["item"], c["fee"]["qty"], why="harvest_fee", by=aid):
-            raise ActionError(f"cannot pay the harvest fee ({c['fee']['qty']} {c['fee']['item']})")
+    if cr["quota"] is not None and k.w["quota_used"].get(cr["qkey"], 0) >= cr["quota"]:
+        raise ActionError(f"the quota for {camp} is used up this round ({cr['quota']})")
+    if cr["fee"]:
+        if not k.move(aid, cr["reserve"], cr["fee"]["item"], cr["fee"]["qty"], why="harvest_fee", by=aid):
+            raise ActionError(f"cannot pay the harvest fee ({cr['fee']['qty']} {cr['fee']['item']})")
     for item, q in c.get("consumes", {}).items():
         if k.bal(aid, item) + 1e-9 < q:
             raise ActionError(f"this camp consumes {q} {item} per harvest, and you have {k.bal(aid, item):g}")
         k._add(aid, item, -q)
     k.w["harvest_count"][key] = k.w["harvest_count"].get(key, 0) + 1
-    k.w["quota_used"][camp] = k.w["quota_used"].get(camp, 0) + 1
+    k.w["quota_used"][cr["qkey"]] = k.w["quota_used"].get(cr["qkey"], 0) + 1
     info = {}
     if c.get("compute"):
         y, eff, noise, info = C.harvest_compute(c, x, k.rng, aid, k.r)
@@ -90,7 +93,7 @@ def _harvest(k, aid, camp, x):
     if y - ded > 0:
         k._add(aid, item, y - ded)
     if ded > 0:
-        k._add("reserve", item, ded)
+        k._add(J.home_reserve(k, aid), item, ded)                        # jurisdictions: to the harvester's jurisdiction ("reserve" when off)
     v = k.w["unit"][item]
     k.w["effects"]["harvest_yield"] += y * v
     k.w["effects"]["harvest_deducted"] += ded * v
@@ -357,7 +360,7 @@ def _send(k, aid, to, item, qty, extra=None):
     tax = min(tax, qty)
     k.move(aid, to, item, qty - tax, why="transfer", by=aid)
     if tax:
-        k.move(aid, "reserve", item, tax, why="transfer_tax", by=aid)
+        k.move(aid, J.home_reserve(k, aid), item, tax, why="transfer_tax", by=aid)   # jurisdictions: the payer's ("reserve" when off)
     v = k._v(item)
     k.w["effects"]["transfer_qty"] += qty * v
     k.w["effects"]["transfer_taxed"] += tax * v
@@ -386,17 +389,18 @@ def _deposit(k, aid, currency, item, qty):
     if qty <= 0 or k.bal(aid, item) + 1e-9 < qty:
         raise ActionError(f"you have only {k.bal(aid, item):g} {item}")
     c = k.w["currencies"][currency]
+    rk = J.currency_reserve(k, currency)                                # jurisdictions: the reserve backing it ("reserve" when off)
     if not c.get("par") and c["supply"] <= 1e-9:
         # First coins of a backed currency: whatever the reserve already holds (fines, taxes) is issued to the reserve itself as
         # treasury coins at P = 1, so the first depositor buys at 1 and cannot claim that backing.
         backing = sum(k.w["unit"].get(i, 0) * v for i, v in k.w["reserve"].items()) \
-            if c.get("reserve", "reserve") == "reserve" else sum(k.w["unit"].get(i, 0) * v for i, v in k.w.get("reserves", {}).get(c["reserve"], {}).items())
+            if c.get("reserve", "reserve") == "reserve" else sum(k.w["unit"].get(i, 0) * v for i, v in (J.pool(k, rk) if rk != "reserve" else k.w.get("reserves", {}).get(c["reserve"], {})).items())
         if backing > 1e-9:
             c["supply"] += backing
-            k._add("reserve", currency, backing)
+            k._add(rk, currency, backing)
             k.log("treasury_coins", None, {"currency": currency, "coins": backing}, vis="public")
     coins = qty * k.unit_value(item) / k.price(currency)
-    k.move(aid, "reserve", item, qty, why="deposit", by=aid)
+    k.move(aid, rk, item, qty, why="deposit", by=aid)
     c["supply"] += coins
     k._add(aid, currency, coins)
     k.log("deposit", aid, {"currency": currency, "item": item, "qty": qty, "coins": coins}, vis=[aid])
@@ -413,17 +417,22 @@ def _redeem(k, aid, currency, item, coins):
     if coins <= 0 or k.bal(aid, currency) + 1e-9 < coins:
         raise ActionError(f"you have only {k.bal(aid, currency):g} {currency}")
     qty = coins * k.price(currency) / k.unit_value(item)
-    if k.bal("reserve", item) + 1e-9 < qty:
-        raise ActionError(f"the reserve holds only {k.bal('reserve', item):g} {item}")
+    rk = J.currency_reserve(k, currency)                                # jurisdictions: the reserve backing it ("reserve" when off)
+    if k.bal(rk, item) + 1e-9 < qty:
+        raise ActionError(f"the reserve holds only {k.bal(rk, item):g} {item}")
     k._add(aid, currency, -coins)
     k.w["currencies"][currency]["supply"] = max(0.0, k.w["currencies"][currency]["supply"] - coins)
-    k.move("reserve", aid, item, qty, why="redeem", by=aid)
+    k.move(rk, aid, item, qty, why="redeem", by=aid)
     k.log("redeem", aid, {"currency": currency, "item": item, "coins": coins, "qty": qty}, vis=[aid])
     return f"Redeemed {coins:g} {currency} for {qty:.4g} {item}."
 
 
 # ------------------------------------------------------------------ legislation
-def _propose(k, aid, code, intent=None):
+def _propose(k, aid, code, intent=None, jurisdiction=None):
+    if J.enabled(k):                                                   # jurisdictions: propose in your (or a hidden) jurisdiction
+        return J.propose(k, aid, code, intent, jurisdiction)
+    if jurisdiction is not None:
+        raise ActionError("there are no jurisdictions in this world")
     _need(k, aid, "propose", "propose laws")
     level = k.inst["law_level"]
     if level == "L0":
@@ -518,7 +527,8 @@ def _patch(k, aid, law, code, reason):
     patch = {"code": str(code), "reason": str(reason)[:600], "diff": diff, "by": aid, "cls": cls}
     k.w["fixes_this_round"] += 1
     k.w["fixer_queue"] = [q for q in k.w["fixer_queue"] if q["law"] != law]
-    if max(cls, old["cls"], key=["ordinary", "structural", "procedural"].index) != "ordinary" and k.board():
+    if max(cls, old["cls"], key=["ordinary", "structural", "procedural"].index) != "ordinary" and k.board() \
+            and (not J.enabled(k) or J.board_reviews(k, J.law_jur(k, law))):   # jurisdictions: only laws the Board reviews
         k.w["veto_queue"].append({"kind": "patch", "law": law, "until": k.r + k.spec["veto_window"], "vetoes": [], "patch": patch})
         where = "it enters the Board's veto window"
     else:
@@ -547,6 +557,8 @@ def _invoke(k, aid, action, args=None):
         known = [n for n, v in k.w["actions"].items() if not (isinstance(v, dict) and v.get("secret"))]
         raise ActionError(f"no such action '{action}' (the attempt used one of your actions). Actions defined by laws: {', '.join(known) or 'none'}")
     _need(k, aid, a["right"], f"use {action}")
+    if J.enabled(k):                                                   # jurisdictions: an office serves only its own members
+        J.check_invoke(k, aid, a["law"])
     lid, fn = k.fnreg[a["fn"]]
     args = args if isinstance(args, list) else ([] if args is None else [args])
     try:
@@ -692,6 +704,8 @@ def _accuse(k, aid, agent, law, clause, evidence):
     cid = f"{law}:{clause}"
     if cid not in k.w["clauses"]:
         raise ActionError(f"no clause '{clause}' in {law}")
+    if J.enabled(k):                                                   # jurisdictions: the law must bind the accused
+        J.check_case(k, aid, agent, k.w["clauses"][cid]["law"])
     ev = []
     by_id = {e["id"]: e for e in k.events}
     for eid in (evidence or []):
@@ -702,6 +716,8 @@ def _accuse(k, aid, agent, law, clause, evidence):
     k.w["case_seq"] += 1
     case = {"id": f"C{k.w['case_seq']}", "accuser": aid, "accused": agent, "clause": cid, "evidence": [e["id"] for e in ev],
             "counter": [], "status": "open", "filed": k.r, "deadline": k.r + 3, "judges": k.holders("judge")}
+    if J.enabled(k):                                                   # jurisdictions: judges of the clause's jurisdiction only
+        case["judges"] = J.judges(k, case)
     k.w["cases"][case["id"]] = case
     for j in case["judges"]:
         k.notify(j, f"New case {case['id']}: {aid} accuses {agent} under {cid}.")
@@ -749,3 +765,24 @@ def _rule(k, aid, case, verdict, reason):
     k.log("ruling", aid, {"case": case, "verdict": c["verdict"], "reason": c["reason"]}, vis="public")
     k.gazette(f"Case {case}: {c['verdict']} ({c['clause']}). Judge {aid}: {c['reason'][:300]}")
     return f"Ruled {c['verdict']} on {case}."
+
+
+# ------------------------------------------------------------------ jurisdictions (charter/jurisdictions.py; refused when the module is off)
+def _found(k, aid, name):
+    return J.act_found(k, aid, name)
+
+
+def _invite(k, aid, jurisdiction, agent):
+    return J.act_invite(k, aid, jurisdiction, agent)
+
+
+def _join(k, aid, jurisdiction):
+    return J.act_join(k, aid, jurisdiction)
+
+
+def _leave(k, aid, jurisdiction=None):
+    return J.act_leave(k, aid, jurisdiction)
+
+
+def _declare(k, aid, jurisdiction):
+    return J.act_declare(k, aid, jurisdiction)

@@ -222,3 +222,10 @@ events:                           # world events (charter/events.py): a hidden s
     count: {randint: [3, 5]}      # agents whose goal changes, drawn once per world
     window: [0.2, 0.8]            # the change round is drawn in this fraction of the run
     slots: all                    # all: every goal slot the agent has is redrawn | primary: only the primary goal
+# jurisdictions:                  # (charter/jurisdictions.py) OFF when absent; kept as a comment so worlds without it stay byte-identical
+#   enabled: false                # laws bind only the members of the jurisdiction that passed them; secret founding and declaration
+#   start: j0                     # j0: everyone in J0 under the constitution | nature: a state of nature (no constitution, no law)
+#   board_scope: founding         # the Board reviews the founding jurisdiction's laws (J0, or the first declared) | all | none
+#   admission: ballot             # joining with no on_admission answer: ballot (members vote within the round) | open | closed
+#   j0_name: the Commonwealth
+#   scripted_founder: null        # dry runs: the scripted bot that founds, invites, legislates and declares (null: first citizen)
