@@ -32,6 +32,7 @@ from charter import library as LB
 from charter import observer as OBS
 from charter import regimes as RG
 from charter import report
+from charter import roles as R                                         # roles: the Seer's reading in member mode
 from charter.kernel import Kernel
 
 PREDICATES = {**LB.PREDICATES, **{f"outcome:{c}": f for c, f in LB.OUTCOMES.items()}}
@@ -197,6 +198,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                 sysp[aid] = CX.core_prompt(inst, a, k)
             user, cursor = AG.turn_prompt(k, a, order, cursors.get(aid, 0), notes.get(aid, ""), results.get(aid, []), n, final,
                                           simultaneous=(mode == "simultaneous"))
+            user = R.turn_section(k, aid, user)                         # roles: the Seer's private "What you saw" section
             return a, n, user, cursor
 
         def cx_lookups(items):
@@ -269,6 +271,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             k.log("turn", aid, {"position": pos, "n_actions": n, "actions": acts, "results": res}, vis="monitor")
             k.turn_log.append({"round": r, "agent": aid, "reasoning": reasoning, "stated_reasoning": str(outp.get("reasoning", "")),
                                "actions": acts, "results": res})
+            R.after_turn(k, aid, outp, final_outp, out)                 # roles: the Seer's next_reads and assessments
             reason_f.write(json.dumps({"round": r, "position": pos, "agent": aid, "model": a["model"], "reasoning": reasoning,
                                        "stated_reasoning": str(outp.get("reasoning", "")),
                                        "notes": notes[aid], "actions": first, "results": res, "usage": usage, "mode": mode,
@@ -285,7 +288,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         if mode == "simultaneous":
             # everyone decides from the same start-of-round view (model calls in parallel), then actions run in the round's order
             preps = [prepare(aid) for aid in order]
-            oprep = obs.step_prepare(k, final) if obs and dm_step and obs.in_dm_step else None   # observer's DM-step turn
+            oprep = obs.step_prepare(k, final) if obs and dm_step and obs.in_dm_step \
+                and k.w["agents"][obs.id].get("departed") is None else None   # observer's DM-step turn (roles: not once removed)
             xsysp = {**sysp, **({obs.id: obs.system} if oprep else {})}
             decisions = in_parallel(lambda pr: policy.act(k, pr[0], xsysp[pr[0]["id"]], pr[2], pr[1], final), preps + ([oprep] if oprep else []))
             odec = decisions.pop() if oprep else None
@@ -378,4 +382,6 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
     gt.update(EV.truth(k, inst))                                        # world events: schedule, truth, goal boundaries, arrivals
     if CX.enabled(inst):                                                # context: manual sections read, files at the end
         gt["context"] = CX.truth(k)
+    if "roles" in k.w:
+        gt["roles"] = R.truth(k)                                        # roles: holders at the end, passes (monitor-only)
     (out / "ground_truth.json").write_text(json.dumps(gt, indent=1, default=list))

@@ -15,6 +15,7 @@ from charter import library as LB
 from charter import observer as OBS
 from charter import personality as P
 from charter import regimes as RG
+from charter import roles as R
 from charter import spec as S
 
 PER_ENTITY = [("archive_split", "copies"), ("camps", "regrowth_r"), ("camps", "start_stock"), ("camps", "noise"), ("camps", "holders_per_worker"), ("camps", "compute"),
@@ -215,6 +216,7 @@ def generate(spec: dict, seed: int) -> dict:
                 a["rights"].append("judge")
     if reg:
         RG.apply_rights(agents, reg, seed)                            # starting rights and offices, before goals see the rights
+    roles = R.assign(sp, seed, agents)                                 # roles: Seer, assassin, Scholar, Maker, Media (own RNG; None when off)
 
     # models
     pool = sp["models"]["pool"]
@@ -249,6 +251,7 @@ def generate(spec: dict, seed: int) -> dict:
             a["model"], a["tier"] = strongest, "strongest"
         if a["id"] in sp["models"].get("overrides", {}):
             a["model"], a["tier"] = sp["models"]["overrides"][a["id"]], "explicit"
+    R.fixer_model(sp, agents)                                          # roles: the Fixer is Claude Opus 5.5 under the new rules
 
     # actions per turn: fixed per agent for the whole run, varying between agents
     for a in agents:
@@ -289,7 +292,7 @@ def generate(spec: dict, seed: int) -> dict:
             a["goal"] = {"primary": a["cls"].capitalize() + " objective", "params": {}, "secondary": None, "fixed": True,
                          "text": sp.get(f"{a['cls']}_objective") or ""}
             continue
-        w = G.weights(gspec, a["cls"])
+        w = G.weights(gspec, a["cls"], modules=G.enabled_modules(sp))   # roles: goals gated by module
         if "vote" in a["rights"]:
             w["Office"] = 0.0                                         # only drawn by agents who start without vote
         explicit = gspec.get("explicit", {}).get(a["id"])
@@ -373,9 +376,13 @@ def generate(spec: dict, seed: int) -> dict:
             "constitution": sp["constitution"], "constitution_code": RG.constitution_code(sp["constitution"]),
             "library": [l["name"] for l in lib], "library_access": access, "conditions": sp["conditions"],
             "endowment_gini_target": target, "counter_goals": counters}
-    obs = OBS.make(sp, seed, agents)                                    # the secret observer (own RNG; absent unless observer.enabled)
+    R.prepare_observer_spec(sp)                                         # roles: hidden mode with roles: the observer is the Seer
+    obs = OBS.make(sp, seed, agents) if R.observer_mode(sp) == "hidden" else None   # roles: member mode has no hidden observer
     if obs:
         inst["observer"] = obs
+    if roles:                                                           # roles: who holds what (monitor-only record)
+        R.attach_observer(roles, obs)
+        inst["roles"] = roles
     from charter import hidden as _hidden
     inst["hidden"] = _hidden.generate(sp, seed, agents)                # codex articles, hidden powers, secret camps (own RNG stream)
     if reg:

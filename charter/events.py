@@ -84,6 +84,8 @@ def attach_schedule(inst: dict) -> dict:
         m = S.draw(cfg.get("mean_interval"), rng)
         if not cfg.get("enabled", True) or not m:
             continue
+        if name == "agent_departs" and (inst["spec"].get("life") or {}).get("enabled"):
+            continue                                                    # roles/life: no departures when agents die of old age (spec)
         t = 1.0
         while True:
             t += rng.expovariate(1.0 / float(m))
@@ -264,7 +266,7 @@ def draw_goals(k, inst, aid, cls, rights, rng, slots=None, keep=None):
     sp = inst["spec"]
     gspec = sp["goals"]
     world = _world(k, inst)
-    w = G.weights(gspec, cls)
+    w = G.weights(gspec, cls, modules=G.enabled_modules(sp))           # roles: goals gated by module
     w["Mirror"] = 0.0
     if "vote" in rights:
         w["Office"] = 0.0

@@ -147,6 +147,20 @@ observer:                         # a secret observer (charter/observer.py): an 
   dm_step: true                   # fast mode with the DM step: also a start-of-round action turn whose DMs go out in wave 0
   step_actions: 2                 # posts/transfers allowed in that turn (run right after the DM step); DMs only count against the DM limit
   max_chars_per_agent: 12000      # cap on each agent's rendered transcript in its prompt
+  # mode (not set here, so old worlds stay byte-identical): hidden | member. Default: member when roles.enabled, else hidden.
+  #   member: no hidden agent. The Seer role (roles below) goes to an ordinary agent (not Board or Fixer) with its own class, goals,
+  #           personality and turns; each turn it privately reads reads_per_round agents' transcripts (history_rounds, reads_reasoning)
+  #           chosen in its reply's next_reads, holds the forge right (forge_cost), may cite what it read as court evidence, and
+  #           may add assessments (observer.jsonl, scored). disposition, outcome, model, actions, endowment, dm_step are unused.
+  #   hidden: the old observer, unchanged. With roles.enabled it IS the Seer: roles.enabled implies observer.enabled (use
+  #           roles.counts.seer: 0 to have no Seer), it gains accuse/respond and may cite what it read as evidence.
+# roles (charter/roles.py; not set here, so old worlds stay byte-identical; preset specs/roles_pilot.yaml):
+#   roles: {enabled: false, counts: {seer: 1, assassin: 0.5, scholar: 1, maker: 1, media: 2}, reference_population: 28,
+#           scaling: proportional, explicit: {}}   # explicit {role: [names]} also works with enabled: false
+#   Counts at 28 agents scale with population (base >= 1: max(1, round(base * N / 28)); assassin: present with probability
+#   max(0.5, 0.5 * N / 28)). Scholar, Maker and Media are public and grant the rights scholar, maker and press; Seer and assassin
+#   are secret and pass to a random living agent when their holder leaves play (roles.pass_on).
+# fixer_model (not set here): the Fixer's model; with roles.enabled it defaults to claude-opus-5-5 (spec: "always Claude Opus 5.5").
 projects:                         # threshold public goods (charter/projects.py): built only if pooled contributions reach a threshold by a deadline
   enabled: true                   # random projects arise as events (laws can always start them with start_project, at L2+)
   mean_interval: 12               # mean rounds between random projects (a seeded Poisson draw each round)

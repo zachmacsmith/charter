@@ -95,6 +95,8 @@ class Kernel:
         self.turn_log: list[dict] = []                                     # per agent turn: {round, agent, reasoning, stated_reasoning, actions, results}
         H.install(self)                                              # hidden powers, codex holdings, secret camps (hidden.py)
         CX.install(self)                                             # context: files, scratchpads, memory (nothing when off)
+        from charter import roles as _roles                            # roles: k.w["roles"] (absent when roles are not in play)
+        _roles.init_state(self)
 
     # ------------------------------------------------------------------ basics
     @property

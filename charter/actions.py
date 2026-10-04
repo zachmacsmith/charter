@@ -12,6 +12,7 @@ from charter import hidden as H
 from charter import lawlang as L
 from charter import outside as O
 from charter import projects as P
+from charter import roles as R                                         # roles: court evidence the Seer read
 
 ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "request_fix",
            "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive",
@@ -699,7 +700,7 @@ def _accuse(k, aid, agent, law, clause, evidence):
     by_id = {e["id"]: e for e in k.events}
     for eid in (evidence or []):
         e = by_id.get(str(eid))
-        if e is None or not k.can_see(aid, e):
+        if e is None or not k.can_see(aid, e) and not R.saw(k, aid, e["id"]):    # roles: the Seer may cite events it read
             raise ActionError(f"you cannot cite {eid}: it does not exist or you could not see it")
         ev.append(e)
     k.w["case_seq"] += 1
@@ -724,7 +725,7 @@ def _respond(k, aid, case, evidence):
     if not c or c["accused"] != aid or c["status"] != "open":
         raise ActionError(f"you cannot respond to {case}")
     by_id = {e["id"]: e for e in k.events}
-    ev = [by_id[e] for e in evidence if e in by_id and k.can_see(aid, by_id[e])]
+    ev = [by_id[e] for e in evidence if e in by_id and (k.can_see(aid, by_id[e]) or R.saw(k, aid, e))]   # roles: the Seer's reads
     c["counter"] += [e["id"] for e in ev]
     k.log("respond", aid, {"case": case, "evidence": _cited(k, aid, ev)}, vis="public")
     return f"Counter-evidence added to {case}."

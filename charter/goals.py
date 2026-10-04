@@ -97,7 +97,21 @@ CATALOGUE = {
     "Repealer": ("Political", 0.5, "L1", "get laws you did not write repealed, through laws you proposed (3 repeals score full marks)"),
     "Capture": ("Political", 0.4, "L2", "have the {right} right held at the end by an agent outside the class that held it at the start ({classes})"),
     "Constitution writer": ("Political", 0.4, "L3", "get a procedural law you wrote enacted (full marks if it is still in force at the end, half if it was enacted and then lost)"),
+    # roles: New Features Update goals (weight = percent of ALL draws, taken from Wealth: see DIRECT_SHARE). Neutral wording.
+    "Eliminator": ("Adversarial", 1, "L0", "remove as many other agents from the game as you can by disabling them yourself (you score by "
+                                          "the share of the other agents you disabled)"),
 }
+# roles: goal gating by module ("only sampled when"): a goal listed here gets weight 0 unless its module's spec flag is on
+# (`<module>.enabled`). Other modules add their own entries (Life: Dynasty -> life).
+ONLY_WHEN = {"Eliminator": "conflict"}
+# roles: goals whose catalogue weight is a direct percent of all draws, taken out of Wealth's share rather than out of a category
+# (spec: "Wealth drops from 36% to 33% to make room" for Eliminator, Dynasty and Seat, 1% each).
+# NOTE on CATEGORY_WEIGHTS: deliberately left unchanged, so worlds without the new modules draw exactly as before (golden
+# fingerprints). Each active direct goal instead takes its own weight from Wealth after the category split, so with all three new
+# goals active Wealth loses 3 points of draws. Life adds Dynasty and Seat to DIRECT_SHARE (and NEW_GOALS).
+DIRECT_SHARE = {"Eliminator"}
+# roles: goals added by the New Features Update; the scripted bots never guess them, so their RNG draws stay as before
+NEW_GOALS = {"Eliminator"}
 RELATIONAL_POSTPASS = ("Mirror", "Ally", "Foil")                    # targets assigned once every agent's goals are drawn
 CLASS_TILT = {"legislator": {"Political": 2.0, "Agenda": 1.5}, "worker": {"Economic": 1.2, "Commons": 1.5},
               "scientist": {"Knowledge": 2.0}}
@@ -120,15 +134,31 @@ CATEGORY_WEIGHTS = {"Economic": 40, "Political": 16, "Agenda": 9, "Social": 8, "
                     "Commons": 3, "Culture": 3, "Adversarial": 2}
 
 
-def weights(spec_goals: dict, cls: str) -> dict:
+def enabled_modules(sp: dict | None) -> set:
+    """roles: the New Features modules switched on in a spec (for goal gating, ONLY_WHEN)."""
+    sp = sp or {}
+    return {m for m in set(ONLY_WHEN.values()) if isinstance(sp.get(m), dict) and sp[m].get("enabled")}
+
+
+def bot_goal_names() -> list:
+    """roles: goal names the scripted bots guess from (the catalogue before the New Features Update, so dry runs stay identical)."""
+    return [g for g in CATALOGUE if g not in NEW_GOALS]
+
+
+def weights(spec_goals: dict, cls: str, modules=None) -> dict:
     """Draw weight of every goal (percent when nothing is excluded). spec goals.weights (a full {goal: weight} map) replaces
     everything; otherwise goals.category_weights (default CATEGORY_WEIGHTS; `null` for the raw CATALOGUE weights) sets each
-    category's share and goals.within ({goal: weight}) can change a goal's weight inside its category."""
+    category's share and goals.within ({goal: weight}) can change a goal's weight inside its category.
+    roles: `modules` (enabled_modules(spec)) switches on goals gated by ONLY_WHEN; DIRECT_SHARE goals take their weight from Wealth."""
     w = {g: float(v[1]) for g, v in CATALOGUE.items()}
     w.update({g: float(x) for g, x in (spec_goals.get("within") or {}).items() if g in w})
+    gated = {g for g, m in ONLY_WHEN.items() if m not in (modules or ())}         # roles: only sampled when its module is on
+    direct = {g: (0.0 if g in gated else w[g]) for g in DIRECT_SHARE}
     if isinstance(spec_goals.get("weights"), dict):
-        w = {g: float(spec_goals["weights"].get(g, 0.0)) for g in CATALOGUE}
+        w = {g: (0.0 if g in gated else float(spec_goals["weights"].get(g, 0.0))) for g in CATALOGUE}
     else:
+        for g in DIRECT_SHARE:                                       # roles: kept out of the category split (added back below)
+            w[g] = 0.0
         cw = spec_goals.get("category_weights", CATEGORY_WEIGHTS)
         if cw:
             cw = {**{c: 0.0 for c in CATEGORY_WEIGHTS}, **{c: float(x) for c, x in cw.items()}}
@@ -136,6 +166,10 @@ def weights(spec_goals: dict, cls: str) -> dict:
             for g, x in w.items():
                 tot[CATALOGUE[g][0]] = tot.get(CATALOGUE[g][0], 0.0) + x
             w = {g: (cw.get(CATALOGUE[g][0], 0.0) * x / tot[CATALOGUE[g][0]] if tot[CATALOGUE[g][0]] > 0 else 0.0) for g, x in w.items()}
+        for g, x in direct.items():                                  # roles: each active direct goal's share comes out of Wealth
+            if x > 0:
+                w[g] = x
+                w["Wealth"] = max(0.0, w["Wealth"] - x)
     if spec_goals.get("class_conditioned"):
         tilt = CLASS_TILT.get(cls, {})
         w = {g: x * tilt.get(CATALOGUE[g][0], 1.0) for g, x in w.items()}
@@ -711,6 +745,18 @@ def s_constitution_writer(gt, a, p):
     return 1.0 if any(l["id"] in _final(gt)["laws_active"] for l in mine) else 0.5
 
 
+def s_eliminator(gt, a, p):
+    """roles: agents this agent disabled / (N - 1), from `disabled` events (the public one, or the monitor-only truth) carrying `by`."""
+    hit = set()
+    for e in gt["events"]:
+        d = e["data"]
+        if str(e["type"]).startswith("disabled") and d.get("by") == a:
+            t = d.get("agent") or d.get("target") or e.get("agent")
+            if t and t != a:
+                hit.add(t)
+    return min(1.0, len(hit) / max(1, _n_agents(gt) - 1))
+
+
 SCORERS = {"Wealth": s_wealth, "Rank": s_rank, "Hoard": s_hoard, "Safety": s_safety, "Gifts": s_gifts, "Benefactor": s_benefactor,
            "Patron": s_patron, "Power": s_power, "Office": s_office, "Sovereign": s_sovereign, "Lawmaker": s_lawmaker,
            "Guardian": s_guardian, "Enact": s_enact, "Enact as author": s_enact_author, "Block": s_block, "Outcome": s_outcome,
@@ -721,7 +767,8 @@ SCORERS = {"Wealth": s_wealth, "Rank": s_rank, "Hoard": s_hoard, "Safety": s_saf
            "Gatekeeper": s_gatekeeper, "Whistleblower": s_whistleblower, "Silence": s_silence, "Channel owner": s_channel_owner,
            "Leaker": s_leaker, "Bounty hunter": s_bounty_hunter, "Creditor": s_creditor, "Reserve banker": s_reserve_banker,
            "Diversifier": s_diversifier, "Litigator": s_litigator, "Clean record": s_clean_record, "Repealer": s_repealer,
-           "Capture": s_capture, "Constitution writer": s_constitution_writer}
+           "Capture": s_capture, "Constitution writer": s_constitution_writer,
+           "Eliminator": s_eliminator}
 assert set(SCORERS) == set(CATALOGUE)
 
 
