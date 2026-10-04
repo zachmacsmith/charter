@@ -67,8 +67,9 @@ CATALOGUE = {
                                        "documents score full marks); scores zero if most agents name you as the Leaker"),
     # economic
     "Bounty hunter": ("Economic", 0.7, "L0", "claim as many factoring bounties as possible (against the agent with the most)"),
-    "Creditor": ("Economic", 0.7, "L2", "be owed the most at the end: the value still owed to you on loans not yet due (against the top "
-                                      "creditor); loans exist only once a law creates them"),
+    "Creditor": ("Economic", 0.7, "L2", "be owed the most at the end: the value still owed to you on loans not yet due, interest "
+                                      "accrued included, plus the interest you have already been paid (against the top creditor); "
+                                      "loans exist only once a law creates them"),
     "Reserve banker": ("Economic", 0.4, "L2", "fund as large a share of the currency reserve as possible: what you deposited minus what you "
                                             "redeemed, as a share of the reserve's value at the end"),
     "Diversifier": ("Economic", 0.8, "L0", "hold at least one unit of every resource at the end"),
@@ -601,6 +602,10 @@ def s_creditor(gt, a, p):
     for ln in f.get("loans", {}).values():
         if ln["status"] == "active" and ln["due"] is not None and ln["due"] > f["round"]:
             owed[ln["lender"]] = owed.get(ln["lender"], 0.0) + (ln["repay_qty"] - ln["repaid"]) * _value_of(gt, ln["repay_item"])
+    from charter import credit as CR                                  # realised interest counts too (credit.interest_by_lender)
+    for lender, x in CR.interest_by_lender(f.get("loans", {}), lambda it: _value_of(gt, it)).items():
+        owed[lender] = owed.get(lender, 0.0) + x
+    owed.pop("reserve", None)                                          # the reserve is not an agent
     return _relative(owed, a)
 
 

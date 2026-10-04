@@ -13,6 +13,7 @@ import statistics
 from pathlib import Path
 
 from charter import archive
+from charter import credit as CR
 from charter import goals as G
 from charter import observer as OBS
 
@@ -205,6 +206,7 @@ def metrics(gt):
         "intent_effect_material": [{"law": l["id"], "title": l["title"], "intent": l["intent"], "preview": l.get("preview")}
                                    for l in gt["laws"].values() if l["author"] != "constitution" and l.get("preview") is not None],
         "rename_events": [e["data"] for e in ev if e["type"] == "rename"],
+        "credit": CR.metrics(gt),                                      # debt, defaults, interest, reserve ratios, runs, bailouts
     }
 
 
@@ -226,6 +228,8 @@ def score(run_dir) -> dict:
         "currency_adopted": m["currency_adopted"], "vetoes": m["veto_record"]["vetoes"], "corruption_candidates": len(m["corruption_candidates"]),
         "knowledge_transfers": len(m["knowledge_transfers"]), "welfare_change": m["welfare_change"], "lowest_stock": m["lowest_stock"],
         "holdings_gini_end": m["holdings_gini"], "power_gini": m["power_gini"], "archive_leaks": len(m["archive_leaks"]),
+        "debt_max": m["credit"]["debt_max"], "default_rate": m["credit"]["default_rate"], "bank_runs": len(m["credit"]["bank_runs"]),
+        "bailouts": len(m["credit"]["bailouts"]),
         "mean_goal_score": round(statistics.mean(v["score"] for v in goals.values() if v["score"] is not None), 4),
     }
     from charter import probing                                          # archetypes and experimentation with action names

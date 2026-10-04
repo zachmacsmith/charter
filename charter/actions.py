@@ -4,12 +4,13 @@ from __future__ import annotations
 import difflib
 
 from charter import camps as C
+from charter import credit as CR
 from charter import lawlang as L
 
 ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "request_fix",
            "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive",
            "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
-           "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan")
+           "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "extend_loan")
 
 
 class ActionError(Exception):
@@ -153,57 +154,24 @@ def _set_dm_limit(k, aid, n, agent=None):
     return f"DM limit set to {n} per round" + (f" for {agent}" if agent else " for everyone") + "; it applies to messages not yet sent this round."
 
 
-def _lend(k, aid, to, item, qty, repay_qty, due_in, repay_item=None):
+def _lend(k, aid, to, item, qty, repay_qty=None, due_in=1, repay_item=None, rate=0.0, compound=False, refinance=None):
     """Offer a loan (only while a law enables loans): `to` receives qty of item on accepting and owes repay_qty of repay_item
-    (default: the same item) within due_in rounds. The offer lapses after 2 rounds."""
-    if not k.loans_enabled():
-        raise ActionError("there are no loans in this world until a law creates them")
-    if to not in k.w["agents"] or to == aid:
-        raise ActionError(f"unknown borrower {to}")
-    qty, repay_qty, due_in = float(qty), float(repay_qty), int(due_in)
-    if qty <= 0 or repay_qty <= 0 or due_in < 1:
-        raise ActionError("qty and repay_qty must be positive and due_in at least 1")
-    k.unit_value(item)
-    k.unit_value(repay_item or item)
-    if k.bal(aid, item) + 1e-9 < qty:
-        raise ActionError(f"you hold less than {qty:g} {item}")
-    k.w["loan_seq"] += 1
-    ln = {"id": f"N{k.w['loan_seq']}", "lender": aid, "borrower": to, "item": item, "qty": qty, "repay_item": repay_item or item,
-          "repay_qty": repay_qty, "due_in": due_in, "due": None, "offered": k.r, "status": "offered", "repaid": 0.0}
-    k.w["loans"][ln["id"]] = ln
-    k.log("loan_offer", aid, {x: v for x, v in ln.items() if x not in ("status", "repaid", "due")}, vis=[aid, to])
-    return f"Loan {ln['id']} offered to {to}: {qty:g} {item} now, {repay_qty:g} {ln['repay_item']} back within {due_in} rounds."
+    (defaults: qty, the same item) within due_in rounds, growing by `rate` per round (simple, or compounding). `refinance`: an
+    outstanding loan of `to` that the new money pays off first. The offer lapses after 2 rounds. See credit.py."""
+    return CR.lend(k, aid, to, item, qty, repay_qty, due_in, repay_item, rate, compound, refinance)
 
 
 def _accept_loan(k, aid, loan):
-    ln = k.w["loans"].get(str(loan))
-    if not ln or ln["borrower"] != aid or ln["status"] != "offered":
-        raise ActionError(f"no open loan offer {loan} to you")
-    if not k.loans_enabled():
-        raise ActionError("loans are not enabled by any law in force")
-    if not k.move(ln["lender"], aid, ln["item"], ln["qty"], why=f"loan:{ln['id']}", by=ln["lender"]):
-        ln["status"] = "expired"
-        raise ActionError(f"{ln['lender']} no longer holds {ln['qty']:g} {ln['item']}; the offer has lapsed")
-    ln.update({"status": "active", "due": k.r + ln["due_in"], "accepted": k.r})
-    k.log("loan_active", aid, {"loan": ln["id"], "lender": ln["lender"], "item": ln["item"], "qty": ln["qty"],
-                               "repay_item": ln["repay_item"], "repay_qty": ln["repay_qty"], "due": ln["due"]}, vis="public")
-    return f"Loan {ln['id']} accepted: you received {ln['qty']:g} {ln['item']} and owe {ln['repay_qty']:g} {ln['repay_item']} by round {ln['due'] + 1}."
+    return CR.accept(k, aid, loan)
 
 
 def _repay_loan(k, aid, loan, qty=None):
-    ln = k.w["loans"].get(str(loan))
-    if not ln or ln["borrower"] != aid or ln["status"] not in ("active", "defaulted"):
-        raise ActionError(f"you have no outstanding loan {loan}")
-    owed = ln["repay_qty"] - ln["repaid"]
-    pay = min(owed, float(qty) if qty is not None else owed)
-    if pay <= 0 or not k.move(aid, ln["lender"], ln["repay_item"], pay, why=f"loan:{ln['id']}", by=aid):
-        raise ActionError(f"you hold less than {pay:g} {ln['repay_item']}")
-    ln["repaid"] += pay
-    if ln["repaid"] + 1e-9 >= ln["repay_qty"]:
-        ln["status"] = "repaid"
-    k.log("loan_payment", aid, {"loan": ln["id"], "lender": ln["lender"], "paid": pay, "item": ln["repay_item"],
-                                "status": ln["status"]}, vis="public")
-    return f"Paid {pay:g} {ln['repay_item']} on loan {ln['id']} ({ln['status']})."
+    return CR.repay(k, aid, loan, qty)
+
+
+def _extend_loan(k, aid, loan, rounds, rate=None):
+    """Lender only: roll a loan over (later due round, same or lower rate); revives a defaulted loan."""
+    return CR.extend(k, aid, loan, rounds, rate)
 
 
 def _transfer(k, aid, to, item, qty):
@@ -249,6 +217,8 @@ def _convertible(k, cur, item):
 def _deposit(k, aid, currency, item, qty):
     """Kernel machinery for a convertible currency: resources into the reserve, coins out at the current price P."""
     _convertible(k, currency, item)
+    if not CR.redemption_open(k, currency):
+        raise ActionError(f"{currency}'s window is closed: no deposits or redemptions while redemption is suspended")
     qty = float(qty)
     if qty <= 0 or k.bal(aid, item) + 1e-9 < qty:
         raise ActionError(f"you have only {k.bal(aid, item):g} {item}")
@@ -263,6 +233,10 @@ def _deposit(k, aid, currency, item, qty):
 
 def _redeem(k, aid, currency, item, coins):
     _convertible(k, currency, item)
+    if k.w["currencies"][currency].get("par"):                          # par: first come first served, shortfall suspends (credit.py)
+        return CR.redeem_par(k, aid, currency, item, coins)
+    if not CR.redemption_open(k, currency):
+        raise ActionError(f"redemption of {currency} is suspended by law")
     coins = float(coins)
     if coins <= 0 or k.bal(aid, currency) + 1e-9 < coins:
         raise ActionError(f"you have only {k.bal(aid, currency):g} {currency}")

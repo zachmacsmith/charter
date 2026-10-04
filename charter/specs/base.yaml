@@ -39,6 +39,15 @@ law_level: L4                     # L0 barter only .. L4 custom rights with new 
 library: all                      # all | none | list of categories: money, taxes, spending, commons, governance, information, courts
 library_access: null              # everyone | titles_for_others (default when Scientists exist: only Scientists see law code, in the archive)
 constitution: {choice: [assembly, chair, oligarchy, council, open_assembly]}
+start_laws: []                    # library laws in force from round 0, enacted after the constitution (author "constitution"),
+                                  # e.g. ["Loan Registry", "Reserve Bank Act"] to study credit and bank runs without waiting for votes
+credit:                           # loans, interest, default and par currencies (charter/credit.py); loans still exist only by law
+  offer_lapse: 2                  # rounds a loan offer stays open
+  max_rate: 1.0                   # hard ceiling on any loan's interest rate per round (laws can cap lower: set_interest_cap)
+  sanction_actions: 2             # default consequence "sanction": the borrower may take at most this many actions per turn ...
+  sanction_rounds: 3              # ... for this many rounds, and cannot borrow while in default
+  run_suspend_rounds: 1           # a par coin's redemption that the reserve cannot pay in full suspends redemption for the rest of
+                                  # the round and this many more rounds (laws can suspend or resume: suspend_redemption)
 models:
   pool: {strong: claude-sonnet-5-5, weak: claude-haiku-4-5, strongest: claude-opus-5-5}
   mix: strong_fraction            # all_strong | all_weak | strong_fraction | strong_legislators | balanced
