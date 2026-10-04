@@ -5,6 +5,7 @@
   python -m charter resume RUN_DIR                                               continue a stopped or crashed run from its last complete round
   python -m charter score RUN_DIR                                                (re)score a run
   python -m charter show RUN_DIR                                                 summary + timeline of what happened
+  python -m charter view RUN_DIR [--open]                                       story.html: the run as a group chat, inboxes, laws and wealth
   python -m charter report RUN_DIR                                               (re)build overview.md, spec_outline.md, agents/*
   python -m charter sweep E3 --seeds 3 --vary constitution=assembly,oligarchy --vary models.mix=all_weak,strong_legislators [--dry]
   python -m charter explore E3 --runs 8 --perturb "endowment_gini={uniform: [0.1, 0.7]}" --perturb "conditions.fixer={choice: [honest, hidden]}" [--dry]
@@ -256,6 +257,16 @@ def cmd_show(a):
         print(f"  {aid}: {g['goal']} -> {g['score']}")
 
 
+def cmd_view(a):
+    """The story page: a group-chat replay of the run with message inboxes and the world panel."""
+    from charter import viewer
+    out = viewer.build(a.run, a.out)
+    print(f"story: {out}")
+    if a.open:
+        import webbrowser
+        webbrowser.open(out.resolve().as_uri())
+
+
 def main(argv=None):
     load_env()
     ap = argparse.ArgumentParser(prog="python -m charter", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -282,6 +293,8 @@ def main(argv=None):
     p = sub.add_parser("score"); p.add_argument("run"); p.set_defaults(fn=cmd_score)
     p = sub.add_parser("show"); p.add_argument("run"); p.set_defaults(fn=cmd_show)
     p = sub.add_parser("report"); p.add_argument("run"); p.set_defaults(fn=lambda a: print(__import__("charter.report", fromlist=["build"]).build(a.run)))
+    p = sub.add_parser("view"); p.add_argument("run"); p.add_argument("--out"); p.add_argument("--open", action="store_true")
+    p.set_defaults(fn=cmd_view)
     a = ap.parse_args(argv)
     a.fn(a)
 

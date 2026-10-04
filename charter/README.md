@@ -43,6 +43,12 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   are not undone. Runs from before checkpoints existed cannot be resumed.
 
 ## What a run produces (`charter/out/<spec>/<run>/`, git-ignored)
+- `story.html`: the run as a story you scroll through (`python -m charter view RUN_DIR --open` rebuilds it; it also updates every
+  round while a run plays). Centre: public posts in each agent's colour, Media stories, gazette entries, proposals, laws and world
+  events, round by round. Left: message inboxes in the style of a phone, for whichever agent you choose; conversations appear as
+  you scroll, with a blue dot where the last message has not been answered, and forged messages and paid replies are marked.
+  Right: the world at that moment: laws in force, wealth by agent, resources held, camp stocks and prices. Opened without data,
+  the page lets you pick any run folder.
 - `messages.md`: every post, DM (encrypted ones marked), channel post, Media item, gazette entry and notice, untruncated, in order; anonymous
   posts show their true author and hidden posts are marked (the monitors' view). Updates live.
 - `overview.md`: round-by-round account (orders, posts, DMs, transfers, proposals, ballots, enactments, vetoes, patches, media, archive

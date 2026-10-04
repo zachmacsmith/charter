@@ -393,6 +393,8 @@ def build(run_dir, status=None) -> Path:
     obs_md = OBS.report_md(d)                                           # secret observer: observer.md
     if obs_md:
         (d / "observer.md").write_text(obs_md)
+    from charter import viewer                                          # story.html: the run as a group chat (charter view)
+    viewer.build(d)
     return d
 
 

@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Charter story</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F5F4EE; --surface: #FAF9F5; --surface-2: #F0EEE6; --text: #1F1E1D; --muted: #73726C; --faint: #A3A199;
+  --line: #E5E2D8; --accent: #C96442; --accent-soft: #F3E3DA; --blue: #2F7CF6; --good: #4E7A4C; --warn: #B4552D;
+  --shadow: 0 1px 2px rgba(31,30,29,.05), 0 4px 16px rgba(31,30,29,.05);
+  --serif: "Source Serif 4", "Tiempos Text", Georgia, serif; --sans: Inter, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --left: 360px; --right: 340px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #262624; --surface: #30302E; --surface-2: #2A2A28; --text: #F2F0E9; --muted: #A9A79F; --faint: #75736C;
+    --line: #3C3B38; --accent: #D97757; --accent-soft: #4A3328; --blue: #5B9BFF; --good: #8FB98C; --warn: #E08A63;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #262624; --surface: #30302E; --surface-2: #2A2A28; --text: #F2F0E9; --muted: #A9A79F; --faint: #75736C;
+  --line: #3C3B38; --accent: #D97757; --accent-soft: #4A3328; --blue: #5B9BFF; --good: #8FB98C; --warn: #E08A63;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 var(--sans); }
+body { overflow-x: hidden; }
+button { font: inherit; color: inherit; }
+
+/* ---------- top bar ---------- */
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 10px 20px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 9px; font-family: var(--serif); font-size: 19px; font-weight: 500; letter-spacing: -.01em; }
+.brand svg { width: 20px; height: 20px; color: var(--accent); }
+.runname { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.spacer { flex: 1; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; }
+.chip[aria-pressed="false"] { opacity: .45; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- layout ---------- */
+.layout { display: grid; grid-template-columns: var(--left) minmax(0, 1fr) var(--right); gap: 0; }
+.side { position: sticky; top: 53px; height: calc(100vh - 53px); overflow: hidden; }
+.side.left { border-right: 1px solid var(--line); }
+.side.right { border-left: 1px solid var(--line); overflow-y: auto; padding: 18px 18px 40px; }
+.feed { max-width: 720px; width: 100%; margin: 0 auto; padding: 18px 28px 60vh; }
+
+/* ---------- story feed ---------- */
+.round { margin: 34px 0 14px; display: flex; align-items: baseline; gap: 12px; }
+.round h2 { margin: 0; font: 500 26px/1.1 var(--serif); letter-spacing: -.015em; }
+.round .order { color: var(--faint); font-size: 12px; }
+.item { margin: 8px 0; }
+.post { border-radius: 14px; padding: 10px 14px 11px; background: var(--tint); border: 1px solid var(--edge); }
+.who { font-weight: 600; font-size: 13px; color: var(--ink); display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.who .cls { font-weight: 500; color: var(--muted); font-size: 11.5px; }
+.post .text, .media .text { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 3px; }
+.tag { display: inline-block; font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 1px 7px;
+  border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); vertical-align: 1px; }
+.tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); background: color-mix(in srgb, var(--good) 10%, transparent); }
+.gazette { font-family: var(--serif); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--text);
+  border-radius: 6px; padding: 9px 14px; box-shadow: var(--shadow); }
+.gazette .mast { font: 600 10.5px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.gazette .text { font-size: 15px; white-space: pre-wrap; }
+.gazette .text + .text { border-top: 1px solid var(--line); margin-top: 5px; padding-top: 5px; font-size: 14px; }
+.media { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow);
+  border-top: 3px solid var(--ink); }
+.media h3 { margin: 4px 0 2px; font: 600 19px/1.25 var(--serif); letter-spacing: -.01em; }
+.law { border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line)); background: var(--accent-soft); border-radius: 12px; padding: 10px 14px; }
+.law .title { font: 600 15.5px/1.3 var(--serif); }
+.law details summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 6px; }
+.law pre { font-size: 11.5px; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px; }
+.sys { color: var(--muted); font-size: 12.8px; padding: 2px 4px 2px 12px; border-left: 2px solid var(--line); }
+.sys b { color: var(--text); font-weight: 600; }
+.sys.big { color: var(--text); font-size: 14px; border-left-color: var(--accent); }
+.event { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 9px 13px; }
+.event .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+.marker { position: fixed; left: calc(var(--left) + 6px); width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: .0; }
+
+/* ---------- right panel: laws and resources ---------- */
+.panel h4 { margin: 22px 0 8px; font: 600 11px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.panel h4:first-child { margin-top: 2px; }
+.roundbig { font: 500 44px/1 var(--serif); letter-spacing: -.03em; }
+.roundsub { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+.regime { display: inline-block; margin-top: 8px; }
+.lawrow { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: 8px; transition: background .6s; }
+.lawrow.fresh { background: var(--accent-soft); }
+.lawrow .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none; }
+.lawrow .t { font-weight: 500; font-size: 13px; line-height: 1.35; }
+.lawrow .m { color: var(--muted); font-size: 11.5px; }
+.bars .row { display: grid; grid-template-columns: 74px 1fr 46px; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
+.bars .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); font-weight: 500; }
+.bars .track { height: 9px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.bars .fill { height: 100%; border-radius: 99px; transition: width .45s ease; }
+.bars .v { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stack { display: flex; height: 12px; border-radius: 99px; overflow: hidden; background: var(--surface-2); margin: 6px 0 4px; }
+.stack div { transition: flex-grow .45s ease; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+.kv { display: flex; justify-content: space-between; font-size: 12.5px; padding: 2px 0; }
+.kv span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; }
+.empty { color: var(--faint); font-size: 12.5px; font-style: italic; }
+
+/* ---------- left panel: iMessage-style inboxes ---------- */
+.msgs { height: 100%; display: flex; flex-direction: column; background: var(--me-tint, var(--surface)); transition: background .3s; }
+.whoami { padding: 12px 12px 8px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.whoami .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-weight: 600; margin: 0 2px 7px; }
+.avatars { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.av { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 12.5px;
+  color: #fff; background: var(--c); cursor: pointer; border: 2px solid transparent; position: relative; }
+.av.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg); }
+.av .badge { position: absolute; right: -2px; top: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--blue); border: 2px solid var(--bg); }
+.me { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.me .nm { font: 600 16px/1.2 var(--serif); }
+.me .sub { color: var(--muted); font-size: 11.5px; }
+.list { overflow-y: auto; flex: 1; }
+.conv { display: grid; grid-template-columns: 12px 38px 1fr; gap: 9px; align-items: center; padding: 9px 12px 9px 6px; cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.conv:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.conv .unread { width: 9px; height: 9px; border-radius: 50%; background: var(--blue); justify-self: center; }
+.conv .av { width: 38px; height: 38px; cursor: pointer; }
+.conv .top { display: flex; justify-content: space-between; gap: 8px; }
+.conv .n { font-weight: 600; font-size: 13.5px; }
+.conv .r { color: var(--faint); font-size: 11.5px; white-space: nowrap; }
+.conv .p { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thread { display: none; flex-direction: column; flex: 1; min-height: 0; }
+.thread.open { display: flex; }
+.thead { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 75%, transparent); }
+.back { border: 0; background: none; color: var(--blue); cursor: pointer; font-size: 14px; padding: 4px 6px; }
+.tbody { overflow-y: auto; flex: 1; padding: 12px 10px 18px; display: flex; flex-direction: column; gap: 3px; }
+.rnd { align-self: center; color: var(--faint); font-size: 11px; margin: 10px 0 4px; }
+.bub { max-width: 82%; padding: 7px 12px; border-radius: 18px; font-size: 13.3px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bub.in { align-self: flex-start; background: var(--their-bg); color: var(--text); border-bottom-left-radius: 6px; }
+.bub.out { align-self: flex-end; background: var(--my-bg); color: #fff; border-bottom-right-radius: 6px; }
+.bub .note { display: block; font-size: 10.5px; opacity: .8; margin-top: 3px; font-weight: 500; }
+.bub.newest { animation: pop .35s ease; }
+@keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+.listhead { padding: 8px 14px 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
+
+/* ---------- loader ---------- */
+.loader { max-width: 560px; margin: 12vh auto; text-align: center; padding: 0 16px; }
+.loader h1 { font: 500 34px/1.15 var(--serif); letter-spacing: -.02em; margin: 0 0 10px; }
+.loader p { color: var(--muted); }
+.drop { margin-top: 22px; border: 1.5px dashed var(--line); border-radius: 16px; padding: 34px 20px; background: var(--surface); }
+.drop.hover { border-color: var(--accent); background: var(--accent-soft); }
+.btn { display: inline-block; margin-top: 12px; background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 9px 16px;
+  font-weight: 500; cursor: pointer; }
+
+/* ---------- narrow screens: panels become tabs ---------- */
+.tabs { display: none; }
+@media (max-width: 1100px) {
+  :root { --left: 300px; --right: 280px; }
+}
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+  .side { display: none; position: fixed; inset: 53px 0 52px 0; height: auto; z-index: 15; background: var(--bg); border: 0; }
+  .side.show { display: block; }
+  .feed { padding: 12px 16px 60vh; }
+  .tabs { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 25; background: var(--surface); border-top: 1px solid var(--line); }
+  .tabs button { flex: 1; border: 0; background: none; padding: 14px 0; font-weight: 500; color: var(--muted); }
+  .tabs button.on { color: var(--accent); }
+  .filters { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.9 6.3L20 6l-3.6 5.4L22 14l-6.6.6L16 21l-4-5.2L8 21l.6-6.4L2 14l5.6-2.6L4 6l6.1 2.3z"/></svg>Charter</div>
+  <div class="runname" id="runname"></div>
+  <div class="spacer"></div>
+  <div class="filters" id="filters"></div>
+  <button class="chip" id="theme" title="Light or dark">◐</button>
+</div>
+<div id="app"></div>
+<div class="tabs" id="tabs"><button data-p="left">Messages</button><button data-p="feed" class="on">Story</button><button data-p="right">World</button></div>
+
+<script id="charter-data" type="application/json">/*__CHARTER_DATA__*/</script>
+<script>
+"use strict";
+// ======================================================================= data
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = x => (Math.abs(x) >= 100 ? x.toFixed(0) : Math.abs(x) >= 10 ? x.toFixed(1) : x.toFixed(2));
+const CLASS_ORDER = ["legislator", "worker", "scientist", "media", "board", "fixer", "observer"];
+const PUBLIC_SYS = new Set(["rights", "sanction", "censure", "rename", "ruling", "accuse", "respond", "case_dismissed", "invoke",
+  "channel_created", "channel_closed", "dm_limit", "treasury_coins", "patched", "proposal_failed", "veto_window", "vetoed", "veto_vote",
+  "ballot_open", "ballot_close", "bank_run", "redemption_suspended", "redemption_resumed", "par_set", "interest_cap", "default_consequence",
+  "loan_active", "loan_payment", "loan_repaid", "loan_defaulted", "loan_forgiven", "loan_bought", "loan_restructured", "power_used",
+  "powers_disclosure", "factored", "post_hidden", "post_revealed", "law_error", "drift", "title", "repeal_failed"]);
+
+function readEmbedded() {
+  const raw = $("#charter-data").textContent.trim();
+  if (!raw || raw.startsWith("/*")) return null;
+  try { return JSON.parse(raw); } catch (e) { console.error(e); return null; }
+}
+
+function prepare(D) {
+  const inst = D.instance, truth = D.truth || {}, events = D.events, snaps = D.snapshots || [];
+  // agents: the roster, arrivals and the secret observer
+  const A = new Map();
+  const add = a => { if (a && a.id && !A.has(a.id)) A.set(a.id, { id: a.id, cls: a.cls || "agent", model: a.model || "", tier: a.tier || "",
+    goal: (a.goal && (a.goal.text || a.goal.primary)) || "", archetype: a.archetype || "" }); };
+  (inst.agents || []).forEach(add);
+  (truth.arrived_agents || []).forEach(add);
+  if (inst.observer) add({ ...inst.observer, cls: "observer" });
+  for (const e of events) if (e.agent && !A.has(e.agent) && !["constitution", "reserve"].includes(e.agent) && !String(e.agent).startsWith("law:")) add({ id: e.agent, cls: "agent" });
+  const agents = [...A.values()].sort((a, b) => (CLASS_ORDER.indexOf(a.cls) - CLASS_ORDER.indexOf(b.cls)) || a.id.localeCompare(b.id));
+  agents.forEach((a, i) => { a.hue = Math.round((i * 137.508 + 18) % 360); });
+  // monitor-only truth for annotations
+  const anon = {}, forged = {}, rumor = {};
+  for (const e of events) {
+    if (e.type === "anon_truth") anon[e.data.event] = e.data.author;
+    if (e.type === "forged_dm" || e.type === "forgery_truth") forged[e.data.event] = e.data.source || "power";
+    if (e.type === "world_event_truth") rumor[e.data.event] = e.data;
+  }
+  const lawInfo = truth.laws || {};
+  // the story (center), DMs (left), law timeline and round boundaries (right)
+  const items = [], dms = [], lawEvents = [], roundAt = [];
+  let round = 0;
+  events.forEach((e, i) => {
+    if (e.round !== undefined) round = e.round;
+    roundAt[i] = round;
+    const d = e.data || {};
+    switch (e.type) {
+      case "round_start": items.push({ i, kind: "round", round: d.round ?? e.round, order: d.order || [] }); break;
+      case "post": items.push({ i, kind: "post", who: e.agent, text: d.text }); break;
+      case "anon_post": items.push({ i, kind: "post", who: anon[e.id] || null, anon: true, text: d.text }); break;
+      case "channel_post": items.push({ i, kind: "post", who: e.agent, channel: d.channel, text: d.text }); break;
+      case "story": items.push({ i, kind: "media", who: e.agent, label: "Front page", head: d.headline, text: d.text }); break;
+      case "digest": items.push({ i, kind: "media", who: e.agent, label: "Digest", text: d.text }); break;
+      case "report": items.push({ i, kind: "media", who: e.agent, label: "Report", text: d.text }); break;
+      case "gazette": items.push({ i, kind: "gazette", text: d.text }); break;
+      case "notify": break;                                              // private notices
+      case "proposal": items.push({ i, kind: "proposal", who: e.agent, law: d.law, title: d.title, intent: d.intent, cls: d.class, code: d.code, preview: d.preview }); break;
+      case "enact": items.push({ i, kind: "law", act: "enacted", who: e.agent, law: d.law, title: d.title, cls: d.class });
+        lawEvents.push({ i, act: "enact", law: d.law, title: d.title, cls: d.class, author: e.agent }); break;
+      case "repeal": items.push({ i, kind: "law", act: "repealed", law: d.law, title: (lawInfo[d.law] || {}).title });
+        lawEvents.push({ i, act: "repeal", law: d.law }); break;
+      case "world_event": items.push({ i, kind: "world", text: d.text, truth: rumor[d.event], vis: e.vis }); break;
+      case "dm": dms.push({ i, round, from: e.agent, to: d.to, text: d.text, enc: d.encrypted, shownAs: d.shown_as, shownTo: d.shown_to,
+        forged: forged[e.id], pay: d.payment }); break;
+      default:
+        if (e.vis === "public" && (PUBLIC_SYS.has(e.type) || e.type.startsWith("project") || e.type.startsWith("tribute") || e.type.startsWith("raid")))
+          items.push({ i, kind: "sys", type: e.type, who: e.agent, data: d });
+    }
+  });
+  // per-agent threads: each side files the message under the partner they believe they are talking to
+  const threads = new Map();                    // me -> Map(partner -> [msg])
+  const put = (me, partner, m) => {
+    if (!threads.has(me)) threads.set(me, new Map());
+    const t = threads.get(me); if (!t.has(partner)) t.set(partner, []); t.get(partner).push(m);
+  };
+  for (const m of dms) {
+    put(m.from, m.shownTo || m.to, { ...m, dir: "out" });
+    put(m.to, m.shownAs || m.from, { ...m, dir: "in" });
+  }
+  const lastRound = Math.max(0, ...events.map(e => e.round || 0));
+  return { inst, truth, events, snaps, agents, A, items, dms, threads, lawEvents, lawInfo, roundAt, lastRound,
+           rounds: inst.rounds || lastRound + 1, name: D.name || inst.run_id || "run" };
+}
+
+// ======================================================================= colours
+const dark = () => document.documentElement.dataset.theme === "dark" ||
+  (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+function col(a, kind) {
+  if (!a) return kind === "ink" ? "var(--muted)" : "var(--surface-2)";
+  const h = a.hue, dk = dark();
+  return { ink: dk ? `hsl(${h} 70% 72%)` : `hsl(${h} 58% 36%)`, solid: `hsl(${h} 55% ${dk ? 52 : 48}%)`,
+    tint: dk ? `hsl(${h} 30% 22%)` : `hsl(${h} 70% 95%)`, edge: dk ? `hsl(${h} 30% 32%)` : `hsl(${h} 55% 86%)`,
+    bubble: dk ? `hsl(${h} 25% 30%)` : `hsl(${h} 60% 90%)`, panel: dk ? `hsl(${h} 20% 17%)` : `hsl(${h} 55% 97%)` }[kind];
+}
+const initials = id => id.slice(0, 2);
+
+// ======================================================================= render: story
+let S, cur = -1, me = null, openWith = null, showKinds = new Set(["post", "media", "gazette", "proposal", "law", "world", "sys"]);
+const KIND_LABEL = { post: "Posts", media: "Media", gazette: "Gazette", proposal: "Proposals", law: "Laws", world: "Events", sys: "System" };
+
+function whoHTML(id, extra = "") {
+  const a = S.A.get(id);
+  if (!a) return `<span class="who" style="--ink:var(--muted)">${esc(id || "Anonymous")}${extra}</span>`;
+  return `<span class="who" data-agent="${esc(id)}" style="--ink:${col(a, "ink")}" title="${esc(`${a.cls} · ${a.model}${a.archetype ? " · " + a.archetype : ""}\nGoal: ${a.goal}`)}">${esc(id)} <span class="cls">${esc(a.cls)}</span>${extra}</span>`;
+}
+
+function sysText(it) {
+  const d = it.data || {}, w = it.who ? `<b>${esc(it.who)}</b> ` : "";
+  switch (it.type) {
+    case "ballot_open": return `Ballot <b>${esc(d.ballot)}</b> opens: ${esc(d.question)} <span class="tag">${esc(d.rule)}</span> · electorate ${(d.electorate || []).length}`;
+    case "ballot_close": { const v = Object.values(d.votes || {}); const y = v.filter(x => x === "yes").length;
+      return `Ballot <b>${esc(d.ballot)}</b> closes: <b>${esc(d.result)}</b> (${y} yes of ${v.length})`; }
+    case "vetoed": return `<b>The Board vetoes ${esc(d.law)}</b>`;
+    case "veto_window": return `${esc(d.law)} enters the Board's veto window`;
+    case "veto_vote": return `${w}votes on the veto of ${esc(d.law)}: ${esc(d.choice)}`;
+    case "proposal_failed": return `${w}proposal failed: ${esc(d.reason || d.error || "")}`.slice(0, 300);
+    case "rights": return `${esc(d.agent)} ${d.change === "grant" ? "gains" : "loses"} the right <b>${esc(d.right)}</b>${d.law ? " (law " + esc(d.law) + ")" : ""}`;
+    case "sanction": return `Sanction on <b>${esc(d.agent)}</b>: ${esc(Object.entries(d).filter(([k]) => !["agent", "law"].includes(k)).map(([k, v]) => k + " " + v).join(", "))}`;
+    case "dm_limit": return `${w}sets the private-message limit to <b>${esc(d.n)}</b>${d.agent ? " for " + esc(d.agent) : " for everyone"}`;
+    case "ruling": return `${w}rules <b>${esc(d.verdict)}</b> on ${esc(d.case)}: ${esc(d.reason || "")}`;
+    case "accuse": return `${w}accuses <b>${esc(d.accused)}</b> under ${esc(d.clause)}`;
+    case "bank_run": return `<b>Bank run on ${esc(d.currency)}</b>`;
+    default: {
+      const short = Object.entries(d).filter(([k, v]) => typeof v !== "object" && k !== "code").map(([k, v]) => `${k} ${v}`).join(" · ");
+      return `${w}<b>${esc(it.type.replace(/_/g, " "))}</b> ${esc(short).slice(0, 260)}`;
+    }
+  }
+}
+
+function itemHTML(it) {
+  const a = S.A.get(it.who);
+  const vars = a ? `--tint:${col(a, "tint")};--edge:${col(a, "edge")};--ink:${col(a, "ink")}` : "--tint:var(--surface);--edge:var(--line);--ink:var(--muted)";
+  switch (it.kind) {
+    case "round": return `<div class="round" data-i="${it.i}"><h2>Round ${it.round + 1}</h2><span class="order">${S.rounds ? "of " + S.rounds : ""}</span></div>`;
+    case "post": return `<div class="item post" data-i="${it.i}" style="${vars}">${it.anon ? `<span class="who" style="--ink:var(--muted)">Anonymous</span> ${it.who ? `<span class="tag">really ${esc(it.who)}</span>` : ""}` : whoHTML(it.who)}${it.channel ? ` <span class="tag">#${esc(it.channel)}</span>` : ""}<div class="text">${esc(it.text)}</div></div>`;
+    case "media": return `<div class="item media" data-i="${it.i}" style="${vars}"><span class="tag">${esc(it.label)}</span> ${whoHTML(it.who)}${it.head ? `<h3>${esc(it.head)}</h3>` : ""}<div class="text">${esc(it.text)}</div></div>`;
+    case "gazette": return `<div class="item gazette" data-i="${it.i}"><div class="mast">The Gazette</div><div class="text">${esc(it.text)}</div></div>`;
+    case "proposal": return `<div class="item law" data-i="${it.i}">${whoHTML(it.who)} <span class="tag">${esc(it.cls)}</span> proposes <b>${esc(it.law)}</b><div class="title">${esc(it.title)}</div><div>${esc(it.intent)}</div>${it.code ? `<details><summary>Code${it.preview ? " and effect preview" : ""}</summary><pre>${esc(it.code)}</pre>${it.preview ? `<pre>${esc((it.preview || []).join("\n"))}</pre>` : ""}</details>` : ""}</div>`;
+    case "law": return `<div class="item sys big" data-i="${it.i}">${it.act === "enacted" ? `<span class="tag good">enacted</span>` : `<span class="tag warn">repealed</span>`} <b>${esc(it.law)} · ${esc(it.title || "")}</b>${it.cls ? ` <span class="tag">${esc(it.cls)}</span>` : ""}</div>`;
+    case "world": { const t = it.truth; const rum = t && t.rumor;
+      return `<div class="item event" data-i="${it.i}"><div class="k">World event${it.vis !== "public" ? " · told to " + (Array.isArray(it.vis) ? it.vis.length : "some") : ""} ${rum ? `<span class="tag ${t.true ? "good" : "warn"}">rumour · ${t.true ? "true" : "false"}</span>` : ""}</div>${esc(it.text)}${t && t.truth && rum ? `<div class="sys" style="margin-top:4px">Truth: ${esc(t.truth)}</div>` : ""}</div>`; }
+    case "sys": return `<div class="item sys" data-i="${it.i}">${sysText(it)}</div>`;
+  }
+  return "";
+}
+
+function renderFeed() {
+  const html = [];
+  let gaz = null;                                       // consecutive gazette entries share one block
+  const flush = () => { if (gaz) { html.push(`<div class="item gazette" data-i="${gaz[0].i}"><div class="mast">The Gazette</div>${gaz.map(g => `<div class="text" data-i="${g.i}">${esc(g.text)}</div>`).join("")}</div>`); gaz = null; } };
+  for (const it of S.items) {
+    if (!(it.kind === "round" || showKinds.has(it.kind))) continue;
+    if (it.kind === "gazette") { (gaz = gaz || []).push(it); continue; }
+    flush();
+    html.push(itemHTML(it));
+  }
+  flush();
+  $("#feed").innerHTML = html.join("");
+  measure();
+}
+
+let marks = [];                                          // [top, eventIndex] of each feed item, for the reading line
+function measure() {
+  const top = el => { let y = 0; for (; el && el.id !== "feed"; el = el.offsetParent) y += el.offsetTop; return y; };
+  marks = [...document.querySelectorAll("#feed [data-i]")].map(el => [top(el), +el.dataset.i]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+}
+function readingIndex() {
+  const y = window.scrollY + window.innerHeight * 0.42;
+  let lo = 0, hi = marks.length - 1, best = 0;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (marks[mid][0] <= y) { best = mid; lo = mid + 1; } else hi = mid - 1; }
+  if (!marks.length) return 0;
+  // everything that happened up to the next visible item counts as "now" (DMs in between appear as you reach them)
+  const next = marks[best + 1];
+  return next ? next[1] - 1 : S.events.length - 1;
+}
+
+// ======================================================================= render: world panel (right)
+const REGIME = s => { const d = (s.decisive_set || []).length, f = s.franchise_share ?? 0;
+  return d === 0 ? "anarchy" : d === 1 ? "dictatorship" : f >= 0.5 ? "democracy" : "oligarchy"; };
+const RES_COL = { timber: "#8C6A43", stone: "#9A9890", copper: "#C46B3D", silver: "#AEB6C2", gold: "#D9A93A", crystal: "#7FA7D9" };
+
+function renderWorld(idx) {
+  const r = S.roundAt[idx] ?? 0;
+  const snap = r > 0 ? S.snaps.find(s => s.round === r - 1) : null;          // the world as of the end of the previous round
+  const values = snap ? snap.values : (S.truth.start_values || {});
+  const holdings = snap ? snap.holdings : Object.fromEntries((S.inst.agents || []).map(a => [a.id, a.endowment || {}]));
+  // laws in force at this moment (event-accurate)
+  const active = new Map(); let freshest = -1;
+  for (const l of S.lawEvents) { if (l.i > idx) break;
+    if (l.act === "enact") { active.set(l.law, l); freshest = l.i; } else active.delete(l.law); }
+  const lawsHTML = [...active.values()].map(l => {
+    const info = S.lawInfo[l.law] || {}, a = S.A.get(l.author);
+    return `<div class="lawrow${idx - l.i < 40 && l.i === freshest ? " fresh" : ""}"><span class="dot" style="background:${a ? col(a, "solid") : "var(--faint)"}"></span><div><div class="t">${esc(l.law)} · ${esc(l.title || info.title || "")}</div><div class="m">${esc(l.cls || info.cls || "")}${l.author && l.author !== "constitution" ? " · by " + esc(l.author) : l.author === "constitution" ? " · founding" : ""}</div></div></div>`;
+  }).join("") || `<div class="empty">No laws yet</div>`;
+  // wealth by agent
+  const rows = Object.entries(values || {}).filter(([id]) => S.A.has(id) && S.A.get(id).cls !== "observer").sort((a, b) => b[1] - a[1]);
+  const max = Math.max(1e-9, ...rows.map(r => r[1]));
+  const bars = rows.map(([id, v]) => { const a = S.A.get(id);
+    return `<div class="row"><span class="name" style="--ink:${col(a, "ink")}">${esc(id)}</span><div class="track"><div class="fill" style="width:${(100 * v / max).toFixed(1)}%;background:${col(a, "solid")}"></div></div><span class="v">${fmt(v)}</span></div>`; }).join("");
+  // resources across everyone
+  const tot = {};
+  for (const [id, h] of Object.entries(holdings || {})) if (S.A.has(id)) for (const [k, q] of Object.entries(h || {})) tot[k] = (tot[k] || 0) + q;
+  const resKeys = Object.keys(tot).filter(k => tot[k] > 0).sort();
+  const unit = (S.truth.unit) || {};
+  const tv = resKeys.map(k => [k, tot[k] * (unit[k] ?? 1)]);
+  const sum = tv.reduce((s, x) => s + x[1], 0) || 1;
+  const stack = tv.map(([k, v], j) => `<div title="${esc(k)}: ${fmt(tot[k])} units" style="flex-grow:${v / sum};background:${RES_COL[k] || `hsl(${(j * 67) % 360} 45% 55%)`}"></div>`).join("");
+  const legend = tv.map(([k], j) => `<span><i style="background:${RES_COL[k] || `hsl(${(j * 67) % 360} 45% 55%)`}"></i>${esc(k)} ${fmt(tot[k])}</span>`).join("");
+  const stocks = snap ? Object.entries(snap.stocks || {}).map(([c, f]) => `<div class="row"><span class="name">${esc(c)}</span><div class="track"><div class="fill" style="width:${(100 * f).toFixed(0)}%;background:var(--good)"></div></div><span class="v">${Math.round(100 * f)}%</span></div>`).join("") : "";
+  const prices = snap ? Object.entries(snap.prices || {}).map(([c, p]) => `<div class="kv"><span>${esc(c)}</span><span>P = ${p.toFixed(3)} · supply ${fmt((snap.supplies || {})[c] || 0)}</span></div>`).join("") : "";
+  const welfare = snap && snap.welfare !== undefined ? `<div class="kv"><span>Welfare</span><span>${fmt(snap.welfare)}</span></div>` : "";
+  $("#world").innerHTML = `
+    <div class="panel">
+      <h4>Now</h4>
+      <div class="roundbig">Round ${r + 1}</div>
+      <div class="roundsub">of ${S.rounds}${snap ? "" : " · starting holdings"}</div>
+      ${snap ? `<span class="tag regime">${esc(REGIME(snap))} · decisive set ${(snap.decisive_set || []).length} · franchise ${Math.round(100 * (snap.franchise_share || 0))}%</span>` : ""}
+      <h4>Laws in force</h4>${lawsHTML}
+      <h4>Wealth by agent</h4><div class="bars">${bars || `<div class="empty">No data yet</div>`}</div>
+      <h4>Resources held</h4><div class="stack">${stack}</div><div class="legend">${legend}</div>
+      ${stocks ? `<h4>Camp stocks</h4><div class="bars">${stocks}</div>` : ""}
+      ${prices || welfare ? `<h4>Money</h4>${prices}${welfare}` : ""}
+    </div>`;
+}
+
+// ======================================================================= render: messages (left)
+function countUpTo(arr, idx) { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m].i <= idx) lo = m + 1; else hi = m; } return lo; }
+
+function renderInbox(idx) {
+  const a = S.A.get(me);
+  $("#msgs").style.setProperty("--me-tint", col(a, "panel"));
+  // avatar strip: blue badge where that agent has unanswered messages right now
+  $("#avatars").innerHTML = S.agents.map(x => {
+    const unread = [...(S.threads.get(x.id) || new Map()).values()].some(t => { const n = countUpTo(t, idx); return n && t[n - 1].dir === "in"; });
+    return `<div class="av${x.id === me ? " on" : ""}" data-me="${esc(x.id)}" style="--c:${col(x, "solid")}" title="${esc(x.id)} (${esc(x.cls)})">${esc(initials(x.id))}${unread ? '<span class="badge"></span>' : ""}</div>`;
+  }).join("");
+  $("#meinfo").innerHTML = `<div class="av" style="--c:${col(a, "solid")};width:40px;height:40px">${esc(initials(me))}</div><div><div class="nm">${esc(me)}</div><div class="sub">${esc(a.cls)} · ${esc(a.model)}${a.archetype ? " · " + esc(a.archetype) : ""}</div></div>`;
+  const convs = [...(S.threads.get(me) || new Map()).entries()].map(([p, t]) => [p, t, countUpTo(t, idx)]).filter(x => x[2] > 0)
+    .sort((x, y) => x[1][x[2] - 1].i < y[1][y[2] - 1].i ? 1 : -1);
+  $("#convlist").innerHTML = convs.length ? `<div class="listhead">Messages</div>` + convs.map(([p, t, n]) => {
+    const last = t[n - 1], pa = S.A.get(p);
+    return `<div class="conv" data-with="${esc(p)}">${last.dir === "in" ? '<span class="unread" title="Not answered yet"></span>' : "<span></span>"}<div class="av" style="--c:${col(pa, "solid")}">${esc(initials(p))}</div><div style="min-width:0"><div class="top"><span class="n">${esc(p)}</span><span class="r">round ${last.round + 1}</span></div><div class="p">${last.dir === "out" ? "You: " : ""}${last.enc ? "🔒 " : ""}${esc(last.text)}</div></div></div>`;
+  }).join("") : `<div class="empty" style="padding:18px">No messages yet at this point in the story.</div>`;
+  if (openWith) renderThread(idx);
+}
+
+let lastThreadCount = 0;
+function renderThread(idx) {
+  const t = (S.threads.get(me) || new Map()).get(openWith) || [];
+  const n = countUpTo(t, idx), pa = S.A.get(openWith), a = S.A.get(me);
+  const box = $("#tbody"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  $("#thead").innerHTML = `<button class="back" id="back">‹ Inbox</button><div class="av" style="--c:${col(pa, "solid")};width:30px;height:30px;font-size:11px">${esc(initials(openWith))}</div><div><div style="font-weight:600">${esc(openWith)}</div><div style="color:var(--muted);font-size:11px">${esc(pa ? pa.cls + " · " + pa.model : "")}</div></div>`;
+  box.style.setProperty("--my-bg", col(a, "solid"));
+  box.style.setProperty("--their-bg", col(pa, "bubble"));
+  let html = "", rr = -1;
+  for (let j = 0; j < n; j++) {
+    const m = t[j];
+    if (m.round !== rr) { html += `<div class="rnd">Round ${m.round + 1}</div>`; rr = m.round; }
+    const notes = [];
+    if (m.enc) notes.push("🔒 encrypted");
+    if (m.shownAs && m.dir === "in") notes.push(`forged: really from ${m.from}`);
+    if (m.shownAs && m.dir === "out") notes.push(`sent as ${m.shownAs}`);
+    if (m.shownTo && m.dir === "out") notes.push(`actually reached ${m.to}`);
+    if (m.pay) notes.push(`+ ${m.pay.qty} ${m.pay.item}`);
+    html += `<div class="bub ${m.dir}${j === n - 1 && n > lastThreadCount ? " newest" : ""}">${esc(m.text)}${notes.length ? `<span class="note">${esc(notes.join(" · "))}</span>` : ""}</div>`;
+  }
+  box.innerHTML = html || `<div class="empty" style="align-self:center;margin-top:20px">Nothing yet.</div>`;
+  if (atBottom || n !== lastThreadCount) box.scrollTop = box.scrollHeight;
+  lastThreadCount = n;
+  $("#back").onclick = () => { openWith = null; $("#thread").classList.remove("open"); $("#convlist").style.display = ""; };
+}
+
+function openThread(p) {
+  openWith = p; lastThreadCount = 0;
+  $("#thread").classList.add("open"); $("#convlist").style.display = "none";
+  renderThread(cur);
+}
+function setMe(id) {
+  me = id; openWith = null; $("#thread").classList.remove("open"); $("#convlist").style.display = "";
+  renderInbox(cur);
+}
+
+// ======================================================================= app
+function mount(D) {
+  S = prepare(D);
+  document.title = `Charter story · ${S.name}`;
+  $("#runname").textContent = `${S.name} · ${S.agents.length} agents · ${S.rounds} rounds`;
+  $("#filters").innerHTML = Object.entries(KIND_LABEL).map(([k, l]) => `<button class="chip" data-kind="${k}" aria-pressed="true">${l}</button>`).join("");
+  $("#app").innerHTML = `
+    <div class="layout">
+      <aside class="side left" id="pleft"><div class="msgs" id="msgs">
+        <div class="whoami"><div class="label">Viewing as</div><div class="avatars" id="avatars"></div><div class="me" id="meinfo"></div></div>
+        <div class="list" id="convlist"></div>
+        <div class="thread" id="thread"><div class="thead" id="thead"></div><div class="tbody" id="tbody"></div></div>
+      </div></aside>
+      <main class="feed" id="feed"></main>
+      <aside class="side right" id="world"></aside>
+    </div>`;
+  const busiest = [...S.threads.entries()].sort((a, b) => b[1].size - a[1].size)[0];
+  me = busiest ? busiest[0] : S.agents[0]?.id;
+  renderFeed();
+  tick(true);
+  addEventListener("scroll", () => requestAnimationFrame(() => tick()), { passive: true });
+  addEventListener("resize", () => { measure(); tick(true); });
+  document.addEventListener("click", ev => {
+    const av = ev.target.closest("[data-me]"); if (av) return setMe(av.dataset.me);
+    const cv = ev.target.closest("[data-with]"); if (cv) return openThread(cv.dataset.with);
+    const who = ev.target.closest(".who[data-agent]"); if (who) return setMe(who.dataset.agent);
+    const f = ev.target.closest("[data-kind]");
+    if (f) { const k = f.dataset.kind, on = f.getAttribute("aria-pressed") !== "true"; f.setAttribute("aria-pressed", on);
+      on ? showKinds.add(k) : showKinds.delete(k); const keep = cur; renderFeed(); tick(true); return; }
+  });
+  $("#tabs").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
+    $("#pleft").classList.toggle("show", b.dataset.p === "left"); $("#world").classList.toggle("show", b.dataset.p === "right");
+  });
+}
+
+function tick(force) {
+  if (!S) return;
+  const idx = readingIndex();
+  if (idx === cur && !force) return;
+  cur = idx;
+  renderWorld(idx);
+  renderInbox(idx);
+}
+
+// theme
+(() => { try { const t = localStorage.getItem("charter-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {} })();
+$("#theme").onclick = () => {
+  const next = dark() ? "light" : "dark"; document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("charter-theme", next); } catch (e) {}
+  if (S) { renderFeed(); tick(true); }
+};
+
+// ======================================================================= loading a run folder (when nothing is embedded)
+function parseFiles(files) {
+  const get = name => files.find(f => f.name === name);
+  const need = ["instance.json", "events.jsonl"];
+  for (const n of need) if (!get(n)) return Promise.reject(new Error(`missing ${n}`));
+  const txt = n => get(n) ? get(n).text() : Promise.resolve(null);
+  return Promise.all(["instance.json", "events.jsonl", "snapshots.json", "ground_truth.json"].map(txt)).then(([i, e, s, g]) => ({
+    instance: JSON.parse(i), events: e.split("\n").filter(Boolean).map(l => JSON.parse(l)),
+    snapshots: s ? JSON.parse(s) : [], truth: g ? JSON.parse(g) : {}, name: (files[0].webkitRelativePath || "").split("/")[0] || "run" }));
+}
+function loader() {
+  $("#app").innerHTML = `<div class="loader"><h1>Read a Charter run as a story</h1>
+    <p>Open a run folder from <code>charter/out/</code> (it needs <code>instance.json</code> and <code>events.jsonl</code>; <code>snapshots.json</code> and <code>ground_truth.json</code> add the world panel), or build a shareable page with <code>python -m charter view RUN_DIR</code>.</p>
+    <div class="drop" id="drop">Drop the run folder's files here<br><label class="btn">Choose run folder<input type="file" id="pick" webkitdirectory multiple hidden></label></div>
+    <p id="err" style="color:var(--warn)"></p></div>`;
+  const go = files => parseFiles([...files]).then(mount).catch(e => { $("#err").textContent = e.message; });
+  $("#pick").onchange = e => go(e.target.files);
+  const dz = $("#drop");
+  dz.ondragover = e => { e.preventDefault(); dz.classList.add("hover"); };
+  dz.ondragleave = () => dz.classList.remove("hover");
+  dz.ondrop = e => { e.preventDefault(); dz.classList.remove("hover"); go(e.dataTransfer.files); };
+}
+
+const embedded = readEmbedded();
+embedded ? mount(embedded) : loader();
+</script>
+</body>
+</html>
