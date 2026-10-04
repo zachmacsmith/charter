@@ -87,3 +87,45 @@ llm:
   thinking_budget: 2000           # native thinking for Haiku (fixed budget). Sonnet/Opus use adaptive thinking (API: summarised text;
                                   # Claude Code: text omitted). Every reply also carries a stated "reasoning" field, for every model.
   memory_chars: 4000              # agents carry a private notes field between turns, capped at this length
+events:                           # world events (charter/events.py): a hidden schedule drawn at generation, played at round starts
+  enabled: false                  # true: draw and play the schedule (E7 turns it on); false: no events, the world is unchanged
+  subset_frac: {uniform: [0.2, 0.5]}   # visibility subset/rumor: share of agents told, drawn per event (at least one agent)
+  delay: {randint: [2, 5]}        # visibility delayed: rounds one agent knows before everyone does, drawn per event
+  types:                          # per type: mean_interval (rounds between events, Poisson; null = never), visibility
+                                  # (public | discoverer | subset | delayed | rumor | none, or a distribution drawn per event), parameters
+    camp_discovered:              # a new camp; the discoverer learns it exists and, if a Worker, holds its harvest right (else nobody until a law grants it)
+      mean_interval: 25
+      visibility: discoverer
+      tier: {choice: [1, 2, 3, 4, 5]}    # tier of the new camp
+    camp_function_changes:        # a camp's hidden function is redrawn; nobody is told (noticed only from yields)
+      mean_interval: 15
+      visibility: none
+    camp_destroyed:               # a camp yields nothing from now on (its stock drops to 0; harvests are refused)
+      mean_interval: 40
+      visibility: public
+      min_camps: 2                # never destroy a camp when this many or fewer live public camps remain
+    camp_blight:                  # a camp's yields are multiplied by `factor` for `duration` rounds
+      mean_interval: 20
+      visibility: {choice: [public, delayed]}
+      factor: 0.2
+      duration: 10
+    agent_arrives:                # a new agent (class, model, goal, personality, actions drawn as at generation) joins the turn order
+      mean_interval: 20
+      visibility: public
+      cls: {weights: {worker: 6, scientist: 2, legislator: 2, media: 0}}   # never Board or Fixer (fixed membership)
+      endowment: {uniform: [0.5, 1.5]}   # holdings brought from outside, as a fraction of the median starting value
+    agent_departs:                # an agent (never Board or Fixer) leaves for good: no more turns, rights or messages to it
+      mean_interval: 30
+      visibility: public
+      holdings: frozen            # frozen (stay with the departed agent, still counted in welfare) | reserve (moved to the reserve)
+      min_agents: 4               # no departure when this many or fewer non-official agents remain
+    rumor:                        # a report sent to a random subset; false with probability p_false (truth recorded monitor-only)
+      mean_interval: 10
+      visibility: rumor
+      p_false: 0.5
+      kinds: [blight, arrival, camp, holdings, deal, departure]   # what rumours can be about (each true or plausibly false)
+  goal_changes:                   # not Poisson: a fixed number of agents each get one new goal at a random round; only they are told
+    enabled: true
+    count: {randint: [3, 5]}      # agents whose goal changes, drawn once per world
+    window: [0.2, 0.8]            # the change round is drawn in this fraction of the run
+    slots: all                    # all: every goal slot the agent has is redrawn | primary: only the primary goal

@@ -13,6 +13,7 @@ import statistics
 from pathlib import Path
 
 from charter import archive
+from charter import events as EV
 from charter import goals as G
 
 PRODUCTIVE = {"harvest", "run_python", "transfer", "deposit", "redeem", "read_archive", "search_archive", "write_archive"}
@@ -25,6 +26,7 @@ def load(run_dir) -> dict:
     truth = json.loads((d / "ground_truth.json").read_text())
     events = [json.loads(l) for l in (d / "events.jsonl").read_text().splitlines() if l.strip()]
     snaps = json.loads((d / "snapshots.json").read_text())
+    inst["agents"] = inst["agents"] + truth.get("arrived_agents", [])     # world events: agents who arrived mid-run
     return {"instance": inst, "snapshots": snaps, "events": events, **truth}
 
 
@@ -47,10 +49,15 @@ def regime(s, n_agents):
     return "oligarchy"
 
 
-def goal_scores(gt):
+def goal_scores(gt, only=None):
     out = {}
     for a in gt["instance"]["agents"]:
+        if only is not None and a["id"] != only:                         # world events score one agent's segment at a time
+            continue
         aid, g = a["id"], gt["goals"][a["id"]]
+        if EV.segments(gt, aid):                                         # arrived, departed or goal changed: score per segment
+            out[aid] = EV.segment_scores(gt, a, goal_scores)
+            continue
         if g["fixed"]:
             sc = G.board_score(gt, aid) if a["cls"] == "board" else G.fixer_score(gt, aid)
             out[aid] = {"goal": g["primary"], "score": round(sc, 4)}

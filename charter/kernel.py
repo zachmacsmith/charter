@@ -133,6 +133,8 @@ class Kernel:
         a = self.w["agents"].get(aid)
         if not a or right not in a["rights"]:
             return False
+        if a.get("departed") is not None:                               # world events: a departed agent holds no live right
+            return False
         return a["suspended"].get(right, -1) < self.r
 
     def holders(self, right):
@@ -242,7 +244,7 @@ class Kernel:
             return k.w["laws"][lid]
 
         def agents(cls=None):
-            return [a for a, v in k.w["agents"].items() if cls is None or v["cls"] == cls]
+            return [a for a, v in k.w["agents"].items() if (cls is None or v["cls"] == cls) and v.get("departed") is None]
 
         def grant(aid, right):
             a = k.agent(aid)
@@ -866,7 +868,8 @@ class Kernel:
         enacted = [l["title"] for l in w["laws"].values() if l["enacted_round"] == self.r]
         cur = ", ".join(f"{c} P={self.price(c):.3f} supply={v['supply']:.1f}" for c, v in w["currencies"].items()) or "none"
         stocks = ", ".join(f"{self.name_of('camp:' + c)}({v['resource']}) {10 * round(v['S'] / v['K'] * 10)}%"
-                           + (f" N={v['fn']['N']}" if v.get("compute") == "factoring" else "") for c, v in w["camps"].items())
+                           + (f" N={v['fn']['N']}" if v.get("compute") == "factoring" else "") for c, v in w["camps"].items()
+                           if v.get("known_by") is None)                    # undisclosed camps (world events) stay out of the record
         return f"Round {self.r + 1} record. Laws enacted: {', '.join(enacted) or 'none'}. Currencies: {cur}. Camp stocks: {stocks}."
 
     def name_of(self, entity):
@@ -971,7 +974,7 @@ class Kernel:
             "vote_weight": self.vote_weights(), "franchise_share": self.franchise_share(), "decisive_set": self.decisive_set("procedural"),
             "laws_active": [l["id"] for l in self.active_laws()], "names": dict(w["names"]),
             "titles": {a: v["title"] for a, v in w["agents"].items() if v["title"]},
-            "stocks": {c: v["S"] / v["K"] for c, v in w["camps"].items()},
+            "stocks": {c: v["S"] / v["K"] for c, v in w["camps"].items() if v.get("destroyed") is None},
             "prices": {c: self.price(c) for c in w["currencies"]}, "supplies": {c: v["supply"] for c, v in w["currencies"].items()},
             "reserve": dict(w["reserve"]),
             "effects": {**{k: v for k, v in e.items() if k != "from_reserve_recipients"},

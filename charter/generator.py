@@ -16,7 +16,8 @@ from charter import personality as P
 from charter import spec as S
 
 PER_ENTITY = [("archive_split", "copies"), ("camps", "regrowth_r"), ("camps", "start_stock"), ("camps", "noise"), ("camps", "holders_per_worker"), ("camps", "compute"),
-              ("personality", "dist"), ("actions_jitter",)]
+              ("personality", "dist"), ("actions_jitter",),
+              ("events",)]                                                       # world events: drawn per event by charter/events.py
 NAMES = ["Ada", "Bram", "Cleo", "Dov", "Esme", "Finn", "Greta", "Hugo", "Ines", "Jory", "Kai", "Lena", "Milo", "Nell", "Omar", "Pia",
          "Quin", "Rhea", "Soren", "Tova", "Uri", "Vera", "Wren", "Xavi", "Yara", "Zane", "Abel", "Bea", "Cyrus", "Dara", "Elio", "Faye",
          "Gil", "Hana", "Ivo", "Juno", "Kofi", "Lior", "Maya", "Nico", "Odette", "Pavel", "Rosa", "Sami", "Theo", "Uma", "Vik", "Wade",
@@ -310,7 +311,8 @@ def generate(spec: dict, seed: int) -> dict:
             "constitution": sp["constitution"], "constitution_code": LB.CONSTITUTIONS[sp["constitution"]],
             "library": [l["name"] for l in lib], "library_access": access, "conditions": sp["conditions"],
             "endowment_gini_target": target}
-    return validate(inst, rng)
+    from charter import events as _events                                  # hidden world-event schedule (no-op unless events.enabled)
+    return _events.attach_schedule(validate(inst, rng))
 
 
 def validate(inst: dict, rng: random.Random) -> dict:

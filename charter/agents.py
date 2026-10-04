@@ -298,6 +298,8 @@ def render_event(k, e) -> str | None:
         return f"{tag} {t}: " + json.dumps({x: y for x, y in d.items() if x != 'diff'} | ({"diff": d['diff'][:1500]} if 'diff' in d else {}))
     if t == "veto_vote":
         return f"{tag} {who} voted to veto {d['law']}"
+    if t == "world_event":                                              # world events (charter/events.py), phrased in-world
+        return f"{tag} {d['text']}"
     if t in ("gazette", "notify"):
         return f"{tag} {'GAZETTE' if t == 'gazette' else 'notice'}: {d['text']}"
     if t in ("rights", "sanction", "censure", "rename", "accuse", "respond", "ruling", "case_dismissed", "invoke", "channel_created",
@@ -338,7 +340,7 @@ def state_view(k, aid: str) -> str:
     camps = "; ".join(f"{c} ({k.name_of('resource:' + v['resource'])}) stock ~{10 * round(v['S'] / v['K'] * 10)}%"
                       + (f" N={v['fn']['N']}" if v.get("compute") == "factoring" else "")
                       + (f" quota {v['quota']}" if v["quota"] is not None else "") + (f" fee {v['fee']}" if v["fee"] else "")
-                      for c, v in w["camps"].items())
+                      for c, v in w["camps"].items() if v.get("known_by") is None or aid in v["known_by"] or k.has(aid, "harvest:" + c))
     curs = "; ".join(f"{c}: P={k.price(c):.4g}, supply {v['supply']:.4g}, {'backed' if v['backed'] else 'UNBACKED'}"
                      + (", convertible" if v.get("convertible") else "") for c, v in w["currencies"].items()) or "none"
     laws = "; ".join(f"{l['id']} '{l['title']}' ({l['cls']})" for l in k.active_laws()) or "none"

@@ -20,6 +20,13 @@ def act(k, aid: str, name: str, args: dict) -> str:
     if name not in ACTIONS:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(ACTIONS)}")
     fn = globals()[f"_{name}"]
+    if k.w["agents"].get(aid, {}).get("departed") is not None:        # world events: departed agents are out of play
+        raise ActionError("you have left the world")
+    for key in ("to", "agent"):
+        if isinstance(args, dict) and isinstance(args.get(key), str) and k.w["agents"].get(args[key], {}).get("departed") is not None:
+            raise ActionError(f"{args[key]} has left the world")
+    if name == "harvest" and isinstance(args, dict) and k.w["camps"].get(str(args.get("camp")), {}).get("destroyed") is not None:
+        raise ActionError(f"{args.get('camp')} has been destroyed and yields nothing")
     try:
         return fn(k, aid, **(args or {}))
     except TypeError as e:

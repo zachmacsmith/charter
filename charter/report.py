@@ -24,6 +24,7 @@ def _load(d: Path):
     snaps = json.loads((d / "snapshots.json").read_text()) if (d / "snapshots.json").exists() else []
     gt = json.loads((d / "ground_truth.json").read_text()) if (d / "ground_truth.json").exists() else {}
     score = json.loads((d / "score.json").read_text()) if (d / "score.json").exists() else None
+    inst["agents"] = inst["agents"] + gt.get("arrived_agents", [])         # world events: agents who arrived mid-run
     return inst, ev, rs, snaps, gt, score
 
 
@@ -81,6 +82,8 @@ def spec_outline(d, inst, ev, gt):
         for e in harv:
             x = e["data"]
             L.append(f"| {e['round'] + 1} | {e['agent']} | {x['camp']} | {x['x']} | {x.get('stock_before', '')} | {x['efficiency']} | {x.get('noise', '')} | {x['yield']:.3f} |")
+    from charter import events as _events
+    L += _events.outline_lines(inst, gt)                                  # world events: schedule, draws, truth
     L += ["", "## Starting constitution", "", "```python", inst["constitution_code"].strip(), "```", "",
           "## Library visible in this world", "", ", ".join(inst["library"]) or "none", "",
           "## Shared archive at start", "", "```json", json.dumps(gt.get("shared_archive_at_start", {}), indent=1), "```", "",
@@ -168,6 +171,9 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
                 line = f"- {who} ran sandbox code ({len(x['code'])} chars)"
             elif t in ("deposit", "redeem"):
                 line = f"- {who} {t}: {_cut(json.dumps(x), 160)}"
+            elif t in ("world_event_truth", "goal_change", "arrival", "departure"):
+                from charter import events as _events
+                line = _events.overview_line(e)
             elif t == "gazette" and not str(x["text"]).startswith("Round "):
                 line = f"- Gazette: {_cut(x['text'], 200)}"
             if line:
@@ -261,7 +267,7 @@ def agent_docs(d, inst, ev, rs, gt):
 
 
 MESSAGE_TYPES = ("post", "anon_post", "dm", "channel_post", "story", "digest", "report", "gazette", "notify", "channel_created",
-                 "post_hidden", "post_revealed")
+                 "post_hidden", "post_revealed", "world_event")
 
 
 def messages(d, inst, ev):
@@ -272,6 +278,7 @@ def messages(d, inst, ev):
     cur = None
     anon = {e["data"]["event"]: e["data"]["author"] for e in ev if e["type"] == "anon_truth"}
     hidden = {e["data"]["event"] for e in ev if e["type"] == "post_hidden"} - {e["data"]["event"] for e in ev if e["type"] == "post_revealed"}
+    wtruth = {e["data"]["event"]: e["data"] for e in ev if e["type"] == "world_event_truth"}
     for e in ev:
         if e["type"] not in MESSAGE_TYPES:
             continue
@@ -298,6 +305,11 @@ def messages(d, inst, ev):
             body = f"{head} Gazette{' (' + who + ')' if who else ''}:"
         elif t == "notify":
             body = f"{head} Notice to {x['to']}{' from ' + who if who else ''}:"
+        elif t == "world_event":                                         # monitor view: recipients and, for rumours, the truth
+            tr = wtruth.get(x["event"], {})
+            to = "everyone" if e["vis"] == "public" else ", ".join(e["vis"])
+            tv = "" if not tr.get("rumor") else (" RUMOUR, TRUE" if tr.get("true") else " RUMOUR, FALSE")
+            body = f"{head} World event {x['event']} ({x['kind']}) to {to}{tv}" + (f" (truth: {tr['truth']})" if tr.get("truth") else "") + ":"
         elif t == "channel_created":
             L.append(f"{head} {who} created channel #{x['channel']} (members {', '.join(x['members'])}{', open' if x.get('open') else ''})")
             continue
