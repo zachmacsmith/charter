@@ -332,6 +332,11 @@ def generate(spec: dict, seed: int) -> dict:
 
 def validate(inst: dict, rng: random.Random) -> dict:
     """Make the instance playable; record every repair in inst['repairs']."""
+    import difflib
+    bad = [n for n in (inst["spec"].get("start_laws") or []) if n not in LB.LIB]
+    if bad:                                                             # fail before any run directory exists
+        hints = {n: difflib.get_close_matches(n, list(LB.LIB), 1) for n in bad}
+        raise ValueError("unknown start_laws: " + ", ".join(f"{n!r}" + (f" (did you mean {h[0]!r}?)" if h else "") for n, h in hints.items()))
     rep = []
     agents, camps = inst["agents"], inst["camps"]
     workers = [a for a in agents if a["cls"] == "worker"]

@@ -710,3 +710,8 @@ def test_a_section_with_a_distribution_like_key_merges_instead_of_replacing(tmp_
     assert sp["goals"]["weights"] == {"Wealth": 2, "Power": 1} and "secondary_prob" in sp["goals"]
     inst = generator.generate(sp, 1)
     assert {a["goal"]["primary"] for a in inst["agents"] if not a["goal"]["fixed"]} <= {"Wealth", "Power"}
+
+
+def test_unknown_start_laws_fail_at_generation_with_a_suggestion():
+    with pytest.raises(ValueError, match="did you mean 'Loan Registry'"):
+        generator.generate(spec.apply_overrides(spec.load("E3"), ['start_laws=["Loan Registri"]']), 1)
