@@ -58,15 +58,9 @@ class Partners(CampType):
         return {"partner": rng.choice(others + ["any", "any"]) if others else "any", "move": rng.choice(MOVES)}
 
     def describe(self, inst=None) -> str:
-        c = self.camp
-        u = B.v0q(c, type(self))
-        v = {m: f"{PAYOFF[m] * u:.3g}" for m in PAYOFF}
-        return (f"A joint workshop open to everyone (no harvest right needed; the Board and the Fixer cannot take part). Once per round, "
-                f"harvest with \"partner\": \"Name\" (or \"any\") and \"move\": \"share\" or \"take\" (no x). Entries are sealed. At the "
-                f"end of the round, two agents who named each other work together; agents who chose \"any\" are paired at random among "
-                f"themselves; anyone else works alone for {ALONE * u:.3g}. In a pair: both share -> {v[('share', 'share')]} each; one "
-                f"takes and one shares -> the taker gets {v[('take', 'share')]} and the sharer {v[('share', 'take')]}; both take -> "
-                f"{v[('take', 'take')]} each (all in {c['resource']}). After each round every pair and its moves are published.")
+        return ("A joint workshop open to everyone (no harvest right needed; the Board and the Fixer cannot take part). Once per round, "
+                "harvest with \"partner\": \"Name\" (or \"any\") and \"move\": \"share\" or \"take\" (no x); entries are sealed "
+                "until the end of the round, when you are paid. Every pair and its moves are published.")
 
     def state_line(self, k, aid) -> str:
         hist = B.peek(self.camp, PLAY)["history"]

@@ -11,76 +11,125 @@
 :root {
   --bg: #F5F4EE; --surface: #FAF9F5; --surface-2: #F0EEE6; --text: #1F1E1D; --muted: #73726C; --faint: #A3A199;
   --line: #E5E2D8; --accent: #C96442; --accent-soft: #F3E3DA; --blue: #2F7CF6; --good: #4E7A4C; --warn: #B4552D;
+  --gold: #D9A93A; --yes: #4E7A4C; --no: #B4552D;
   --shadow: 0 1px 2px rgba(31,30,29,.05), 0 4px 16px rgba(31,30,29,.05);
+  --pop: 0 10px 34px rgba(31,30,29,.16), 0 2px 6px rgba(31,30,29,.08);
   --serif: "Source Serif 4", "Tiempos Text", Georgia, serif; --sans: Inter, -apple-system, "Segoe UI", system-ui, sans-serif;
-  --left: 360px; --right: 340px;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --left: 380px; --right: 340px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #262624; --surface: #30302E; --surface-2: #2A2A28; --text: #F2F0E9; --muted: #A9A79F; --faint: #75736C;
     --line: #3C3B38; --accent: #D97757; --accent-soft: #4A3328; --blue: #5B9BFF; --good: #8FB98C; --warn: #E08A63;
-    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    --gold: #E8C25A; --yes: #8FB98C; --no: #E08A63;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25); --pop: 0 10px 34px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
   }
 }
 :root[data-theme="dark"] {
   --bg: #262624; --surface: #30302E; --surface-2: #2A2A28; --text: #F2F0E9; --muted: #A9A79F; --faint: #75736C;
   --line: #3C3B38; --accent: #D97757; --accent-soft: #4A3328; --blue: #5B9BFF; --good: #8FB98C; --warn: #E08A63;
-  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  --gold: #E8C25A; --yes: #8FB98C; --no: #E08A63;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25); --pop: 0 10px 34px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.3);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 var(--sans); }
 body { overflow-x: hidden; }
 button { font: inherit; color: inherit; }
+details > summary { cursor: pointer; list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
 
 /* ---------- top bar ---------- */
-.topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 10px 20px;
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 10px 20px; height: 53px;
   background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: 9px; font-family: var(--serif); font-size: 19px; font-weight: 500; letter-spacing: -.01em; }
+.brand { display: flex; align-items: center; gap: 9px; font-family: var(--serif); font-size: 19px; font-weight: 500; letter-spacing: -.01em; white-space: nowrap; }
 .brand svg { width: 20px; height: 20px; color: var(--accent); }
 .runname { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .spacer { flex: 1; }
-.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
 .chip[aria-pressed="false"] { opacity: .45; }
+.chip.primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 500; }
 .filters { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- mascots ---------- */
+.masc { display: inline-block; flex: none; vertical-align: middle; overflow: visible; }
+.mwrap { position: relative; display: inline-flex; flex: none; cursor: pointer; border-radius: 50%; }
+.mwrap.on::after { content: ""; position: absolute; left: 10%; right: 10%; bottom: -5px; height: 3px; border-radius: 3px; background: var(--text); }
+.mwrap .badge { position: absolute; right: -1px; top: 1px; width: 9px; height: 9px; border-radius: 50%; background: var(--blue); border: 2px solid var(--bg); }
+.mwrap:hover .masc { transform: translateY(-2px) rotate(-4deg); }
+.masc { transition: transform .2s; }
 
 /* ---------- layout ---------- */
 .layout { display: grid; grid-template-columns: var(--left) minmax(0, 1fr) var(--right); gap: 0; }
 .side { position: sticky; top: 53px; height: calc(100vh - 53px); overflow: hidden; }
 .side.left { border-right: 1px solid var(--line); }
 .side.right { border-left: 1px solid var(--line); overflow-y: auto; padding: 18px 18px 40px; }
-.feed { max-width: 720px; width: 100%; margin: 0 auto; padding: 18px 28px 60vh; }
+.feed { max-width: 760px; width: 100%; margin: 0 auto; padding: 18px 28px 60vh; }
 
 /* ---------- story feed ---------- */
-.round { margin: 34px 0 14px; display: flex; align-items: baseline; gap: 12px; }
+.round { margin: 38px 0 14px; }
+.round .rt { display: flex; align-items: baseline; gap: 12px; }
 .round h2 { margin: 0; font: 500 26px/1.1 var(--serif); letter-spacing: -.015em; }
 .round .order { color: var(--faint); font-size: 12px; }
+.headline { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.hl { font-size: 11.5px; padding: 2px 9px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.hl.big { color: var(--text); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-soft); }
 .item { margin: 8px 0; }
-.post { border-radius: 14px; padding: 10px 14px 11px; background: var(--tint); border: 1px solid var(--edge); }
+.prow { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; align-items: start; }
+.prow > .mwrap { margin-top: 4px; }
+.post { border-radius: 4px 14px 14px 14px; padding: 8px 14px 9px; background: var(--tint); border: 1px solid var(--edge); }
 .who { font-weight: 600; font-size: 13px; color: var(--ink); display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
 .who .cls { font-weight: 500; color: var(--muted); font-size: 11.5px; }
-.post .text, .media .text { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 3px; }
+.post .text, .media .text { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; }
 .tag { display: inline-block; font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 1px 7px;
-  border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); vertical-align: 1px; }
+  border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); vertical-align: 1px; white-space: nowrap; }
 .tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
 .tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); background: color-mix(in srgb, var(--good) 10%, transparent); }
+.tag.gold { color: color-mix(in srgb, var(--gold) 70%, var(--text)); border-color: color-mix(in srgb, var(--gold) 45%, transparent); background: color-mix(in srgb, var(--gold) 14%, transparent); }
+.lawref { border-bottom: 1.5px dotted color-mix(in srgb, var(--accent) 70%, transparent); cursor: help; font-weight: 500; }
+.lawref:hover { background: var(--accent-soft); border-radius: 3px; }
 .gazette { font-family: var(--serif); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--text);
-  border-radius: 6px; padding: 9px 14px; box-shadow: var(--shadow); }
+  border-radius: 0; padding: 9px 14px; box-shadow: var(--shadow); }
 .gazette .mast { font: 600 10.5px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
 .gazette .text { font-size: 15px; white-space: pre-wrap; }
 .gazette .text + .text { border-top: 1px solid var(--line); margin-top: 5px; padding-top: 5px; font-size: 14px; }
-.media { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow);
-  border-top: 3px solid var(--ink); }
+.media { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow); }
 .media h3 { margin: 4px 0 2px; font: 600 19px/1.25 var(--serif); letter-spacing: -.01em; }
 .law { border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line)); background: var(--accent-soft); border-radius: 12px; padding: 10px 14px; }
 .law .title { font: 600 15.5px/1.3 var(--serif); }
-.law details summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 6px; }
-.law pre { font-size: 11.5px; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px; }
+.law details summary, .turn details summary { color: var(--muted); font-size: 12px; margin-top: 6px; }
+pre { font: 11.5px/1.45 var(--mono); overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 9px; white-space: pre; }
 .sys { color: var(--muted); font-size: 12.8px; padding: 2px 4px 2px 12px; border-left: 2px solid var(--line); }
 .sys b { color: var(--text); font-weight: 600; }
 .sys.big { color: var(--text); font-size: 14px; border-left-color: var(--accent); }
+.sys.enacted { animation: glow 1.6s ease 1; }
+@keyframes glow { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
 .event { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 9px 13px; }
 .event .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
-.marker { position: fixed; left: calc(var(--left) + 6px); width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: .0; }
+.ballot { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 9px 13px; font-size: 13px; }
+.ballot .q { font-weight: 500; }
+.votes { display: flex; flex-wrap: wrap; gap: 3px 12px; margin-top: 6px; align-items: center; }
+.votes .vside { display: flex; align-items: center; gap: 2px; }
+.votes .lab { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
+.turn { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); padding: 1px 0 1px 4px; }
+.turn .ic { letter-spacing: 1px; }
+.turn details { flex: 1; min-width: 0; }
+.turn details summary { margin: 0; display: flex; gap: 8px; align-items: center; }
+.turn .acts { margin: 4px 0 6px; padding-left: 4px; }
+
+/* epilogue */
+.epilogue { margin-top: 50px; border-top: 2px solid var(--text); padding-top: 16px; }
+.epilogue h2 { font: 500 30px/1.1 var(--serif); margin: 0 0 4px; letter-spacing: -.02em; }
+.epilogue .facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 18px; }
+.podium { display: flex; justify-content: center; align-items: flex-end; gap: 18px; margin: 18px 0 22px; }
+.podium .p { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.podium .block { width: min(92px, 24vw); border-radius: 8px 8px 0 0; background: var(--surface-2); border: 1px solid var(--line); border-bottom: 0;
+  display: grid; place-items: center; font: 500 22px var(--serif); color: var(--muted); }
+.podium .nm { font-weight: 600; font-size: 13px; }
+.podium .sc { color: var(--muted); font-size: 12px; }
+.scorerow { display: grid; grid-template-columns: 26px 36px minmax(0, 1fr) 120px; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.scorerow .rk { color: var(--faint); font: 500 15px var(--serif); text-align: right; }
+.scorerow .gl { color: var(--muted); font-size: 12px; }
 
 /* ---------- right panel: laws and resources ---------- */
 .panel h4 { margin: 22px 0 8px; font: 600 11px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
@@ -88,42 +137,96 @@ button { font: inherit; color: inherit; }
 .roundbig { font: 500 44px/1 var(--serif); letter-spacing: -.03em; }
 .roundsub { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
 .regime { display: inline-block; margin-top: 8px; }
-.lawrow { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: 8px; transition: background .6s; }
+.lawrow { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: 8px; transition: background .6s; cursor: help; }
+.lawrow:hover { background: var(--surface-2); }
 .lawrow.fresh { background: var(--accent-soft); }
-.lawrow .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none; }
 .lawrow .t { font-weight: 500; font-size: 13px; line-height: 1.35; }
 .lawrow .m { color: var(--muted); font-size: 11.5px; }
-.bars .row { display: grid; grid-template-columns: 74px 1fr 46px; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
-.bars .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); font-weight: 500; }
-.bars .track { height: 9px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
-.bars .fill { height: 100%; border-radius: 99px; transition: width .45s ease; }
+.lawrow .does { color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+.bars .row { display: grid; grid-template-columns: 20px 70px 1fr 46px; align-items: center; gap: 6px; font-size: 12px; margin: 3px 0; }
+.bars.plain .row { grid-template-columns: 74px 1fr 46px; }
+.bars .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); font-weight: 500; cursor: pointer; }
+.track { height: 9px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.fill { height: 100%; border-radius: 99px; transition: width .45s ease; }
 .bars .v { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .stack { display: flex; height: 12px; border-radius: 99px; overflow: hidden; background: var(--surface-2); margin: 6px 0 4px; }
 .stack div { transition: flex-grow .45s ease; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--muted); }
 .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
-.kv { display: flex; justify-content: space-between; font-size: 12.5px; padding: 2px 0; }
-.kv span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; }
+.kv { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 2px 0; }
+.kv span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .empty { color: var(--faint); font-size: 12.5px; font-style: italic; }
 
-/* ---------- left panel: iMessage-style inboxes ---------- */
-.msgs { height: 100%; display: flex; flex-direction: column; background: var(--me-tint, var(--surface)); transition: background .3s; }
-.whoami { padding: 12px 12px 8px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 70%, transparent); }
-.whoami .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-weight: 600; margin: 0 2px 7px; }
-.avatars { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
-.av { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 12.5px;
-  color: #fff; background: var(--c); cursor: pointer; border: 2px solid transparent; position: relative; }
-.av.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg); }
-.av .badge { position: absolute; right: -2px; top: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--blue); border: 2px solid var(--bg); }
-.me { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-.me .nm { font: 600 16px/1.2 var(--serif); }
-.me .sub { color: var(--muted); font-size: 11.5px; }
+/* ---------- left panel ---------- */
+.lp { height: 100%; display: flex; flex-direction: column; background: var(--me-tint, var(--surface)); transition: background .3s; }
+.whoami { padding: 10px 12px 0; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.avatars { display: flex; gap: 2px; overflow-x: auto; padding: 4px 2px 9px; scrollbar-width: thin; }
+.ltabs { display: flex; gap: 0; margin: 0 -12px; padding: 0 12px; }
+.ltabs button { border: 0; background: none; padding: 8px 12px 9px; font-weight: 500; font-size: 13px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+.ltabs button.on { color: var(--text); border-bottom-color: var(--text); }
+.ltabs .n { font-size: 11px; color: var(--faint); font-weight: 500; }
+.pane { flex: 1; min-height: 0; display: none; flex-direction: column; }
+.pane.on { display: flex; }
+
+/* dossier */
+.dossier { overflow-y: auto; flex: 1; padding: 14px 16px 60px; }
+.dhead { display: flex; gap: 12px; align-items: center; }
+.dhead .nm { font: 500 24px/1.1 var(--serif); letter-spacing: -.015em; }
+.dhead .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.dhead .tags { margin-top: 5px; display: flex; gap: 4px; flex-wrap: wrap; }
+.sec { margin-top: 18px; }
+.sec > .h { font: 600 10.5px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; }
+.sec > .h span:last-child { letter-spacing: 0; text-transform: none; font-weight: 500; color: var(--faint); }
+.goal { padding: 8px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); margin-bottom: 6px; }
+.goal.old { opacity: .55; }
+.goal.old .gn { text-decoration: line-through; }
+.goal .gtop { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.goal .gn { font-weight: 600; font-size: 13px; }
+.goal .gw { font: 500 12px var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goal .gt { font-size: 12.3px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+.goal .gs { display: grid; grid-template-columns: 1fr 40px; gap: 8px; align-items: center; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+.gchange { font-size: 11.5px; color: var(--warn); margin: -2px 0 6px 4px; }
+.traits { display: grid; grid-template-columns: 76px 1fr 76px; gap: 3px 8px; font-size: 11px; color: var(--muted); align-items: center; }
+.traits span:nth-child(3n) { text-align: right; }
+.traits .tr { height: 4px; border-radius: 4px; background: var(--surface-2); position: relative; }
+.traits .tr i { position: absolute; top: -3px; width: 10px; height: 10px; border-radius: 50%; margin-left: -5px; background: var(--c); border: 2px solid var(--bg); }
+.ptext { font: italic 13px/1.5 var(--serif); color: var(--muted); margin-top: 8px; }
+.rights { display: flex; flex-wrap: wrap; gap: 4px; }
+.rchip { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); }
+.rchip.new { border-color: var(--good); color: var(--good); }
+.holds { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; margin-top: 6px; color: var(--muted); }
+.holds i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+.spark { width: 100%; height: 46px; display: block; }
+.rel { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; padding: 3px 4px; border-radius: 8px; cursor: pointer; font-size: 12.5px; }
+.rel:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.rel .c { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.dround { margin: 0 0 12px; padding-left: 12px; border-left: 2px solid var(--line); }
+.dround.now { border-left-color: var(--accent); }
+.dround.later { opacity: .5; }
+.dround .drh { font: 500 15px var(--serif); margin-bottom: 4px; display: flex; gap: 8px; align-items: baseline; }
+.dround .drh span { font: 500 11px var(--sans); color: var(--muted); }
+.dact { font-size: 12.5px; margin: 3px 0; display: grid; grid-template-columns: 20px 1fr; gap: 4px; }
+.dact .res { color: var(--muted); font-size: 11.8px; overflow-wrap: anywhere; }
+.dact b { font-weight: 600; }
+.think { font-size: 12.5px; margin: 4px 0; }
+.think > summary { display: inline-flex; gap: 6px; align-items: center; padding: 2px 9px; border-radius: 999px; background: var(--surface);
+  border: 1px solid var(--line); color: var(--text); font-size: 12px; }
+.think > summary .w { color: var(--muted); }
+.think[open] > summary { background: var(--accent-soft); }
+.think .body { white-space: pre-wrap; overflow-wrap: anywhere; font: 12.3px/1.55 var(--serif); color: var(--text); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin-top: 5px; max-height: 420px; overflow-y: auto; }
+.think .body .lbl { font: 600 10.5px var(--sans); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); display: block; margin: 6px 0 2px; }
+.think .body .lbl:first-child { margin-top: 0; }
+.nothink { display: inline-flex; gap: 6px; font-size: 12px; color: var(--faint); padding: 2px 9px; border: 1px dashed var(--line); border-radius: 999px; margin: 4px 0; }
+.dmline { font-size: 12px; color: var(--muted); margin: 3px 0; cursor: pointer; }
+.dmline:hover { color: var(--blue); }
+
+/* inbox */
 .list { overflow-y: auto; flex: 1; }
 .conv { display: grid; grid-template-columns: 12px 38px 1fr; gap: 9px; align-items: center; padding: 9px 12px 9px 6px; cursor: pointer;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
 .conv:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); }
 .conv .unread { width: 9px; height: 9px; border-radius: 50%; background: var(--blue); justify-self: center; }
-.conv .av { width: 38px; height: 38px; cursor: pointer; }
 .conv .top { display: flex; justify-content: space-between; gap: 8px; }
 .conv .n { font-weight: 600; font-size: 13.5px; }
 .conv .r { color: var(--faint); font-size: 11.5px; white-space: nowrap; }
@@ -138,10 +241,29 @@ button { font: inherit; color: inherit; }
 .bub { max-width: 82%; padding: 7px 12px; border-radius: 18px; font-size: 13.3px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 .bub.in { align-self: flex-start; background: var(--their-bg); color: var(--text); border-bottom-left-radius: 6px; }
 .bub.out { align-self: flex-end; background: var(--my-bg); color: #fff; border-bottom-right-radius: 6px; }
+.bub.out .lawref { border-bottom-color: rgba(255,255,255,.7); }
 .bub .note { display: block; font-size: 10.5px; opacity: .8; margin-top: 3px; font-weight: 500; }
 .bub.newest { animation: pop .35s ease; }
 @keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
 .listhead { padding: 8px 14px 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
+
+/* ---------- hover card ---------- */
+#hovercard { position: fixed; z-index: 60; width: 380px; max-width: calc(100vw - 24px); max-height: 70vh; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--pop); padding: 13px 15px 14px;
+  font-size: 13px; opacity: 0; pointer-events: none; transform: translateY(4px); transition: opacity .12s, transform .12s; }
+#hovercard.show { opacity: 1; pointer-events: auto; transform: none; }
+#hovercard.pinned { border-color: var(--accent); }
+#hovercard .ht { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+#hovercard .ttl { font: 600 17px/1.25 var(--serif); }
+#hovercard .intent { font: 14px/1.5 var(--serif); margin: 7px 0 4px; }
+#hovercard .st { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+#hovercard .hsec { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+#hovercard .hsec > .h { font: 600 10.5px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+#hovercard .does { display: flex; flex-wrap: wrap; gap: 4px; }
+#hovercard .does span { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+#hovercard .tlr { font-size: 12.3px; margin: 3px 0; color: var(--muted); }
+#hovercard .tlr b { color: var(--text); font-weight: 600; }
+#hovercard .hint { color: var(--faint); font-size: 11px; margin-top: 8px; }
 
 /* ---------- loader ---------- */
 .loader { max-width: 560px; margin: 12vh auto; text-align: center; padding: 0 16px; }
@@ -152,11 +274,54 @@ button { font: inherit; color: inherit; }
 .btn { display: inline-block; margin-top: 12px; background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 9px 16px;
   font-weight: 500; cursor: pointer; }
 
+/* ---------- society window ---------- */
+.soc { display: grid; grid-template-columns: minmax(0, 1fr) 320px; height: calc(100vh - 53px); }
+.stagewrap { position: relative; min-width: 0; display: flex; flex-direction: column; }
+#stage { flex: 1; width: 100%; min-height: 0; display: block; }
+.ctrl { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--surface); }
+.ctrl input[type=range] { flex: 1; accent-color: var(--accent); }
+.ctrl .pb { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--text); color: var(--bg); cursor: pointer; font-size: 14px; }
+.ctrl .rl { font: 500 15px var(--serif); min-width: 92px; }
+.ctrl select { font: inherit; font-size: 12.5px; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; }
+.keyhint { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+.seg button { border: 0; background: none; padding: 4px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 500; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.seg button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+body.insoc .filters, body.insoc .tabs { display: none !important; }
+@media (min-width: 861px) { body.insoc { overflow: hidden; } }
+.sside { border-left: 1px solid var(--line); overflow-y: auto; padding: 16px 16px 40px; }
+.ticker .tk { font-size: 12.5px; padding: 6px 8px; border-radius: 8px; margin: 3px 0; background: var(--surface); border: 1px solid var(--line); animation: pop .35s ease; }
+.ticker .tk .r { color: var(--faint); font-size: 11px; }
+.ticker .tk.old { opacity: .6; animation: none; }
+.lawchips { display: flex; flex-wrap: wrap; gap: 5px; }
+.lawchip { font-size: 12px; padding: 3px 9px; border-radius: 8px; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); cursor: help; }
+.minichart { margin: 4px 0 10px; }
+.minichart .lab { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+.minichart svg { width: 100%; height: 40px; display: block; }
+.node { transition: transform .7s cubic-bezier(.3,1.3,.5,1), opacity .6s; cursor: pointer; }
+.node .bob { animation: bob 2.6s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 100%; }
+@keyframes bob { from { transform: translateY(0) rotate(-2deg); } to { transform: translateY(-3px) rotate(2deg); } }
+.node.gone { opacity: .35; }
+.node text { font: 600 12px var(--sans); fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.node .wv { font: 500 10.5px var(--sans); fill: var(--muted); }
+.bubble { animation: pop .3s ease; }
+.bubble rect { fill: var(--surface); stroke: var(--faint); stroke-width: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.18)); }
+.bubble text { font: 11.5px var(--sans); fill: var(--text); stroke: none; }
+.camp text { font: 600 11.5px var(--sans); fill: var(--text); }
+.camp .s { font: 500 10.5px var(--sans); fill: var(--muted); }
+.camp.raid circle.rim { animation: raid .5s ease 3; }
+@keyframes raid { 50% { stroke: #E24B4A; stroke-width: 6; } }
+.plaza text { fill: var(--text); }
+.fx { pointer-events: none; }
+#toasts { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px;
+  pointer-events: none; max-width: 90%; }
+.toast { background: var(--text); color: var(--bg); padding: 7px 16px; border-radius: 999px; font-weight: 500; font-size: 13.5px; box-shadow: var(--pop);
+  animation: toast 3.2s ease forwards; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+@keyframes toast { 0% { opacity: 0; transform: translateY(-10px); } 10%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
 /* ---------- narrow screens: panels become tabs ---------- */
 .tabs { display: none; }
-@media (max-width: 1100px) {
-  :root { --left: 300px; --right: 280px; }
-}
+@media (max-width: 1180px) { :root { --left: 320px; --right: 280px; } }
 @media (max-width: 860px) {
   .layout { grid-template-columns: 1fr; }
   .side { display: none; position: fixed; inset: 53px 0 52px 0; height: auto; z-index: 15; background: var(--bg); border: 0; }
@@ -166,33 +331,58 @@ button { font: inherit; color: inherit; }
   .tabs button { flex: 1; border: 0; background: none; padding: 14px 0; font-weight: 500; color: var(--muted); }
   .tabs button.on { color: var(--accent); }
   .filters { display: none; }
+  .podium { gap: 8px; }
+  .scorerow { grid-template-columns: 20px 32px minmax(0, 1fr) 64px; gap: 6px; }
+  .soc { grid-template-columns: 1fr; height: auto; }
+  .stagewrap { height: 70vh; }
+  .sside { border-left: 0; border-top: 1px solid var(--line); }
 }
 </style>
 </head>
 <body>
+<svg id="sprite" width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="spritedefs"></defs></svg>
 <div class="topbar">
-  <div class="brand"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.9 6.3L20 6l-3.6 5.4L22 14l-6.6.6L16 21l-4-5.2L8 21l.6-6.4L2 14l5.6-2.6L4 6l6.1 2.3z"/></svg>Charter</div>
+  <div class="brand"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.9 6.3L20 6l-3.6 5.4L22 14l-6.6.6L16 21l-4-5.2L8 21l.6-6.4L2 14l5.6-2.6L4 6l6.1 2.3z"/></svg><span id="brandname">Charter</span></div>
   <div class="runname" id="runname"></div>
   <div class="spacer"></div>
   <div class="filters" id="filters"></div>
+  <div class="seg" id="viewseg" role="tablist" aria-label="View" hidden><button data-view="story" class="on" title="The story feed (M to switch)">📖 Story</button><button data-view="society" title="The whole society as a map, at the same moment (M to switch)">🗺️ Society</button></div>
   <button class="chip" id="theme" title="Light or dark">◐</button>
 </div>
 <div id="app"></div>
-<div class="tabs" id="tabs"><button data-p="left">Messages</button><button data-p="feed" class="on">Story</button><button data-p="right">World</button></div>
+<div id="hovercard" role="tooltip"></div>
+<div class="tabs" id="tabs"><button data-p="left">Agent</button><button data-p="feed" class="on">Story</button><button data-p="right">World</button></div>
 
 <script id="charter-data" type="application/json">/*__CHARTER_DATA__*/</script>
 <script>
 "use strict";
-// ======================================================================= data
+// ======================================================================= helpers and constants
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const fmt = x => (Math.abs(x) >= 100 ? x.toFixed(0) : Math.abs(x) >= 10 ? x.toFixed(1) : x.toFixed(2));
+const fmt = x => (x == null || isNaN(x) ? "–" : Math.abs(x) >= 100 ? x.toFixed(0) : Math.abs(x) >= 10 ? x.toFixed(1) : x.toFixed(2));
+const clip = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+const hash = s => { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+const words = s => (String(s || "").match(/\S+/g) || []).length;
 const CLASS_ORDER = ["legislator", "worker", "scientist", "media", "board", "fixer", "observer"];
+const CLASS_ICON = { legislator: "⚖️", worker: "⛏️", scientist: "🔬", media: "📰", board: "🏛️", fixer: "🔧", observer: "👁️" };
 const PUBLIC_SYS = new Set(["rights", "sanction", "censure", "rename", "ruling", "accuse", "respond", "case_dismissed", "invoke",
   "channel_created", "channel_closed", "dm_limit", "treasury_coins", "patched", "proposal_failed", "veto_window", "vetoed", "veto_vote",
   "ballot_open", "ballot_close", "bank_run", "redemption_suspended", "redemption_resumed", "par_set", "interest_cap", "default_consequence",
   "loan_active", "loan_payment", "loan_repaid", "loan_defaulted", "loan_forgiven", "loan_bought", "loan_restructured", "power_used",
   "powers_disclosure", "factored", "post_hidden", "post_revealed", "law_error", "drift", "title", "repeal_failed"]);
+const ACT_ICON = { harvest: "⛏️", vote: "🗳️", post: "💬", anon_post: "🎭", propose: "📜", repeal: "🗑️", pay_tribute: "🪙", write_digest: "📰", publish: "📰",
+  report: "📰", read_archive: "📚", search_archive: "🔎", list_archive: "📚", write_archive: "✍️", run_python: "🐍", patch: "🔧", transfer: "💸",
+  deposit: "🏦", redeem: "🏦", veto: "🛑", request_fix: "🧰", invoke: "✨", contribute: "🎁", lend: "🤝", accept_loan: "🤝", repay_loan: "💰",
+  dm: "✉️", channel_post: "📣", create_channel: "📣", accuse: "⚖️", guess: "🤔", set_dm_limit: "✉️", channel_add: "📣", pass: "💤" };
+const RES_COL = { timber: "#8C6A43", stone: "#9A9890", copper: "#C46B3D", silver: "#AEB6C2", gold: "#D9A93A", crystal: "#7FA7D9" };
+const resCol = (k, j = 0) => RES_COL[k] || `hsl(${(hash(k) % 360)} 45% 55%)`;
+const REGIME = s => { const d = (s.decisive_set || []).length, f = s.franchise_share ?? 0;
+  return d === 0 ? "anarchy" : d === 1 ? "dictatorship" : f >= 0.5 ? "democracy" : "oligarchy"; };
+const REGIME_ICON = { anarchy: "🔥", dictatorship: "👑", democracy: "🏛️", oligarchy: "🏰" };
+const TRAITS = [["risk", "cautious", "bold"], ["trust", "wary", "trusting"], ["honesty", "slippery", "honest"], ["assertiveness", "follower", "leader"],
+  ["patience", "impatient", "patient"], ["reciprocity", "forgiving", "tit-for-tat"], ["talkativeness", "quiet", "chatty"]];
+const modelShort = m => { const s = String(m || "").replace(/^claude-/, "").replace(/-\d{8}$/, "").replace(/-(\d+)-(\d+)$/, " $1.$2");
+  return s ? s[0].toUpperCase() + s.slice(1) : ""; };
 
 function readEmbedded() {
   const raw = $("#charter-data").textContent.trim();
@@ -200,18 +390,20 @@ function readEmbedded() {
   try { return JSON.parse(raw); } catch (e) { console.error(e); return null; }
 }
 
+// ======================================================================= data
 function prepare(D) {
-  const inst = D.instance, truth = D.truth || {}, events = D.events, snaps = D.snapshots || [];
+  const inst = D.instance, truth = D.truth || {}, events = D.events, snaps = D.snapshots || [], score = D.score || {};
   // agents: the roster, arrivals and the secret observer
   const A = new Map();
   const add = a => { if (a && a.id && !A.has(a.id)) A.set(a.id, { id: a.id, cls: a.cls || "agent", model: a.model || "", tier: a.tier || "",
-    goal: (a.goal && (a.goal.text || a.goal.primary)) || "", archetype: a.archetype || "" }); };
+    goal: a.goal || {}, archetype: a.archetype || "", personality: a.personality || null, ptext: a.personality_text || "",
+    atext: a.archetype_text || "", actions: a.actions, rights: a.rights || [], endowment: a.endowment || {} }); };
   (inst.agents || []).forEach(add);
   (truth.arrived_agents || []).forEach(add);
   if (inst.observer) add({ ...inst.observer, cls: "observer" });
   for (const e of events) if (e.agent && !A.has(e.agent) && !["constitution", "reserve"].includes(e.agent) && !String(e.agent).startsWith("law:")) add({ id: e.agent, cls: "agent" });
   const agents = [...A.values()].sort((a, b) => (CLASS_ORDER.indexOf(a.cls) - CLASS_ORDER.indexOf(b.cls)) || a.id.localeCompare(b.id));
-  agents.forEach((a, i) => { a.hue = Math.round((i * 137.508 + 18) % 360); });
+  agents.forEach((a, i) => { a.hue = Math.round((i * 137.508 + 18) % 360); a.n = i; a.goalText = (a.goal && (a.goal.text || a.goal.primary)) || ""; });
   // monitor-only truth for annotations
   const anon = {}, forged = {}, rumor = {};
   for (const e of events) {
@@ -219,30 +411,62 @@ function prepare(D) {
     if (e.type === "forged_dm" || e.type === "forgery_truth") forged[e.data.event] = e.data.source || "power";
     if (e.type === "world_event_truth") rumor[e.data.event] = e.data;
   }
-  const lawInfo = truth.laws || {};
-  // the story (center), DMs (left), law timeline and round boundaries (right)
-  const items = [], dms = [], lawEvents = [], roundAt = [];
+  // laws: ground truth first, then whatever the event log knows (a live run's ground truth is partial)
+  const laws = new Map();
+  for (const [id, l] of Object.entries(truth.laws || {})) laws.set(id, { ...l, id });
+  const law = id => { if (!laws.has(id)) laws.set(id, { id }); return laws.get(id); };
+  const lawTL = new Map(), tl = (id, x) => { if (!id) return; if (!lawTL.has(id)) lawTL.set(id, []); lawTL.get(id).push(x); };
+  // the story (center), DMs (left), law timeline and round boundaries (right), and everything each agent did
+  const items = [], dms = [], lawEvents = [], roundAt = [], roundEnd = [], roundStart = [];
+  const turns = new Map(), gchanges = new Map(), departs = new Map(), arrives = new Map(), transfers = [], harvests = [], ballots = new Map();
+  const turnAt = {}, dmOutAt = {}, posts = [];
+  const push = (m, k, x) => { if (!m.has(k)) m.set(k, []); m.get(k).push(x); };
   let round = 0;
   events.forEach((e, i) => {
     if (e.round !== undefined) round = e.round;
-    roundAt[i] = round;
+    roundAt[i] = round; roundEnd[round] = i; if (roundStart[round] === undefined) roundStart[round] = i;
     const d = e.data || {};
     switch (e.type) {
+      case "turn": push(turns, e.agent, { i, round, acts: d.actions || [], res: d.results || [], phase: d.phase }); turnAt[`${round}|${e.agent}`] = i; break;
+      case "goal_change": push(gchanges, d.agent || e.agent, { i, round, ...d }); break;
+      case "departure": departs.set(d.agent || e.agent, i); break;
+      case "arrival": case "agent_arrives": arrives.set(d.agent || e.agent, i); break;
+      case "transfer": transfers.push({ i, round, from: e.agent, to: d.to, item: d.item, qty: d.qty }); break;
+      case "harvest": harvests.push({ i, round, who: e.agent, camp: d.camp, y: d.yield }); break;
+      case "ballot_open": { const q = String(d.question || ""); const b = { id: d.ballot, open: i, round, q, electorate: d.electorate || [], rule: d.rule,
+          closes: d.closes_round, votes: [], law: d.law || (q.match(/\bL\d+\b/) || [])[0] };
+        ballots.set(d.ballot, b); tl(b.law, { i, kind: "ballot", b }); break; }
+      case "vote": { const b = ballots.get(d.ballot); if (b) b.votes.push({ i, who: e.agent, choice: d.choice }); break; }
+      case "ballot_close": { const b = ballots.get(d.ballot); if (b) { b.close = i; b.result = d.result; b.final = d.votes || {}; } break; }
+      case "proposal": { const l = law(d.law); for (const k of ["title", "intent", "code"]) if (!l[k] && d[k]) l[k] = d[k];
+        if (!l.cls && d.class) l.cls = d.class; if (!l.author) l.author = e.agent; tl(d.law, { i, kind: "proposed", who: e.agent }); break; }
+      case "enact": { const l = law(d.law); if (!l.title) l.title = d.title; if (!l.cls) l.cls = d.class; if (!l.author) l.author = e.agent;
+        tl(d.law, { i, kind: "enacted", who: e.agent }); break; }
+      case "repeal": tl(d.law, { i, kind: "repealed" }); break;
+      case "veto_window": tl(d.law, { i, kind: "veto_window", until: d.until }); break;
+      case "vetoed": tl(d.law, { i, kind: "vetoed", by: d.by }); break;
+      case "patched": tl(d.law, { i, kind: "patched", who: e.agent, reason: d.reason, diff: d.diff }); break;
+      case "law_error": tl(d.law, { i, kind: "error", error: d.error }); break;
+      case "dm": (dmOutAt[`${round}|${e.agent}`] = dmOutAt[`${round}|${e.agent}`] || []).push(i); break;
+    }
+    switch (e.type) {
       case "round_start": items.push({ i, kind: "round", round: d.round ?? e.round, order: d.order || [] }); break;
-      case "post": items.push({ i, kind: "post", who: e.agent, text: d.text }); break;
-      case "anon_post": items.push({ i, kind: "post", who: anon[e.id] || null, anon: true, text: d.text }); break;
+      case "post": items.push({ i, kind: "post", who: e.agent, text: d.text }); posts.push({ i, who: e.agent, text: d.text }); break;
+      case "anon_post": items.push({ i, kind: "post", who: anon[e.id] || null, anon: true, text: d.text }); posts.push({ i, who: anon[e.id] || null, anon: true, text: d.text }); break;
       case "channel_post": items.push({ i, kind: "post", who: e.agent, channel: d.channel, text: d.text }); break;
       case "story": items.push({ i, kind: "media", who: e.agent, label: "Front page", head: d.headline, text: d.text }); break;
       case "digest": items.push({ i, kind: "media", who: e.agent, label: "Digest", text: d.text }); break;
       case "report": items.push({ i, kind: "media", who: e.agent, label: "Report", text: d.text }); break;
       case "gazette": items.push({ i, kind: "gazette", text: d.text }); break;
       case "notify": break;                                              // private notices
+      case "turn": if ((d.actions || []).length) items.push({ i, kind: "turn", who: e.agent, acts: d.actions, res: d.results || [] }); break;
       case "proposal": items.push({ i, kind: "proposal", who: e.agent, law: d.law, title: d.title, intent: d.intent, cls: d.class, code: d.code, preview: d.preview }); break;
       case "enact": items.push({ i, kind: "law", act: "enacted", who: e.agent, law: d.law, title: d.title, cls: d.class });
         lawEvents.push({ i, act: "enact", law: d.law, title: d.title, cls: d.class, author: e.agent }); break;
-      case "repeal": items.push({ i, kind: "law", act: "repealed", law: d.law, title: (lawInfo[d.law] || {}).title });
+      case "repeal": items.push({ i, kind: "law", act: "repealed", law: d.law, title: (laws.get(d.law) || {}).title });
         lawEvents.push({ i, act: "repeal", law: d.law }); break;
       case "world_event": items.push({ i, kind: "world", text: d.text, truth: rumor[d.event], vis: e.vis }); break;
+      case "ballot_close": items.push({ i, kind: "ballot", ballot: d.ballot }); break;
       case "dm": dms.push({ i, round, from: e.agent, to: d.to, text: d.text, enc: d.encrypted, shownAs: d.shown_as, shownTo: d.shown_to,
         forged: forged[e.id], pay: d.payment }); break;
       default:
@@ -250,22 +474,68 @@ function prepare(D) {
           items.push({ i, kind: "sys", type: e.type, who: e.agent, data: d });
     }
   });
+  // private reasoning, placed at the turn it belongs to (DM replies: at that agent's last message of the round)
+  const reas = new Map();
+  for (const x of D.reasoning || []) {
+    const key = `${x.round}|${x.agent}`, dm = String(x.phase || "").startsWith("dm");
+    let i = dm ? (dmOutAt[key] || []).slice(-1)[0] : turnAt[key];
+    if (i === undefined) i = turnAt[key] ?? roundEnd[x.round] ?? events.length - 1;
+    push(reas, x.agent, { ...x, i, dm });
+  }
   // per-agent threads: each side files the message under the partner they believe they are talking to
-  const threads = new Map();                    // me -> Map(partner -> [msg])
+  const threads = new Map();
   const put = (me, partner, m) => {
     if (!threads.has(me)) threads.set(me, new Map());
     const t = threads.get(me); if (!t.has(partner)) t.set(partner, []); t.get(partner).push(m);
   };
-  for (const m of dms) {
-    put(m.from, m.shownTo || m.to, { ...m, dir: "out" });
-    put(m.to, m.shownAs || m.from, { ...m, dir: "in" });
-  }
+  for (const m of dms) { put(m.from, m.shownTo || m.to, { ...m, dir: "out" }); put(m.to, m.shownAs || m.from, { ...m, dir: "in" }); }
+  // round headlines
+  const heads = [];
+  const H = (r, x) => { (heads[r] = heads[r] || { chips: [], posts: 0, dms: 0, votes: 0 }); if (x) heads[r].chips.push(x); return heads[r]; };
+  events.forEach((e, i) => {
+    const r = roundAt[i], d = e.data || {}, t = e.type;
+    if (t === "post" || t === "anon_post") H(r).posts++;
+    else if (t === "dm") H(r).dms++;
+    else if (t === "vote") H(r).votes++;
+    else if (t === "enact" && e.agent !== "constitution") H(r, { big: 1, html: `📜 ${lawRefRaw(d.law)} enacted` });
+    else if (t === "repeal") H(r, { big: 1, html: `🗑️ ${lawRefRaw(d.law)} repealed` });
+    else if (t === "vetoed") H(r, { big: 1, html: `🛑 ${lawRefRaw(d.law)} vetoed` });
+    else if (t === "raid") H(r, { big: 1, html: `🏴 raid on ${esc(d.camp)}` });
+    else if (t === "departure") H(r, { html: `👋 ${esc(d.agent || e.agent)} leaves` });
+    else if (t === "arrival" || t === "agent_arrives") H(r, { html: `🧳 ${esc(d.agent || e.agent)} arrives` });
+    else if (t === "bank_run") H(r, { big: 1, html: `🏃 bank run` });
+    else if (t === "tribute_demand") H(r, { html: `🪙 tribute demanded` });
+    else if (t === "project_open") H(r, { html: `🏗️ ${esc(d.kind || "project")} offered` });
+    else if (t === "world_event") H(r, { html: `🌍 world event` });
+  });
+  const snapBy = new Map(snaps.map(s => [s.round, s]));
   const lastRound = Math.max(0, ...events.map(e => e.round || 0));
-  return { inst, truth, events, snaps, agents, A, items, dms, threads, lawEvents, lawInfo, roundAt, lastRound,
+  return { inst, truth, events, snaps, snapBy, score, agents, A, items, dms, threads, lawEvents, laws, lawTL, roundAt, roundEnd, roundStart, lastRound,
+           turns, reas, gchanges, departs, arrives, transfers, harvests, ballots, posts, heads,
            rounds: inst.rounds || lastRound + 1, name: D.name || inst.run_id || "run" };
 }
+function lawRefRaw(id) { return `<span class="lawref" data-law="${esc(id)}">${esc(id)}</span>`; }
 
-// ======================================================================= colours
+// what a law hooks into, read from its code (stub hooks that only pass or return 0 are ignored)
+const HOOKS = [["on_harvest", "⛏️ acts on every harvest"], ["on_transfer", "💸 acts on every transfer"], ["on_round_start", "🔁 runs at each round's start"],
+  ["on_round_end", "🔁 runs at each round's end"], ["on_post", "💬 reads public posts"], ["on_dm", "✉️ reads private messages"], ["on_vote", "🗳️ watches votes"],
+  ["on_propose", "📜 watches proposals"], ["on_enact", "⚡ acts once when enacted"], ["on_repeal", "↩️ acts when repealed"], ["on_loan", "🤝 watches loans"]];
+const CALLS = [[/set_procedure|electorate/, "🗳️ changes who votes / how laws pass"], [/create_currency|mint\(/, "🪙 creates or mints money"],
+  [/grant_right|revoke_right|set_right/, "🔑 grants or removes rights"], [/\bfine\(|sanction\(/, "⚖️ fines or sanctions"], [/hide_post/, "🙈 can hide posts"],
+  [/unhide_post/, "🔦 reveals hidden posts"], [/enable_loans/, "🤝 enables loans"], [/set_dm_limit/, "✉️ changes the message limit"],
+  [/set_quota|harvest_limit|quota/, "🚧 limits harvesting"], [/pay\(|give\(|move\(/, "💰 moves resources"], [/entrench/, "🔒 entrenches itself"]];
+function lawDoes(code) {
+  if (!code) return [];
+  const out = [], fns = {};
+  const re = /^def\s+(\w+)\s*\([^)]*\)\s*:\s*\n((?:[ \t]+.*\n?|[ \t]*\n)*)/gm;
+  let m; while ((m = re.exec(code + "\n"))) fns[m[1]] = m[2].split("\n").map(s => s.trim()).filter(Boolean);
+  const stub = b => b.every(l => /^(pass|return( 0(\.0)?| None| qty| y)?|#.*)$/.test(l));
+  for (const [f, label] of HOOKS) if (fns[f] && !stub(fns[f])) out.push(label);
+  for (const [r, label] of CALLS) if (r.test(code)) out.push(label);
+  return [...new Set(out)];
+}
+
+// ======================================================================= colours and mascots
 const dark = () => document.documentElement.dataset.theme === "dark" ||
   (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
 function col(a, kind) {
@@ -275,62 +545,230 @@ function col(a, kind) {
     tint: dk ? `hsl(${h} 30% 22%)` : `hsl(${h} 70% 95%)`, edge: dk ? `hsl(${h} 30% 32%)` : `hsl(${h} 55% 86%)`,
     bubble: dk ? `hsl(${h} 25% 30%)` : `hsl(${h} 60% 90%)`, panel: dk ? `hsl(${h} 20% 17%)` : `hsl(${h} 55% 97%)` }[kind];
 }
-const initials = id => id.slice(0, 2);
+const MOODS = ["ok", "happy", "sad", "gone"];
+function accessory(cls, deep, body, eyeKind) {
+  const ink = "#2b2a28";
+  switch (cls) {
+    case "legislator": return `<rect x="13" y="0.5" width="14" height="9.5" rx="1.6" fill="${ink}"/><rect x="13" y="6.8" width="14" height="1.8" fill="#C96442"/><rect x="9.5" y="9.2" width="21" height="2.6" rx="1.3" fill="${ink}"/>`;
+    case "worker": return `<path d="M10.5 12.2a9.5 8.6 0 0 1 19 0z" fill="#F2B632"/><rect x="19" y="3.8" width="2" height="8" rx="1" fill="#D99A1E"/><rect x="7.5" y="11.2" width="25" height="2.6" rx="1.3" fill="#D99A1E"/>`;
+    case "scientist": return eyeKind === 2
+      ? `<circle cx="20" cy="21.5" r="6.6" fill="none" stroke="${ink}" stroke-width="1.5"/><path d="M13.4 21H7.5M26.6 21h5.9" stroke="${ink}" stroke-width="1.3"/>`
+      : `<circle cx="15" cy="22" r="5.2" fill="none" stroke="${ink}" stroke-width="1.4"/><circle cx="25" cy="22" r="5.2" fill="none" stroke="${ink}" stroke-width="1.4"/><path d="M19.6 21.5h.8M9.8 21.5H7.2M30.2 21.5h2.6" stroke="${ink}" stroke-width="1.3"/><path d="M15 4q2 3 0 6M20 3q2 3 0 6" fill="none" stroke="#7FA7D9" stroke-width="1.2" stroke-linecap="round"/>`;
+    case "media": return `<path d="M10 13.5Q11 4 20 4.5Q29 4 30 13.5z" fill="#6b6f78"/><circle cx="20" cy="4.8" r="1.6" fill="#4b4e55"/><path d="M24 13Q32 12 34 15L24 15z" fill="#4b4e55"/><rect x="25" y="7" width="6" height="4" rx=".6" fill="#fff" stroke="#4b4e55" stroke-width=".6" transform="rotate(14 28 9)"/>`;
+    case "board": return `<path d="M15.5 34l4.5 2.2-4.5 2.2zM24.5 34L20 36.2l4.5 2.2z" fill="${ink}"/><circle cx="20" cy="36.2" r="1.2" fill="${ink}"/><circle cx="25" cy="22" r="5" fill="none" stroke="#D9A93A" stroke-width="1.3"/><path d="M29.5 24.5q2 5 0 10" fill="none" stroke="#D9A93A" stroke-width=".8"/>`;
+    case "fixer": return `<path d="M9 13q11-6 22 0l-1.2 2.4q-9.8-4.6-19.6 0z" fill="#C44B3D"/><path d="M30 14l4 2-3.5 1z" fill="#C44B3D"/><g transform="rotate(30 34 26)"><rect x="32.6" y="20" width="2.8" height="13" rx="1.4" fill="#8a8d93"/><circle cx="34" cy="19" r="3.6" fill="#8a8d93"/><rect x="33" y="14.8" width="2" height="4.4" fill="${body}"/></g>`;
+    case "observer": return `<path d="M4.5 33C3.5 12 36.5 12 35.5 33C33.5 22 28.5 16.5 20 16.5S6.5 22 4.5 33z" fill="#3d3c47"/><path d="M20 4L13.5 15.5Q20 12.5 26.5 15.5z" fill="#3d3c47"/>`;
+    default: return `<line x1="20" y1="11" x2="20" y2="4.5" stroke="${deep}" stroke-width="1.6" stroke-linecap="round"/><circle cx="20" cy="4" r="2.4" fill="#F2B632" stroke="${deep}" stroke-width=".8"/>`;
+  }
+}
+function mascotSymbol(a, mood) {
+  const k = hash(a.id), h = a.hue, dk = dark(), gone = mood === "gone";
+  const sat = gone ? 6 : 62;
+  const body = `hsl(${h} ${sat}% ${dk ? 58 : 64}%)`, deep = `hsl(${h} ${gone ? 6 : 50}% ${dk ? 30 : 34}%)`, belly = `hsl(${h} ${gone ? 6 : 75}% ${dk ? 74 : 85}%)`;
+  const shape = k % 4, eyeKind = (k >>> 4) % 3, top = [11, 10, 12, 10][shape];
+  const bodies = [`<circle cx="20" cy="24" r="13"/>`, `<ellipse cx="20" cy="24" rx="12.4" ry="14"/>`, `<rect x="7" y="12" width="26" height="25" rx="10"/>`,
+    `<path d="M20 10C30 10 33 20 33 28C33 34 28 37 20 37C12 37 7 34 7 28C7 20 10 10 20 10Z"/>`];
+  const b = bodies[shape].replace("/>", ` fill="${body}" stroke="${deep}" stroke-width="1.3"/>`);
+  const px = ((k >>> 8) % 3 - 1) * 0.8;
+  const pupil = "#1d1c1b";
+  let eyes;
+  if (gone) eyes = `<path d="M12.5 22.5h5M22.5 22.5h5" stroke="${deep}" stroke-width="1.6" stroke-linecap="round"/>`;
+  else if (eyeKind === 2) eyes = `<circle cx="20" cy="21.5" r="5.2" fill="#fff" stroke="${deep}" stroke-width=".8"/><circle cx="${20 + px}" cy="22" r="2.5" fill="${pupil}"/><circle cx="${21 + px}" cy="21" r=".85" fill="#fff"/>`;
+  else { const r = eyeKind ? 4.1 : 3.5;
+    eyes = [15, 25].map(x => `<circle cx="${x}" cy="22" r="${r}" fill="#fff" stroke="${deep}" stroke-width=".7"/><circle cx="${x + px}" cy="22.6" r="${(r * .5).toFixed(2)}" fill="${pupil}"/><circle cx="${x + px + .7}" cy="21.7" r=".6" fill="#fff"/>`).join(""); }
+  if (mood === "sad" && !gone) eyes += `<path d="M11.5 16.5l5 1.6M28.5 16.5l-5 1.6" stroke="${deep}" stroke-width="1.2" stroke-linecap="round"/>`;
+  const ms = `fill="none" stroke="${deep}" stroke-width="1.5" stroke-linecap="round"`;
+  const mouth = { happy: `<path d="M15.5 28.2Q20 33.5 24.5 28.2" ${ms}/><path d="M16.8 29.3Q20 32 23.2 29.3z" fill="#E86A6A" opacity=".55"/>`,
+    sad: `<path d="M16.5 31.2Q20 27.6 23.5 31.2" ${ms}/>`, ok: `<path d="M17.2 29.4Q20 31.2 22.8 29.4" ${ms}/>`, gone: `<path d="M18 30.2h4" ${ms}/>` }[mood];
+  const cheeks = gone ? "" : `<ellipse cx="11.3" cy="27.3" rx="2.3" ry="1.4" fill="#ff7a8a" opacity="${mood === "happy" ? .6 : .35}"/><ellipse cx="28.7" cy="27.3" rx="2.3" ry="1.4" fill="#ff7a8a" opacity="${mood === "happy" ? .6 : .35}"/>`;
+  const sweat = mood === "sad" ? `<path d="M31.5 15.5q1.8 3 0 4.2q-1.8-1.2 0-4.2z" fill="#7FC4FF"/>` : "";
+  const zz = gone ? `<text x="29" y="9" font-size="7" font-family="sans-serif" fill="${deep}">z</text><text x="33" y="5" font-size="5" font-family="sans-serif" fill="${deep}">z</text>` : "";
+  const feet = `<ellipse cx="14.2" cy="37.3" rx="3.8" ry="2" fill="${deep}"/><ellipse cx="25.8" cy="37.3" rx="3.8" ry="2" fill="${deep}"/>`;
+  const belly2 = `<ellipse cx="20" cy="31.5" rx="7" ry="4.6" fill="${belly}"/>`;
+  const acc = `<g transform="translate(0 ${top - 10})">${accessory(a.cls, deep, body, eyeKind)}</g>`;
+  return `<symbol id="m${a.n}-${mood}" viewBox="-2 -2 44 44">${feet}${b}${belly2}${eyes}${cheeks}${mouth}${sweat}${zz}${acc}</symbol>`;
+}
+function buildSprite() {
+  $("#spritedefs").innerHTML = S.agents.map(a => MOODS.map(m => mascotSymbol(a, m)).join("")).join("") +
+    `<symbol id="m-anon" viewBox="-2 -2 44 44"><path d="M20 10C30 10 33 20 33 28C33 34 28 37 20 37C12 37 7 34 7 28C7 20 10 10 20 10Z" fill="#8a8890" stroke="#55545b" stroke-width="1.3"/><path d="M10 20q10-6 20 0v4q-10-4-20 0z" fill="#2b2a28"/><circle cx="15" cy="22" r="1.5" fill="#fff"/><circle cx="25" cy="22" r="1.5" fill="#fff"/><text x="20" y="34" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#fff">?</text></symbol>`;
+}
+// the mood of an agent at a round: did their holdings' value go up or down since the round before?
+function valueAt(id, r) {                                 // value at the start of round r (end of r-1)
+  if (r <= 0) return (S.truth.start_values || {})[id];
+  const s = S.snapBy.get(r - 1); return s ? (s.values || {})[id] : undefined;
+}
+function moodAt(id, r, idx) {
+  if (idx !== undefined && S.departs.has(id) && S.departs.get(id) <= idx) return "gone";
+  const v1 = valueAt(id, r), v0 = valueAt(id, r - 1);
+  if (v1 == null || v0 == null || !v0) return "ok";
+  return v1 > v0 * 1.04 ? "happy" : v1 < v0 * 0.96 ? "sad" : "ok";
+}
+function mascot(id, size = 30, mood = "ok", extra = "") {
+  const a = S.A.get(id);
+  const ref = a ? `m${a.n}-${mood}` : "m-anon";
+  return `<span class="mwrap${extra}" ${a ? `data-agent="${esc(id)}"` : ""}><svg class="masc" width="${size}" height="${size}"><use href="#${ref}"/></svg></span>`;
+}
+const mascotNow = (id, size, extra) => mascot(id, size, moodAt(id, S.roundAt[cur] ?? 0, cur), extra);
+
+// law references in free text: "L4" and law titles become hoverable
+let lawRx = null;
+function buildLawRx() {
+  const titles = new Map();
+  for (const [id, l] of S.laws) if (l.title && l.title.length >= 6) {
+    const enacted = (S.lawTL.get(id) || []).some(x => x.kind === "enacted");
+    if (!titles.has(l.title) || enacted) titles.set(l.title, id);
+  }
+  S.titleLaw = titles;
+  const alts = [...titles.keys()].sort((a, b) => b.length - a.length).map(t => esc(t).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  lawRx = new RegExp(`\\b(L\\d{1,3})\\b${alts.length ? "|(" + alts.join("|") + ")" : ""}`, "g");
+}
+function linkLaws(html) {
+  if (!lawRx) return html;
+  return html.replace(lawRx, (m, id, title) => {
+    const lid = id || S.titleLaw.get(title.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"'));
+    return lid && S.laws.has(lid) ? `<span class="lawref" data-law="${esc(lid)}">${m}</span>` : m;
+  });
+}
+const txt = s => linkLaws(esc(s));
 
 // ======================================================================= render: story
-let S, cur = -1, me = null, openWith = null, showKinds = new Set(["post", "media", "gazette", "proposal", "law", "world", "sys"]);
-const KIND_LABEL = { post: "Posts", media: "Media", gazette: "Gazette", proposal: "Proposals", law: "Laws", world: "Events", sys: "System" };
+let S, cur = -1, me = null, openWith = null, leftTab = "dossier";
+let showKinds = new Set(["post", "media", "gazette", "proposal", "law", "world", "sys", "ballot"]);
+const KIND_LABEL = { post: "Posts", media: "Media", gazette: "Gazette", proposal: "Proposals", law: "Laws", ballot: "Ballots", world: "Events", sys: "System", turn: "Actions" };
+try { const k = JSON.parse(localStorage.getItem("charter-kinds") || "null"); if (Array.isArray(k)) showKinds = new Set(k); } catch (e) {}
+try { leftTab = localStorage.getItem("charter-lefttab") || "dossier"; } catch (e) {}
 
 function whoHTML(id, extra = "") {
   const a = S.A.get(id);
   if (!a) return `<span class="who" style="--ink:var(--muted)">${esc(id || "Anonymous")}${extra}</span>`;
-  return `<span class="who" data-agent="${esc(id)}" style="--ink:${col(a, "ink")}" title="${esc(`${a.cls} · ${a.model}${a.archetype ? " · " + a.archetype : ""}\nGoal: ${a.goal}`)}">${esc(id)} <span class="cls">${esc(a.cls)}</span>${extra}</span>`;
+  return `<span class="who" data-agent="${esc(id)}" style="--ink:${col(a, "ink")}">${esc(id)} <span class="cls">${CLASS_ICON[a.cls] || ""} ${esc(a.cls)}</span>${extra}</span>`;
 }
 
 function sysText(it) {
   const d = it.data || {}, w = it.who ? `<b>${esc(it.who)}</b> ` : "";
   switch (it.type) {
-    case "ballot_open": return `Ballot <b>${esc(d.ballot)}</b> opens: ${esc(d.question)} <span class="tag">${esc(d.rule)}</span> · electorate ${(d.electorate || []).length}`;
-    case "ballot_close": { const v = Object.values(d.votes || {}); const y = v.filter(x => x === "yes").length;
-      return `Ballot <b>${esc(d.ballot)}</b> closes: <b>${esc(d.result)}</b> (${y} yes of ${v.length})`; }
-    case "vetoed": return `<b>The Board vetoes ${esc(d.law)}</b>`;
-    case "veto_window": return `${esc(d.law)} enters the Board's veto window`;
-    case "veto_vote": return `${w}votes on the veto of ${esc(d.law)}: ${esc(d.choice)}`;
-    case "proposal_failed": return `${w}proposal failed: ${esc(d.reason || d.error || "")}`.slice(0, 300);
-    case "rights": return `${esc(d.agent)} ${d.change === "grant" ? "gains" : "loses"} the right <b>${esc(d.right)}</b>${d.law ? " (law " + esc(d.law) + ")" : ""}`;
-    case "sanction": return `Sanction on <b>${esc(d.agent)}</b>: ${esc(Object.entries(d).filter(([k]) => !["agent", "law"].includes(k)).map(([k, v]) => k + " " + v).join(", "))}`;
-    case "dm_limit": return `${w}sets the private-message limit to <b>${esc(d.n)}</b>${d.agent ? " for " + esc(d.agent) : " for everyone"}`;
-    case "ruling": return `${w}rules <b>${esc(d.verdict)}</b> on ${esc(d.case)}: ${esc(d.reason || "")}`;
-    case "accuse": return `${w}accuses <b>${esc(d.accused)}</b> under ${esc(d.clause)}`;
-    case "bank_run": return `<b>Bank run on ${esc(d.currency)}</b>`;
+    case "ballot_open": return `🗳️ Ballot <b>${esc(d.ballot)}</b> opens: ${txt(d.question)} <span class="tag">${esc(String(d.rule || "").replace(/_/g, " "))}</span> · electorate ${(d.electorate || []).length}${d.closes_round != null ? ` · closes round ${d.closes_round + 1}` : ""}`;
+    case "vetoed": return `🛑 <b>The Board vetoes ${lawRefRaw(d.law)}</b>${d.by ? " (" + esc([].concat(d.by).join(", ")) + ")" : ""}`;
+    case "veto_window": return `⏳ ${lawRefRaw(d.law)} enters the Board's veto window${d.until != null ? " until round " + (d.until + 1) : ""}`;
+    case "veto_vote": return `🛑 ${w}${d.choice ? `votes <b>${esc(d.choice)}</b> on vetoing` : "casts a veto vote on"} ${lawRefRaw(d.law)}`;
+    case "patched": return `🔧 ${w}patches ${lawRefRaw(d.law)}: ${esc(clip(d.reason || "", 220))}`;
+    case "law_error": return `⚠️ ${lawRefRaw(d.law)} errors: <code>${esc(clip(d.error, 140))}</code>`;
+    case "proposal_failed": return `${w}proposal failed: ${esc(clip(d.reason || d.error || "", 300))}`;
+    case "rights": return `🔑 ${esc(d.agent)} ${d.change === "grant" ? "gains" : "loses"} the right <b>${esc(d.right)}</b>${d.law ? " (law " + lawRefRaw(d.law) + ")" : ""}`;
+    case "sanction": return `⚖️ Sanction on <b>${esc(d.agent)}</b>: ${esc(Object.entries(d).filter(([k]) => !["agent", "law"].includes(k)).map(([k, v]) => k + " " + v).join(", "))}`;
+    case "dm_limit": return `✉️ ${w}sets the private-message limit to <b>${esc(d.n)}</b>${d.agent ? " for " + esc(d.agent) : " for everyone"}`;
+    case "ruling": return `⚖️ ${w}rules <b>${esc(d.verdict)}</b> on ${esc(d.case)}: ${esc(d.reason || "")}`;
+    case "accuse": return `⚖️ ${w}accuses <b>${esc(d.accused)}</b> under ${esc(d.clause)}`;
+    case "bank_run": return `🏃 <b>Bank run on ${esc(d.currency)}</b>`;
+    case "raid": return `🏴 <b>Raid on ${esc(d.camp)}</b>: ${fmt(d.stock_lost)} stock lost${d.seized ? ", seized from " + esc(Object.keys(d.seized).join(", ")) : ""}`;
+    case "tribute_demand": return `🪙 <b>The outside power demands tribute</b> worth ${fmt((d.demand || {}).value)} by round ${(d.deadline ?? 0) + 1}`;
+    case "tribute_payment": return `🪙 ${w}pays ${fmt(d.qty)} ${esc(d.item)} toward tribute`;
+    case "project_open": return `🏗️ <b>Project ${esc(d.project)}</b>: ${esc(clip(d.description || d.kind, 260))}`;
     default: {
       const short = Object.entries(d).filter(([k, v]) => typeof v !== "object" && k !== "code").map(([k, v]) => `${k} ${v}`).join(" · ");
-      return `${w}<b>${esc(it.type.replace(/_/g, " "))}</b> ${esc(short).slice(0, 260)}`;
+      return `${w}<b>${esc(it.type.replace(/_/g, " "))}</b> ${linkLaws(esc(short).slice(0, 260))}`;
     }
   }
+}
+
+function parseArgs(a) {
+  if (a.args && typeof a.args === "object") return a.args;
+  try { return typeof a.args_json === "string" ? JSON.parse(a.args_json) : (a.args_json || {}); } catch (e) { return {}; }
+}
+function actDesc(a) {
+  const x = parseArgs(a);
+  switch (a.action) {
+    case "harvest": return `at ${esc(x.camp)}`;
+    case "vote": return `<b>${esc(x.choice ?? "")}</b> on ${esc(x.ballot ?? "")}`;
+    case "post": case "anon_post": case "channel_post": return `“${txt(clip(x.text, 110))}”`;
+    case "publish": case "write_digest": case "report": return `“${txt(clip(x.headline || x.text, 110))}”`;
+    case "propose": return x.title ? `“${esc(x.title)}”` : "";
+    case "repeal": return lawRefRaw(x.law || "");
+    case "transfer": return `${esc(x.qty)} ${esc(x.item)} → ${esc(x.to)}`;
+    case "read_archive": return esc(x.doc || x.id || "");
+    case "search_archive": return `“${esc(x.query || "")}”`;
+    case "patch": return `${lawRefRaw(x.law || "")}`;
+    case "veto": return `${lawRefRaw(x.law || "")}`;
+    default: return esc(clip(Object.entries(x).filter(([k, v]) => typeof v !== "object").map(([k, v]) => `${k} ${v}`).join(" · "), 90));
+  }
+}
+const actName = a => String(a.action || "").replace(/_/g, " ");
+const resText = r => linkLaws(esc(clip(String(r || "").replace(/^[\w ]+:\s*/, "").replace(/\s*with x=\[[^\]]*\]/, "").replace(/;\s*parity bit \d/, ""), 220)));
+function actsHTML(acts, res) {
+  return acts.map((a, j) => `<div class="dact"><span>${ACT_ICON[a.action] || "•"}</span><div><b>${esc(actName(a))}</b> ${actDesc(a)}${res[j] ? `<div class="res">→ ${resText(res[j])}</div>` : ""}</div></div>`).join("");
+}
+
+function ballotHTML(b, idx) {
+  const fin = b.close !== undefined && b.close <= idx;
+  const vs = fin ? Object.entries(b.final || {}) : b.votes.filter(v => v.i <= idx).map(v => [v.who, v.choice]);
+  const by = {}; for (const [w, c] of vs) (by[c] = by[c] || []).push(w);
+  const r = S.roundAt[idx] ?? 0;
+  const sides = Object.entries(by).sort((x, y) => (x[0] === "yes" ? -1 : y[0] === "yes" ? 1 : 0)).map(([c, ws]) =>
+    `<span class="vside"><span class="lab" style="color:${c === "yes" ? "var(--yes)" : c === "no" ? "var(--no)" : "var(--muted)"}">${esc(c)} ${ws.length}</span>${ws.map(w => mascot(w, 22, moodAt(w, r))).join("")}</span>`).join("");
+  const silent = (b.electorate || []).filter(w => !vs.some(v => v[0] === w));
+  return `<div class="votes">${sides || `<span class="empty">no votes yet</span>`}${silent.length ? `<span class="vside"><span class="lab" style="color:var(--faint)">silent ${silent.length}</span>${silent.map(w => mascot(w, 18, moodAt(w, r))).join("")}</span>` : ""}</div>`;
 }
 
 function itemHTML(it) {
   const a = S.A.get(it.who);
   const vars = a ? `--tint:${col(a, "tint")};--edge:${col(a, "edge")};--ink:${col(a, "ink")}` : "--tint:var(--surface);--edge:var(--line);--ink:var(--muted)";
+  const r = S.roundAt[it.i] ?? 0;
   switch (it.kind) {
-    case "round": return `<div class="round" data-i="${it.i}"><h2>Round ${it.round + 1}</h2><span class="order">${S.rounds ? "of " + S.rounds : ""}</span></div>`;
-    case "post": return `<div class="item post" data-i="${it.i}" style="${vars}">${it.anon ? `<span class="who" style="--ink:var(--muted)">Anonymous</span> ${it.who ? `<span class="tag">really ${esc(it.who)}</span>` : ""}` : whoHTML(it.who)}${it.channel ? ` <span class="tag">#${esc(it.channel)}</span>` : ""}<div class="text">${esc(it.text)}</div></div>`;
-    case "media": return `<div class="item media" data-i="${it.i}" style="${vars}"><span class="tag">${esc(it.label)}</span> ${whoHTML(it.who)}${it.head ? `<h3>${esc(it.head)}</h3>` : ""}<div class="text">${esc(it.text)}</div></div>`;
-    case "gazette": return `<div class="item gazette" data-i="${it.i}"><div class="mast">The Gazette</div><div class="text">${esc(it.text)}</div></div>`;
-    case "proposal": return `<div class="item law" data-i="${it.i}">${whoHTML(it.who)} <span class="tag">${esc(it.cls)}</span> proposes <b>${esc(it.law)}</b><div class="title">${esc(it.title)}</div><div>${esc(it.intent)}</div>${it.code ? `<details><summary>Code${it.preview ? " and effect preview" : ""}</summary><pre>${esc(it.code)}</pre>${it.preview ? `<pre>${esc((it.preview || []).join("\n"))}</pre>` : ""}</details>` : ""}</div>`;
-    case "law": return `<div class="item sys big" data-i="${it.i}">${it.act === "enacted" ? `<span class="tag good">enacted</span>` : `<span class="tag warn">repealed</span>`} <b>${esc(it.law)} · ${esc(it.title || "")}</b>${it.cls ? ` <span class="tag">${esc(it.cls)}</span>` : ""}</div>`;
+    case "round": { const h = S.heads[it.round] || { chips: [], posts: 0, dms: 0, votes: 0 };
+      const chips = h.chips.map(c => `<span class="hl${c.big ? " big" : ""}">${c.html}</span>`).join("") +
+        `<span class="hl">💬 ${h.posts} posts</span><span class="hl">✉️ ${h.dms} messages</span>${h.votes ? `<span class="hl">🗳️ ${h.votes} votes</span>` : ""}`;
+      return `<div class="round" data-i="${it.i}"><div class="rt"><h2>Round ${it.round + 1}</h2><span class="order">${S.rounds ? "of " + S.rounds : ""}</span></div><div class="headline">${chips}</div></div>`; }
+    case "post": {
+      const head = it.anon ? `<span class="who" style="--ink:var(--muted)">🎭 Anonymous</span> ${it.who ? `<span class="tag">really ${esc(it.who)}</span>` : ""}` : whoHTML(it.who);
+      return `<div class="item prow" data-i="${it.i}">${it.anon ? mascot(null, 30) : mascot(it.who, 30, moodAt(it.who, r))}<div class="post" style="${vars}">${head}${it.channel ? ` <span class="tag">#${esc(it.channel)}</span>` : ""}<div class="text">${txt(it.text)}</div></div></div>`; }
+    case "media": return `<div class="item prow" data-i="${it.i}">${mascot(it.who, 30, moodAt(it.who, r))}<div class="media" style="${vars};border-top:3px solid var(--ink)"><span class="tag">${esc(it.label)}</span> ${whoHTML(it.who)}${it.head ? `<h3>${txt(it.head)}</h3>` : ""}<div class="text">${txt(it.text)}</div></div></div>`;
+    case "gazette": return `<div class="item gazette" data-i="${it.i}"><div class="mast">The Gazette</div><div class="text">${txt(it.text)}</div></div>`;
+    case "proposal": { const does = lawDoes(it.code);
+      return `<div class="item prow" data-i="${it.i}">${mascot(it.who, 30, moodAt(it.who, r))}<div class="law">${whoHTML(it.who)} <span class="tag">${esc(it.cls)}</span> proposes ${lawRefRaw(it.law)}<div class="title">📜 ${esc(it.title)}</div><div>${txt(it.intent)}</div>${does.length ? `<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${does.map(x => `<span class="hl">${esc(x)}</span>`).join("")}</div>` : ""}${it.code ? `<details><summary>▸ Code${it.preview ? " and effect preview" : ""}</summary><pre>${esc(it.code)}</pre>${it.preview ? `<pre>${esc((it.preview || []).join("\n"))}</pre>` : ""}</details>` : ""}</div></div>`; }
+    case "law": { const l = S.laws.get(it.law) || {};
+      return `<div class="item sys big${it.act === "enacted" ? " enacted" : ""}" data-i="${it.i}">${it.act === "enacted" ? `<span class="tag good">enacted</span>` : `<span class="tag warn">repealed</span>`} <b>${lawRefRaw(it.law)} · ${esc(it.title || l.title || "")}</b>${it.cls ? ` <span class="tag">${esc(it.cls)}</span>` : ""}${l.intent && it.act === "enacted" ? `<div style="color:var(--muted);font-size:12.5px;margin-top:2px">${txt(clip(l.intent, 220))}</div>` : ""}</div>`; }
     case "world": { const t = it.truth; const rum = t && t.rumor;
-      return `<div class="item event" data-i="${it.i}"><div class="k">World event${it.vis !== "public" ? " · told to " + (Array.isArray(it.vis) ? it.vis.length : "some") : ""} ${rum ? `<span class="tag ${t.true ? "good" : "warn"}">rumour · ${t.true ? "true" : "false"}</span>` : ""}</div>${esc(it.text)}${t && t.truth && rum ? `<div class="sys" style="margin-top:4px">Truth: ${esc(t.truth)}</div>` : ""}</div>`; }
+      return `<div class="item event" data-i="${it.i}"><div class="k">🌍 World event${it.vis !== "public" ? " · told to " + (Array.isArray(it.vis) ? it.vis.length : "some") : ""} ${rum ? `<span class="tag ${t.true ? "good" : "warn"}">rumour · ${t.true ? "true" : "false"}</span>` : ""}</div>${txt(it.text)}${t && t.truth && rum ? `<div class="sys" style="margin-top:4px">Truth: ${esc(t.truth)}</div>` : ""}</div>`; }
+    case "ballot": { const b = S.ballots.get(it.ballot); if (!b) return "";
+      return `<div class="item ballot" data-i="${it.i}"><span class="q">🗳️ Ballot ${esc(b.id)} closes: ${txt(b.q)}</span> <span class="tag ${b.result === "yes" ? "good" : "warn"}">${esc(b.result)}</span>${ballotHTML(b, it.i)}</div>`; }
+    case "turn": { const icons = it.acts.map(x => ACT_ICON[x.action] || "•").join("");
+      return `<div class="item turn" data-i="${it.i}">${mascot(it.who, 20, moodAt(it.who, r))}<details><summary><b style="color:${col(a, "ink")}">${esc(it.who)}</b><span class="ic">${icons}</span></summary><div class="acts">${actsHTML(it.acts, it.res)}</div></details></div>`; }
     case "sys": return `<div class="item sys" data-i="${it.i}">${sysText(it)}</div>`;
   }
   return "";
 }
 
+function epilogueHTML() {
+  const sc = S.score || {}, goals = sc.goals || {}, sum = sc.summary || {};
+  if (!Object.keys(goals).length) return "";
+  const rows = Object.entries(goals).filter(([id]) => S.A.has(id)).map(([id, g]) => [id, g]).sort((x, y) => (y[1].score ?? 0) - (x[1].score ?? 0));
+  const guessed = guessStats();
+  const pod = rows.slice(0, 3), order = [1, 0, 2].filter(k => pod[k]);
+  const lr = S.lastRound + 1;
+  const podium = `<div class="podium">${order.map(k => { const [id, g] = pod[k];
+    return `<div class="p">${mascot(id, k === 0 ? 64 : 50, "happy")}<div class="nm">${esc(id)}</div><div class="sc">${Math.round(100 * (g.score ?? 0))}%</div><div class="block" style="height:${[70, 48, 34][k]}px">${k + 1}</div></div>`; }).join("")}</div>`;
+  const facts = [["regime", sum.regime_path], ["laws enacted", sum.laws_enacted != null ? `${sum.laws_enacted} of ${sum.laws_proposed} proposed` : null],
+    ["vetoes", sum.vetoes], ["inequality", sum.gini_start != null ? `${fmt(sum.gini_start)} → ${fmt(sum.holdings_gini_end)}` : null],
+    ["welfare change", sum.welfare_change != null ? fmt(sum.welfare_change) : null], ["mean goal score", sum.mean_goal_score != null ? Math.round(100 * sum.mean_goal_score) + "%" : null],
+    ["raids", sum.raids], ["bank runs", sum.bank_runs]].filter(f => f[1] != null && f[1] !== "");
+  return `<div class="epilogue" data-i="${S.events.length - 1}"><h2>The ending</h2><div style="color:var(--muted)">After ${lr} rounds: how well each agent did at its private goals.</div>
+    <div class="facts">${facts.map(([k, v]) => `<span class="hl">${esc(k)} <b style="color:var(--text)">${esc(v)}</b></span>`).join("")}</div>${podium}
+    ${rows.map(([id, g], k) => { const gs = guessed[id];
+      return `<div class="scorerow"><span class="rk">${k + 1}</span>${mascot(id, 32, (g.score ?? 0) >= .5 ? "happy" : (g.score ?? 0) < .15 ? "sad" : "ok")}<div style="min-width:0">${whoHTML(id)}<div class="gl">${esc([g.goal, g.secondary, g.tertiary].filter(Boolean).join(" · "))}${gs ? ` · goal guessed by ${gs.right} of ${gs.total}` : ""}</div></div><div><div class="track"><div class="fill" style="width:${Math.round(100 * (g.score ?? 0))}%;background:${col(S.A.get(id), "solid")}"></div></div><div style="text-align:right;font-size:12px;color:var(--muted)">${Math.round(100 * (g.score ?? 0))}%</div></div></div>`; }).join("")}</div>`;
+}
+function guessStats() {
+  const out = {}, G = S.truth.guesses || {}, goals = S.truth.goals || {};
+  for (const [guesser, gs] of Object.entries(G)) for (const [target, guess] of Object.entries(gs || {})) {
+    const real = (goals[target] || {}).primary; if (!real) continue;
+    const o = out[target] = out[target] || { right: 0, total: 0, by: [] }; o.total++; if (guess === real) { o.right++; o.by.push(guesser); }
+  }
+  return out;
+}
+
 function renderFeed() {
   const html = [];
-  let gaz = null;                                       // consecutive gazette entries share one block
-  const flush = () => { if (gaz) { html.push(`<div class="item gazette" data-i="${gaz[0].i}"><div class="mast">The Gazette</div>${gaz.map(g => `<div class="text" data-i="${g.i}">${esc(g.text)}</div>`).join("")}</div>`); gaz = null; } };
+  let gaz = null;
+  const flush = () => { if (gaz) { html.push(`<div class="item gazette" data-i="${gaz[0].i}"><div class="mast">The Gazette</div>${gaz.map(g => `<div class="text" data-i="${g.i}">${txt(g.text)}</div>`).join("")}</div>`); gaz = null; } };
   for (const it of S.items) {
     if (!(it.kind === "round" || showKinds.has(it.kind))) continue;
     if (it.kind === "gazette") { (gaz = gaz || []).push(it); continue; }
@@ -338,11 +776,12 @@ function renderFeed() {
     html.push(itemHTML(it));
   }
   flush();
+  html.push(epilogueHTML());
   $("#feed").innerHTML = html.join("");
   measure();
 }
 
-let marks = [];                                          // [top, eventIndex] of each feed item, for the reading line
+let marks = [];
 function measure() {
   const top = el => { let y = 0; for (; el && el.id !== "feed"; el = el.offsetParent) y += el.offsetTop; return y; };
   marks = [...document.querySelectorAll("#feed [data-i]")].map(el => [top(el), +el.dataset.i]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -352,77 +791,206 @@ function readingIndex() {
   let lo = 0, hi = marks.length - 1, best = 0;
   while (lo <= hi) { const mid = (lo + hi) >> 1; if (marks[mid][0] <= y) { best = mid; lo = mid + 1; } else hi = mid - 1; }
   if (!marks.length) return 0;
-  // everything that happened up to the next visible item counts as "now" (DMs in between appear as you reach them)
   const next = marks[best + 1];
-  return next ? next[1] - 1 : S.events.length - 1;
+  return next ? Math.max(marks[best][1], next[1] - 1) : S.events.length - 1;
 }
 
 // ======================================================================= render: world panel (right)
-const REGIME = s => { const d = (s.decisive_set || []).length, f = s.franchise_share ?? 0;
-  return d === 0 ? "anarchy" : d === 1 ? "dictatorship" : f >= 0.5 ? "democracy" : "oligarchy"; };
-const RES_COL = { timber: "#8C6A43", stone: "#9A9890", copper: "#C46B3D", silver: "#AEB6C2", gold: "#D9A93A", crystal: "#7FA7D9" };
-
-function renderWorld(idx) {
-  const r = S.roundAt[idx] ?? 0;
-  const snap = r > 0 ? S.snaps.find(s => s.round === r - 1) : null;          // the world as of the end of the previous round
-  const values = snap ? snap.values : (S.truth.start_values || {});
-  const holdings = snap ? snap.holdings : Object.fromEntries((S.inst.agents || []).map(a => [a.id, a.endowment || {}]));
-  // laws in force at this moment (event-accurate)
+function lawsInForce(idx) {
   const active = new Map(); let freshest = -1;
   for (const l of S.lawEvents) { if (l.i > idx) break;
     if (l.act === "enact") { active.set(l.law, l); freshest = l.i; } else active.delete(l.law); }
+  for (const [id, x] of S.lawTL) for (const e of x) if (e.kind === "vetoed" && e.i <= idx) active.delete(id);
+  return { active, freshest };
+}
+function renderWorld(idx) {
+  const r = S.roundAt[idx] ?? 0;
+  const snap = r > 0 ? S.snapBy.get(r - 1) : null;
+  const values = snap ? snap.values : (S.truth.start_values || {});
+  const holdings = snap ? snap.holdings : Object.fromEntries((S.inst.agents || []).map(a => [a.id, a.endowment || {}]));
+  const decisive = new Set((snap && snap.decisive_set) || []);
+  const { active, freshest } = lawsInForce(idx);
   const lawsHTML = [...active.values()].map(l => {
-    const info = S.lawInfo[l.law] || {}, a = S.A.get(l.author);
-    return `<div class="lawrow${idx - l.i < 40 && l.i === freshest ? " fresh" : ""}"><span class="dot" style="background:${a ? col(a, "solid") : "var(--faint)"}"></span><div><div class="t">${esc(l.law)} · ${esc(l.title || info.title || "")}</div><div class="m">${esc(l.cls || info.cls || "")}${l.author && l.author !== "constitution" ? " · by " + esc(l.author) : l.author === "constitution" ? " · founding" : ""}</div></div></div>`;
+    const info = S.laws.get(l.law) || {}, does = lawDoes(info.code);
+    return `<div class="lawrow${idx - l.i < 40 && l.i === freshest ? " fresh" : ""}" data-law="${esc(l.law)}">${l.author && S.A.has(l.author) ? mascot(l.author, 22) : `<span style="width:22px;text-align:center">📜</span>`}<div style="min-width:0"><div class="t">${esc(l.law)} · ${esc(l.title || info.title || "")}</div><div class="m">${esc(l.cls || info.cls || "")}${l.author && l.author !== "constitution" ? " · by " + esc(l.author) : l.author === "constitution" ? " · founding" : ""}</div>${does.length ? `<div class="does">${esc(does.slice(0, 3).join(" · "))}</div>` : ""}</div></div>`;
   }).join("") || `<div class="empty">No laws yet</div>`;
-  // wealth by agent
   const rows = Object.entries(values || {}).filter(([id]) => S.A.has(id) && S.A.get(id).cls !== "observer").sort((a, b) => b[1] - a[1]);
   const max = Math.max(1e-9, ...rows.map(r => r[1]));
   const bars = rows.map(([id, v]) => { const a = S.A.get(id);
-    return `<div class="row"><span class="name" style="--ink:${col(a, "ink")}">${esc(id)}</span><div class="track"><div class="fill" style="width:${(100 * v / max).toFixed(1)}%;background:${col(a, "solid")}"></div></div><span class="v">${fmt(v)}</span></div>`; }).join("");
-  // resources across everyone
+    return `<div class="row">${mascot(id, 20, moodAt(id, r, idx))}<span class="name" data-agent="${esc(id)}" style="--ink:${col(a, "ink")}">${decisive.has(id) ? "👑 " : ""}${esc(id)}</span><div class="track"><div class="fill" style="width:${(100 * v / max).toFixed(1)}%;background:${col(a, "solid")}"></div></div><span class="v">${fmt(v)}</span></div>`; }).join("");
   const tot = {};
   for (const [id, h] of Object.entries(holdings || {})) if (S.A.has(id)) for (const [k, q] of Object.entries(h || {})) tot[k] = (tot[k] || 0) + q;
   const resKeys = Object.keys(tot).filter(k => tot[k] > 0).sort();
   const unit = (S.truth.unit) || {};
   const tv = resKeys.map(k => [k, tot[k] * (unit[k] ?? 1)]);
   const sum = tv.reduce((s, x) => s + x[1], 0) || 1;
-  const stack = tv.map(([k, v], j) => `<div title="${esc(k)}: ${fmt(tot[k])} units" style="flex-grow:${v / sum};background:${RES_COL[k] || `hsl(${(j * 67) % 360} 45% 55%)`}"></div>`).join("");
-  const legend = tv.map(([k], j) => `<span><i style="background:${RES_COL[k] || `hsl(${(j * 67) % 360} 45% 55%)`}"></i>${esc(k)} ${fmt(tot[k])}</span>`).join("");
-  const stocks = snap ? Object.entries(snap.stocks || {}).map(([c, f]) => `<div class="row"><span class="name">${esc(c)}</span><div class="track"><div class="fill" style="width:${(100 * f).toFixed(0)}%;background:var(--good)"></div></div><span class="v">${Math.round(100 * f)}%</span></div>`).join("") : "";
-  const prices = snap ? Object.entries(snap.prices || {}).map(([c, p]) => `<div class="kv"><span>${esc(c)}</span><span>P = ${p.toFixed(3)} · supply ${fmt((snap.supplies || {})[c] || 0)}</span></div>`).join("") : "";
+  const stack = tv.map(([k, v]) => `<div title="${esc(k)}: ${fmt(tot[k])} units" style="flex-grow:${v / sum};background:${resCol(k)}"></div>`).join("");
+  const legend = tv.map(([k]) => `<span><i style="background:${resCol(k)}"></i>${esc(k)} ${fmt(tot[k])}</span>`).join("");
+  const campRes = S.truth.camp_resource || Object.fromEntries((S.inst.camps || []).map(c => [c.id, c.resource]));
+  const stocks = snap ? Object.entries(snap.stocks || {}).map(([c, f]) => `<div class="row"><span class="name" title="${esc(campRes[c] || "")}">${esc(c)}</span><div class="track"><div class="fill" style="width:${(100 * f).toFixed(0)}%;background:${resCol(campRes[c])}"></div></div><span class="v">${Math.round(100 * f)}%</span></div>`).join("") : "";
+  const prices = snap ? Object.entries(snap.prices || {}).map(([c, p]) => `<div class="kv"><span>🪙 ${esc(c)}</span><span>P = ${p.toFixed(3)} · supply ${fmt((snap.supplies || {})[c] || 0)}</span></div>`).join("") : "";
   const welfare = snap && snap.welfare !== undefined ? `<div class="kv"><span>Welfare</span><span>${fmt(snap.welfare)}</span></div>` : "";
+  const trib = snap && snap.tribute && snap.tribute.current ? snap.tribute.current : null;
+  const projs = snap ? Object.entries(snap.projects || {}) : [];
+  const outside = (trib && (trib.demands || trib.raids)) || projs.length ? `<h4>Outside world</h4>${trib ? `<div class="kv"><span>🪙 Tribute demands</span><span>${trib.demands || 0} · paid ${trib.paid_in_full || 0} · raids ${trib.raids || 0}${trib.open ? " · open now" : ""}</span></div>` : ""}${projs.map(([id, p]) => `<div class="kv"><span>🏗️ ${esc(id)} ${esc(p.kind || "")}</span><span>${esc(p.status || "")}</span></div>`).join("")}` : "";
   $("#world").innerHTML = `
     <div class="panel">
       <h4>Now</h4>
       <div class="roundbig">Round ${r + 1}</div>
       <div class="roundsub">of ${S.rounds}${snap ? "" : " · starting holdings"}</div>
-      ${snap ? `<span class="tag regime">${esc(REGIME(snap))} · decisive set ${(snap.decisive_set || []).length} · franchise ${Math.round(100 * (snap.franchise_share || 0))}%</span>` : ""}
-      <h4>Laws in force</h4>${lawsHTML}
+      ${snap ? `<span class="tag regime">${REGIME_ICON[REGIME(snap)] || ""} ${esc(REGIME(snap))} · decisive set ${(snap.decisive_set || []).length} · franchise ${Math.round(100 * (snap.franchise_share || 0))}%</span>` : ""}
+      <h4>Laws in force <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--faint)">· hover for intent</span></h4>${lawsHTML}
       <h4>Wealth by agent</h4><div class="bars">${bars || `<div class="empty">No data yet</div>`}</div>
       <h4>Resources held</h4><div class="stack">${stack}</div><div class="legend">${legend}</div>
-      ${stocks ? `<h4>Camp stocks</h4><div class="bars">${stocks}</div>` : ""}
+      ${stocks ? `<h4>Camp stocks</h4><div class="bars plain">${stocks}</div>` : ""}
       ${prices || welfare ? `<h4>Money</h4>${prices}${welfare}` : ""}
+      ${outside}
     </div>`;
 }
 
-// ======================================================================= render: messages (left)
+// ======================================================================= render: left panel (dossier and messages)
 function countUpTo(arr, idx) { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m].i <= idx) lo = m + 1; else hi = m; } return lo; }
 
-function renderInbox(idx) {
+function renderStrip(idx) {
   const a = S.A.get(me);
-  $("#msgs").style.setProperty("--me-tint", col(a, "panel"));
-  // avatar strip: blue badge where that agent has unanswered messages right now
+  $("#lp").style.setProperty("--me-tint", col(a, "panel"));
+  const r = S.roundAt[idx] ?? 0;
   $("#avatars").innerHTML = S.agents.map(x => {
     const unread = [...(S.threads.get(x.id) || new Map()).values()].some(t => { const n = countUpTo(t, idx); return n && t[n - 1].dir === "in"; });
-    return `<div class="av${x.id === me ? " on" : ""}" data-me="${esc(x.id)}" style="--c:${col(x, "solid")}" title="${esc(x.id)} (${esc(x.cls)})">${esc(initials(x.id))}${unread ? '<span class="badge"></span>' : ""}</div>`;
+    return mascot(x.id, 36, moodAt(x.id, r, idx), x.id === me ? " on" : "").replace("</span>", unread ? '<span class="badge"></span></span>' : "</span>").replace('class="mwrap', `data-me="${esc(x.id)}" class="mwrap`);
   }).join("");
-  $("#meinfo").innerHTML = `<div class="av" style="--c:${col(a, "solid")};width:40px;height:40px">${esc(initials(me))}</div><div><div class="nm">${esc(me)}</div><div class="sub">${esc(a.cls)} · ${esc(a.model)}${a.archetype ? " · " + esc(a.archetype) : ""}</div></div>`;
+  const nconv = [...(S.threads.get(me) || new Map()).values()].filter(t => countUpTo(t, idx) > 0).length;
+  $("#ltabs").innerHTML = `<button data-tab="dossier" class="${leftTab === "dossier" ? "on" : ""}">Dossier</button><button data-tab="messages" class="${leftTab === "messages" ? "on" : ""}">Messages <span class="n">${nconv}</span></button>`;
+}
+
+function parseGoalText(t) {
+  const re = /(Primary|Secondary|Tertiary|Third) goal \((\d+)%(?: of your score)?\):\s*/g, out = []; let m, last = null;
+  const L = { primary: "primary", secondary: "secondary", tertiary: "tertiary", third: "tertiary" };
+  while ((m = re.exec(t))) { if (last) last.text = t.slice(last.end, m.index).trim(); last = { label: L[m[1].toLowerCase()], pct: +m[2], end: re.lastIndex }; out.push(last); }
+  if (last) last.text = t.slice(last.end).trim();
+  if (!out.length && t) out.push({ label: "primary", pct: 100, text: t });
+  return out;
+}
+function goalsHTML(a, idx) {
+  const g = a.goal || {}, ch = S.gchanges.get(a.id) || [];
+  const sc = (S.score.goals || {})[a.id] || {};
+  const names = { primary: g.primary, secondary: g.secondary, tertiary: g.tertiary };
+  const scores = { primary: sc.primary, secondary: sc.secondary_score, tertiary: sc.tertiary_score };
+  const past = ch.filter(c => c.i <= idx), future = ch.filter(c => c.i > idx);
+  let text = a.goalText, out = "";
+  if (past.length) { const c = past[past.length - 1]; text = c.new_text || text; names.primary = c.new || names.primary; }
+  else if (future.length && future[0].old_text) text = future[0].old_text;
+  if (!past.length && future.length) names.primary = future[0].old || names.primary;
+  // earlier goals, struck through
+  for (const c of past) out += `<div class="goal old"><div class="gtop"><span class="gn">${esc(c.old || "earlier goal")}</span><span class="gw">until round ${c.round + 1}</span></div></div><div class="gchange">↳ goal changed in round ${c.round + 1}</div>`;
+  const parts = parseGoalText(text || "");
+  out += parts.map(p => { const s = scores[p.label], final = past.length || !future.length;
+    return `<div class="goal"><div class="gtop"><span class="gn">${p.label === "primary" ? "🎯" : p.label === "secondary" ? "🥈" : "🥉"} ${esc(names[p.label] || p.label)}</span><span class="gw">${p.pct}% of score</span></div><div class="gt">${txt(p.text)}</div>${s != null && final ? `<div class="gs"><div class="track"><div class="fill" style="width:${Math.round(100 * s)}%;background:${col(a, "solid")}"></div></div><span>${Math.round(100 * s)}%</span></div>` : ""}</div>`; }).join("");
+  if (future.length) out += `<div class="gchange" style="color:var(--faint)">↳ this goal will change in round ${future[0].round + 1} (to ${esc(future[0].new)})</div>`;
+  const tot = sc.score;
+  const gs = guessStats()[a.id];
+  return out + (tot != null ? `<div class="kv" style="margin-top:4px"><span>Final goal score</span><span><b style="color:var(--text)">${Math.round(100 * tot)}%</b>${gs ? ` · guessed by ${gs.right} of ${gs.total}` : ""}</span></div>` : "");
+}
+function traitsHTML(a) {
+  const p = a.personality; if (!p) return "";
+  return `<div class="traits">${TRAITS.filter(([k]) => p[k] != null).map(([k, lo, hi]) => `<span>${lo}</span><div class="tr" style="--c:${col(a, "solid")}"><i style="left:${Math.round(100 * p[k])}%"></i></div><span>${hi}</span>`).join("")}</div>${a.ptext ? `<div class="ptext">“${esc(a.ptext)}”</div>` : ""}${a.atext ? `<div class="ptext">${esc(a.atext)}</div>` : ""}`;
+}
+function rightsHTML(id, r) {
+  const now = r > 0 ? ((S.snapBy.get(r - 1) || {}).rights || {})[id] : null;
+  const before = r > 1 ? ((S.snapBy.get(r - 2) || {}).rights || {})[id] : (S.A.get(id).rights);
+  const list = now || S.A.get(id).rights || [];
+  const harv = list.filter(x => x.startsWith("harvest:")).map(x => x.slice(8).replace("camp", ""));
+  const other = list.filter(x => !x.startsWith("harvest:"));
+  const isNew = x => before && !before.includes(x);
+  return `<div class="rights">${other.map(x => `<span class="rchip${isNew(x) ? " new" : ""}">${isNew(x) ? "✨ " : ""}${esc(x.replace(/_/g, " "))}</span>`).join("")}${harv.length ? `<span class="rchip">⛏️ camps ${esc(harv.join(" · "))}</span>` : ""}${!list.length ? `<span class="empty">no rights</span>` : ""}</div>`;
+}
+function sparkHTML(id, r, a) {
+  const pts = [];
+  for (let k = 0; k <= S.lastRound + 1; k++) { const v = valueAt(id, k); if (v != null) pts.push([k, v]); }
+  if (pts.length < 2) return "";
+  const W = 300, Hh = 46, mx = Math.max(...pts.map(p => p[1])) || 1, n = Math.max(1, S.lastRound + 1);
+  const X = k => 4 + (W - 8) * k / n, Y = v => Hh - 5 - (Hh - 12) * v / mx;
+  const line = pts.map(([k, v]) => `${X(k).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const curV = valueAt(id, r);
+  return `<svg class="spark" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none"><polygon points="${X(pts[0][0])},${Hh} ${line} ${X(pts[pts.length - 1][0])},${Hh}" fill="${col(a, "solid")}" opacity=".12"/><polyline points="${line}" fill="none" stroke="${col(a, "solid")}" stroke-width="2" vector-effect="non-scaling-stroke"/><line x1="${X(r)}" x2="${X(r)}" y1="0" y2="${Hh}" stroke="var(--text)" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>${curV != null ? `<circle cx="${X(r)}" cy="${Y(curV)}" r="3.5" fill="${col(a, "solid")}" stroke="var(--bg)" stroke-width="1.5"/>` : ""}</svg>`;
+}
+function relationsHTML(id, idx) {
+  const rel = new Map(), get = p => { if (!rel.has(p)) rel.set(p, { out: 0, in: 0, tx: 0, rx: 0 }); return rel.get(p); };
+  for (const m of S.dms) { if (m.i > idx) break; if (m.from === id) get(m.to).out++; else if (m.to === id) get(m.from).in++; }
+  for (const t of S.transfers) { if (t.i > idx) break; if (t.from === id && S.A.has(t.to)) get(t.to).tx++; else if (t.to === id && S.A.has(t.from)) get(t.from).rx++; }
+  const rows = [...rel.entries()].filter(([p]) => S.A.has(p)).sort((x, y) => (y[1].out + y[1].in + 2 * (y[1].tx + y[1].rx)) - (x[1].out + x[1].in + 2 * (x[1].tx + x[1].rx))).slice(0, 6);
+  const r = S.roundAt[idx] ?? 0;
+  return rows.length ? rows.map(([p, c]) => `<div class="rel" data-with-dossier="${esc(p)}">${mascot(p, 24, moodAt(p, r, idx))}<span style="font-weight:500">${esc(p)}</span><span class="c">✉️ ${c.out}→ ←${c.in}${c.tx || c.rx ? ` · 💸 ${c.tx}→ ←${c.rx}` : ""}</span></div>`).join("") : `<div class="empty">Hasn't talked to anyone yet.</div>`;
+}
+const openKeys = new Set();
+function thinkHTML(x) {
+  const key = `${x.agent}|${x.i}|${x.phase}`;
+  const label = x.dm ? "Reasoning (replying to messages)" : x.phase === "decide" ? "Reasoning" : `Reasoning (${esc(String(x.phase || "").replace(/_/g, " "))})`;
+  const body = x.reasoning || "", stated = x.stated_reasoning || "";
+  if (!body && !stated) return `<div class="nothink">🧠 no reasoning${x.error ? " · error" : ""}</div>`;
+  return `<details class="think" data-key="${esc(key)}"${openKeys.has(key) ? " open" : ""}><summary>🧠 ${label} <span class="w">· ${words(body || stated).toLocaleString()} words</span></summary><div class="body">${body ? `<span class="lbl">Private reasoning</span>${txt(body)}` : ""}${stated ? `<span class="lbl">What it said it was doing</span>${txt(stated)}` : ""}${x.notes && !x.dm ? `<span class="lbl">📝 Notes it kept</span>${txt(x.notes)}` : ""}</div></details>`;
+}
+function diaryHTML(id, idx) {
+  const byR = new Map(), add = (r, x) => { if (!byR.has(r)) byR.set(r, []); byR.get(r).push(x); };
+  for (const t of S.turns.get(id) || []) add(t.round, { ...t, k: "turn", o: 1 });
+  for (const x of S.reas.get(id) || []) add(x.round, { ...x, k: "think", o: 0 });
+  for (const g of S.gchanges.get(id) || []) add(g.round, { ...g, k: "goal", o: -1 });
+  const dmsBy = new Map();
+  for (const m of S.dms) if (m.from === id) { if (!dmsBy.has(m.round)) dmsBy.set(m.round, []); dmsBy.get(m.round).push(m); }
+  for (const r of dmsBy.keys()) if (!byR.has(r)) byR.set(r, []);
+  const curR = S.roundAt[idx] ?? 0;
+  const rounds = [...byR.keys()].sort((a, b) => b - a);
+  if (!rounds.length) return `<div class="empty">No turns recorded for this agent.</div>`;
+  return rounds.map(r => {
+    const xs = byR.get(r).sort((a, b) => a.i - b.i || a.o - b.o);
+    const sent = dmsBy.get(r) || [];
+    const later = r > curR, now = r === curR;
+    const body = xs.map(x => {
+      if (x.k === "think") return thinkHTML(x);
+      if (x.k === "goal") return `<div class="gchange">🎯 goal changes: ${esc(x.old)} → <b>${esc(x.new)}</b></div>`;
+      if (!x.acts.length) return `<div class="nothink">💤 took no actions</div>`;
+      return actsHTML(x.acts, x.res);
+    }).join("");
+    const to = [...new Set(sent.map(m => m.to))];
+    const dmLine = sent.length ? `<div class="dmline" data-dm-round="${r}">✉️ sent ${sent.length} message${sent.length > 1 ? "s" : ""} to ${esc(to.join(", "))} ›</div>` : "";
+    return `<div class="dround${now ? " now" : later ? " later" : ""}"><div class="drh">Round ${r + 1}${now ? ` <span>reading now</span>` : later ? ` <span>later</span>` : ""}</div>${body}${dmLine}</div>`;
+  }).join("");
+}
+let dossierSig = "";
+function renderDossier(idx, force) {
+  const a = S.A.get(me); if (!a) return;
+  const r = S.roundAt[idx] ?? 0;
+  const sig = `${me}|${r}|${countUpTo(S.dms, idx)}|${countUpTo(S.transfers, idx)}|${(S.gchanges.get(me) || []).filter(c => c.i <= idx).length}|${dark()}`;
+  if (sig === dossierSig && !force) return;
+  dossierSig = sig;
+  const box = $("#dossier"), st = box.scrollTop;
+  const snap = r > 0 ? S.snapBy.get(r - 1) : null;
+  const holdings = snap ? (snap.holdings || {})[me] : a.endowment;
+  const decisive = snap && (snap.decisive_set || []).includes(me);
+  const vw = snap && snap.vote_weight ? snap.vote_weight[me] : null;
+  const gone = S.departs.has(me) && S.departs.get(me) <= idx;
+  const val = valueAt(me, r), v0 = valueAt(me, 0);
+  box.innerHTML = `
+    <div class="dhead">${mascot(me, 72, moodAt(me, r, idx))}<div style="min-width:0"><div class="nm">${esc(me)}</div>
+      <div class="sub">${CLASS_ICON[a.cls] || ""} ${esc(a.cls)} · ${esc(modelShort(a.model))}${a.tier ? ` (${esc(a.tier)})` : ""}${a.actions ? ` · ${a.actions} actions a turn` : ""}</div>
+      <div class="tags">${a.archetype ? `<span class="tag gold">${esc(a.archetype)}</span>` : ""}${decisive ? `<span class="tag gold">👑 decisive</span>` : ""}${vw ? `<span class="tag">vote ${Math.round(100 * vw)}%</span>` : ""}${gone ? `<span class="tag warn">departed</span>` : ""}</div></div></div>
+    <div class="sec"><div class="h"><span>Goals</span><span>private</span></div>${goalsHTML(a, idx)}</div>
+    <div class="sec"><div class="h"><span>Wealth</span><span>${val != null ? fmt(val) : ""}${val != null && v0 ? ` · ${val >= v0 ? "+" : ""}${Math.round(100 * (val / v0 - 1))}% since start` : ""}</span></div>${sparkHTML(me, r, a)}
+      <div class="holds">${Object.entries(holdings || {}).filter(([, q]) => q > 0.0005).map(([k, q]) => `<span><i style="background:${resCol(k)}"></i>${esc(k)} ${fmt(q)}</span>`).join("")}</div></div>
+    <div class="sec"><div class="h"><span>Rights now</span></div>${rightsHTML(me, r)}</div>
+    ${a.personality ? `<div class="sec"><div class="h"><span>Personality</span></div>${traitsHTML(a)}</div>` : ""}
+    <div class="sec"><div class="h"><span>Closest contacts</span><span>so far</span></div>${relationsHTML(me, idx)}</div>
+    <div class="sec"><div class="h"><span>Diary</span><span>newest first</span></div>${diaryHTML(me, idx)}</div>`;
+  box.scrollTop = st;
+}
+
+function renderInbox(idx) {
   const convs = [...(S.threads.get(me) || new Map()).entries()].map(([p, t]) => [p, t, countUpTo(t, idx)]).filter(x => x[2] > 0)
     .sort((x, y) => x[1][x[2] - 1].i < y[1][y[2] - 1].i ? 1 : -1);
+  const r = S.roundAt[idx] ?? 0;
   $("#convlist").innerHTML = convs.length ? `<div class="listhead">Messages</div>` + convs.map(([p, t, n]) => {
-    const last = t[n - 1], pa = S.A.get(p);
-    return `<div class="conv" data-with="${esc(p)}">${last.dir === "in" ? '<span class="unread" title="Not answered yet"></span>' : "<span></span>"}<div class="av" style="--c:${col(pa, "solid")}">${esc(initials(p))}</div><div style="min-width:0"><div class="top"><span class="n">${esc(p)}</span><span class="r">round ${last.round + 1}</span></div><div class="p">${last.dir === "out" ? "You: " : ""}${last.enc ? "🔒 " : ""}${esc(last.text)}</div></div></div>`;
+    const last = t[n - 1];
+    return `<div class="conv" data-with="${esc(p)}">${last.dir === "in" ? '<span class="unread" title="Not answered yet"></span>' : "<span></span>"}${mascot(p, 38, moodAt(p, r, idx))}<div style="min-width:0"><div class="top"><span class="n">${esc(p)}</span><span class="r">round ${last.round + 1}</span></div><div class="p">${last.dir === "out" ? "You: " : ""}${last.enc ? "🔒 " : ""}${esc(last.text)}</div></div></div>`;
   }).join("") : `<div class="empty" style="padding:18px">No messages yet at this point in the story.</div>`;
   if (openWith) renderThread(idx);
 }
@@ -432,7 +1000,7 @@ function renderThread(idx) {
   const t = (S.threads.get(me) || new Map()).get(openWith) || [];
   const n = countUpTo(t, idx), pa = S.A.get(openWith), a = S.A.get(me);
   const box = $("#tbody"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-  $("#thead").innerHTML = `<button class="back" id="back">‹ Inbox</button><div class="av" style="--c:${col(pa, "solid")};width:30px;height:30px;font-size:11px">${esc(initials(openWith))}</div><div><div style="font-weight:600">${esc(openWith)}</div><div style="color:var(--muted);font-size:11px">${esc(pa ? pa.cls + " · " + pa.model : "")}</div></div>`;
+  $("#thead").innerHTML = `<button class="back" id="back">‹ Inbox</button>${mascot(openWith, 30, moodAt(openWith, S.roundAt[idx] ?? 0, idx))}<div><div style="font-weight:600">${esc(openWith)}</div><div style="color:var(--muted);font-size:11px">${esc(pa ? pa.cls + " · " + modelShort(pa.model) : "")}</div></div>`;
   box.style.setProperty("--my-bg", col(a, "solid"));
   box.style.setProperty("--their-bg", col(pa, "bubble"));
   let html = "", rr = -1;
@@ -445,7 +1013,7 @@ function renderThread(idx) {
     if (m.shownAs && m.dir === "out") notes.push(`sent as ${m.shownAs}`);
     if (m.shownTo && m.dir === "out") notes.push(`actually reached ${m.to}`);
     if (m.pay) notes.push(`+ ${m.pay.qty} ${m.pay.item}`);
-    html += `<div class="bub ${m.dir}${j === n - 1 && n > lastThreadCount ? " newest" : ""}">${esc(m.text)}${notes.length ? `<span class="note">${esc(notes.join(" · "))}</span>` : ""}</div>`;
+    html += `<div class="bub ${m.dir}${j === n - 1 && n > lastThreadCount ? " newest" : ""}">${txt(m.text)}${notes.length ? `<span class="note">${esc(notes.join(" · "))}</span>` : ""}</div>`;
   }
   box.innerHTML = html || `<div class="empty" style="align-self:center;margin-top:20px">Nothing yet.</div>`;
   if (atBottom || n !== lastThreadCount) box.scrollTop = box.scrollHeight;
@@ -453,83 +1021,487 @@ function renderThread(idx) {
   $("#back").onclick = () => { openWith = null; $("#thread").classList.remove("open"); $("#convlist").style.display = ""; };
 }
 
+function setTab(t) {
+  leftTab = t; try { localStorage.setItem("charter-lefttab", t); } catch (e) {}
+  $("#pane-dossier").classList.toggle("on", t === "dossier"); $("#pane-messages").classList.toggle("on", t === "messages");
+  renderLeft(cur, true);
+}
 function openThread(p) {
   openWith = p; lastThreadCount = 0;
+  if (leftTab !== "messages") setTab("messages");
   $("#thread").classList.add("open"); $("#convlist").style.display = "none";
   renderThread(cur);
 }
 function setMe(id) {
+  if (!S.A.has(id)) return;
   me = id; openWith = null; $("#thread").classList.remove("open"); $("#convlist").style.display = "";
-  renderInbox(cur);
+  $("#dossier").scrollTop = 0;
+  renderLeft(cur, true);
+  if (innerWidth <= 860) { $("#pleft").classList.add("show"); $("#world").classList.remove("show");
+    document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x.dataset.p === "left")); }
+}
+function renderLeft(idx, force) {
+  renderStrip(idx);
+  if (leftTab === "dossier") renderDossier(idx, force); else renderInbox(idx);
 }
 
-// ======================================================================= app
+// ======================================================================= hover cards (laws and agents)
+let hcTimer = null, hcPinned = false, hcFor = null;
+function lawStatus(id, idx) {
+  let st = "not yet proposed", cls = "";
+  for (const x of S.lawTL.get(id) || []) {
+    if (x.i > idx) break;
+    if (x.kind === "proposed") { st = "proposed"; cls = ""; }
+    else if (x.kind === "ballot") { st = "on the ballot"; cls = ""; }
+    else if (x.kind === "enacted") { st = "in force"; cls = "good"; }
+    else if (x.kind === "veto_window") { st = `in force · Board may veto until round ${(x.until ?? 0) + 1}`; cls = "good"; }
+    else if (x.kind === "vetoed") { st = "vetoed"; cls = "warn"; }
+    else if (x.kind === "repealed") { st = "repealed"; cls = "warn"; }
+  }
+  for (const b of S.ballots.values()) if (b.law === id && b.close !== undefined && b.close <= idx && b.result !== "yes" && st === "on the ballot") { st = "rejected"; cls = "warn"; }
+  return [st, cls];
+}
+function lawCard(id) {
+  const l = S.laws.get(id) || { id }, idx = cur, r = S.roundAt[idx] ?? 0;
+  const [st, scls] = lawStatus(id, idx);
+  const does = lawDoes(l.code);
+  const tlx = S.lawTL.get(id) || [];
+  const rows = tlx.map(x => {
+    const R = `<span style="color:var(--faint)">r${(S.roundAt[x.i] ?? 0) + 1}</span>`;
+    const fut = x.i > idx ? ' style="opacity:.55"' : "";
+    switch (x.kind) {
+      case "proposed": return `<div class="tlr"${fut}>${R} 📜 proposed by <b>${esc(x.who)}</b></div>`;
+      case "ballot": { const b = x.b; return `<div class="tlr"${fut}>${R} 🗳️ ballot <b>${esc(b.id)}</b> (${esc(String(b.rule || "").replace(/_/g, " "))})${b.close !== undefined ? ` → <b style="color:${b.result === "yes" ? "var(--yes)" : "var(--no)"}">${esc(b.result)}</b>` : ""}${ballotHTML(b, b.close ?? S.events.length - 1)}</div>`; }
+      case "enacted": return `<div class="tlr"${fut}>${R} ✅ <b>enacted</b>${x.who === "constitution" ? " (founding law)" : ""}</div>`;
+      case "veto_window": return `<div class="tlr"${fut}>${R} ⏳ Board veto window until round ${(x.until ?? 0) + 1}</div>`;
+      case "vetoed": return `<div class="tlr"${fut}>${R} 🛑 <b>vetoed</b>${x.by ? " by " + esc([].concat(x.by).join(", ")) : ""}</div>`;
+      case "repealed": return `<div class="tlr"${fut}>${R} 🗑️ <b>repealed</b></div>`;
+      case "patched": return `<div class="tlr"${fut}>${R} 🔧 patched by <b>${esc(x.who)}</b>: ${esc(clip(x.reason, 240))}${x.diff ? `<details><summary style="font-size:11.5px;color:var(--muted)">▸ diff</summary><pre>${esc(x.diff)}</pre></details>` : ""}</div>`;
+      case "error": return `<div class="tlr"${fut}>${R} ⚠️ error: <code>${esc(clip(x.error, 120))}</code></div>`;
+    }
+    return "";
+  }).join("");
+  const author = l.author && S.A.has(l.author) ? `${mascot(l.author, 22)} <b>${esc(l.author)}</b>` : l.author === "constitution" ? "the founding constitution" : esc(l.author || "");
+  return `<div class="ht"><div><div style="font-size:11.5px;color:var(--muted);font-weight:600">${esc(id)}${l.cls ? ` · ${esc(l.cls)} law` : ""}</div><div class="ttl">${esc(l.title || id)}</div></div><span class="tag ${scls}">${esc(st)}</span></div>
+    ${l.intent ? `<div class="intent">${esc(l.intent)}</div>` : `<div class="empty" style="margin:6px 0">No stated intent.</div>`}
+    ${author ? `<div class="st" style="font-size:12.5px;color:var(--muted)">by ${author}</div>` : ""}
+    ${does.length ? `<div class="hsec"><div class="h">What its code does</div><div class="does">${does.map(d => `<span>${esc(d)}</span>`).join("")}</div></div>` : ""}
+    ${rows ? `<div class="hsec"><div class="h">History</div>${rows}</div>` : ""}
+    ${l.code ? `<div class="hsec"><details><summary style="font-size:12px;color:var(--muted)">▸ Show code</summary><pre>${esc(l.code)}</pre></details></div>` : ""}
+    <div class="hint">${hcPinned ? "Pinned · click outside or press Esc to close" : "Click to pin"}</div>`;
+}
+function agentCard(id) {
+  const a = S.A.get(id), r = S.roundAt[cur] ?? 0, v = valueAt(id, r);
+  const p = parseGoalText(a.goalText || "")[0];
+  return `<div class="ht" style="justify-content:flex-start;align-items:center">${mascot(id, 54, moodAt(id, r, cur))}<div><div class="ttl">${esc(id)}</div><div style="color:var(--muted);font-size:12px">${CLASS_ICON[a.cls] || ""} ${esc(a.cls)} · ${esc(modelShort(a.model))}${a.archetype ? " · " + esc(a.archetype) : ""}</div>${v != null ? `<div style="font-size:12px;color:var(--muted)">wealth ${fmt(v)}</div>` : ""}</div></div>
+    ${p ? `<div class="hsec"><div class="h">🎯 ${esc(a.goal.primary || "Goal")}</div><div style="font-size:12.5px">${txt(clip(p.text, 220))}</div></div>` : ""}
+    ${a.ptext ? `<div class="ptext" style="margin-top:8px">“${esc(clip(a.ptext, 160))}”</div>` : ""}
+    <div class="hint">Click to open ${esc(id)}'s dossier</div>`;
+}
+function showCard(el) {
+  const hc = $("#hovercard");
+  const law = el.dataset.law, agent = el.dataset.agent;
+  const key = law ? "L:" + law : "A:" + agent;
+  if (law && !S.laws.has(law)) return;
+  if (agent && !S.A.has(agent)) return;
+  if (hcFor !== key) { hc.innerHTML = law ? lawCard(law) : agentCard(agent); hcFor = key; hc.scrollTop = 0; }
+  hc.classList.add("show");
+  const rc = el.getBoundingClientRect(), w = hc.offsetWidth, h = hc.offsetHeight;
+  let x = Math.min(Math.max(8, rc.left), innerWidth - w - 8), y = rc.bottom + 8;
+  if (y + h > innerHeight - 8) y = Math.max(8, rc.top - h - 8);
+  hc.style.left = x + "px"; hc.style.top = y + "px";
+}
+function hideCard(now) {
+  clearTimeout(hcTimer);
+  const go = () => { if (hcPinned) return; $("#hovercard").classList.remove("show"); hcFor = null; };
+  now ? go() : (hcTimer = setTimeout(go, 220));
+}
+function wireHover() {
+  const hc = $("#hovercard");
+  document.addEventListener("mouseover", ev => {
+    if (hcPinned) return;
+    if (hc.contains(ev.target)) { clearTimeout(hcTimer); return; }
+    const t = ev.target.closest("[data-law], .who[data-agent], .mwrap[data-agent], .name[data-agent], .node[data-agent]");
+    if (!t || t.closest("#avatars")) return hideCard();
+    clearTimeout(hcTimer);
+    hcTimer = setTimeout(() => showCard(t), t.dataset.law ? 90 : 350);
+  });
+  document.addEventListener("mouseout", ev => {
+    if (hcPinned) return;
+    if (!ev.relatedTarget || !hc.contains(ev.relatedTarget)) hideCard();
+  });
+  hc.addEventListener("mouseleave", () => hideCard());
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape") { hcPinned = false; hc.classList.remove("pinned"); hideCard(true); } });
+}
+function pinLaw(el) {
+  hcPinned = false; hcFor = null; showCard(el);
+  hcPinned = true; $("#hovercard").classList.add("pinned"); hcFor = null; showCard(el);
+}
+
+// ======================================================================= app: a story view and a society view sharing one moment
+let view = "story", socBuilt = false;
 function mount(D) {
   S = prepare(D);
-  document.title = `Charter story · ${S.name}`;
+  buildSprite(); buildLawRx();
+  document.title = `Charter · ${S.name}`;
   $("#runname").textContent = `${S.name} · ${S.agents.length} agents · ${S.rounds} rounds`;
-  $("#filters").innerHTML = Object.entries(KIND_LABEL).map(([k, l]) => `<button class="chip" data-kind="${k}" aria-pressed="true">${l}</button>`).join("");
+  $("#filters").innerHTML = Object.entries(KIND_LABEL).map(([k, l]) => `<button class="chip" data-kind="${k}" aria-pressed="${showKinds.has(k)}">${l}</button>`).join("");
+  $("#viewseg").hidden = false;
   $("#app").innerHTML = `
-    <div class="layout">
-      <aside class="side left" id="pleft"><div class="msgs" id="msgs">
-        <div class="whoami"><div class="label">Viewing as</div><div class="avatars" id="avatars"></div><div class="me" id="meinfo"></div></div>
-        <div class="list" id="convlist"></div>
-        <div class="thread" id="thread"><div class="thead" id="thead"></div><div class="tbody" id="tbody"></div></div>
+    <div id="storyview"><div class="layout">
+      <aside class="side left" id="pleft"><div class="lp" id="lp">
+        <div class="whoami"><div class="avatars" id="avatars"></div><div class="ltabs" id="ltabs"></div></div>
+        <div class="pane" id="pane-dossier"><div class="dossier" id="dossier"></div></div>
+        <div class="pane" id="pane-messages"><div class="list" id="convlist"></div>
+          <div class="thread" id="thread"><div class="thead" id="thead"></div><div class="tbody" id="tbody"></div></div></div>
       </div></aside>
       <main class="feed" id="feed"></main>
       <aside class="side right" id="world"></aside>
-    </div>`;
+    </div></div>
+    <div id="socview" hidden></div>`;
+  $("#pane-" + leftTab).classList.add("on");
   const busiest = [...S.threads.entries()].sort((a, b) => b[1].size - a[1].size)[0];
   me = busiest ? busiest[0] : S.agents[0]?.id;
   renderFeed();
   tick(true);
   addEventListener("scroll", () => requestAnimationFrame(() => tick()), { passive: true });
-  addEventListener("resize", () => { measure(); tick(true); });
+  addEventListener("resize", () => { if (view === "story") { measure(); tick(true); } });
+  $("#dossier").addEventListener("toggle", ev => { const k = ev.target.dataset && ev.target.dataset.key; if (k) ev.target.open ? openKeys.add(k) : openKeys.delete(k); }, true);
   document.addEventListener("click", ev => {
+    const lw = ev.target.closest("[data-law]");
+    if (lw && !ev.target.closest("#hovercard")) { ev.preventDefault(); return pinLaw(lw); }
+    if (hcPinned && !ev.target.closest("#hovercard")) { hcPinned = false; $("#hovercard").classList.remove("pinned"); hideCard(true); }
+    const vw = ev.target.closest("[data-view]"); if (vw) return setView(vw.dataset.view);
+    const tab = ev.target.closest("[data-tab]"); if (tab) return setTab(tab.dataset.tab);
     const av = ev.target.closest("[data-me]"); if (av) return setMe(av.dataset.me);
+    const rel = ev.target.closest("[data-with-dossier]"); if (rel) return setMe(rel.dataset.withDossier);
+    const dml = ev.target.closest("[data-dm-round]"); if (dml) return setTab("messages");
     const cv = ev.target.closest("[data-with]"); if (cv) return openThread(cv.dataset.with);
-    const who = ev.target.closest(".who[data-agent]"); if (who) return setMe(who.dataset.agent);
+    const who = ev.target.closest("[data-agent]");
+    if (who && !ev.target.closest("summary")) {                 // in the society view, a mascot opens its dossier in the story view
+      hideCard(true); if (view === "society") { setView("story"); if (leftTab !== "dossier") setTab("dossier"); } return setMe(who.dataset.agent); }
     const f = ev.target.closest("[data-kind]");
     if (f) { const k = f.dataset.kind, on = f.getAttribute("aria-pressed") !== "true"; f.setAttribute("aria-pressed", on);
-      on ? showKinds.add(k) : showKinds.delete(k); const keep = cur; renderFeed(); tick(true); return; }
+      on ? showKinds.add(k) : showKinds.delete(k);
+      try { localStorage.setItem("charter-kinds", JSON.stringify([...showKinds])); } catch (e) {}
+      const anchor = cur; renderFeed(); scrollToIdx(anchor); tick(true); return; }
   });
   $("#tabs").addEventListener("click", ev => {
     const b = ev.target.closest("button"); if (!b) return;
     document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
     $("#pleft").classList.toggle("show", b.dataset.p === "left"); $("#world").classList.toggle("show", b.dataset.p === "right");
   });
+  addEventListener("keydown", ev => {
+    if (ev.key === "Escape" || ev.target.closest("input, select, textarea")) return;
+    if (ev.key.toLowerCase() === "m" && !ev.metaKey && !ev.ctrlKey) return setView(view === "story" ? "society" : "story");
+    if (view !== "society") return;
+    if (ev.key === " ") { ev.preventDefault(); setPlaying(!playing); }
+    if (ev.key === "ArrowRight") { ev.preventDefault(); setPlaying(false); setIdx(nextInteresting(sIdx), true); }
+    if (ev.key === "ArrowLeft") { ev.preventDefault(); setPlaying(false); setIdx(Math.max(0, sIdx - 1), false); }
+  });
+  wireHover();
+}
+// switching views keeps the moment: the society map opens where the story is being read, and the story scrolls to where the map got to
+function setView(v) {
+  if (v === view || !S) return;
+  hcPinned = false; $("#hovercard").classList.remove("pinned"); hideCard(true);
+  if (v === "society") {
+    const at = Math.max(0, cur);
+    view = "society";
+    $("#storyview").hidden = true; $("#socview").hidden = false;
+    document.body.classList.add("insoc");
+    if (!socBuilt) { buildSociety(); socBuilt = true; }
+    lastSideSig = ""; setIdx(at, false);
+    window.scrollTo(0, 0);
+  } else {
+    setPlaying(false);
+    view = "story";
+    $("#socview").hidden = true; $("#storyview").hidden = false;
+    document.body.classList.remove("insoc");
+    measure(); scrollToIdx(sIdx); tick(true);
+  }
+  document.querySelectorAll("#viewseg [data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+  try { history.replaceState(null, "", v === "society" ? "#society" : location.pathname + location.search); } catch (e) {}
+}
+function scrollToIdx(idx) {
+  let best = null; for (const [y, i] of marks) { if (i <= idx) best = y; else break; }
+  if (best != null) window.scrollTo({ top: Math.max(0, best - innerHeight * 0.42 + 2) });
 }
 
 function tick(force) {
-  if (!S) return;
+  if (!S || view !== "story") return;
   const idx = readingIndex();
   if (idx === cur && !force) return;
   cur = idx;
   renderWorld(idx);
-  renderInbox(idx);
+  renderLeft(idx, force);
 }
 
-// theme
+// ======================================================================= society view
+const SW = 1000, SH = 700, CX = 500, CY = 360;
+let sIdx = 0, playing = false, speed = 1, playT = null, socPos = {}, campPos = {}, lastToastI = -1;
+const INTERESTING = new Set(["post", "anon_post", "dm", "transfer", "harvest", "enact", "repeal", "vote", "ballot_open", "ballot_close", "vetoed",
+  "world_event", "raid", "departure", "arrival", "story", "round_start", "tribute_payment", "tribute_demand", "project_open", "proposal", "patched", "rights", "bank_run"]);
+
+function buildSociety() {
+  $("#socview").innerHTML = `
+    <div class="soc">
+      <div class="stagewrap">
+        <svg id="stage" viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="xMidYMid meet">
+          <defs><pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.1" fill="var(--line)"/></pattern></defs>
+          <rect width="${SW}" height="${SH}" fill="url(#dots)"/>
+          <g id="g-camps"></g><g id="g-paths"></g><g id="g-plaza" class="plaza"></g><g id="g-edges"></g><g id="g-agents"></g><g id="g-bubbles"></g><g id="g-fx" class="fx"></g>
+        </svg>
+        <div id="toasts"></div>
+        <div class="ctrl">
+          <button class="pb" id="play" title="Play / pause (space)">▶</button>
+          <span class="rl" id="rl">Round 1</span>
+          <input type="range" id="scrub" min="0" max="${S.events.length - 1}" value="0" step="1" aria-label="Moment in the run">
+          <select id="speed" aria-label="Speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+          <span class="keyhint">space play · ← → step · M switch view</span>
+        </div>
+      </div>
+      <aside class="sside" id="sside"></aside>
+    </div>`;
+  layoutSociety();
+  $("#play").onclick = () => setPlaying(!playing);
+  $("#scrub").oninput = e => { setPlaying(false); setIdx(+e.target.value, false); };
+  $("#speed").onchange = e => { speed = +e.target.value; };
+}
+function setPlaying(on) {
+  playing = on; $("#play").textContent = on ? "❚❚" : "▶"; clearTimeout(playT);
+  if (on) { if (sIdx >= S.events.length - 1) setIdx(0, false); step(); }
+}
+function nextInteresting(i) { let j = i + 1; while (j < S.events.length - 1 && !INTERESTING.has(S.events[j].type)) j++; return Math.min(j, S.events.length - 1); }
+function step() {
+  if (!playing) return;
+  const j = nextInteresting(sIdx);
+  setIdx(j, true);
+  if (j >= S.events.length - 1) return setPlaying(false);
+  const t = S.events[j].type;
+  const delay = ({ post: 1500, anon_post: 1500, story: 1600, round_start: 1500, enact: 1800, world_event: 1700, raid: 1800, ballot_close: 1300, dm: 650, harvest: 260, vote: 300 }[t] || 520) / speed;
+  playT = setTimeout(step, delay);
+}
+
+function layoutSociety() {
+  const ring = S.agents.filter(a => a.cls !== "observer");
+  const n = ring.length;
+  ring.forEach((a, k) => { const t = -Math.PI / 2 + 2 * Math.PI * k / n; socPos[a.id] = [CX + 285 * Math.cos(t), CY + 215 * Math.sin(t)]; });
+  S.agents.filter(a => a.cls === "observer").forEach((a, k) => { socPos[a.id] = [SW - 60 - k * 70, SH - 50]; });
+  const camps = S.inst.camps || [];
+  camps.forEach((c, k) => { const t = -Math.PI / 2 + Math.PI / Math.max(1, camps.length) + 2 * Math.PI * k / camps.length;
+    campPos[c.id] = [CX + 440 * Math.cos(t), CY + 300 * Math.sin(t)]; });
+  // the ring road and the camp islands are drawn once
+  $("#g-paths").innerHTML = `<ellipse cx="${CX}" cy="${CY}" rx="285" ry="215" fill="none" stroke="var(--line)" stroke-width="18" opacity=".55"/><ellipse cx="${CX}" cy="${CY}" rx="285" ry="215" fill="none" stroke="var(--surface)" stroke-width="2" stroke-dasharray="6 9"/>`;
+  $("#g-camps").innerHTML = camps.map(c => { const [x, y] = campPos[c.id];
+    return `<g class="camp" id="camp-${esc(c.id)}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><title>${esc(c.id)}: ${esc(c.resource)} (tier ${esc(c.tier)})</title>
+      <ellipse cx="0" cy="6" rx="52" ry="30" fill="var(--surface-2)" stroke="var(--line)"/>
+      <clipPath id="clip-${esc(c.id)}"><circle cx="0" cy="0" r="22"/></clipPath>
+      <circle cx="0" cy="0" r="22" fill="var(--surface)"/><rect class="lvl" x="-22" y="-22" width="44" height="44" fill="${resCol(c.resource)}" clip-path="url(#clip-${esc(c.id)})" opacity=".85"/>
+      <circle class="rim" cx="0" cy="0" r="22" fill="none" stroke="${resCol(c.resource)}" stroke-width="2"/>
+      <text x="0" y="40" text-anchor="middle">${esc(c.resource)}</text><text class="s" x="0" y="53" text-anchor="middle">${esc(c.id)} · <tspan class="pct"></tspan></text></g>`; }).join("");
+  $("#g-agents").innerHTML = S.agents.map(a => { const [x, y] = socPos[a.id]; const dly = (hash(a.id) % 1000) / 1000 * 2.6;
+    return `<g class="node" data-agent="${esc(a.id)}" id="node-${a.n}" style="transform:translate(${x}px,${y}px)"><g class="sc"><g class="bob" style="animation-delay:-${dly.toFixed(2)}s"><use class="mu" href="#m${a.n}-ok" x="-24" y="-30" width="48" height="48"/></g><g class="crown"></g></g>
+      <text class="nm" x="0" y="34" text-anchor="middle">${esc(a.id)}</text><text class="wv" x="0" y="47" text-anchor="middle"></text></g>`; }).join("");
+}
+
+function gini(vs) { const x = vs.filter(v => v >= 0).sort((a, b) => a - b), n = x.length, s = x.reduce((a, b) => a + b, 0); if (!n || !s) return 0;
+  return x.reduce((acc, v, i) => acc + (2 * (i + 1) - n - 1) * v, 0) / (n * s); }
+function chart(label, series, r, fmtv) {
+  const pts = series.map((v, k) => [k, v]).filter(p => p[1] != null);
+  if (pts.length < 2) return "";
+  const W = 280, Hh = 40, lo = Math.min(...pts.map(p => p[1])), hi = Math.max(...pts.map(p => p[1])), span = hi - lo || 1, n = Math.max(1, series.length - 1);
+  const X = k => 3 + (W - 6) * k / n, Y = v => Hh - 4 - (Hh - 8) * (v - lo) / span;
+  const cv = series[Math.min(r, series.length - 1)];
+  return `<div class="minichart"><div class="lab"><span>${esc(label)}</span><span>${cv != null ? fmtv(cv) : ""}</span></div><svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none"><polyline points="${pts.map(([k, v]) => `${X(k).toFixed(1)},${Y(v).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/><line x1="${X(r)}" x2="${X(r)}" y1="0" y2="${Hh}" stroke="var(--text)" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/></svg></div>`;
+}
+
+function setIdx(n, animate) {
+  const prev = sIdx; sIdx = Math.max(0, Math.min(S.events.length - 1, n));
+  $("#scrub").value = sIdx;
+  renderSociety();
+  if (animate && sIdx > prev && sIdx - prev <= 80) for (let i = prev + 1; i <= sIdx; i++) fx(S.events[i], i);
+  if (!animate || sIdx < prev) lastToastI = sIdx;
+}
+
+function renderSociety() {
+  const idx = sIdx, r = S.roundAt[idx] ?? 0;
+  const snap = r > 0 ? S.snapBy.get(r - 1) : null;
+  const values = snap ? snap.values || {} : (S.truth.start_values || {});
+  const decisive = new Set((snap && snap.decisive_set) || []);
+  const vals = S.agents.map(a => values[a.id] ?? 0), max = Math.max(1e-9, ...vals);
+  $("#rl").textContent = `Round ${r + 1} of ${S.rounds}`;
+  // agents
+  for (const a of S.agents) {
+    const g = $(`#node-${a.n}`); if (!g) continue;
+    const arrived = !S.arrives.has(a.id) || S.arrives.get(a.id) <= idx;
+    const isArrival = (S.truth.arrived_agents || []).some(x => x.id === a.id);
+    const present = !isArrival || arrived || S.events.slice(0, idx + 1).some(e => e.agent === a.id);
+    const gone = S.departs.has(a.id) && S.departs.get(a.id) <= idx;
+    const v = values[a.id];
+    const s = a.cls === "observer" ? 0.8 : 0.75 + 0.85 * Math.sqrt(Math.max(0, v ?? 0) / max);
+    let [x, y] = socPos[a.id];
+    if (gone) { x = CX + (x - CX) * 1.18; y = CY + (y - CY) * 1.18; }
+    g.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`;
+    g.querySelector(".sc").setAttribute("transform", `scale(${s.toFixed(3)})`);
+    g.style.opacity = present ? "" : "0";
+    g.classList.toggle("gone", gone);
+    g.querySelector(".mu").setAttribute("href", `#m${a.n}-${moodAt(a.id, r, idx)}`);
+    g.querySelector(".crown").innerHTML = decisive.has(a.id) ? `<path d="M-10 -31 L-8 -42 L-3.5 -35.5 L0 -44 L3.5 -35.5 L8 -42 L10 -31 Z" fill="#E8B931" stroke="#a57a12" stroke-width="1"/>` : "";
+    g.querySelector(".nm").setAttribute("y", (34 * s + 4).toFixed(1));
+    const wv = g.querySelector(".wv"); wv.setAttribute("y", (34 * s + 17).toFixed(1));
+    wv.textContent = a.cls === "observer" ? "watching" : v != null ? fmt(v) : "";
+  }
+  // DMs this round so far: lines between pairs, thicker with more messages
+  const pairs = new Map();
+  const r0 = S.roundStart[r] ?? 0;
+  for (const m of S.dms) { if (m.i > idx) break; if (m.i < r0) continue;
+    if (!socPos[m.from] || !socPos[m.to]) continue;
+    const k = [m.from, m.to].sort().join("|"); const p = pairs.get(k) || { n: 0, last: 0, from: m.from, odd: false }; p.n++; p.last = m.i; if (m.forged || m.shownAs || m.shownTo) p.odd = true; pairs.set(k, p); }
+  $("#g-edges").innerHTML = [...pairs.entries()].map(([k, p]) => { const [a, b] = k.split("|"), [x1, y1] = socPos[a], [x2, y2] = socPos[b];
+    const mx = (x1 + x2) / 2 + (CX - (x1 + x2) / 2) * 0.25, my = (y1 + y2) / 2 + (CY - (y1 + y2) / 2) * 0.25;
+    const fresh = idx - p.last < 12;
+    return `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} Q${mx.toFixed(1)} ${my.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${col(S.A.get(p.from), "solid")}" stroke-width="${Math.min(9, 1 + p.n * 1.1).toFixed(1)}" stroke-linecap="round" opacity="${fresh ? .75 : .32}"${p.odd ? ' stroke-dasharray="5 6"' : ""}><title>${esc(a)} ↔ ${esc(b)}: ${p.n} message${p.n > 1 ? "s" : ""} this round</title></path>`; }).join("");
+  // camps
+  for (const c of S.inst.camps || []) {
+    const g = document.getElementById("camp-" + c.id); if (!g) continue;
+    const f = snap && snap.stocks ? snap.stocks[c.id] : (c.S != null && c.K ? c.S / c.K : null);
+    const lvl = g.querySelector(".lvl"), pct = g.querySelector(".pct");
+    if (f != null) { const hgt = 44 * Math.max(0, Math.min(1, f)); lvl.setAttribute("y", (22 - hgt).toFixed(1)); lvl.setAttribute("height", hgt.toFixed(1)); pct.textContent = Math.round(100 * f) + "%"; }
+  }
+  // the plaza: regime, round, laws count
+  const regime = snap ? REGIME(snap) : (S.score.summary || {}).regime_start || "";
+  const { active } = lawsInForce(idx);
+  $("#g-plaza").innerHTML = `<circle cx="${CX}" cy="${CY}" r="92" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+    <text x="${CX}" y="${CY - 30}" text-anchor="middle" font-size="34">${REGIME_ICON[regime] || "🏛️"}</text>
+    <text x="${CX}" y="${CY + 4}" text-anchor="middle" style="font:500 22px var(--serif)">${esc(regime || "the square")}</text>
+    <text x="${CX}" y="${CY + 26}" text-anchor="middle" style="font:500 12px var(--sans);fill:var(--muted)">round ${r + 1} · ${active.size} law${active.size === 1 ? "" : "s"} in force</text>
+    ${snap ? `<text x="${CX}" y="${CY + 44}" text-anchor="middle" style="font:500 12px var(--sans);fill:var(--muted)">franchise ${Math.round(100 * (snap.franchise_share || 0))}% · ${decisive.size} decide</text>` : ""}`;
+  // speech bubbles: each agent's latest public post among the last few moments
+  const bub = new Map();
+  for (const p of S.posts) { if (p.i > idx) break; if (idx - p.i <= 30 && p.who && socPos[p.who]) bub.set(p.who, p); }
+  $("#g-bubbles").innerHTML = [...bub.values()].map(p => { const [x, y] = socPos[p.who]; const t = clip(p.text, 46); const w = Math.min(280, 14 + t.length * 6.1);
+    const above = y < CY ? 1 : -1, by = above > 0 ? y + 52 : y - 70;
+    const bx = Math.max(6, Math.min(SW - w - 6, x - w / 2));
+    return `<g class="bubble" opacity="${Math.max(.6, 1 - (idx - p.i) / 60).toFixed(2)}"><rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${w.toFixed(1)}" height="24" rx="12"/><text x="${(bx + 10).toFixed(1)}" y="${(by + 16).toFixed(1)}">${p.anon ? "🎭 " : ""}${esc(t)}</text></g>`; }).join("");
+  renderSocSide(idx, r, snap, active);
+}
+
+function tickerItems(idx, n) {
+  const out = [];
+  for (let i = idx; i >= 0 && out.length < n; i--) {
+    const e = S.events[i], d = e.data || {}, t = e.type;
+    let h = null;
+    if (t === "enact" && e.agent !== "constitution") h = `📜 ${lawRefRaw(d.law)} <b>${esc(d.title || "")}</b> enacted`;
+    else if (t === "repeal") h = `🗑️ ${lawRefRaw(d.law)} repealed`;
+    else if (t === "vetoed") h = `🛑 Board vetoes ${lawRefRaw(d.law)}`;
+    else if (t === "proposal") h = `📜 ${esc(e.agent)} proposes ${lawRefRaw(d.law)} <b>${esc(d.title || "")}</b>`;
+    else if (t === "ballot_close") h = `🗳️ ${esc(d.ballot)} → <b>${esc(d.result)}</b>`;
+    else if (t === "world_event") h = `🌍 ${txt(clip(d.text, 120))}`;
+    else if (t === "raid") h = `🏴 <b>Raid</b> on ${esc(d.camp)}`;
+    else if (t === "departure") h = `👋 ${esc(d.agent || e.agent)} leaves for good`;
+    else if (t === "story") h = `📰 <b>${esc(d.headline || "")}</b>`;
+    else if (t === "tribute_demand") h = `🪙 Tribute demanded: ${fmt((d.demand || {}).value)}`;
+    else if (t === "project_open") h = `🏗️ ${esc(clip(d.description || d.kind, 100))}`;
+    else if (t === "patched") h = `🔧 ${esc(e.agent)} patches ${lawRefRaw(d.law)}`;
+    else if (t === "rights" && e.vis === "public") h = `🔑 ${esc(d.agent)} ${d.change === "grant" ? "gains" : "loses"} <b>${esc(d.right)}</b>`;
+    else if (t === "bank_run") h = `🏃 Bank run on ${esc(d.currency)}`;
+    if (h) out.push({ i, h, r: S.roundAt[i] });
+  }
+  return out;
+}
+let lastSideSig = "";
+function renderSocSide(idx, r, snap, active) {
+  const tk = tickerItems(idx, 14);
+  const sig = `${r}|${tk.length ? tk[0].i : -1}|${active.size}|${dark()}`;
+  if (sig === lastSideSig) return;
+  lastSideSig = sig;
+  const series = (f) => { const out = []; for (let k = 0; k <= S.lastRound; k++) { const s = S.snapBy.get(k); out.push(s ? f(s) : null); } return out; };
+  const g = series(s => gini(Object.entries(s.values || {}).filter(([id]) => S.A.has(id) && S.A.get(id).cls !== "observer").map(([, v]) => v)));
+  const tot = series(s => Object.entries(s.values || {}).filter(([id]) => S.A.has(id)).reduce((a, [, v]) => a + v, 0));
+  const stock = series(s => { const v = Object.values(s.stocks || {}); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; });
+  const wel = series(s => s.welfare ?? null);
+  const rr = Math.max(0, r - 1);
+  $("#sside").innerHTML = `<div class="panel">
+    <h4>Laws in force</h4><div class="lawchips">${[...active.values()].map(l => `<span class="lawchip" data-law="${esc(l.law)}">${esc(l.law)} · ${esc(l.title || (S.laws.get(l.law) || {}).title || "")}</span>`).join("") || `<span class="empty">No laws yet</span>`}</div>
+    <h4>Happenings</h4><div class="ticker">${tk.map((x, k) => `<div class="tk${k ? " old" : ""}"><span class="r">round ${x.r + 1}</span><br>${x.h}</div>`).join("") || `<div class="empty">Nothing yet.</div>`}</div>
+    <h4>Over time</h4>
+    ${chart("Total wealth", tot, rr, fmt)}${chart("Inequality (Gini)", g, rr, v => v.toFixed(2))}${chart("Average camp stock", stock, rr, v => Math.round(100 * v) + "%")}${chart("Welfare", wel, rr, fmt)}
+    <div class="empty" style="margin-top:10px">Mascots grow with wealth and smile or sweat as it rises or falls. 👑 = in the decisive set. Lines are this round's private messages (dashed: forged). Bubbles are public posts.</div>
+  </div>`;
+}
+
+// animations for one moment of the run
+function fly(fromXY, toXY, html, dur = 900) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.innerHTML = html; $("#g-fx").appendChild(g);
+  const anim = g.animate([{ transform: `translate(${fromXY[0]}px,${fromXY[1]}px)`, opacity: 0 }, { opacity: 1, offset: .15 },
+    { transform: `translate(${toXY[0]}px,${toXY[1]}px)`, opacity: 1, offset: .9 }, { transform: `translate(${toXY[0]}px,${toXY[1]}px)`, opacity: 0 }], { duration: dur / Math.sqrt(speed), easing: "ease-in-out" });
+  anim.onfinish = () => g.remove();
+}
+function popAt(xy, html, dur = 1100) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.innerHTML = html; $("#g-fx").appendChild(g);
+  const anim = g.animate([{ transform: `translate(${xy[0]}px,${xy[1]}px) scale(.3)`, opacity: 0 }, { transform: `translate(${xy[0]}px,${xy[1] - 30}px) scale(1.1)`, opacity: 1, offset: .3 },
+    { transform: `translate(${xy[0]}px,${xy[1] - 46}px) scale(1)`, opacity: 0 }], { duration: dur / Math.sqrt(speed), easing: "ease-out" });
+  anim.onfinish = () => g.remove();
+}
+function toast(html) {
+  const box = $("#toasts"), el = document.createElement("div"); el.className = "toast"; el.innerHTML = html; box.appendChild(el);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => el.remove(), 3300);
+}
+function fx(e, i) {
+  if (!e) return;
+  const d = e.data || {}, P = socPos;
+  const emoji = (s, size = 18) => `<text text-anchor="middle" dominant-baseline="central" font-size="${size}">${s}</text>`;
+  switch (e.type) {
+    case "dm": if (P[e.agent] && P[d.to]) fly(P[e.agent], P[d.to], emoji(d.encrypted ? "🔒" : "✉️", 16), 950); break;
+    case "transfer": if (P[e.agent] && P[d.to]) fly(P[e.agent], P[d.to], `<circle r="7" fill="${resCol(d.item)}" stroke="var(--bg)" stroke-width="2"/><text y="-11" text-anchor="middle" style="font:600 11px var(--sans);fill:var(--text)">${esc(fmt(d.qty))} ${esc(d.item)}</text>`, 1200); break;
+    case "harvest": if (campPos[d.camp] && P[e.agent] && d.yield > 0) { const res = ((S.inst.camps || []).find(c => c.id === d.camp) || {}).resource;
+      fly(campPos[d.camp], P[e.agent], `<circle r="5" fill="${resCol(res)}"/>`, 900); } break;
+    case "vote": if (P[e.agent]) popAt(P[e.agent], emoji(d.choice === "yes" ? "👍" : d.choice === "no" ? "👎" : "🤷", 20)); break;
+    case "post": case "anon_post": if (P[e.agent]) popAt(P[e.agent], emoji("💬", 18), 800); break;
+    case "proposal": if (P[e.agent]) popAt(P[e.agent], emoji("📜", 22), 1300); break;
+    case "enact": if (e.agent !== "constitution") { toast(`📜 ${esc(d.law)} · ${esc(d.title || "")} is now law`);
+      for (let k = 0; k < 10; k++) popAt([CX + (Math.random() - .5) * 160, CY - 60 + (Math.random() - .5) * 60], emoji(["🎉", "✨", "📜"][k % 3], 18), 1400); } break;
+    case "repeal": toast(`🗑️ ${esc(d.law)} repealed`); break;
+    case "vetoed": toast(`🛑 The Board vetoes ${esc(d.law)}`); break;
+    case "raid": { toast(`🏴 Raid on ${esc(d.camp)}!`); const g = document.getElementById("camp-" + d.camp); if (g) { g.classList.remove("raid"); void g.getBBox(); g.classList.add("raid"); } break; }
+    case "departure": toast(`👋 ${esc(d.agent || e.agent)} leaves the world`); break;
+    case "world_event": toast(`🌍 ${esc(clip(d.text, 80))}`); break;
+    case "round_start": toast(`Round ${(d.round ?? e.round) + 1}`); break;
+    case "ballot_close": toast(`🗳️ ${esc(d.ballot)}: ${esc(d.result)}`); break;
+    case "bank_run": toast(`🏃 Bank run on ${esc(d.currency)}`); break;
+    case "tribute_demand": toast(`🪙 The outside power demands tribute`); break;
+  }
+}
+
+// ======================================================================= theme
 (() => { try { const t = localStorage.getItem("charter-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {} })();
 $("#theme").onclick = () => {
   const next = dark() ? "light" : "dark"; document.documentElement.dataset.theme = next;
   try { localStorage.setItem("charter-theme", next); } catch (e) {}
-  if (S) { renderFeed(); tick(true); }
+  if (!S) return;
+  buildSprite();
+  const anchor = cur; renderFeed();
+  if (view === "society") { lastSideSig = ""; renderSociety(); } else { scrollToIdx(anchor); tick(true); }
 };
 
 // ======================================================================= loading a run folder (when nothing is embedded)
 function parseFiles(files) {
   const get = name => files.find(f => f.name === name);
-  const need = ["instance.json", "events.jsonl"];
-  for (const n of need) if (!get(n)) return Promise.reject(new Error(`missing ${n}`));
-  const txt = n => get(n) ? get(n).text() : Promise.resolve(null);
-  return Promise.all(["instance.json", "events.jsonl", "snapshots.json", "ground_truth.json"].map(txt)).then(([i, e, s, g]) => ({
-    instance: JSON.parse(i), events: e.split("\n").filter(Boolean).map(l => JSON.parse(l)),
-    snapshots: s ? JSON.parse(s) : [], truth: g ? JSON.parse(g) : {}, name: (files[0].webkitRelativePath || "").split("/")[0] || "run" }));
+  for (const n of ["instance.json", "events.jsonl"]) if (!get(n)) return Promise.reject(new Error(`missing ${n}`));
+  const txtf = n => get(n) ? get(n).text() : Promise.resolve(null);
+  const jl = s => (s || "").split("\n").filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
+  return Promise.all(["instance.json", "events.jsonl", "snapshots.json", "ground_truth.json", "score.json", "reasoning.jsonl"].map(txtf)).then(([i, e, s, g, sc, rs]) => ({
+    instance: JSON.parse(i), events: jl(e), snapshots: s ? JSON.parse(s) : [], truth: g ? JSON.parse(g) : {}, score: sc ? JSON.parse(sc) : {},
+    reasoning: jl(rs).map(r => { delete r.prompt; return r; }),
+    name: (files[0].webkitRelativePath || "").split("/")[0] || "run" }));
 }
 function loader() {
   $("#app").innerHTML = `<div class="loader"><h1>Read a Charter run as a story</h1>
-    <p>Open a run folder from <code>charter/out/</code> (it needs <code>instance.json</code> and <code>events.jsonl</code>; <code>snapshots.json</code> and <code>ground_truth.json</code> add the world panel), or build a shareable page with <code>python -m charter view RUN_DIR</code>.</p>
+    <p>Open a run folder from <code>charter/out/</code> (it needs <code>instance.json</code> and <code>events.jsonl</code>; <code>snapshots.json</code>, <code>ground_truth.json</code>, <code>score.json</code> and <code>reasoning.jsonl</code> add the world, the ending and each agent's diary), or build a shareable page with <code>python -m charter view RUN_DIR</code>.</p>
     <div class="drop" id="drop">Drop the run folder's files here<br><label class="btn">Choose run folder<input type="file" id="pick" webkitdirectory multiple hidden></label></div>
     <p id="err" style="color:var(--warn)"></p></div>`;
   const go = files => parseFiles([...files]).then(mount).catch(e => { $("#err").textContent = e.message; });
@@ -541,7 +1513,7 @@ function loader() {
 }
 
 const embedded = readEmbedded();
-embedded ? mount(embedded) : loader();
+if (embedded) { mount(embedded); if (location.hash === "#society") setView("society"); } else loader();
 </script>
 </body>
 </html>

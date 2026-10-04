@@ -280,6 +280,13 @@ def generate(spec: dict, seed: int) -> dict:
                 if doc.startswith("rare/") and rng.random() < rare_p:
                     held[a["id"]].append(doc)
             a["archive_docs"] = sorted(held[a["id"]])
+        # required documents (game-critical knowledge kept from everyone else): at least one Scientist holds each (own RNG stream)
+        req_rng = random.Random(f"{seed}|archive_required")
+        alldocs = _archive.docs(None)
+        for doc in split.get("required", ["math/camp-mechanics"]) or []:
+            if doc in alldocs and not any(doc in a["archive_docs"] for a in scis):
+                a = req_rng.choice(scis)
+                a["archive_docs"] = sorted(a["archive_docs"] + [doc])
         MD.archive_split(sp, seed, scis)                               # media2: gated documents (Media laws, rare record), own stream
 
     # library visible in this instance

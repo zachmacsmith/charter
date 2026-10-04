@@ -75,14 +75,9 @@ class WeakLink(CampType):
     # ------------------------------------------------------------------ text
     def describe(self, inst=None) -> str:
         c, n = self.camp, self.p["shifts"]
-        u = B.v0q(c, type(self))
         return (f"A work site run in {n} shifts each round. Join one shift per round with x = [effort 0..{c['max']}] and \"shift\": "
-                f"1..{n} (default 1); entries are sealed until the end of the round. A shift's crew produces at the level of its LOWEST "
-                f"effort: each worker in it earns {PER_LEVEL * u:.3g} {c['resource']} per level, plus {SPARE * u:.3g} for each point of "
-                f"effort they held back. A shift with fewer than {MIN_CREW} workers produces nothing but the held-back part. Some "
-                f"workers' tools are faulty without their knowing it: a faulty worker's effort counts as zero for the crew, whatever "
-                f"they enter. Which workers are faulty changes from time to time. After each round, each shift's head count and total "
-                f"pay are published, but not who worked it.")
+                f"1..{n} (default 1); entries are sealed until the end of the round, when you are paid. Each shift's head count and total "
+                "pay are published, but not who worked it.")
 
     def state_line(self, k, aid) -> str:
         hist = B.peek(self.camp, PLAY)["history"]

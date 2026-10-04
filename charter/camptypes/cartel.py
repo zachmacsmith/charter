@@ -95,11 +95,9 @@ class Cartel(CampType):
 
     def describe(self, inst):
         c = self.camp
-        return (f"Each right holder chooses how much to extract each round: x = [q], q from 0 to {c['max']} (one choice per round). "
-                f"Choices are sealed until the end of the round. Then everything extracted sells at one price, the same for everyone, "
-                f"which falls as the total extracted by all holders rises, and also depends on a hidden demand level that shifts from "
-                f"round to round. Each extractor receives q x price in {c['resource']} (times stock/capacity). Only the total extracted "
-                f"and the price are published; individual amounts are not.")
+        return (f"Each round each right holder chooses an amount to extract: x = [q], q from 0 to {c['max']} (one choice per round, sealed "
+                f"until the end of the round). Payment, in {c['resource']}, comes at the end of the round. The total extracted and the "
+                "price are published; individual amounts are not.")
 
     def state_line(self, k, aid):
         pub = self.camp.get("published") or []

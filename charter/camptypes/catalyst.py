@@ -88,14 +88,9 @@ class Catalyst(CampType):
     # ------------------------------------------------------------------ text
     def describe(self, inst=None) -> str:
         c = self.camp
-        u = B.v0q(c, type(self))
-        return (f"A reactor with {c['dials']} dials (x, each 0..{c['max']}). Output rises smoothly as the dials approach a hidden best "
-                f"setting. The reactor also needs this round's catalyst number: the smallest whole number n >= 0 such that the SHA-256 "
-                f"hash (hex digest) of the text '<batch code>:<n>' starts with {'0' * self.p['difficulty']}. The batch code is shown "
-                f"each round. Harvest with x and \"catalyst\": n. Without the right catalyst a harvest yields only {NO_CATALYST:.0%} of "
-                f"its output. Optionally add \"credit\": \"Name\": when the catalyst is right, {CREDIT_SHARE:.0%} of that harvest goes "
-                f"to the named agent at the end of the round. At its best setting a catalysed harvest yields about {PEAK * u:.3g} "
-                f"{c['resource']}.")
+        return (f"A reactor with {c['dials']} dials (x, each 0..{c['max']}). Each round has a batch code (shown in your state); a harvest "
+                "may also give a \"catalyst\" number, and the right number for the batch makes a large difference. Optionally add "
+                "\"credit\": \"Name\" to share a harvest's output with a partner. You receive your yield at once.")
 
     def state_line(self, k, aid) -> str:
         return f"this round's batch code is '{self.code(k.r)}'"

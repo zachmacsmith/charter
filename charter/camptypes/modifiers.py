@@ -209,14 +209,8 @@ def describe(camp, inst=None) -> list:
     out = []
     if "conditions" in m:
         out.append(f"each round a public conditions vector of {m['conditions']['dims']} numbers (0..{m['conditions']['levels'] - 1}) "
-                   "is published, and the best setting depends on it through a hidden rule")
-    if "drift" in m:
-        lo, hi = m["drift"]["every"]
-        out.append(f"the hidden rule changes without notice every {lo}-{hi} rounds")
-    if "crowding" in m:
-        out.append(f"a setting yields less the more it has been used here in the last {m['crowding']['window']} rounds (by anyone)")
-    if "history" in m:
-        out.append("yield also depends on the inputs of recent harvests here, by anyone")
+                   "is published")
+    # drift, crowding and history coupling are how the camp behaves: agents find them out (camp mechanics are in the archive)
     if "survey" in m:
         fee = ", ".join(f"{q:g} {i}" for i, q in m["survey"]["fee"].items())
         out.append(f"you can survey a setting without harvesting (action survey; costs an action and {fee})")

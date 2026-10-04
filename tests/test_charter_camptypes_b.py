@@ -78,7 +78,7 @@ def test_describe_never_names_the_game(name):
     for word in ("prisoner", "dilemma", "stag", "weak link", "weakest", "minimum effort", "beauty contest", "keynes",
                  "regression", "least squares", "public good", "group test", "proof of work", "nash", "cooperate", "defect"):
         assert word not in d, (name, word)
-    assert c["resource"] in d
+    assert "hidden" not in d or name == "landscape"                                  # interface only: no mechanics
 
 
 def test_standard_set_draws_the_new_types_and_rules_hold():

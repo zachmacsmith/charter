@@ -40,12 +40,9 @@ class Guess(CampType):
 
     def describe(self, inst=None) -> str:
         c = self.camp
-        u = B.v0q(c, type(self))
         return (f"A guessing booth open to everyone (no harvest right needed; the Board and the Fixer cannot take part). Once per round, "
-                f"harvest with x = [a whole number 0..{c['max']}]; entries are sealed. At the end of the round the target is "
-                f"{self.p['fraction']:g} times the average of all entries, and the entry closest to it takes the pot of "
-                f"{POT_PER_ENTRY * u:.3g} {c['resource']} per entrant (ties split). With fewer than {MIN_ENTRANTS} entrants there is no "
-                f"contest and each entrant gets {SMALL * u:.3g}. The average, target and winners are published.")
+                f"harvest with x = [a whole number 0..{c['max']}]; entries are sealed until the end of the round. The average, the "
+                "target and the winners are published.")
 
     def state_line(self, k, aid) -> str:
         hist = B.peek(self.camp, PLAY)["history"]

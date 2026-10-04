@@ -78,12 +78,9 @@ class Minority(CampType):
         return [rng.randint(0, 1)]
 
     def describe(self, inst):
-        c = self.camp
-        res = c["resource"]
-        return (f"Open to every agent (no harvest right needed; the Board and the Fixer cannot take part). Each round you may choose "
-                f"x = [0] or x = [1] (one choice per round). Choices are sealed until the end of the round. Then the agents on the side "
-                f"chosen by FEWER agents share the round's pool of {res} equally; the other side gets nothing. On a tie, or if fewer "
-                f"than {self.p['min_players']} agents take part, nobody is paid. Only the number on each side is published.")
+        return ("Open to every agent (no harvest right needed; the Board and the Fixer cannot take part). Each round you may choose "
+                "x = [0] or x = [1] (one choice per round, sealed until the end of the round). Payment comes at the end of the round. "
+                "The number of agents on each side is published.")
 
     def state_line(self, k, aid):
         last = self.camp.get("last")

@@ -589,6 +589,8 @@ def allowed_actions(inst, a, rights) -> list:
         absent |= {"survey", "invest"}
     if not _CT.LS.enabled_spec(sp):
         absent |= {"lease", "accept_lease"}
+    if "maker" not in rights:                                            # Maker tools only for the Maker
+        absent |= {"create_agent", "copy_agent"}
     if not (sp.get("outside_power") or {}).get("enabled"):
         absent |= {"pay_tribute"}
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
@@ -628,17 +630,17 @@ def _class_line(inst, a) -> str:
     return AG.class_brief(inst, a)
 
 
-CAMP_SHORT = {
-    "tutorial": "a few dials, a steady and simple rule",
-    "landscape": "8 dials; the best setting follows a hidden rule that shifts with public conditions (modelling pays)",
-    "cartel": "the price falls as total extraction rises; demand is hidden (quotas pay if kept)",
-    "consortium": "noisy readings of a hidden vector; submitting the vector wins a shared pool (pool your data)",
-    "weak_link": "crews in shifts produce at their lowest effort; some workers are secretly faulty",
-    "catalyst": "needs a per-round number that only code can compute (pair a harvester with a sandbox)",
-    "minority": "open to all; pick a side, and the less crowded side is paid",
-    "partners": "open to all; pick a partner, share or take",
-    "guess": "guess a fraction of the average guess",
-    "vault": "a one-time bounty for factoring a number",
+CAMP_SHORT = {                                                          # the interface only: how a camp works is for agents to find out
+    "tutorial": "dials; paid at once",
+    "landscape": "8 dials; public conditions each round",
+    "cartel": "choose an amount; sealed; total and price published",
+    "consortium": "readings, and sealed claims on a pool",
+    "weak_link": "shifts with sealed effort entries",
+    "catalyst": "dials plus a per-round catalyst number",
+    "minority": "open to all; choose 0 or 1, sealed",
+    "partners": "open to all; choose a partner and a move, sealed",
+    "guess": "open to all; guess a number, sealed",
+    "vault": "a one-time reward for a factor of a number",
 }
 
 

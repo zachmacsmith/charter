@@ -63,18 +63,9 @@ class Consortium(CampType):
     # ------------------------------------------------------------------ text
     def describe(self, inst=None) -> str:
         c, n, mx = self.camp, self.camp["dials"], self.camp["max"]
-        pool = B.qty(c, type(self), POOL_START)
-        rule = {"by_readings": f"{SUBMIT_SHARE:.0%} goes to whoever submitted the correct weights, and the rest is shared in proportion "
-                               f"to how many readings each participant took this season",
-                "equal": f"{SUBMIT_SHARE:.0%} goes to whoever submitted the correct weights, and the rest is shared equally among "
-                         f"everyone who took at least one reading this season",
-                "winner": "whoever submitted the correct weights takes the whole pool (shared if several did in the same round)"}[self.p["split"]]
-        return (f"A measurement station with {n} settings (x, each 0..{mx}) and {n} hidden whole-number weights (each 0..{mx}). A reading "
-                f"(harvest with x) returns the sum of each setting times its weight, plus random noise (standard deviation about "
-                f"{self.p['noise_sigma']:g}); readings are private and pay nothing. To claim the pool, harvest with x = the weights and "
-                f"\"submit\": true; claims are sealed until the end of the round. If a claim is exactly right, the pool is paid out and "
-                f"new weights are drawn. The pool starts at {pool:.3g} {c['resource']} and shrinks to {POOL_DECAY:.0%} of itself at the "
-                f"end of each round it is not won. How it is split: {rule}. Readings at the same settings repeat the same information.")
+        return (f"A measurement station with {n} settings (x, each 0..{mx}). Harvesting with x returns a private reading. Harvesting with "
+                "x and \"submit\": true makes a sealed claim on the station's pool, judged at the end of the round. The pool's size and "
+                "any payout are published.")
 
     def state_line(self, k, aid) -> str:
         p = B.peek(self.camp, PLAY)

@@ -57,9 +57,8 @@ class Landscape(CampType):
 
     def describe(self, inst):
         c = self.camp
-        return (f"x is a list of {c['dials']} dials, each 0..{c['max']}. The yield follows a hidden rule in which dials interact (how good "
-                "one dial's value is can depend on other dials), times stock/capacity, plus noise. The best setting is not fixed: it "
-                "depends on public conditions, so what worked last round, or for someone else, may not work now.")
+        return (f"Harvest with x, a list of {c['dials']} dials, each 0..{c['max']}. A set of public conditions is published each round "
+                "(shown in your state).")
 
     def state_line(self, k, aid):
         cond = self.camp.get("conditions")

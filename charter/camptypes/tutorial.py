@@ -30,8 +30,7 @@ class Tutorial(CampType):
 
     def describe(self, inst):
         c = self.camp
-        return (f"x is a list of {c['dials']} dials, each 0..{c['max']}. The yield is a simple, steady function of a few of the dials "
-                "(each dial that matters either always helps or always hurts), times stock/capacity, plus a little noise.")
+        return (f"Harvest with x, a list of {c['dials']} dials, each 0..{c['max']}. You receive your yield at once.")
 
     def truth(self):
         return {"type": self.name, "fn": self.p, "best_input": self.best_input(None)}

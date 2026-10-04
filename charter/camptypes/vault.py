@@ -48,9 +48,8 @@ class Vault(CampType):
 
     def describe(self, inst=None) -> str:
         c = self.camp
-        return (f"A vault holding a one-time reward of {B.qty(c, type(self), BOUNTY):.3g} {c['resource']}. It opens for the first harvest "
-                f"that gives a whole-number factor of N = {self.p['N']} (other than 1 and N): harvest with \"factor\": the number (no "
-                f"x). The reward is paid at once to whoever harvests first, and the vault is then empty for good.")
+        return (f"A vault holding a one-time reward of {B.qty(c, type(self), BOUNTY):.3g} {c['resource']}. Harvest with \"factor\": a "
+                f"number (no x). N = {self.p['N']}. The reward goes to the first correct harvest; then the vault is empty for good.")
 
     def state_line(self, k, aid) -> str:
         p = B.peek(self.camp, PLAY)
