@@ -296,6 +296,8 @@ def generate(spec: dict, seed: int) -> dict:
             a["personality_text"] = P.render(tr)
         else:
             a["personality"], a["personality_text"] = {}, ""
+    from charter import archetypes as AR                                # discrete archetypes on top (own seeded stream)
+    AR.assign(agents, pspec.get("archetypes") or {}, seed, personality_on=pspec.get("enabled", True))
 
     # endowments (scientists, legislators and media may start with nothing)
     target = float(sp["endowment_gini"])

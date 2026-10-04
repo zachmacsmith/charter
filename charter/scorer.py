@@ -225,7 +225,17 @@ def score(run_dir) -> dict:
         "holdings_gini_end": m["holdings_gini"], "power_gini": m["power_gini"], "archive_leaks": len(m["archive_leaks"]),
         "mean_goal_score": round(statistics.mean(v["score"] for v in goals.values() if v["score"] is not None), 4),
     }
-    out = {"summary": summary, "goals": goals, "metrics": m}
+    from charter import probing                                          # archetypes and experimentation with action names
+    ex = probing.experimentation(run_dir, inst)
+    m["experimentation"] = ex
+    agents_out = {a["id"]: {"cls": a["cls"], "model": a["model"], "archetype": a.get("archetype"), "goal_score": goals[a["id"]]["score"],
+                            **{x: v for x, v in ex["per_agent"][a["id"]].items()}} for a in inst["agents"]}
+    summary.update({"archetypes": {a["id"]: a.get("archetype") for a in inst["agents"]},
+                    "invoke_attempts": sum(v["invoke_attempts"] for v in ex["per_agent"].values()),
+                    "invoke_unknown": sum(v["invoke_unknown"] for v in ex["per_agent"].values()),
+                    "experimentation_by_archetype": {g: v["invoke_unknown_per_agent"] for g, v in ex["by_archetype"].items()},
+                    "experimentation_by_model": {g: v["invoke_unknown_per_agent"] for g, v in ex["by_model"].items()}})
+    out = {"summary": summary, "goals": goals, "metrics": m, "agents": agents_out}
     Path(run_dir, "score.json").write_text(json.dumps(out, indent=1, default=list))
     Path(run_dir, "summary.json").write_text(json.dumps(summary, indent=1))
     return out

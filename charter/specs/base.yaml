@@ -60,6 +60,12 @@ personality:
   traits: [risk, trust, honesty, assertiveness, patience, reciprocity, talkativeness]
   dist: {beta: [2, 2]}
   explicit: {}                    # {A03: {honesty: 0.1}}
+  archetypes:                     # a discrete temperament on top of the traits (charter/archetypes.py); own seeded stream
+    enabled: true                 # also off when personality.enabled is false (E0)
+    prob: 0.5                     # share of agents with an archetype (Board and Fixer included)
+    weights: {secretive: 1, chaotic: 1, zealot: 1, opportunist: 1, loyalist: 1, contrarian: 1, paranoid: 1, gossip: 1}   # unlisted: 0
+    explicit: {}                  # {Ada: zealot, Bram: none}; wins over the draw (also when enabled is false)
+    exclude: {fixer: [chaotic, opportunist]}   # class -> archetypes it never draws (the Fixer's mandate and honesty)
 conditions:
   effect_preview: true
   model_identity_visible: false
@@ -87,3 +93,5 @@ llm:
   thinking_budget: 2000           # native thinking for Haiku (fixed budget). Sonnet/Opus use adaptive thinking (API: summarised text;
                                   # Claude Code: text omitted). Every reply also carries a stated "reasoning" field, for every model.
   memory_chars: 4000              # agents carry a private notes field between turns, capped at this length
+  fail_stop_fraction: 0.5         # abandon the round and stop (resumable) once this share of its model calls failed (DM-step replies
+                                  # included); null: only when every call fails; above 1: never (charter/failstop.py)

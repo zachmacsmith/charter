@@ -9,8 +9,9 @@ Writes to the run directory (checkpointed every round, so a crash keeps everythi
   checkpoint.pkl     full state after the last complete round (kernel, law data and callbacks, agents' notes and feed cursors,
                      log offsets): `run(..., resume=True)` continues from it, trimming anything logged after it
 
-A round in which every agent's model call fails (e.g. a usage limit) is not played: the run stops with RunStopped before the
-round runs, so nothing is lost and resuming later replays that round from the last checkpoint.
+A round in which `llm.fail_stop_fraction` (default half) of the model calls fail (e.g. a usage limit) is abandoned: nothing of it
+is kept (logs cut back to the last checkpoint, see failstop.py), STOPPED.md says why, and the run stops with RunStopped, so resuming
+later replays that round from the last checkpoint. A checkpoint is also written before round 1, so a stop in round 1 resumes too.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from pathlib import Path
 from charter import actions as A
 from charter import agents as AG
 from charter import archive
+from charter import failstop as FS
 from charter import library as LB
 from charter import report
 from charter.kernel import Kernel
@@ -31,7 +33,7 @@ PREDICATES = {**LB.PREDICATES, **{f"outcome:{c}": f for c, f in LB.OUTCOMES.item
 
 
 class RunStopped(Exception):
-    """The run stopped cleanly (every model call in a round failed); resume it once the cause is gone."""
+    """The run stopped cleanly (too many model calls in a round failed); resume it once the cause is gone."""
 
 
 def welfare(k) -> float:
@@ -58,6 +60,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                 f.truncate(size)
         reason_f, ev_f = open(out / "reasoning.jsonl", "a"), open(out / "events.jsonl", "a")
         n_ev = len(k.events)
+        FS.clear(out)
         log(f"  resuming after round {first_round} of {inst['rounds']}")
     else:
         shared_snap = archive.snapshot(k.shared_archive)
@@ -76,13 +79,26 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
     mem = inst["spec"]["llm"].get("memory_chars", 4000)
     t0 = time.time()
 
-    def stop_if_all_failed(r, outs):
-        errs = [o.get("_error") for o in outs]
-        if errs and all(errs):
+    def runner_state():
+        return {"notes": notes, "cursors": cursors, "results": results, "guesses": guesses,
+                "welfare_series": welfare_series, "start_values": start_values, "shared_snap": shared_snap,
+                "const": const, "policy_rng": policy.rng.getstate() if hasattr(policy, "rng") else None}
+
+    if not ckpt_path.exists() or not resume:                           # checkpoint "round 0" (before round 1): a stop in round 1 resumes
+        for e in k.events[n_ev:]:
+            ev_f.write(json.dumps(e, default=list) + "\n")
+        n_ev = len(k.events)
+        (out / "snapshots.json").write_text(json.dumps(k.snapshots, default=list))
+        _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=False)
+        _checkpoint(ckpt_path, -1, k, runner_state(), {"events.jsonl": _size(ev_f), "reasoning.jsonl": _size(reason_f)})
+    fail_frac = FS.fraction(inst["spec"]["llm"])
+
+    def stop_if_failing(r, tally):
+        """Too many failed model calls this round: abandon it (nothing kept) and stop; resuming replays it."""
+        if tally.reached():
             reason_f.close()
             ev_f.close()
-            _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=False)
-            raise RunStopped(f"round {r + 1}: every model call failed ({str(errs[0])[:160]}); resume to replay it from the last checkpoint")
+            raise RunStopped(FS.abandon(out, ckpt_path, r, tally, inst["rounds"], inst["spec"].get("turns", "sequential")))
 
     for r in range(first_round, inst["rounds"]):
         k.start_round()
@@ -93,6 +109,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         mode = inst["spec"].get("turns", "sequential")
         dmc = inst["spec"].get("dm_step") or {}
         dm_step = mode == "simultaneous" and dmc.get("enabled", False) and inst["spec"]["channels"].get("dm", True)
+        tally = FS.Tally(fail_frac, len(order))                         # this round's model calls (decisions and DM replies)
 
         def in_parallel(fn, items):
             if getattr(policy, "parallel_safe", False) and len(items) > 1:
@@ -132,6 +149,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                     asks.append((aid, AG.dm_prompt(k, agents[aid], preps[aid][2], decisions[aid][0], plan[aid], new, k.w["dm_sent"].get(aid, 0), k.dm_limit(aid),
                                                     preps[aid][1], wave + 1, waves, final)))
                 outs = in_parallel(lambda q: policy.act(k, agents[q[0]], sysp[q[0]], q[1], preps[q[0]][1], final), asks)
+                tally.add([o[0] for o in outs], [q[0] for q in asks])
+                stop_if_failing(r, tally)
                 for (aid, prompt), (o, reasoning, usage) in zip(asks, outs):
                     acts = list(o.get("actions") or [])
                     reason_f.write(json.dumps({"round": r, "position": order.index(aid) + 1, "agent": aid, "model": agents[aid]["model"],
@@ -209,20 +228,20 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             # everyone decides from the same start-of-round view (model calls in parallel), then actions run in the round's order
             preps = [prepare(aid) for aid in order]
             decisions = in_parallel(lambda pr: policy.act(k, pr[0], sysp[pr[0]["id"]], pr[2], pr[1], final), preps)
-            stop_if_all_failed(r, [d[0] for d in decisions])
+            tally.add([d[0] for d in decisions], order)
+            stop_if_failing(r, tally)
             pre, last = {aid: [] for aid in order}, {}
             if dm_step:
                 dm_exchange(k, r, order, agents, sysp, dict(zip(order, preps)), dict(zip(order, decisions)), pre, last, final)
             for pos, (aid, pr, dec) in enumerate(zip(order, preps, decisions), 1):
                 execute(pos, aid, pr, dec, pre[aid], last.get(aid))
         else:
-            outs = []
             for pos, aid in enumerate(order, 1):
                 pr = prepare(aid)
                 dec = policy.act(k, pr[0], sysp[aid], pr[2], pr[1], final)
-                outs.append(dec[0])
+                tally.add([dec[0]], [aid])
+                stop_if_failing(r, tally)                               # mid-round: the round is abandoned, nothing kept
                 execute(pos, aid, pr, dec)
-            stop_if_all_failed(r, outs)
         k.end_round(PREDICATES)
         k.snapshots[-1]["welfare"] = welfare(k)
         welfare_series.append(k.snapshots[-1]["welfare"])
@@ -233,10 +252,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         (out / "snapshots.json").write_text(json.dumps(k.snapshots, default=list))
         _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=False)
         reason_f.flush()
-        _checkpoint(ckpt_path, r, k, {"notes": notes, "cursors": cursors, "results": results, "guesses": guesses,
-                                      "welfare_series": welfare_series, "start_values": start_values, "shared_snap": shared_snap,
-                                      "const": const, "policy_rng": policy.rng.getstate() if hasattr(policy, "rng") else None},
-                    {"events.jsonl": _size(ev_f), "reasoning.jsonl": _size(reason_f)})
+        _checkpoint(ckpt_path, r, k, runner_state(), {"events.jsonl": _size(ev_f), "reasoning.jsonl": _size(reason_f)})
         _live(out, f"round {r + 1} of {inst['rounds']} complete", full=True)
         log(f"  round {r + 1}/{inst['rounds']} done ({time.time() - t0:.0f}s): laws {len(k.active_laws())}, "
             f"currencies {list(k.w['currencies'])}, decisive set {len(k.snapshots[-1]['decisive_set'])}")

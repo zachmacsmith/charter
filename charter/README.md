@@ -35,8 +35,11 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   feed cursors, and the log offsets. Resuming (same command, or `python -m charter resume <dir>`) trims anything logged after the last
   complete round and continues from there; a resumed run is identical to one that never stopped (tested with the scripted bots).
   Resuming refuses if the world the current code and spec would generate differs from `instance.json`.
-- If **every** agent's model call in a round fails (e.g. a usage limit), the round is not played: the run stops with exit code 2, so
-  nothing runs without agents. Run the same command again later to continue. Runs from before checkpoints existed cannot be resumed.
+- If **half** the model calls in a round fail (`llm.fail_stop_fraction`, default 0.5, DM-step replies included; e.g. a usage limit,
+  auth or CLI errors), the round is abandoned, also mid-round in sequential mode: the logs are cut back to the last checkpoint (a
+  checkpoint is also written before round 1), `STOPPED.md` gives the round, the counts and sample errors, and the run stops with exit
+  code 2. Run the same command again (or `resume`) later to replay that round. Writes to the shared archive in the abandoned round
+  are not undone. Runs from before checkpoints existed cannot be resumed.
 
 ## What a run produces (`charter/out/<spec>/<run>/`, git-ignored)
 - `messages.md`: every post, DM (encrypted ones marked), channel post, Media item, gazette entry and notice, untruncated, in order; anonymous
@@ -116,6 +119,14 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   `phase: dm_reply_N` and shown in the transcripts.
 - **Convertible currency**: `set_convertible(currency)` turns on kernel deposit/redeem at price P, so a backed currency is possible at L2.
 - **Static class** also counts `on_harvest`/`on_transfer` that return a deduction, a tax or False as structural (they move holdings).
+- **Personality archetypes** (`personality.archetypes`, `archetypes.py`): half the agents (`prob`) also get a discrete temperament
+  (Secretive, Chaotic, Zealot, Opportunist, Loyalist, Contrarian, Paranoid, Gossip; `weights`, `explicit`), shown first in their
+  temperament line, from its own seeded stream so the rest of the world is unchanged. Board and Fixer can have one (a Zealot pursues
+  its fixed objective); the Fixer never draws Chaotic or Opportunist (`exclude`). Off when `personality.enabled` is false. Recorded in
+  `instance.json`, `spec_outline.md` and per agent in `score.json` (`agents`) and `summary.json` (`archetypes`).
+- **Experimentation metrics** (`probing.py`, in `score.json -> metrics.experimentation` and `agents`): per agent, invoke attempts, attempts
+  with names nothing defined ("no such action": they still use the action), the distinct unknown names, and top-level unknown actions;
+  aggregated by archetype and by model. Computed from `reasoning.jsonl`, so older runs score too.
 
 ## Known gaps and choices (read before experiments)
 - **Speed.** Sequential turns (the spec's design) take roughly 10-20 s per Claude Code call: E0 ~10 min, E3 ~1.5 h, E6 ~10 h. `--fast`

@@ -14,8 +14,9 @@ Model calls go through LLM_BACKEND in agnet/.env: api (default) or claude_code (
 scripted bots instead of models.
 
 Run directories are stable: <spec>_seed<N>[_dry]_<hash of the resolved spec>. Running the same command again skips a run that is
-complete and resumes one that is not (from checkpoint.pkl, written after every round). A run stops by itself if every model call
-in a round fails (e.g. a usage limit), so nothing is played without agents; run the same command again (or `resume`) later.
+complete and resumes one that is not (from checkpoint.pkl, written after every round). A run stops by itself if half the model calls
+in a round fail (llm.fail_stop_fraction; e.g. a usage limit): that round is dropped and STOPPED.md says why; run the same command
+again (or `resume`) later.
 --fresh starts a separate run in a new timestamped directory instead (e.g. to repeat a seed).
 """
 from __future__ import annotations

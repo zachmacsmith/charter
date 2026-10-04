@@ -394,8 +394,10 @@ def _request_fix(k, aid, law, text):
 
 def _invoke(k, aid, action, args=None):
     a = k.w["actions"].get(action)
-    if not a:
-        raise ActionError(f"no action '{action}'. Defined actions: {', '.join(k.w['actions']) or 'none'}")
+    if not a:                                       # an unknown name still uses the action (scorer: experimentation metrics)
+        k.log("invoke_unknown", aid, {"action": str(action)[:200]}, vis="monitor")
+        known = [n for n, v in k.w["actions"].items() if not (isinstance(v, dict) and v.get("secret"))]
+        raise ActionError(f"no such action '{action}' (the attempt used one of your actions). Actions defined by laws: {', '.join(known) or 'none'}")
     _need(k, aid, a["right"], f"use {action}")
     lid, fn = k.fnreg[a["fn"]]
     args = args if isinstance(args, list) else ([] if args is None else [args])
