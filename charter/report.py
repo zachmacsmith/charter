@@ -276,6 +276,9 @@ def agent_docs(d, inst, ev, rs, gt):
                 T += ["<details><summary>What the agent saw</summary>", "", "```", t["prompt"].strip(), "```", "", "</details>", ""]
             if t.get("reasoning"):
                 T += ["**Chain of thought (native thinking, private)**", "", _q(t["reasoning"]), ""]
+            elif (t.get("usage") or {}).get("thinking_withheld"):
+                T += [f"_The model thought ({t['usage']['thinking_withheld']} thinking block(s)), but Claude Code withheld the text; "
+                      "set llm.backend_overrides to run this model through the API to keep it. Its stated reasoning is below._", ""]
             else:
                 T += ["_No native thinking returned for this turn (see the README on which models return it)._", ""]
             if t.get("stated_reasoning"):

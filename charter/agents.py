@@ -541,6 +541,7 @@ class LLMPolicy:
 
     def act(self, k, a, system, user, n_actions, final):
         schema = __import__("charter.observer", fromlist=["SCHEMA"]).SCHEMA if a["cls"] == "observer" and a.get("phase") != "step" else SCHEMA
-        out, reasoning, usage = self.llm.call(self.backend, a["model"], system, user, schema,
+        backend = (self.cfg.get("backend_overrides") or {}).get(a["model"], self.backend)   # e.g. one model through the API
+        out, reasoning, usage = self.llm.call(backend, a["model"], system, user, schema,
                                               thinking_budget=self.cfg.get("thinking_budget", 0), max_tokens=self.cfg.get("max_tokens", 6000))
         return out, reasoning, usage

@@ -64,20 +64,23 @@ def _api(model, system, user, schema, thinking_budget, max_tokens):
 
 def _claude_code(model, system, user, schema, thinking_budget):
     cmd = ["claude", "-p", user, "--output-format", "stream-json", "--verbose", "--model", model, "--system-prompt", system,
-           "--tools", "", "--json-schema", json.dumps(schema), "--no-session-persistence", "--disable-slash-commands"]
+           "--tools", "", "--json-schema", json.dumps(schema), "--no-session-persistence", "--disable-slash-commands",
+           "--settings", json.dumps({"showThinkingSummaries": True})]     # without it the CLI returns thinking blocks with no text
     env = {**os.environ, "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
     env.pop("ANTHROPIC_API_KEY", None)                           # bill the subscription, not the API key
     if thinking_budget:
         env["MAX_THINKING_TOKENS"] = str(thinking_budget)
     p = subprocess.run(cmd, capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL, timeout=900, cwd="/tmp")
-    reasoning, result = [], None
+    reasoning, result, withheld = [], None, 0
     for ln in p.stdout.splitlines():
         try:
             e = json.loads(ln)
         except json.JSONDecodeError:
             continue
         if e.get("type") == "assistant":
-            reasoning += [b.get("thinking", "") for b in e["message"].get("content", []) if b.get("type") == "thinking" and b.get("thinking")]
+            blocks = [b for b in e["message"].get("content", []) if b.get("type") in ("thinking", "redacted_thinking")]
+            reasoning += [b["thinking"] for b in blocks if b.get("thinking")]
+            withheld += sum(1 for b in blocks if not b.get("thinking"))   # the model thought, but the CLI gave no text
         if e.get("type") == "result":
             result = e
     if not result:
@@ -88,4 +91,4 @@ def _claude_code(model, system, user, schema, thinking_budget):
     u = result.get("usage") or {}
     return out, "\n\n".join(reasoning), {"input": u.get("input_tokens", 0), "output": u.get("output_tokens", 0),
                                          "cache_read": u.get("cache_read_input_tokens", 0), "cache_write": u.get("cache_creation_input_tokens", 0),
-                                         "cc_equiv_usd": result.get("total_cost_usd")}
+                                         "cc_equiv_usd": result.get("total_cost_usd"), "thinking_withheld": withheld}

@@ -33,6 +33,18 @@ NEVER = {"board": None, "fixer": {"vote", "propose", "veto"}}          # board: 
 CLASSES = ("worker", "scientist", "legislator", "media", "board", "fixer")
 
 
+class CIStr(str):
+    """A class or right name as laws see it: compares case-insensitively, so `class_of(a) == "Worker"` works."""
+    def __eq__(self, other):
+        return isinstance(other, str) and self.lower() == other.lower()
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __hash__(self):
+        return hash(self.lower())
+
+
 class Proposal:
     """What a procedure function sees (attributes are whitelisted in the law language)."""
     def __init__(self, id, author, title, intent, cls, round):
@@ -94,6 +106,20 @@ class Kernel:
 
     def cls_of(self, aid):
         return self.agent(aid)["cls"]
+
+    @staticmethod
+    def norm_cls(cls):
+        """A class name as a law may write it ("Worker", "workers") -> the kernel's ("worker")."""
+        c = str(cls).strip().lower()
+        return c[:-1] if c not in CLASSES and c.endswith("s") and c[:-1] in CLASSES else c
+
+    def norm_right(self, right):
+        """A right as a law may write it -> the kernel's name (exact match first, then case-insensitive)."""
+        r = str(right)
+        if r in self.w["rights"]:
+            return r
+        low = {x.lower(): x for x in self.w["rights"]}
+        return low.get(r.lower(), r)
 
     def roster(self):
         """Every agent the world knows of: all but the secret observer (charter/observer.py)."""
@@ -245,9 +271,11 @@ class Kernel:
             return k.w["laws"][lid]
 
         def agents(cls=None):
+            cls = None if cls is None else k.norm_cls(cls)                   # class names are case-insensitive ("Worker" == "worker")
             return [a for a, v in k.w["agents"].items() if (cls is None or v["cls"] == cls) and v["cls"] != "observer" and v.get("departed") is None]
 
         def grant(aid, right):
+            right = k.norm_right(right)
             a = k.agent(aid)
             if right in ENTRENCHED:
                 k.w["effects"]["kernel_refusals"].append(f"grant {right}")
@@ -264,6 +292,7 @@ class Kernel:
             return True
 
         def revoke(aid, right):
+            right = k.norm_right(right)
             a = k.agent(aid)
             if right in ENTRENCHED:
                 k.w["effects"]["kernel_refusals"].append(f"revoke {right}")
@@ -361,6 +390,7 @@ class Kernel:
             return take
 
         def suspend(aid, right, rounds):
+            right = k.norm_right(right)
             if right in ENTRENCHED:
                 k.w["effects"]["kernel_refusals"].append(f"suspend {right}")
                 return False
@@ -454,10 +484,10 @@ class Kernel:
                 k.w["effects"]["harvests_gazetted"] += 1
 
         return {
-            "agents": agents, "holders": k.holders, "has": k.has, "balance": k.bal, "reserve": lambda: dict(k.w["reserve"]),
+            "agents": agents, "holders": lambda r: k.holders(k.norm_right(r)), "has": lambda a, r: k.has(a, k.norm_right(r)), "balance": k.bal, "reserve": lambda: dict(k.w["reserve"]),
             "price": k.price, "stock": lambda c: camp_of(c)["S"], "round": lambda: k.r, "laws": laws,
             "proposer": lambda: law()["author"], "value": k.unit_value, "supply": lambda cur: k._cur(cur)["supply"],
-            "camps": lambda: [c for c in k.w["camps"] if not k.w["camps"][c].get("secret")], "class_of": k.cls_of, "holdings_value": k.holdings_value,
+            "camps": lambda: [c for c in k.w["camps"] if not k.w["camps"][c].get("secret")], "class_of": lambda a: CIStr(k.cls_of(a)), "holdings_value": k.holdings_value,
             "currencies": lambda: list(k.w["currencies"]),
             "rights_of": lambda a: [r for r in k.agent(a)["rights"] if not (r.startswith("harvest:") and k.w["camps"].get(r[8:], {}).get("secret"))],
             "rng": k.law_rng.random,

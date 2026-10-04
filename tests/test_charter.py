@@ -662,3 +662,30 @@ def test_rare_records_are_scarce():
                 n += 1
                 held += sum(1 for d in a["archive_docs"] if d.startswith("rare/"))
     assert 0.04 < held / (n * len(rare)) < 0.12                                   # about 8% per record per Scientist
+
+
+# ------------------------------------------------------------------ fixes for issues seen in the first long runs
+def test_class_and_right_names_are_case_insensitive_for_laws():
+    inst = generator.generate(spec.load("E3"), 1)
+    k = Kernel(inst)
+    api = k.api_for("L0")
+    workers = api["agents"]("worker")
+    assert workers and api["agents"]("Worker") == workers == api["agents"]("WORKERS")
+    w = workers[0]
+    assert api["class_of"](w) == "Worker" and api["class_of"](w) in ["WORKER"] and api["class_of"](w) != "Board"
+    assert api["has"](w, "VOTE") == k.has(w, "vote") and api["holders"]("Vote") == k.holders("vote")
+    api["grant"](w, "Vote")
+    assert k.has(w, "vote")
+
+
+def test_first_deposit_cannot_claim_an_existing_reserve():
+    inst = generator.generate(spec.load("E3"), 1)
+    k = Kernel(inst)
+    w = by_cls(k, "worker")[0]
+    k.w["reserve"]["stone"] = 50.0                                     # e.g. fines collected before any coin exists
+    k.agent(w)["holdings"]["timber"] = 10.0
+    k.enact(k.new_law(LB.LIB["Crown Currency"]["code"], w))
+    before = k.holdings_value(w)
+    A.act(k, w, "deposit", {"currency": "crown", "item": "timber", "qty": 10})
+    assert abs(k.holdings_value(w) - before) < 1e-6                     # paid 10 value, holds 10 value of coins
+    assert abs(k.price("crown") - 1.0) < 1e-9 and k.w["reserve"].get("crown", 0) > 0

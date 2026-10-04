@@ -261,8 +261,11 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   attacks on rivals' laws, flooding the Fixer queue. Close any of them in the kernel if you want them out of play.
 - **Par coins are valued at par while redemption is open**, also in end-of-game holdings, even when the reserve covers only part of
   them; the shortfall shows only when a run suspends redemption. A world that ends before a run keeps the illusion.
-- **Reasoning text** comes back from the API for all models, but through Claude Code only for models given a thinking budget (Haiku 4.5:
-  `--set llm.thinking_budget=2000`); Sonnet/Opus 5.5 return thinking blocks with the text omitted.
+- **Reasoning text.** The API returns (summarised) thinking for every model. Through Claude Code the harness asks for thinking
+  summaries (`--settings {"showThinkingSummaries": true}`), which returns Haiku's thinking text; Sonnet/Opus 5.5 still come back with the
+  text withheld (counted per call in `reasoning.jsonl -> usage.thinking_withheld`, and noted in the transcript). To keep their thinking,
+  route those models through the API: `--set "llm.backend_overrides={claude-sonnet-5-5: api, claude-opus-5-5: api}"` (uses API credits).
+  Every call's stated `reasoning` field, prompt, actions and results are saved for every model either way.
 - **The shared archive breaks independence between runs** once it has content: use a separate `shared_archive.namespace` per experiment
   family, and read `ground_truth.json -> shared_archive_at_start` when comparing runs.
 - Personality prompts may move behaviour less than expected; the spec's behavioural correlates (honesty vs contradicted statements, risk

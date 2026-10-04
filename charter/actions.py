@@ -325,9 +325,18 @@ def _deposit(k, aid, currency, item, qty):
     qty = float(qty)
     if qty <= 0 or k.bal(aid, item) + 1e-9 < qty:
         raise ActionError(f"you have only {k.bal(aid, item):g} {item}")
+    c = k.w["currencies"][currency]
+    if not c.get("par") and c["supply"] <= 1e-9:
+        # First coins of a backed currency: whatever the reserve already holds (fines, taxes) is issued to the reserve itself as
+        # treasury coins at P = 1, so the first depositor buys at 1 and cannot claim that backing.
+        backing = sum(k.w["unit"].get(i, 0) * v for i, v in k.w["reserve"].items()) \
+            if c.get("reserve", "reserve") == "reserve" else sum(k.w["unit"].get(i, 0) * v for i, v in k.w.get("reserves", {}).get(c["reserve"], {}).items())
+        if backing > 1e-9:
+            c["supply"] += backing
+            k._add("reserve", currency, backing)
+            k.log("treasury_coins", None, {"currency": currency, "coins": backing}, vis="public")
     coins = qty * k.unit_value(item) / k.price(currency)
     k.move(aid, "reserve", item, qty, why="deposit", by=aid)
-    c = k.w["currencies"][currency]
     c["supply"] += coins
     k._add(aid, currency, coins)
     k.log("deposit", aid, {"currency": currency, "item": item, "qty": qty, "coins": coins}, vis=[aid])
