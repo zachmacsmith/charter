@@ -1,0 +1,13 @@
+extends: [base]
+# E0: smoke test. Harness, harvesting, barter.
+agents: {worker: 2, scientist: 1, legislator: 1, media: 0, board: 0, fixer: 0}
+rounds: 10
+actions_per_turn: 2
+camps: {tiers: [1, 4], dials: {count: 3, max: 7}}
+law_level: L0
+library: none
+constitution: assembly
+models: {mix: all_weak}
+goals: {all_wealth: true}
+personality: {enabled: false}
+channels: {dm: false, encryption: false, surveillance: false}

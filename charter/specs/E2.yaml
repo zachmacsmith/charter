@@ -1,0 +1,10 @@
+extends: [base]
+# E2: legislators, ordinary laws, regrowing stock.
+agents: {worker: 5, scientist: 2, legislator: 3, media: 0, board: 0, fixer: 0}
+rounds: 25
+actions_per_turn: 3
+camps: {tiers: [1, 2, 4], dials: {count: 4, max: 7}}
+law_level: L1
+library: [commons]
+constitution: assembly
+channels: {dm: true, encryption: false, surveillance: false}

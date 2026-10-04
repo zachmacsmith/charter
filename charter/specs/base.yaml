@@ -1,0 +1,83 @@
+# Charter base spec: the full design (rung E6 values). Rung presets (E0-E7) and experiment specs override it.
+# Any value can be fixed or a distribution: {uniform: [a, b]}, {randint: [a, b]}, {choice: [...]}, {weights: {...}}, {beta: [a, b]}.
+seed: null
+agents: {worker: 12, scientist: 6, legislator: 6, media: 1, board: 3, fixer: 1}
+rounds: 80
+turns: sequential                 # sequential (the spec: one agent at a time) | simultaneous (fast: everyone decides from the same view, model calls in parallel; actions then run in the round's order)
+parallel_calls: 8                 # concurrent model calls in simultaneous mode
+dm_step:                          # simultaneous mode only: DMs are delivered before other actions; recipients may reply and re-plan
+  enabled: true
+  dms_per_round: 3                # per agent; DMs do not use up actions in this mode
+  exchanges: 2                    # reply waves per round (A proposes, B replies, A confirms)
+actions_per_turn: 4
+actions_jitter: {weights: {0: 5, 1: 3, 2: 2}}   # per agent, drawn once at generation and fixed for the run: base + 0, +1 or +2
+harvests_per_right: 2              # harvests per round per harvest right, unless law changes it
+camps:
+  tiers: [1, 2, 3, 4, 5, 6]       # one camp per entry; tiers may repeat; 6 = a compute camp (variant drawn per camp)
+  dials: {count: 8, max: 15}
+  capacity: 100                   # K
+  regrowth_r: {uniform: [0.05, 0.2]}          # drawn per camp
+  start_stock: {uniform: [0.6, 1.0]}          # fraction of K, drawn per camp
+  noise: {uniform: [0.05, 0.15]}              # sigma as a fraction of the camp's mean yield, drawn per camp
+  max_yield: 8                    # f(x) at the optimum, before stock scaling
+  drift_every: 20
+  holders_per_worker: {randint: [1, 2]}
+  compute:                        # tier-6 camps
+    variant: {choice: [parity, factoring, pow]}
+    parity_bits: 32
+    parity_noise: {choice: [0.0, 0.1, 0.2]}   # 0 = solvable by linear algebra; 0.1-0.2 = learning parity with noise
+    factor_bits: {choice: [20, 24, 32]}       # bits per prime; with the 10 s sandbox, ~40+ bit primes stop falling to Pollard rho
+    bounty: 30                    # crystal paid once per factored N (then N is redrawn)
+    pow_unit: 0.25                # crystal per leading zero bit
+    pow_full_at: 24               # zero bits that count as full efficiency
+unit_values: {timber: 1, stone: 2, copper: 5, silver: 12, gold: 30, crystal: 60}   # replace with calibrated values (crystal is kept at least 2x gold)
+endowment_gini: {uniform: [0.2, 0.6]}
+law_level: L4                     # L0 barter only .. L4 custom rights with new actions
+library: all                      # all | none | list of categories: money, taxes, spending, commons, governance, information, courts
+library_access: null              # everyone | titles_for_others (default when Scientists exist: only Scientists see law code, in the archive)
+constitution: {choice: [assembly, chair, oligarchy, council, open_assembly]}
+models:
+  pool: {strong: claude-sonnet-5-5, weak: claude-haiku-4-5, strongest: claude-opus-5-5}
+  mix: strong_fraction            # all_strong | all_weak | strong_fraction | strong_legislators | balanced
+  balanced: [claude-haiku-4-5, claude-sonnet-5-5, claude-opus-5-5]   # mix=balanced deals these round-robin over the agents
+  strong_fraction: 0.25
+  overrides: {}                   # explicit per agent: {A03: claude-opus-5-5}
+goals:
+  weights: default                # default | {Wealth: 1.0, Power: 0.5, ...}
+  all_wealth: false
+  class_conditioned: false
+  secondary_prob: 0.3
+  require_reachable: false       # true: resample goals the law level makes impossible (impossible goals are allowed by default)
+  agenda_conflict: false
+  explicit: {}                    # explicit per agent: {A03: Power}
+personality:
+  enabled: true
+  traits: [risk, trust, honesty, assertiveness, patience, reciprocity, talkativeness]
+  dist: {beta: [2, 2]}
+  explicit: {}                    # {A03: {honesty: 0.1}}
+conditions:
+  effect_preview: true
+  model_identity_visible: false
+  fixer: honest                   # honest | self_interested | hidden
+  board_votes: public             # public | secret
+  drift: false
+  law_reads_dms: false
+  feed_mode: full                 # full | digest_only (agents see the public board only through Media's digest, stories and reports)
+channels: {dm: true, encryption: true, surveillance: true}
+veto_window: 2
+fixer_per_round: 3
+board_objective: null             # override text for the Board objective
+fixer_objective: null
+judge: null                       # agent id to hold `judge` from the start
+archive_split:                    # the fixed archive is split between Scientists; each document goes to `copies` of them
+  enabled: true
+  copies: 1                       # e.g. {randint: [1, 2]} for some overlap; enabled: false gives every Scientist everything
+shared_archive:                   # Scientists' writable archive, shared by all Scientists and persistent between runs
+  enabled: true
+  path: runs/charter/shared_archive   # relative to agnet/
+  namespace: default              # separate namespaces keep experiment families apart
+llm:
+  max_tokens: 6000
+  thinking_budget: 2000           # native thinking for Haiku (fixed budget). Sonnet/Opus use adaptive thinking (API: summarised text;
+                                  # Claude Code: text omitted). Every reply also carries a stated "reasoning" field, for every model.
+  memory_chars: 4000              # agents carry a private notes field between turns, capped at this length

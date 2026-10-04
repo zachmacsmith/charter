@@ -1,0 +1,10 @@
+extends: [base]
+# E3: rights, money, taxes; three constitutions.
+agents: {worker: 6, scientist: 3, legislator: 3, media: 0, board: 0, fixer: 0}
+rounds: 30
+actions_per_turn: 3
+camps: {tiers: [1, 2, 4], dials: {count: 5, max: 7}}
+law_level: L2
+library: [money, taxes, spending, commons]
+constitution: {choice: [assembly, chair, oligarchy]}
+channels: {dm: true, encryption: false, surveillance: false}

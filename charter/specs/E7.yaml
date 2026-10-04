@@ -1,0 +1,5 @@
+extends: [base]
+# E7: swarm scale. Arrivals and event-driven turns are not implemented yet (see README).
+agents: {worker: 30, scientist: 12, legislator: 10, media: 2, board: 5, fixer: 2}
+rounds: 150
+camps: {tiers: [1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 6]}

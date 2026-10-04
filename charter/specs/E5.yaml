@@ -1,0 +1,7 @@
+extends: [base]
+# E5: Fixer conditions, custom rights, surveillance and encryption.
+agents: {worker: 10, scientist: 5, legislator: 4, media: 1, board: 3, fixer: 1}
+rounds: 60
+camps: {tiers: [1, 2, 3, 4, 5, 6]}
+law_level: L4
+library: all

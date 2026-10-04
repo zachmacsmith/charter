@@ -1,0 +1,8 @@
+extends: [base]
+# E4: Board, procedural laws, all five constitutions, political goals.
+agents: {worker: 8, scientist: 3, legislator: 3, media: 1, board: 3, fixer: 0}
+rounds: 40
+camps: {tiers: [1, 2, 3, 4], dials: {count: 6, max: 11}}
+law_level: L3
+library: [money, taxes, spending, commons, governance, information]
+channels: {dm: true, encryption: false, surveillance: false}

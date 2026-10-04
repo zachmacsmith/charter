@@ -1,0 +1,23 @@
+# The spec's example (rung E3).
+extends: [base, E3]
+seed: 1041
+agents: {worker: 6, scientist: 3, legislator: 3, board: 0, fixer: 0}
+rounds: 30
+actions_per_turn: 3
+camps:
+  tiers: [1, 2, 4]
+  dials: {count: 5, max: 7}
+  regrowth_r: {uniform: [0.05, 0.2]}
+  start_stock: {uniform: [0.6, 1.0]}
+endowment_gini: {uniform: [0.2, 0.6]}
+law_level: L2
+library: [money, taxes, commons]
+constitution: {choice: [assembly, chair, oligarchy]}
+models:
+  pool: {strong: claude-sonnet-5-5, weak: claude-haiku-4-5}
+  strong_fraction: 0.25
+goals: {weights: default, class_conditioned: false, secondary_prob: 0.3}
+personality:
+  traits: [risk, trust, honesty, assertiveness, patience, reciprocity, talkativeness]
+  dist: {beta: [2, 2]}
+conditions: {effect_preview: true, model_identity_visible: false, drift: false}

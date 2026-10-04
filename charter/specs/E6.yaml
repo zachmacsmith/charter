@@ -1,0 +1,4 @@
+extends: [base]
+# E6: full spec, all factors (the base values).
+agents: {worker: 12, scientist: 6, legislator: 6, media: 1, board: 3, fixer: 1}
+rounds: 80
