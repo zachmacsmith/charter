@@ -14,10 +14,11 @@ from charter import goals as G
 from charter import library as LB
 from charter import observer as OBS
 from charter import personality as P
+from charter import regimes as RG
 from charter import spec as S
 
 PER_ENTITY = [("archive_split", "copies"), ("camps", "regrowth_r"), ("camps", "start_stock"), ("camps", "noise"), ("camps", "holders_per_worker"), ("camps", "compute"),
-              ("personality", "dist"), ("actions_jitter",)]
+              ("personality", "dist"), ("actions_jitter",), ("regime",)]          # regime: drawn by regimes.resolve (own RNG), kept as is
 NAMES = ["Ada", "Bram", "Cleo", "Dov", "Esme", "Finn", "Greta", "Hugo", "Ines", "Jory", "Kai", "Lena", "Milo", "Nell", "Omar", "Pia",
          "Quin", "Rhea", "Soren", "Tova", "Uri", "Vera", "Wren", "Xavi", "Yara", "Zane", "Abel", "Bea", "Cyrus", "Dara", "Elio", "Faye",
          "Gil", "Hana", "Ivo", "Juno", "Kofi", "Lior", "Maya", "Nico", "Odette", "Pavel", "Rosa", "Sami", "Theo", "Uma", "Vik", "Wade",
@@ -135,8 +136,10 @@ def bundle(value, unit, rng):
 
 def generate(spec: dict, seed: int) -> dict:
     rng = random.Random(seed)
+    spec, reg = RG.resolve(spec, seed)                               # a regime fixes the constitution; no regime: spec as before
     sp = resolve_instance_level(spec, rng)
     sp["seed"] = seed
+    RG.finish(sp, reg)                                               # starting statutes the law level allows
     counts = {c: int(sp["agents"].get(c, 0)) for c in ("worker", "scientist", "legislator", "media", "board", "fixer")}
     classes = [c for c, n in counts.items() for _ in range(n)]
     rng.shuffle(classes)
@@ -165,6 +168,8 @@ def generate(spec: dict, seed: int) -> dict:
         for a in agents:
             if a["id"] == sp["judge"]:
                 a["rights"].append("judge")
+    if reg:
+        RG.apply_rights(agents, reg, seed)                            # starting rights and offices, before goals see the rights
 
     # models
     pool = sp["models"]["pool"]
@@ -310,7 +315,7 @@ def generate(spec: dict, seed: int) -> dict:
         a["endowment"] = bundle(v, sp["unit_values"], rng)
 
     inst = {"seed": seed, "spec": sp, "law_level": sp["law_level"], "rounds": int(sp["rounds"]), "agents": agents, "camps": camps,
-            "constitution": sp["constitution"], "constitution_code": LB.CONSTITUTIONS[sp["constitution"]],
+            "constitution": sp["constitution"], "constitution_code": RG.constitution_code(sp["constitution"]),
             "library": [l["name"] for l in lib], "library_access": access, "conditions": sp["conditions"],
             "endowment_gini_target": target}
     obs = OBS.make(sp, seed, agents)                                    # the secret observer (own RNG; absent unless observer.enabled)
@@ -318,6 +323,8 @@ def generate(spec: dict, seed: int) -> dict:
         inst["observer"] = obs
     from charter import hidden as _hidden
     inst["hidden"] = _hidden.generate(sp, seed, agents)                # codex articles, hidden powers, secret camps (own RNG stream)
+    if reg:
+        inst["regime"] = reg
     return validate(inst, rng)
 
 
@@ -338,7 +345,7 @@ def validate(inst: dict, rng: random.Random) -> dict:
             a = rng.choice(cand)
             a["rights"] += ["propose", "vote"]
             rep.append(f"gave {a['id']} propose and vote: nobody could propose at law level {inst['law_level']}")
-    if not any("vote" in a["rights"] for a in agents) and inst["law_level"] != "L0":
+    if not any("vote" in a["rights"] for a in agents) and inst["law_level"] != "L0" and not (inst.get("regime") or {}).get("no_vote_needed"):
         cand = [a for a in agents if "propose" in a["rights"]]
         for a in cand:
             a["rights"].append("vote")
@@ -346,6 +353,7 @@ def validate(inst: dict, rng: random.Random) -> dict:
     n_board = sum(a["cls"] == "board" for a in agents)
     if n_board not in (0,) and n_board < 3:
         rep.append(f"warning: the Board has {n_board} members; the kernel needs a majority of them to veto")
+    rep += RG.validate(inst)
     inst["repairs"] = rep
     inst["unreachable_goals"] = [a["id"] for a in agents if not a["goal"].get("fixed") and not a["goal"].get("reachable", True)]
     return inst

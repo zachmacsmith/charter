@@ -55,7 +55,8 @@ def spec_outline(d, inst, ev, gt):
          f"- Run id: {inst.get('run_id', '-')}. Library access: {inst['library_access']}. Repairs by the validator: {inst.get('repairs') or 'none'}.",
          f"- Unreachable goals (allowed): {inst.get('unreachable_goals') or 'none'}.", "",
          "## World draws",
-         f"- Constitution: **{inst['constitution']}**; law level **{inst['law_level']}**; rounds **{inst['rounds']}**.",
+         f"- Constitution: **{inst['constitution']}**; law level **{inst['law_level']}**; rounds **{inst['rounds']}**."
+         + (f" Starting regime: **{inst['regime']['name']}** (see below)." if inst.get("regime") else ""),
          f"- Endowment Gini target: {inst['endowment_gini_target']:.3f}.",
          f"- Conditions: {json.dumps(inst['conditions'])}", "",
          "## Camps (hidden functions included: agents never see these)", "",
@@ -88,11 +89,35 @@ def spec_outline(d, inst, ev, gt):
         for e in harv:
             x = e["data"]
             L.append(f"| {e['round'] + 1} | {e['agent']} | {x['camp']} | {x['x']} | {x.get('stock_before', '')} | {x['efficiency']} | {x.get('noise', '')} | {x['yield']:.3f} |")
+    L += _regime_outline(inst)
     L += ["", "## Starting constitution", "", "```python", inst["constitution_code"].strip(), "```", "",
           "## Library visible in this world", "", ", ".join(inst["library"]) or "none", "",
           "## Shared archive at start", "", "```json", json.dumps(gt.get("shared_archive_at_start", {}), indent=1), "```", "",
           "## Resolved spec", "", "```yaml", yaml.safe_dump(sp, sort_keys=False, default_flow_style=None).strip(), "```"]
     return "\n".join(L) + "\n"
+
+
+def _regime_outline(inst) -> list[str]:
+    """The starting regime (regimes.py): what it is, its draws, statutes, rights rules and the text agents saw. Empty without one."""
+    reg = inst.get("regime")
+    if not reg:
+        return []
+    from charter import regimes
+    L = ["", f"## Starting regime: {reg['name']}", "",
+         f"- {reg.get('summary') or ''}",
+         f"- Drawn from: `{json.dumps(reg['drawn_from'])}` with `random.Random({reg['rng_seed']})`; offices by `random.Random({reg['rng_seed'] + 110})`."
+         if reg.get("drawn_from") else f"- Chosen explicitly. Offices drawn by `random.Random({reg['rng_seed'] + 110})`.",
+         f"- Constitution: {reg['constitution']}. Intended label at the start: {reg.get('expect')}.",
+         f"- Starting statutes: {', '.join(s['name'] + ' (' + s['level'] + ')' for s in reg['statutes']) or 'none'}.",
+         f"- Offices: {'; '.join(t + ': ' + (', '.join(ids) or 'empty') for t, ids in reg['offices'].items()) or 'none'}.",
+         f"- Spec settings fixed by the regime: {json.dumps(reg.get('spec') or {})}.",
+         f"- Regime repairs: {reg.get('notes') or 'none'}.",
+         "- Rights rules (applied in order at generation):"] + [f"  - `{json.dumps(r)}`" for r in reg["rights"]]
+    text = regimes.describe(inst)
+    L += ["", "What agents are told:", "", _q(text) if text else "> (nothing: a legacy regime reads exactly like its constitution)"]
+    for s in reg["statutes"]:
+        L += ["", f"### Starting statute: {s['name']}", "", "```python", s["code"].strip(), "```"]
+    return L
 
 
 # ------------------------------------------------------------------ overview
@@ -110,6 +135,7 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
          f"{inst['rounds']} rounds, constitution **{inst['constitution']}**, law level **{inst['law_level']}**, "
          f"camps {', '.join(c['id'] + ' (' + c['resource'] + ')' for c in inst['camps'])}. Seed {inst['seed']}. "
          f"Models: {', '.join(sorted({a['model'] for a in inst['agents']}))}.", "",
+         *(_regime_overview(inst)),
          "Files: [messages.md](messages.md) (every message and post, untruncated), [spec_outline.md](spec_outline.md) (seeds and every random draw), "
          "`agents/<Name>/transcript.md`, `agents/<Name>/working/`.", ""]
     if status:
@@ -117,6 +143,8 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
     if score:
         s = score["summary"]
         L += ["## Outcome", "",
+              *([f"- Regime at the start: **{s['regime_start']}**" + (f" (starting regime {s['regime']})" if s.get("regime") else "") + "."]
+                if s.get("regime_start") else []),
               f"- Regime at the end: **{s['regime_final']}** (decisive set {s['decisive_set_final']}, franchise share {s['franchise_final']:.2f}); regime changes: {s['regime_changes']}.",
               f"- Laws enacted: {s['laws_enacted']} of {s['laws_proposed']} proposed; currency adopted: {s['currency_adopted']}; vetoes: {s['vetoes']}.",
               f"- Welfare change: {s['welfare_change']}; lowest stock: {s['lowest_stock']}; holdings Gini at end: {s['holdings_gini_end']}; power Gini: {s['power_gini']}.",
@@ -199,6 +227,16 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
             L.append(f"- End of round: stocks {stocks}; {prices}; laws in force {len(s['laws_active'])}; decisive set {len(s['decisive_set'])} "
                      f"({', '.join(s['decisive_set'])}); franchise {s['franchise_share']:.2f}; welfare {s.get('welfare', 0):.1f}")
     return "\n".join(L) + "\n"
+
+
+def _regime_overview(inst) -> list[str]:
+    reg = inst.get("regime")
+    if not reg:
+        return []
+    offices = "; ".join(t + ": " + (", ".join(ids) or "empty") for t, ids in reg["offices"].items())
+    return [f"Starting regime **{reg['name']}**: {reg.get('summary') or ''}"
+            + (f" Starting statutes: {', '.join(s['name'] for s in reg['statutes'])}." if reg["statutes"] else "")
+            + (f" Offices: {offices}." if offices else "") + " Details in spec_outline.md.", ""]
 
 
 def _count(xs):

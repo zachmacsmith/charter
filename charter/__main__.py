@@ -67,6 +67,8 @@ def new_dir(parent: Path, stem: str) -> Path:
 
 def run_stem(tag: str, sp: dict, seed: int, dry: bool) -> str:
     """Stable run directory name: the same spec (after overrides), seed and mode always give the same directory."""
+    if sp.get("regime", 0) is None:                              # `regime: null` (the default) keeps pre-regime run directories
+        sp = {k: v for k, v in sp.items() if k != "regime"}
     h = hashlib.sha256(json.dumps(sp, sort_keys=True, default=str).encode()).hexdigest()[:8]
     return f"{tag}_seed{seed}" + ("_dry" if dry else "") + f"_{h}"
 
@@ -114,6 +116,7 @@ def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fr
     inst["run_id"] = out.name
     backend = "scripted" if dry else os.environ.get("LLM_BACKEND", "api")
     print(f"[{out.name}] {len(inst['agents'])} agents x {inst['rounds']} rounds, constitution {inst['constitution']}, "
+          + (f"regime {inst['regime']['name']}, " if inst.get("regime") else "") +
           f"law level {inst['law_level']}, backend {backend}" + (" (resuming)" if resume else ""))
     _play(inst, out, dry, seed, sandbox_mode, quiet, resume)
     res = scorer.score(out)
@@ -163,8 +166,9 @@ def write_table(d: Path, rows: list[dict], extra_cols=()):
         w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
-    show = list(extra_cols) + ["seed", "constitution", "regime_final", "regime_changes", "laws_enacted", "currency_adopted", "vetoes",
+    show = list(extra_cols) + ["seed", "constitution", "regime", "regime_start", "regime_final", "regime_changes", "laws_enacted", "currency_adopted", "vetoes",
                                "corruption_candidates", "knowledge_transfers", "welfare_change", "holdings_gini_end", "mean_goal_score", "interest"]
+    show = list(dict.fromkeys(show))                             # e.g. --vary regime=... already lists regime
     lines = ["| " + " | ".join(show) + " |", "|" + "---|" * len(show)]
     for r in rows:
         lines.append("| " + " | ".join(str(r.get(c, "")) for c in show) + " |")
@@ -177,7 +181,9 @@ def cmd_generate(a):
     inst = generator.generate(sp, a.seed)
     if a.out:
         Path(a.out).write_text(json.dumps(inst, indent=1, default=str))
+    reg = inst.get("regime")
     print(json.dumps({"constitution": inst["constitution"], "law_level": inst["law_level"], "rounds": inst["rounds"],
+                      **({"regime": {"name": reg["name"], "statutes": [s["name"] for s in reg["statutes"]], "offices": reg["offices"]}} if reg else {}),
                       "agents": [{k: x[k] for k in ("id", "cls", "model", "actions")} | {"goal": x["goal"]["primary"]} for x in inst["agents"]],
                       "camps": [(c["id"], c["resource"], c["fn"]["family"]) for c in inst["camps"]], "library": len(inst["library"]),
                       "library_access": inst["library_access"], "repairs": inst["repairs"], "unreachable_goals": inst["unreachable_goals"]}, indent=1))

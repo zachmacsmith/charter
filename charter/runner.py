@@ -28,6 +28,7 @@ from charter import failstop as FS
 from charter import hidden as H
 from charter import library as LB
 from charter import observer as OBS
+from charter import regimes as RG
 from charter import report
 from charter.kernel import Kernel
 
@@ -69,6 +70,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         (out / "instance.json").write_text(json.dumps(inst, indent=1, default=str))
         const = k.new_law(inst["constitution_code"], "constitution")
         k.enact(const)
+        RG.enact_statutes(k, inst)                                     # a regime's starting statutes (none without a regime)
         for name in inst["spec"].get("start_laws") or []:              # library laws in force from round 0 (spec start_laws)
             k.enact(k.new_law(LB.LIB[name]["code"], "constitution"))
         notes, cursors, results, guesses, welfare_series = {}, {}, {}, {}, []

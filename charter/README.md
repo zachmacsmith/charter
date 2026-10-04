@@ -13,6 +13,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 .venv/bin/python -m charter run E3 --seed 1 --dry                         # free scripted bots: tests the machinery, not behaviour
 .venv/bin/python -m charter run E3 --seed 1 --set constitution=council --set models.mix=strong_legislators
 .venv/bin/python -m charter sweep E3 --seeds 3 --vary constitution=assembly,oligarchy --vary conditions.fixer=honest,hidden
+.venv/bin/python -m charter sweep E6 --seeds 3 --fast --vary regime=direct_democracy,absolute_autocracy,anarchy   # starting regimes
 .venv/bin/python -m charter explore E4 --runs 10 --perturb "endowment_gini={uniform: [0.1, 0.7]}" --perturb "constitution={choice: [chair, council]}"
 .venv/bin/python -m charter run E6 --seed 1 --fast                       # simultaneous turns: model calls in parallel (~6x faster)
 .venv/bin/python -m charter show charter/out/E3/<run>                     # summary + timeline
@@ -64,6 +65,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 | `actions.py` | every agent action |
 | `credit.py` | loans, interest, default, credit records, par currencies, reserve ratio, bank runs, credit metrics |
 | `library.py` | 41 drafted laws, 5 constitutions, effect predicates |
+| `regimes.py` | 21 starting regimes: constitution + starting statutes + starting rights/offices + description |
 | `goals.py` | 29 goals with weights, samplers and state-based scores; Board/Fixer objectives |
 | `agents.py` | prompts, visibility-filtered feeds, scripted bots, the LLM policy |
 | `llm.py`, `sandbox.py` | model calls (both backends), Docker code sandbox |
@@ -186,6 +188,32 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   after a raid or a payment (`escalation`). Library: War Chest (the reserve pays), Defence Emergency (the proposer's laws pass at once
   while a demand is open; otherwise majority of Legislators); the general Emergency Decree also works. Scored: demands, paid in full,
   raids, stock lost, paid by agent and by class (`metrics.tribute`).
+- **Starting regimes** (`regime:`, `regimes.py`): named starting orders, each a constitution (one of the five or a new procedural
+  law), starting statutes enacted at round 0 (library laws or new ones), starting rights by class plus offices drawn by lot (e.g. the
+  Ruler, the Junta, the Guardians), spec settings it fixes (the surveillance state turns encryption off), and a paragraph agents see
+  ("You live under ..."). `regime: null` (default) keeps the old behaviour: `constitution` decides. A regime fixes the constitution,
+  so `regime: assembly` is exactly `constitution: assembly`; it takes a name, `{choice: [...]}`, or an inline definition
+  (`{base: absolute_autocracy, statutes: [Transparency], name: open_autocracy}`). Regimes: the five constitutions unchanged
+  (assembly, chair, oligarchy, council, open_assembly), direct_democracy, representative_democracy (elections, an elected judge,
+  a court clause), constitutional_monarchy (Monarch gates proposals), absolute_autocracy (one Ruler, levy and purse, succession to
+  the richest proposer), military_junta (three officers, press shut, surveil), rule_of_the_rich (three richest, recounted per
+  proposal), plutocracy (above-median wealth votes, weighted by holdings), technocracy (Scientists vote), theocratic_council
+  (three Guardians for life with just over a third of the weight under a two-thirds rule: a veto bloc), sortition (five by lot,
+  redrawn every 10 rounds), anarchy (no procedure; more than half posting `#convention` within three rounds opens an all-agent
+  convention), one_party_state (Party votes, General Secretary gates), surveillance_state, free_market (crown and enforced loans,
+  structural laws need two thirds), command_economy (planning council, quotas, levy, fees, dividend), federation (camps are
+  cantons of equal weight; cantonal quota councils at L4). Statutes above the law level are dropped and offices with an empty
+  pool are drawn from a fallback pool; both are recorded in `repairs`. Regime draws use their own RNG. The regime is recorded in
+  `instance.json`, `spec_outline.md` and `overview.md`; `score.json`/`summary.json` add `regime`, `regime_start` (the scorer's
+  label before anyone acts) and `regime_path` (e.g. `dictatorship -> democracy`), and sweep tables show both labels.
+  **Start labels and mismatches** (decisive set / franchise share at round 0): democracies, the monarchy and the federation read
+  `democracy`; absolute_autocracy reads `dictatorship`; anarchy reads `anarchy`; all others read `oligarchy`. Mismatches with the
+  intended type: sortition reads `oligarchy` (the franchise counts current vote holders, not who could be drawn); plutocracy and the
+  legacy `oligarchy` constitution read `dictatorship` when one voter holds over half the weighted vote (common in small worlds);
+  theocratic_council reads `democracy` in E3 (6 of 12 agents vote, franchise 0.5); the economic regimes take the label of their
+  constitution (free_market and surveillance_state: oligarchy of Legislators). The Board's veto window still applies to the
+  Ruler's structural and procedural laws, and class briefs still call Legislators voters where a regime revoked their vote (the
+  regime paragraph and the rights shown each turn say otherwise).
 - **Convertible currency**: `set_convertible(currency)` turns on kernel deposit/redeem at price P, so a backed currency is possible at L2.
 - **Static class** also counts `on_harvest`/`on_transfer` that return a deduction, a tax or False as structural (they move holdings).
 - **Personality archetypes** (`personality.archetypes`, `archetypes.py`): half the agents (`prob`) also get a discrete temperament

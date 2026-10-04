@@ -15,6 +15,7 @@ from charter import hidden as H
 from charter import library as LB
 from charter import outside as O
 from charter import projects as P
+from charter import regimes as RG
 
 SCHEMA = {
     "type": "object",
@@ -168,7 +169,7 @@ Camps: {camps}. Each harvest is one query of a camp's hidden function: you choos
 and receive yield = max(0, f(x) * stock/capacity + noise) (compute camps work differently: see their description). Harder camps have more valuable resources. Stocks regrow logistically; overharvesting
 lowers everyone's future yields. Each harvest right allows {sp['harvests_per_right']} harvests per round unless a law changes it.
 {money}
-Laws: {law} The starting constitution ({inst['constitution']}) is itself a procedural law and can be amended under its own procedure.
+Laws: {law} The starting constitution ({inst['constitution']}) is itself a procedural law and can be amended under its own procedure.{(chr(10) + RG.describe(inst)) if RG.describe(inst) else ''}
 {board} {fixer} {hist} {media}
 {turns} Reading is free; unused actions are lost. Your holdings value = resources at unit value + coins at P.
 Everything you do is logged."""

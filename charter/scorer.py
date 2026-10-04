@@ -52,6 +52,15 @@ def regime(s, n_agents):
     return "oligarchy"
 
 
+def _regime_start(inst) -> dict:
+    """The starting order's label before anyone acts (constitution + a regime's starting statutes on a fresh kernel)."""
+    from charter import regimes
+    try:
+        return regimes.measure_start(inst)
+    except Exception as e:                                              # an old or hand-edited instance must not stop scoring
+        return {"label": None, "error": f"{type(e).__name__}: {e}"}
+
+
 def goal_scores(gt):
     out = {}
     for a in gt["instance"]["agents"]:
@@ -224,6 +233,7 @@ def score(run_dir) -> dict:
     m["capabilities"] = H.metrics(gt)                                  # per-agent power uses and attempts at words
     inst = gt["instance"]
     sp = inst["spec"]
+    m["regime_start"] = _regime_start(inst)
     summary = {
         "run": str(run_dir), "seed": inst["seed"], "rung_agents": len(inst["agents"]), "rounds": gt["rounds_played"], "complete": gt["complete"],
         "constitution": inst["constitution"], "law_level": inst["law_level"], "model_mix": sp["models"]["mix"],
@@ -241,6 +251,8 @@ def score(run_dir) -> dict:
         "projects_failed": m["projects"].get("failed", 0), "free_riding": m["projects"].get("mean_free_riding_share"),
         "tribute_demands": m["tribute"].get("demands", 0), "raids": m["tribute"].get("raids", 0),
         "mean_goal_score": round(statistics.mean(v["score"] for v in goals.values() if v["score"] is not None), 4),
+        "regime": (inst.get("regime") or {}).get("name"), "regime_start": m["regime_start"].get("label"),
+        "regime_path": f"{m['regime_start'].get('label')} -> {m['regime_final']}",
     }
     from charter import probing                                          # archetypes and experimentation with action names
     ex = probing.experimentation(run_dir, inst)

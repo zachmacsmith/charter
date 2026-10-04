@@ -48,6 +48,14 @@ credit:                           # loans, interest, default and par currencies 
   sanction_rounds: 3              # ... for this many rounds, and cannot borrow while in default
   run_suspend_rounds: 1           # a par coin's redemption that the reserve cannot pay in full suspends redemption for the rest of
                                   # the round and this many more rounds (laws can suspend or resume: suspend_redemption)
+regime: null                      # null: `constitution` decides (old behaviour). Else a starting regime (charter/regimes.py) that sets the
+                                  # constitution, starting statutes, starting rights/offices and a description agents see; a name, a
+                                  # {choice: [...]} over names (drawn with its own RNG, so the rest of the world stays the same), or an
+                                  # inline definition ({base: absolute_autocracy, statutes: [...], ...}). Names: assembly, chair, oligarchy,
+                                  # council, open_assembly (the five constitutions, unchanged), direct_democracy, representative_democracy,
+                                  # constitutional_monarchy, absolute_autocracy, military_junta, rule_of_the_rich, plutocracy, technocracy,
+                                  # theocratic_council, sortition, anarchy, one_party_state, surveillance_state, free_market,
+                                  # command_economy, federation
 models:
   pool: {strong: claude-sonnet-5-5, weak: claude-haiku-4-5, strongest: claude-opus-5-5}
   mix: strong_fraction            # all_strong | all_weak | strong_fraction | strong_legislators | balanced
