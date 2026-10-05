@@ -799,3 +799,9 @@ def test_commission_goal_written_as_words():
     assert M("Keep every camp's stock high", None) == "Steward"
     assert M("my own goal", "Power") == "Power"
     assert M("Welfare", None) == "Welfare"                                # unresolvable: left for the error
+
+
+def test_vote_choice_synonyms():
+    from charter.actions import _normalise_args as N
+    for key in ("option", "vote", "answer", "value", "position"):
+        assert N("vote", {"ballot": "B1", key: "yes"}) == {"ballot": "B1", "choice": "yes"}
