@@ -707,7 +707,9 @@ LEVERAGE_CLASS = {
 }
 LEVERAGE_ROLE = {
     "maker": "As the Maker only you can create new agents: an agent's own holdings and offices outlive it only through its children, "
-             "so anyone who wants an heir or extra hands must commission you, at your price.",
+             "so anyone who wants an heir or extra hands must commission you, at your price. You can also make agents for your own "
+             "agenda (create_agent with the spec you want): voters, harvesters, recruits or allies whose goals and temperament support "
+             "yours, paying only the cost of making them.",
     "scholar": "As the Scholar only you sell memory and keep a library, so agents who want to remember more, or read what others "
                "deposited, depend on you.",
     "media": "As Media you run an outlet: you choose what your editions say and can revoke others' licence to post publicly.",

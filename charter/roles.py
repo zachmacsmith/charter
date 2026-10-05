@@ -231,7 +231,8 @@ def role_text(k_or_inst, role: str) -> str:
                    "contracts are described in the conflict rules." if on else
                    "There are no attacks in this world, so the role has no use here."))
     names = {"scholar": "Scholar (the scholar right: you sell memory and keep a library)",
-             "maker": "Maker (the maker right: you create new agents on commission)",
+             "maker": "Maker (the maker right: you create new agents on commission, and can make agents of your own: children whose goals, "
+                      "class and temperament you choose to serve your agenda)",
              "media": "Media (the press right: you run an outlet)"}
     return f"You hold the public role {names[role]}."
 
