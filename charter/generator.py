@@ -37,6 +37,11 @@ CLASS_RIGHTS = {"scientist": ["sandbox", "archive"], "legislator": ["vote", "pro
                 "media": ["press"], "worker": []}
 
 
+def has_cls(a: dict, cls: str) -> bool:
+    """An agent's class, or a second class it also holds (spec `also`)."""
+    return a.get("cls") == cls or cls in (a.get("also") or ())
+
+
 def score_weights(g: dict, sw: dict) -> list[float]:
     """Weights of primary / secondary / third goal in the agent's score."""
     if g.get("tertiary"):
@@ -189,20 +194,34 @@ def generate(spec: dict, seed: int) -> dict:
     sp["seed"] = seed
     RG.finish(sp, reg)                                               # starting statutes the law level allows
     counts = {c: int(sp["agents"].get(c, 0)) for c in ("worker", "scientist", "legislator", "media", "board", "fixer")}
-    classes = [c for c, n in counts.items() for _ in range(n)]
+    combos = {k: int(n) for k, n in sp["agents"].items() if "+" in str(k)}          # multi-class agents: "legislator+scientist": 2
+    for key in combos:
+        parts = [p.strip() for p in str(key).split("+")]
+        if any(p not in CLASS_RIGHTS for p in parts) or len(set(parts)) != len(parts):
+            raise ValueError(f"agents.{key}: classes are worker, scientist, legislator, media, board, fixer, each once")
+        if {"board", "fixer"} & set(parts):
+            raise ValueError(f"agents.{key}: the Board and the Fixer cannot hold another class (they hold no other right)")
+    classes = [c for c, n in counts.items() for _ in range(n)] + [k for k, n in combos.items() for _ in range(n)]
     rng.shuffle(classes)
     names = rng.sample(NAMES, len(classes)) if len(classes) <= len(NAMES) else [f"A{i:03d}" for i in range(len(classes))]
-    agents = [{"id": names[i], "cls": c, "rights": list(CLASS_RIGHTS[c])} for i, c in enumerate(classes)]
+    agents = []
+    for i, c in enumerate(classes):                                   # an agent's classes: the first is its main class ("cls"), the rest
+        parts = c.split("+")                                           # are in "also"; it holds every class's rights
+        a = {"id": names[i], "cls": parts[0], "rights": [r for p in parts for r in CLASS_RIGHTS[p]]}
+        if parts[1:]:
+            a["also"] = parts[1:]
+            a["rights"] = list(dict.fromkeys(a["rights"]))
+        agents.append(a)
     ctl = (sp.get("dm_step") or {}).get("controller", "media")                # who sets the DM limit at the start (laws can move it)
     for a in agents:
-        if a["cls"] == ctl and "dm_rules" not in a["rights"]:
+        if has_cls(a, ctl) and "dm_rules" not in a["rights"]:
             a["rights"].append("dm_rules")
 
     # camps and harvest rights (each camp needs at least 2 holders when there are workers)
     camps = []
     for i, tier in enumerate(sp["camps"]["tiers"]):
         camps.append(C.make_camp(f"camp{i + 1}", int(tier), sp["camps"], rng, S.draw))
-    workers = [a for a in agents if a["cls"] == "worker"]
+    workers = [a for a in agents if has_cls(a, "worker")]
     for w in workers:
         k = min(len(camps), int(S.draw(sp["camps"].get("holders_per_worker", {"randint": [1, 2]}), rng)))
         for c in rng.sample(camps, k):
@@ -264,7 +283,7 @@ def generate(spec: dict, seed: int) -> dict:
 
     # the fixed archive is split between the Scientists: each document goes to `copies` of them (the README to everyone)
     from charter import archive as _archive
-    scis = [a for a in agents if a["cls"] == "scientist"]
+    scis = [a for a in agents if has_cls(a, "scientist")]
     if scis:
         split = sp.get("archive_split", {}) or {}
         held = {a["id"]: ["README"] for a in scis}
@@ -416,7 +435,7 @@ def validate(inst: dict, rng: random.Random) -> dict:
         raise ValueError("unknown start_laws: " + ", ".join(f"{n!r}" + (f" (did you mean {h[0]!r}?)" if h else "") for n, h in hints.items()))
     rep = []
     agents, camps = inst["agents"], inst["camps"]
-    workers = [a for a in agents if a["cls"] == "worker"]
+    workers = [a for a in agents if has_cls(a, "worker")]
     for c in camps:
         if c.get("open"):                                               # camps: open camps (social games) need no right holders
             continue

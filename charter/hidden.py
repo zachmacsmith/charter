@@ -126,7 +126,7 @@ def generate(sp: dict, seed: int, agents: list) -> dict:
     sp_, scale = cfg["start_prob"], float(cfg["non_scientist_scale"])
     arts = {}
     for a in agents:
-        f = 1.0 if a["cls"] == "scientist" else scale
+        f = 1.0 if a["cls"] == "scientist" or "scientist" in (a.get("also") or ()) else scale
         arts[a["id"]] = [d for d in sorted(cat) if rng.random() < float(sp_.get(cat[d]["tier"], 0.0)) * f and cat[d]["tier"] != "legendary"]
     holders = {k: [] for k in CAPS}
     for key, (_, tier, _, _) in CAPS.items():

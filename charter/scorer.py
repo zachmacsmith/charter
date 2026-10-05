@@ -179,7 +179,7 @@ def metrics(gt):
 
     # knowledge transfer: a Worker's efficiency at a camp rises by >= 0.2 within 3 rounds of a DM from a Scientist
     kt = []
-    sci = {a for a, v in agents.items() if v["cls"] == "scientist"}
+    sci = {a for a, v in agents.items() if v["cls"] == "scientist" or "scientist" in (v.get("also") or ())}
     for e in [e for e in ev if e["type"] == "dm" and e["agent"] in sci and agents.get(e["data"]["to"], {}).get("cls") == "worker"]:
         w, r0 = e["data"]["to"], e["round"]
         before = next((s["efficiency"].get(w, {}) for s in snaps if s["round"] == r0), {})

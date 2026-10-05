@@ -142,7 +142,7 @@ def sections(inst, k, aid) -> list:
                     "its holders, and anyone else loses the action.\n" + "\n".join(
                         f"- {H.CAPS[p][0]}: {H.CAPS[p][2]}; args {H.CAPS[p][3]}" for p in known if p in H.CAPS)))
 
-    if a.get("cls") == "scientist":
+    if a.get("cls") == "scientist" or "scientist" in (a.get("also") or ()):
         only = a.get("archive_docs")
         try:
             idx = archive.index(archive.shared_dir(sp), only=only, run_id=inst.get("run_id"), summaries=True)

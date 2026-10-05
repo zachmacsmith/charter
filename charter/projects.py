@@ -348,7 +348,7 @@ def _new_camp(k, p) -> tuple[str, list[str]]:
     if right not in k.w["rights"]:
         k.w["rights"] = sorted(k.w["rights"] + [right])
     contributors = [a for a in _contributors(k, p) if _grantable(k, a)]
-    workers = [a for a, v in k.w["agents"].items() if v["cls"] == "worker"]
+    workers = [a for a, v in k.w["agents"].items() if v["cls"] == "worker" or "worker" in (v.get("also") or ())]
     if p["params"].get("rights") == "all":
         who = sorted(set(workers) | set(contributors))
     else:

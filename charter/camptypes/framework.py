@@ -154,7 +154,7 @@ def generate(sp: dict, seed: int, agents: list) -> tuple:
     sp["unit_values"] = {**sp["unit_values"], **{r: v for r, v in RS.VALUE.items() if r not in sp["unit_values"]}}
     for a in agents:
         a["rights"] = [r for r in a["rights"] if not r.startswith("harvest:")]
-    workers = [a for a in agents if a["cls"] == "worker"]
+    workers = [a for a in agents if a["cls"] == "worker" or "worker" in (a.get("also") or ())]
     players = [a for a in agents if a["cls"] not in NO_CAMPS]
     slots, notes = compose(sp, rng, {"eligible": len(workers), "agents": len(players),
                                      "sandbox": sum(1 for a in players if "sandbox" in a["rights"])})   # camps-b: catalyst needs one

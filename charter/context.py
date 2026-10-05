@@ -602,6 +602,7 @@ def allowed_actions(inst, a, rights) -> list:
     out = [x for x in AG.ACTION_DOC if x not in absent and x not in ACTIONS] + {
         "board": ["veto"], "fixer": ["patch"], "scientist": ["read_archive", "search_archive", "write_archive"],
         "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) \
+        + [x for c in (a.get("also") or ()) for x in {"scientist": ["read_archive", "search_archive", "write_archive"]}.get(c, [])] \
         + (["rule"] if lvl >= 2 else []) + (["set_dm_limit"] if "dm_rules" in rights and sp["channels"].get("dm", True) else [])
     return out + list(ACTIONS)
 
@@ -650,15 +651,25 @@ LEVERAGE_ROLE = {
 
 def leverage_line(inst, a, roles) -> str:
     """'Your leverage': one sentence for the agent's class and one per role it holds (secret roles only reach their holder)."""
-    out = [LEVERAGE_CLASS[a["cls"]]] if a["cls"] in LEVERAGE_CLASS else []
-    if a["cls"] == "legislator" and any("vote" in (x.get("rights") or []) for x in inst["agents"] if x["cls"] != "legislator"):
-        out = ["Only Legislators propose laws, so every law starts with you: your agenda is what others have to buy, persuade or replace."]
+    out = [LEVERAGE_CLASS[c] for c in [a["cls"]] + list(a.get("also") or ()) if c in LEVERAGE_CLASS]
+    if "legislator" in [a["cls"]] + list(a.get("also") or ()) and any(
+            "vote" in (x.get("rights") or []) for x in inst["agents"] if "legislator" not in [x["cls"]] + list(x.get("also") or ())):
+        out = [x for x in out if x != LEVERAGE_CLASS["legislator"]] + ["Only Legislators propose laws, so every law starts with you: your agenda is what others have to buy, persuade or replace."]
     on = bool((inst["spec"].get("conflict") or {}).get("enabled"))
     out += [LEVERAGE_ROLE[r] for r in roles if r in LEVERAGE_ROLE and (r != "assassin" or on)]
     return ("Your leverage: " + " ".join(out)) if out else ""
 
 
 def _class_line(inst, a) -> str:
+    also = [c for c in (a.get("also") or ()) if c != a["cls"]]
+    if also:                                                             # dual classes: the main line, then each second class
+        return _one_class_line(inst, a) + " " + " ".join(
+            "You are also " + {"scientist": "a Scientist", "legislator": "a Legislator", "worker": "a Worker", "media": "Media"}[c]
+            + ": " + _one_class_line(inst, {**a, "cls": c, "also": []}).split(": ", 1)[-1] for c in also)
+    return _one_class_line(inst, a)
+
+
+def _one_class_line(inst, a) -> str:
     from charter import agents as AG
     if a["cls"] == "scientist":
         return ("You are a Scientist: you have a private Python sandbox (you start with no harvest rights: only open camps, or rights a law "

@@ -80,7 +80,7 @@ class Kernel:
             "round": 0, "unit": unit,
             "agents": {a["id"]: {"id": a["id"], "cls": a["cls"], "model": a["model"], "rights": sorted(a["rights"]),
                                  "holdings": {k: float(v) for k, v in a["endowment"].items() if v}, "suspended": {},
-                                 "limit": None, "title": None}
+                                 "limit": None, "title": None, **({"also": list(a["also"])} if a.get("also") else {})}
                        for a in instance["agents"] + ([instance["observer"]] if instance.get("observer") else [])},   # observer: on no roster (roster())
             "camps": {c["id"]: dict(c) for c in instance["camps"]},
             "reserve": {}, "currencies": {}, "rights": sorted(KERNEL_RIGHTS | {f"harvest:{c['id']}" for c in instance["camps"]}),

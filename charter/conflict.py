@@ -128,7 +128,7 @@ def install(k) -> None:
             R.holders(k, "assassin")                                   # (the stub reads roles.explicit lazily first)
             k.w.setdefault("roles", {}).setdefault("assassin", []).append(who)
             k.log("role_assigned", None, {"role": "assassin", "agent": who, "module": "conflict"}, vis="monitor")
-    scis = sorted(a for a in k.roster() if k.w["agents"][a]["cls"] == "scientist")
+    scis = sorted(a for a in k.roster() if k.w["agents"][a]["cls"] == "scientist" or "scientist" in (k.w["agents"][a].get("also") or ()))
     if ac.get("archive", True):
         for a in scis:
             if rng.random() < float(ac["article_prob"]):
@@ -668,7 +668,7 @@ def ensure_archive(k, notify=True) -> None:
     if not on(k) or not _cfg(k)["assassin"].get("archive", True):
         return
     arts = k.w["conflict"]["articles"]
-    scis = sorted(a for a in k.players() if k.w["agents"][a]["cls"] == "scientist")
+    scis = sorted(a for a in k.players() if k.w["agents"][a]["cls"] == "scientist" or "scientist" in (k.w["agents"][a].get("also") or ()))
     if any(ASSASSIN_DOC in arts.get(a, []) for a in scis) or not scis:
         return
     grant(k, _rng(k, "archive").choice(scis), ASSASSIN_DOC, source="guarantee", notify=notify)
