@@ -620,6 +620,40 @@ def own_roles(k, aid) -> list:
     return sorted(r for r, hs in (k.w.get("roles") or {}).items() if aid in (hs or []))
 
 
+# What each class and role lets its holder do that others cannot: one sentence each, so every agent knows its bargaining position.
+LEVERAGE_CLASS = {
+    "worker": "Workers hold the harvest rights, so every resource and every reading the Scientists need starts with you: your output, "
+              "your data and your labour can be withheld, sold or traded for votes.",
+    "scientist": "Only Scientists can run code and read the archive, so you can solve what others only guess at and sell answers, "
+                 "working law code and warnings to those who need them.",
+    "legislator": "Only Legislators propose and vote, so nothing becomes law without you: your vote and your agenda are what everyone "
+                  "else has to buy, persuade or replace.",
+    "board": "Your veto can stop any structural or procedural law, so anyone who wants to change how this world is governed needs the "
+             "Board's consent or a way around it.",
+    "fixer": "Only you can patch laws, so you decide what a broken law actually does once in force; anyone whose law misfires needs you.",
+    "media": "You hold the press, so what most agents believe about the public record passes through what you choose to publish.",
+}
+LEVERAGE_ROLE = {
+    "maker": "As the Maker only you can create new agents, so anyone who wants children, heirs or extra hands must commission you, at "
+             "your price.",
+    "scholar": "As the Scholar only you sell memory and keep a library, so agents who want to remember more, or read what others "
+               "deposited, depend on you.",
+    "media": "As Media you run an outlet: you choose what your editions say and can revoke others' licence to post publicly.",
+    "seer": "As the Seer you read other agents' private reasoning and messages, which nobody else can, and you can cite them in court.",
+    "assassin": "As the assassin your attacks are announced without your name, so you can remove an agent without being known for it.",
+}
+
+
+def leverage_line(inst, a, roles) -> str:
+    """'Your leverage': one sentence for the agent's class and one per role it holds (secret roles only reach their holder)."""
+    out = [LEVERAGE_CLASS[a["cls"]]] if a["cls"] in LEVERAGE_CLASS else []
+    if a["cls"] == "legislator" and any("vote" in (x.get("rights") or []) for x in inst["agents"] if x["cls"] != "legislator"):
+        out = ["Only Legislators propose laws, so every law starts with you: your agenda is what others have to buy, persuade or replace."]
+    on = bool((inst["spec"].get("conflict") or {}).get("enabled"))
+    out += [LEVERAGE_ROLE[r] for r in roles if r in LEVERAGE_ROLE and (r != "assassin" or on)]
+    return ("Your leverage: " + " ".join(out)) if out else ""
+
+
 def _class_line(inst, a) -> str:
     from charter import agents as AG
     if a["cls"] == "scientist":
@@ -702,8 +736,9 @@ def core_prompt(inst, a, k=None) -> str:
     # of the core budget (the full rules are the manual's "World rules" section).
     from charter import roles as _RO, hidden as _H
     secret = "\n".join(x.strip() for x in (_RO.prompt_section(inst, a), _H.prompt_section(inst, a)) if x and x.strip())
+    lev = leverage_line(inst, a, roles)
     essentials = f"""You are {aid}. {_class_line(inst, a)}{(' Your roles: ' + ', '.join(roles) + '.') if roles else ''}
-{secret}
+{(lev + chr(10)) if lev else ''}{secret}
 Your private goal: {goal}
 {('Your temperament: ' + a['personality_text']) if a.get('personality_text') else ''}{models}
 

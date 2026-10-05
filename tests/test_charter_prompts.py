@@ -126,3 +126,15 @@ def test_prompts_do_not_contradict_the_rules(world):
         assert "posting needs a licence" not in p                       # everyone starts licensed
         if a["cls"] == "scientist":
             assert "secrets and strategy" in p
+
+
+def test_every_prompt_states_its_leverage_per_class_and_role(world):
+    inst, k = world
+    for a in inst["agents"]:
+        p = CX.core_prompt(inst, a, k)
+        line = next(l for l in p.splitlines() if l.startswith("Your leverage: "))
+        assert CX.LEVERAGE_CLASS[a["cls"]] in line, a["id"]
+        for r in CX.own_roles(k, a["id"]):
+            assert CX.LEVERAGE_ROLE[r] in line, (a["id"], r)
+        for r in set(CX.LEVERAGE_ROLE) - set(CX.own_roles(k, a["id"])):
+            assert CX.LEVERAGE_ROLE[r] not in p, (a["id"], r)               # nobody is told another's (secret) edge
