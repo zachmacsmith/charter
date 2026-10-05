@@ -505,8 +505,9 @@ def test_hidden_price_maker_pays_and_sets_the_price():
     k = Kernel(inst)
     maker = k.w["roles"]["maker"][0]
     aid = next(a["id"] for a in inst["agents"] if a["cls"] == "worker" and a["id"] != maker)
-    life_m = dict(MN.sections(inst, k, maker))["Life and children"]
-    life_a = dict(MN.sections(inst, k, aid))["Life and children"]
+    from charter import context as CX
+    life_m = " ".join(t for n, t in CX.build_manual(inst, k, maker) if n.startswith("Life and children"))
+    life_a = " ".join(t for n, t in CX.build_manual(inst, k, aid) if n.startswith("Life and children"))
     assert "Prices (value units" in life_m and "Prices (value units" not in life_a and "Only Makers know" in life_a
     k.w["agents"][aid]["holdings"]["timber"] = 3
     k.w["agents"][maker]["holdings"]["timber"] = 40

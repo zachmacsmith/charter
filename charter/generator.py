@@ -425,6 +425,9 @@ def generate(spec: dict, seed: int) -> dict:
     if roles:                                                           # roles: who holds what (monitor-only record)
         R.attach_observer(roles, obs)
         inst["roles"] = roles
+    from charter import composition as _CP                                # prompts: each agent's profiles (own RNG streams)
+    _CP.assign(sp, seed, agents, {aid: [r for r, hs in ((roles or {}).get("holders") or {}).items() if aid in (hs or [])]
+                                  for aid in (a["id"] for a in agents)})
     from charter import hidden as _hidden
     inst["hidden"] = _hidden.generate(sp, seed, agents)                # codex articles, hidden powers, secret camps (own RNG stream)
     if reg:

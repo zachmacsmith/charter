@@ -156,6 +156,16 @@ def init_agent(k, aid) -> None:
     st = k.w.setdefault("context", {})
     for key in ("recent", "manual_titles", "manual_reads", "fetched", "carry", "layers", "core", "scratchpad_size"):
         st.setdefault(key, {})
+    from charter import composition as CP                                 # prompts: memory sizes from the agent's profiles
+    mem = CP.memory(k.inst, next((x for x in k.inst["agents"] if x["id"] == aid), {})) if getattr(k, "inst", None) else {}
+    if mem and aid not in st.setdefault("profiled", {}):
+        st["profiled"][aid] = True
+        if "scratchpad" in mem:
+            st["scratchpad_size"][aid] = int(mem["scratchpad"])
+        if "file_space" in mem:
+            k.w["file_space"][aid] = int(mem["file_space"])
+        if "pin_slots" in mem:
+            k.w["pin_slots"][aid] = min(int(mem["pin_slots"]), int(c["max_pin_slots"]))
 
 
 def _st(k, aid=None) -> dict:
@@ -422,11 +432,15 @@ def _module_sections(inst, k, aid) -> list:
 
 def build_manual(inst, k, aid) -> list:
     """This agent's manual: [(title, text)], deterministic, each section at most a lookup's budget."""
+    from charter import composition as CP
     secs = []
     for fn in MANUAL_SECTIONS:
         secs += list(fn(inst, k, aid) or [])
+    a_ = next((x for x in inst["agents"] if x["id"] == aid), {"id": aid})
+    secs = CP.insert(secs, CP._MANUAL, lambda fn: fn(inst, k, a_))       # plug-in sections, at their anchors
     if k is not None:
         secs += _module_sections(inst, k, aid)
+    secs = CP.apply(inst, a_, secs, "manual")                             # spec and profile edits
     lim = int(cfg(inst)["budgets"]["lookup"]) - 40
     out, seen = [], set()
     for t, x in secs:
@@ -834,30 +848,43 @@ def core_prompt(inst, a, k=None) -> str:
     from charter import roles as _RO, hidden as _H
     secret = "\n".join(x.strip() for x in (_RO.prompt_section(inst, a), _H.prompt_section(inst, a)) if x and x.strip())
     lev = leverage_line(inst, a, roles)
-    essentials = f"""You are {aid}. {_class_line(inst, a)}{(' Your roles: ' + ', '.join(roles) + '.') if roles else ''}
-{(lev + chr(10)) if lev else ''}{secret}
-Your private goal: {goal}{(chr(10) + STRATEGY_TEXT) if a.get("strategy_prompt") else ""}
-{('Your temperament: ' + a['personality_text']) if a.get('personality_text') else ''}{models}
-
-Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {c['recent_turns']} turns, your
+    acts = ((chr(10) + grouped_purposes(allowed_actions(inst, a, rights), {"post": "submit a public statement to the media",
+                                                                            "anon_post": "submit one without your name"}
+                                        if (inst["spec"].get("media2") or {}).get("submissions") else None))
+            if c["action_purposes"] else grouped_actions(allowed_actions(inst, a, rights)) + ".")
+    parts = [
+        ("identity", f"You are {aid}. {_class_line(inst, a)}" + ((" Your roles: " + ", ".join(roles) + ".") if roles else "")),
+        ("leverage", lev),
+        ("secret", secret),
+        ("goal", f"Your private goal: {goal}"),
+        ("strategy", STRATEGY_TEXT if a.get("strategy_prompt") else ""),
+        ("temperament", (("Your temperament: " + a["personality_text"]) if a.get("personality_text") else "") + models),
+        ("memory", f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {c['recent_turns']} turns, your
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
-first write each turn is free) or can find it again by search.
-
-Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {(chr(10) + grouped_purposes(allowed_actions(inst, a, rights), {"post": "submit a public statement to the media", "anon_post": "submit one without your name"} if (inst["spec"].get("media2") or {}).get("submissions") else None)) if c["action_purposes"] else grouped_actions(allowed_actions(inst, a, rights)) + "."}
-{look}
-
-Your manual (only titles here; fetch a section with the manual lookup):
-{manual_index(secs)}
-
-Reply with a JSON object with these fields:
+first write each turn is free) or can find it again by search."""),
+        ("actions", f"""Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {acts}"""),
+        ("lookups", look),
+        ("manual_index", "Your manual (only titles here; fetch a section with the manual lookup):\n" + manual_index(secs)),
+        ("reply", f"""Reply with a JSON object with these fields:
 - "reasoning": a short explanation of your plan for this turn.
 - "lookups": lookups to make before acting (see above), or [].
 - "actions": a list of up to {a['actions']} actions, each {{"action": "<name>", "args_json": "<the arguments as a JSON object string>"}}.
 - "goal_guesses_json": on the final round, a JSON object mapping each other agent to the goal name from the goals section of your
-  manual that best fits what they did; on other rounds, "{{}}"."""
+  manual that best fits what they did; on other rounds, "{{}}"."""),
+    ]
+    from charter import composition as CP
+    parts = CP.insert([("overview", "")] + parts, CP._CORE, lambda fn: fn(inst, k, a))   # plug-in sections from modules
+    parts = [(key, t) for key, t in CP.apply(inst, a, parts, "core", default_after="goal") if t or key == "overview"]
+    gap = {"memory", "actions", "manual_index", "reply"}                  # a blank line before these, as before
+    essentials = ""
+    for key, t in parts:
+        if key == "overview":
+            continue
+        essentials += ("\n\n" if key in gap and essentials else ("\n" if essentials else "")) + t.strip("\n")
+    keep_overview = any(key == "overview" for key, _ in parts)
     room = max(200, int(c["budgets"]["core"]) - tokens(essentials) - 10)
-    rules, cut = clip(overview(inst), room, '...(more: manual section "World rules")')
-    text = rules + "\n\n" + essentials
+    rules, cut = clip(overview(inst), room, '...(more: manual section "World rules")') if keep_overview else ("", False)
+    text = (rules + "\n\n" + essentials) if rules else essentials
 
     if k is not None:
         _st(k, aid)["core"][aid] = {"tokens": tokens(text), "budget": int(c["budgets"]["core"]), "trimmed": cut, "sections": len(secs)}

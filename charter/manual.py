@@ -65,12 +65,7 @@ def sections(inst, k, aid) -> list:
     out = []
 
     out.append(("World rules", AG.world_rules(inst)))                   # the full rules (the core prompt carries what fits)
-    from charter import conflict as _CF, media as _MD, life as _LF
-    for title, txt in (("Conflict", _CF.prompt_section(inst, a) if _CF.enabled_inst(inst) else ""), ("Media", _MD.prompt_section(inst, a)),
-                       ("Life and children", "\n".join(x for x in ((_LF.rules_text(inst, maker=_is_maker(k, aid)) if _LF.enabled(sp) else ""),
-                                                                   _LF.prompt_section(inst, a)) if x))):
-        if txt and txt.strip():
-            out.append((title, txt.strip()))
+    # module sections (Conflict, Media, Life and children) are registered in their modules: composition.manual_section
     out.append(("How your turn works", (
         f"Each turn is built fresh from fixed parts: your state, what changed since your last turn (trimmed to a budget: the most important "
         f"first, then counts and pointers such as \"(14 older posts not shown: search_board)\"), your own last {c['recent_turns']} turns, "

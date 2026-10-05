@@ -179,8 +179,8 @@ def test_heir_reminder_in_the_last_rounds(world):
 def test_life_rules_are_in_everyones_manual(world):
     inst, k = world
     for a in inst["agents"]:
-        secs = dict(MN.sections(inst, k, a["id"]))
-        assert "Life and children" in secs and "commission a new agent" in secs["Life and children"], a["id"]
+        life = " ".join(t for n, t in CX.build_manual(inst, k, a["id"]) if n.startswith("Life and children"))
+        assert "commission a new agent" in life, a["id"]
 
 
 def test_camp_line_names_harvest_inputs():

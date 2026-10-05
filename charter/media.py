@@ -1462,3 +1462,11 @@ def scripted_extra(k, a, acts) -> list:
     name, args = rng.choice(opts)
     import json
     return acts[:-1] + [{"action": name, "args_json": json.dumps(args)}]
+
+
+from charter import composition as _CP                                  # noqa: E402
+
+
+@_CP.manual_section("Media", after="World rules", order=2)
+def _manual_section(inst, k, a):
+    return prompt_section(inst, a)

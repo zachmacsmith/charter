@@ -446,6 +446,13 @@ def price(k, spec) -> tuple[dict, dict]:
     return {"base": base, "extras": float(extras)}, items
 
 
+def _child_profiles(k, aid, cls) -> list:
+    from charter import composition as CP
+    c = {"id": aid, "cls": cls}
+    CP.assign_child(k.spec, k.inst["seed"], c, [])
+    return c.get("profiles", [])
+
+
 def tier_of_name(k, x) -> str:
     """A tier from a tier name, a model id or a short model name (haiku, sonnet, opus)."""
     s = str(x).strip().lower()
@@ -839,6 +846,7 @@ def _birth(k, c) -> str | None:
     model = _pool(k)[sp["stats"]["tier"]]
     child = {"goal": goal_fn, "personality": traits, "personality_text": (atxt + " " + ptxt).strip(), "archetype": arch,
              "archetype_text": atxt, "model": model, "tier": sp["stats"]["tier"],
+             **({"profiles": _child_profiles(k, aid, sp["cls"])} if (k.spec.get("prompts") or {}).get("assign") else {}),
              **({"strategy_prompt": random.Random(f"{k.inst['seed']}|strategy_prompt|{aid}").random() < share}
                 if (share := __import__("charter.context", fromlist=["x"]).strategy_share(k.spec)) > 0 else {}),
              "actions": int(k.spec["actions_per_turn"]) + int(sp["stats"]["actions"]),
@@ -1147,3 +1155,12 @@ def lineage_scores(gt) -> dict:
         out[a] = {"goal": g["primary"], "score": score, "parts": [None if x is None else round(x, 4) for x, _ in parts],
                   "living_lineage": living[a], "descendants": gt_descendants(gt, a)}
     return out
+
+
+from charter import composition as _CP                                  # noqa: E402
+
+
+@_CP.manual_section("Life and children", after="World rules", order=3)
+def _manual_section(inst, k, a):
+    maker = k is not None and a["id"] in ((k.w.get("roles") or {}).get("maker") or [])
+    return "\n".join(x for x in ((rules_text(inst, maker=maker) if enabled(inst["spec"]) else ""), prompt_section(inst, a)) if x)

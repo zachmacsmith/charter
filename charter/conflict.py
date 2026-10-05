@@ -1051,3 +1051,11 @@ def metrics(gt, run_dir=None) -> dict:
             "contracts_to_assassin": sum(1 for e in ev if e["type"] == "contract_truth" and e["data"].get("to_assassin")),
             "initiative_bought": sum(e["data"]["n"] for e in ev if e["type"] == "initiative_bought"),
             "votes_discarded": sum(1 for e in ev if e["type"] == "votes_discarded")}
+
+
+from charter import composition as _CP                                  # noqa: E402  (registered after the module is defined)
+
+
+@_CP.manual_section("Conflict", after="World rules", order=1)
+def _manual_section(inst, k, a):
+    return prompt_section(inst, a) if enabled_inst(inst) else ""
