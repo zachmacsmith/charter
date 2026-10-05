@@ -256,7 +256,7 @@ def test_archive_is_split_between_scientists():
     inst = generator.generate(spec.load("E6"), 3)
     scis = [a for a in inst["agents"] if a["cls"] == "scientist"]
     held = [{d for d in a["archive_docs"] if not d.startswith("rare/")} - {"README"} for a in scis]
-    common = {d for d in archive.docs(None) if not d.startswith("rare/")} - {"README"}
+    common = {d for d in archive.docs(None, spec=inst["spec"]) if not d.startswith("rare/")} - {"README"}
     assert set().union(*held) == common                                         # every ordinary document is held by someone
     assert sum(map(len, held)) == len(set().union(*held))                       # copies: 1 -> no overlap
     k = Kernel(inst)

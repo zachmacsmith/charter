@@ -294,7 +294,7 @@ def generate(spec: dict, seed: int) -> dict:
     if scis:
         split = sp.get("archive_split", {}) or {}
         held = {a["id"]: ["README"] for a in scis}
-        for doc in _archive.docs(None):
+        for doc in _archive.docs(None, spec=sp):
             if doc == "README" or doc.startswith("rare/"):
                 continue
             k_ = max(1, min(len(scis), int(S.draw(split.get("copies", 1), rng)))) if split.get("enabled", True) else len(scis)
@@ -302,13 +302,13 @@ def generate(spec: dict, seed: int) -> dict:
                 held[a["id"]].append(doc)
         rare_p = float(split.get("rare_prob", 0.08))                    # rare records: each Scientist holds each with this chance
         for a in scis:
-            for doc in _archive.docs(None):
+            for doc in _archive.docs(None, spec=sp):
                 if doc.startswith("rare/") and rng.random() < rare_p:
                     held[a["id"]].append(doc)
             a["archive_docs"] = sorted(held[a["id"]])
         # required documents (game-critical knowledge kept from everyone else): at least one Scientist holds each (own RNG stream)
         req_rng = random.Random(f"{seed}|archive_required")
-        alldocs = _archive.docs(None)
+        alldocs = _archive.docs(None, spec=sp)
         for doc in split.get("required", ["math/camp-mechanics"]) or []:
             if doc in alldocs and not any(doc in a["archive_docs"] for a in scis):
                 a = req_rng.choice(scis)

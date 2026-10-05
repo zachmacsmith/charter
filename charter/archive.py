@@ -44,10 +44,39 @@ def gated_docs() -> set:
     return set(GATED_DOCS) | {"library/" + _slug(n) for n, v in LB.LIB.items() if v["category"] in LB.GATED_CATEGORIES}
 
 
-def docs(shared: Path | None = None, gated: bool = False) -> dict:
+# Documents that describe only some worlds: the old camp families (tiered camps) or the camp types (camps.model: types), and the
+# entries on modules that may be off. A world's split (generator) and its Scientists' indexes leave out the ones that do not apply.
+OLD_CAMPS = {"math/tree-camps", "math/linear-camps", "math/modular-camps", "math/peak-camps", "math/compute-camps",
+             "math/history-camps", "math/yield-functions"}
+TYPED_CAMPS = {"math/camp-mechanics"}
+NEEDS = {                                                               # document -> modules that must all be on
+    "strategy/entry-17-jurisdictions-charters-and-secession": ("jurisdictions",),
+    "strategy/entry-18-the-press-and-public-speech": ("media2",),
+    "strategy/entry-19-lifespans-heirs-and-makers": ("life",),
+    "strategy/entry-20-force-forts-and-assassins": ("conflict",),
+    "strategy/entry-21-board-seats-and-succession": ("life",),
+    "history/the-maker-who-culled-his-customers": ("life", "conflict"),
+    "history/the-editor-and-the-bounty": ("media2", "jurisdictions"),
+    "history/the-successor-who-waited": ("life",),
+    "history/the-emptied-commonwealth": ("jurisdictions",),
+}
+
+
+def applies(doc: str, spec: dict | None) -> bool:
+    """Whether a document describes this world (no spec: every document)."""
+    if spec is None:
+        return True
+    typed = ((spec.get("camps") or {}).get("model") == "types")
+    if doc in OLD_CAMPS and typed or doc in TYPED_CAMPS and not typed:
+        return False
+    return all(bool((spec.get(m) or {}).get("enabled")) for m in NEEDS.get(doc, ()))
+
+
+def docs(shared: Path | None = None, gated: bool = False, spec: dict | None = None) -> dict:
     skip = set() if gated else gated_docs()                            # media2: gated documents only when asked for
     out = {str(p.relative_to(ROOT).with_suffix("")): p for p in sorted(ROOT.rglob("*.md"))
-           if not str(p.relative_to(ROOT)).startswith("codex/") and str(p.relative_to(ROOT).with_suffix("")) not in skip}
+           if not str(p.relative_to(ROOT)).startswith("codex/") and str(p.relative_to(ROOT).with_suffix("")) not in skip
+           and applies(str(p.relative_to(ROOT).with_suffix("")), spec)}
     from charter import library as LB
     for name in LB.LIB:
         if "library/" + _slug(name) not in skip:
