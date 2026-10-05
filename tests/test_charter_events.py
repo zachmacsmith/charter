@@ -303,9 +303,12 @@ def test_arrivals_and_departures_end_to_end(tmp_path, mode):
     for aid, r1 in we["departures"].items():
         assert not any(r["agent"] == aid and r["round"] >= r1 for r in rs)
     res = scorer.score(out)
-    for aid in list(we["arrivals"]) + list(we["departures"]) + [b["agent"] for b in we["goal_boundaries"]]:
+    for aid in list(we["arrivals"]) + [b["agent"] for b in we["goal_boundaries"]]:
         g = res["goals"][aid]
         assert "segments" in g and (g["score"] is None or 0 <= g["score"] <= 1)
+    for aid in set(we["departures"]) - set(we["arrivals"]) - {b["agent"] for b in we["goal_boundaries"]}:
+        g = res["goals"][aid]                                            # goals.score_at_end: scored on the whole run, not cut at leaving
+        assert "segments" not in g and (g["score"] is None or 0 <= g["score"] <= 1)
     assert 3 <= len(we["goal_boundaries"]) + len(we["goal_changes_skipped"]) <= 5
     report.build(out)
     msgs = (out / "messages.md").read_text()

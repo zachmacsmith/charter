@@ -839,6 +839,8 @@ def _birth(k, c) -> str | None:
     model = _pool(k)[sp["stats"]["tier"]]
     child = {"goal": goal_fn, "personality": traits, "personality_text": (atxt + " " + ptxt).strip(), "archetype": arch,
              "archetype_text": atxt, "model": model, "tier": sp["stats"]["tier"],
+             **({"strategy_prompt": random.Random(f"{k.inst['seed']}|strategy_prompt|{aid}").random() < share}
+                if (share := __import__("charter.context", fromlist=["x"]).strategy_share(k.spec)) > 0 else {}),
              "actions": int(k.spec["actions_per_turn"]) + int(sp["stats"]["actions"]),
              "extra": {"persona": sp.get("persona") or "", "parent": parent, "maker": maker, "commission": c["id"],
                        "origin": {"parent": parent, "maker": maker, "born_round": k.r + 1}}}
@@ -907,8 +909,9 @@ def state_lines(k, aid) -> list:
                        f"{st['dies_at'][aid] + 1}).")
     if rem is not None and rem <= int(cfg(k.spec).get("heir_reminder", 3)):
         heirs = [c for c in children(k, aid) if MO.alive(k, c)]
-        out.append(f"Reminder: you leave the game in {rem} round{'s' if rem != 1 else ''}. Your goals are then scored on your living "
-                   "descendants; with none, goals about the final state score 0. "
+        out.append(f"Reminder: you leave the game in {rem} round{'s' if rem != 1 else ''}. Your goals are still scored at the end of the "
+                   "game: arrange now what will keep them true after you leave (heirs, allies, laws, bequests); goals about your own holdings "
+                   "or offices count only through living descendants. "
                    + (f"Your living children: {', '.join(heirs)}." if heirs else
                       "You have no heir yet: consider commissioning one from a Maker now (commission), with a goal that carries yours on."))
     out.append(f"Population: {len(k.players())} of a cap of {st['cap']}. Maker(s): {', '.join(living_makers(k)) or 'none now'}.")

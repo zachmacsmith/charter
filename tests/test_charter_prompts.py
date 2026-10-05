@@ -157,7 +157,7 @@ def test_everyone_is_told_why_children_matter_and_how_to_make_them(world):
     inst, k = world
     for a in inst["agents"]:
         p = CX.core_prompt(inst, a, k)
-        assert "scored on your living descendants" in p and "Anyone can pay a Maker to make a new agent" in p, a["id"]
+        assert "scored at the end of the game whether or not" in p and "Anyone can pay a Maker to make a new agent" in p, a["id"]
 
 
 def test_heir_reminder_in_the_last_rounds(world):

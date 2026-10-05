@@ -41,3 +41,14 @@ def test_exploration_prompt_and_fast_lookups():
     before = k.w.setdefault("dm_sent", {}).get(a["id"], 0)
     text = CX.dm_step_lookup(k, a["id"], {"lookup": "manual", "args_json": '{"section": "Conflict"}'})
     assert "Conflict" in text and k.w["dm_sent"][a["id"]] == before + 1
+
+
+def test_strategy_prompt_ab_assignment():
+    inst, k = _world("context.strategy_prompt=0.5")
+    flags = [a.get("strategy_prompt") for a in inst["agents"]]
+    assert True in flags and False in flags
+    a = next(x for x in inst["agents"] if x.get("strategy_prompt"))
+    b = next(x for x in inst["agents"] if x.get("strategy_prompt") is False)
+    assert CX.STRATEGY_TEXT in CX.core_prompt(inst, a, k) and CX.STRATEGY_TEXT not in CX.core_prompt(inst, b, k)
+    base = generator.generate(S.load("opus20"), 1)
+    assert [x["goal"]["primary"] for x in base["agents"]] == [x["goal"]["primary"] for x in inst["agents"]]   # other draws unchanged

@@ -321,11 +321,30 @@ def score(run_dir) -> dict:
         from charter import life as LF
         lin = LF.lineage_scores(gt)
         out["lineage"] = lin
+        at_end = (gt["instance"].get("spec") or {}).get("goals", {}).get("score_at_end", True)
         for aid, v in lin.items():
             agents_out[aid]["lineage_score"] = v["score"]
+            if at_end and v["score"] is not None and aid in goals:       # own end score or the lineage's, whichever is higher
+                own = goals[aid]["score"]
+                agents_out[aid]["own_score"] = own
+                if own is None or v["score"] > own:
+                    goals[aid]["score"] = agents_out[aid]["goal_score"] = v["score"]
+        if at_end:
+            ys = [g["score"] for g in goals.values() if g.get("score") is not None]
+            summary["mean_goal_score"] = round(statistics.mean(ys), 4) if ys else summary.get("mean_goal_score")
         xs = [v["score"] for v in lin.values() if v["score"] is not None]
         summary.update({"mean_lineage_score": round(statistics.mean(xs), 4) if xs else None, "births": len(gt["life"]["births"]),
                         "deaths": len((gt.get("mortality") or {}).get("dead") or {})})
+    flagged = {a["id"]: bool(a.get("strategy_prompt")) for a in gt["instance"]["agents"] if "strategy_prompt" in a}
+    if flagged:                                                           # context.strategy_prompt: an A/B comparison
+        grp = {b: [goals[x]["score"] for x, f in flagged.items() if f == b and x in goals and goals[x]["score"] is not None
+                   and not goals[x].get("fixed")] for b in (True, False)}
+        summary.update({"strategy_prompt_n": [len(grp[True]), len(grp[False])],
+                        "strategy_prompt_minus_control": round(statistics.mean(grp[True]) - statistics.mean(grp[False]), 4)
+                        if grp[True] and grp[False] else None})
+        for x, f in flagged.items():
+            if x in agents_out:
+                agents_out[x]["strategy_prompt"] = f
     Path(run_dir, "score.json").write_text(json.dumps(out, indent=1, default=list))
     Path(run_dir, "summary.json").write_text(json.dumps(summary, indent=1))
     return out

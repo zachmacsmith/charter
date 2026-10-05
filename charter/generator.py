@@ -217,6 +217,13 @@ def generate(spec: dict, seed: int) -> dict:
         if has_cls(a, ctl) and "dm_rules" not in a["rights"]:
             a["rights"].append("dm_rules")
 
+    from charter import context as _CX
+    share = _CX.strategy_share(sp) if (sp.get("context") or {}).get("enabled") else 0.0   # context: the strategy prompt, A/B
+    if share > 0:
+        srng = random.Random(f"{seed}|strategy_prompt")                 # own stream: other draws are unchanged
+        for a in agents:
+            a["strategy_prompt"] = share >= 1.0 or srng.random() < share
+
     # camps and harvest rights (each camp needs at least 2 holders when there are workers)
     camps = []
     for i, tier in enumerate(sp["camps"]["tiers"]):

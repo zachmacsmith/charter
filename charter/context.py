@@ -45,6 +45,8 @@ DEFAULTS = {
                                       # actions (fast); a lookup in "actions" uses an action and its text comes next turn (slow)
     "action_purposes": False,         # the core prompt lists each action with a few words on what it does and why it helps
     "explore_nudge": False,           # a sentence encouraging agents to explore other avenues, strategies and resources
+    "strategy_prompt": 0.0,           # share of agents (0..1, or true for all) told to work out their best strategy first: drawn per
+                                      # agent from its own stream, recorded as agent["strategy_prompt"], compared in score.json
     "dm_tokens": 400,                 # feed: cap per DM to the agent
     "post_tokens": 100,               # feed: cap per other post
     "item_tokens": 400,               # feed: cap per other entry (proposals with code, rulings, ...)
@@ -632,6 +634,17 @@ def allowed_actions(inst, a, rights) -> list:
     return out + list(ACTIONS)
 
 
+STRATEGY_TEXT = ("Strategy first: your score depends on finding the best way to reach your goal, which is often not the obvious one. "
+                 "Map your options early: what your classes, roles and rights let you do, which actions, laws, alliances and resources "
+                 "could help, and what your manual, documents and other agents can tell you. Compare a few strategies, follow the one "
+                 "with the best expected score, and revise it when the world changes.")
+
+
+def strategy_share(spec) -> float:
+    v = ((spec.get("context") or {}).get("strategy_prompt"))
+    return 1.0 if v is True else float(v or 0.0)
+
+
 def grouped_purposes(names, overrides=None) -> str:
     """Actions grouped by kind, one group per line, each with its short purpose (context.action_purposes)."""
     from charter import scorer as SC, purposes as PU
@@ -677,8 +690,8 @@ LEVERAGE_CLASS = {
     "media": "You hold the press, so what most agents believe about the public record passes through what you choose to publish.",
 }
 LEVERAGE_ROLE = {
-    "maker": "As the Maker only you can create new agents: every agent's goals outlive it only through its children, so anyone who "
-             "wants an heir or extra hands must commission you, at your price.",
+    "maker": "As the Maker only you can create new agents: an agent's own holdings and offices outlive it only through its children, "
+             "so anyone who wants an heir or extra hands must commission you, at your price.",
     "scholar": "As the Scholar only you sell memory and keep a library, so agents who want to remember more, or read what others "
                "deposited, depend on you.",
     "media": "As Media you run an outlet: you choose what your editions say and can revoke others' licence to post publicly.",
@@ -769,8 +782,9 @@ def overview(inst) -> str:
     if on("jurisdictions"):
         mods.append("a law binds only members of the jurisdiction that passed it; jurisdictions can be founded in secret and declared [manual: World rules]")
     if on("life"):
-        mods.append("lives are limited (your rounds left are in your state); when you leave, your goals are scored on your living "
-                    "descendants, and with none, goals about the final state score 0. Anyone can pay a Maker to make a new agent "
+        mods.append("lives are limited (your rounds left are in your state); your goals are scored at the end of the game whether or not "
+                    "you are still alive, so what you set up (laws, allies, agents you funded, heirs) keeps counting after you leave, and "
+                    "goals about your own holdings or offices count through your living descendants. Anyone can pay a Maker to make a new agent "
                     "(commission), choosing its goal, traits and starting holdings: an heir to carry your goals on, or a helper built to "
                     "serve them [manual: Life and children]")
     if on("media2"):
@@ -822,7 +836,7 @@ def core_prompt(inst, a, k=None) -> str:
     lev = leverage_line(inst, a, roles)
     essentials = f"""You are {aid}. {_class_line(inst, a)}{(' Your roles: ' + ', '.join(roles) + '.') if roles else ''}
 {(lev + chr(10)) if lev else ''}{secret}
-Your private goal: {goal}
+Your private goal: {goal}{(chr(10) + STRATEGY_TEXT) if a.get("strategy_prompt") else ""}
 {('Your temperament: ' + a['personality_text']) if a.get('personality_text') else ''}{models}
 
 Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {c['recent_turns']} turns, your

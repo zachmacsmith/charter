@@ -709,6 +709,8 @@ def segments(gt, aid):
     bs = sorted((b for b in we.get("goal_boundaries", []) if b["agent"] == aid), key=lambda b: b["round"])
     r0 = int(we.get("arrivals", {}).get(aid, 0))
     dep = we.get("departures", {}).get(aid)
+    if ((gt.get("instance") or {}).get("spec") or {}).get("goals", {}).get("score_at_end", True):
+        dep = None                                                       # scored at the end on the final world, alive or not
     if not bs and not r0 and dep is None:
         return None
     last = gt["snapshots"][-1]["round"] if dep is None else int(dep) - 1
