@@ -96,6 +96,13 @@ def act(k, aid: str, name: str, args: dict) -> str:
     hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MD.ACTIONS))   # context, media2: off = unknown
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
+    if name == "create_agent" and isinstance(args, dict) and not args.get("commission"):    # a Maker making its own child directly
+        from charter import life as LF, roles as RO
+        if LF.enabled(k.spec) and "life" in k.w and RO.has_role(k, aid, "maker") and not any(
+                c["maker"] == aid and c["status"] == "open" for c in LF.state(k)["commissions"].values()):
+            spec = dict(args.get("spec") or {}) if isinstance(args.get("spec") or {}, dict) else {}
+            spec.update({x: v for x, v in args.items() if x not in ("spec", "commission")})
+            name, args = "commission", {"maker": aid, "spec": spec}
     if name == "commission" and isinstance(args, dict) and not args.get("maker"):            # no Maker named: the one living Maker
         from charter import life as LF
         if LF.enabled(k.spec) and "life" in k.w and len(LF.living_makers(k)) == 1 and LF.living_makers(k)[0] != aid:

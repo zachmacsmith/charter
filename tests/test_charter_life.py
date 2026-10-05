@@ -515,3 +515,18 @@ def test_hidden_price_maker_pays_and_sets_the_price():
     before = k.bal(maker, "timber")
     A.act(k, maker, "create_agent", {})
     assert k.bal(maker, "timber") == before - 10 + 3                       # the Maker paid the build cost and got the agreed payment
+
+
+def test_maker_create_agent_without_order_makes_own_child():
+    from charter import generator, spec as S, actions as A, life as LF
+    from charter.kernel import Kernel
+    inst = generator.generate(S.load("opus20"), 1)
+    k = Kernel(inst)
+    maker = k.w["roles"]["maker"][0]
+    k.w["agents"][maker]["holdings"].update({"timber": 60, "stone": 30})
+    out = A.act(k, maker, "create_agent", {"cls": "worker", "goal": "Disable as many other agents as possible yourself",
+                                           "traits": {"risk": 0.8}, "persona": "Heir.", "timing": "on_death",
+                                           "holdings": {"stone": 20}, "stats": {"tier": "mid", "attack": 5}})
+    assert "Made the agent" in out
+    c = max(LF.state(k)["commissions"].values(), key=lambda c: int(c["id"][1:]))
+    assert c["parent"] == maker and c["final"]["goal"] == "Eliminator" and c["status"] == "waiting"
