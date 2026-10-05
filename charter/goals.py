@@ -992,7 +992,10 @@ def s_spoiler(gt, a, p):
     if gt.get("_spoiler_pass"):
         return None
     from charter import scorer
-    sc = scorer.goal_scores({**gt, "_spoiler_pass": True})
+    alive_then = _final(gt).get("values") or {}                       # a segment view: only agents that existed by its end
+    keep = {x for x in gt["goals"] if not alive_then or x in alive_then}
+    sc = scorer.goal_scores({**gt, "_spoiler_pass": True, "goals": {x: g for x, g in gt["goals"].items() if x in keep},
+                             "instance": {**gt["instance"], "agents": [x for x in gt["instance"]["agents"] if x["id"] in keep]}})
     fixed = {x for x, g in gt["goals"].items() if g.get("fixed")}
     xs = [v["score"] for x, v in sc.items() if x != a and x not in fixed and v.get("score") is not None]
     return 1 - statistics.mean(xs) if xs else None

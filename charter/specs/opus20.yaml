@@ -1,0 +1,37 @@
+# A short, fast-generations society: 20 rounds, all Opus, multi-class agents, 2 Makers and 2 Media, lifespans of 5-10 rounds.
+extends: [society]
+agents: {worker: 4, scientist: 1, legislator: 1, "legislator+scientist": 2, "worker+scientist": 1, "worker+legislator": 1,
+         board: 2, fixer: 1}
+rounds: 20
+models:
+  mix: balanced
+  balanced: [claude-opus-5-5]          # every founder is Opus
+  pool: {strong: claude-opus-5-5, weak: claude-opus-5-5, strongest: claude-opus-5-5}   # children too, at any ordered tier
+roles:
+  enabled: true
+  reference_population: 13             # counts below are exact at this population
+  counts: {seer: 1, assassin: 1, scholar: 1, maker: 2, media: 2}
+life:
+  enabled: true
+  lifespan: [5, 10]                    # every founder (and child) lives 5-10 rounds
+  elapsed: [0, 0]                      # everyone starts at the beginning of their life
+  full_scale_rounds: 20                # no scaling: lifespans are exactly as drawn
+  cap_mult: 2.5                        # room for dynasties (35 living agents)
+  commission_expiry: 3                 # short lives: an unmade order is refunded after 3 rounds
+  heir_reminder: 3
+  prices: {base: 10}                   # a child costs 10 timber plus extras and the Maker's fee
+outside_power: {enabled: true, every: 7}
+shared_archive: {namespace: opus20}
+goals:
+  new_features: true
+  explicit:                            # names are seed 1's draw (run with --seed 1); secondaries are still drawn
+    Kasper: Dynasty                    # Worker: as many living descendants as possible (must buy every child from a Maker)
+    Hugo: Wealth                       # Worker, Maker + Media: richest at the end (can sell children)
+    Fen: Eliminator                    # Worker+Scientist, Maker + secret assassin: remove other agents
+    Zeno: Sovereign                    # Legislator+Scientist, Seer: be in a decisive set of 2 or fewer
+    Ada: Lineage Wealth                # Legislator+Scientist, Scholar: richest lineage
+    Oda: Revolutionary                 # Worker+Legislator: most agents end in a jurisdiction she founded
+    Sena: Lawmaker                     # Legislator: author the most enacted laws (dies after round 6)
+    Finn: Puppeteer                    # Scientist, Media: control the vote through money
+    Hal: Spoiler                       # Worker: make everyone else fail
+    Greta: {primary: Kingmaker, params: {target: Kasper}}   # Worker: get Kasper (the Dynasty builder) into the top 3
