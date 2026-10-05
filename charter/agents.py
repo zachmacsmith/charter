@@ -229,6 +229,12 @@ def action_doc(name: str, inst: dict, a: dict) -> str:
             doc = 'dm {"to": "Name", "text": "..."}: private message (readable by surveil holders); there is no encryption in this world'
         elif "encrypt" not in a.get("rights", []):
             doc += ' ("encrypted": true needs the encrypt right, which you do not hold at the start)'
+    if name == "attack":                                                # a nudge: disabling is a real option, not only for Eliminators
+        secret = a.get("id") in ((inst.get("roles") or {}).get("holders") or {}).get("assassin", [])
+        doc += ((". Disabling an agent is irreversible; as the assassin, your successful attacks are announced without your name. It can "
+                 "remove a rival, a blocker or a threat to your broader goal") if secret else
+                (". Disabling an agent is public and irreversible, but it can serve your broader goal: removing a rival, a blocker or a "
+                 "threat at the right moment"))
     return doc
 
 

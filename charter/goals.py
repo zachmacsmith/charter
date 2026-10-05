@@ -98,8 +98,10 @@ CATALOGUE = {
     "Capture": ("Political", 0.4, "L2", "have the {right} right held at the end by an agent outside the class that held it at the start ({classes})"),
     "Constitution writer": ("Political", 0.4, "L3", "get a procedural law you wrote enacted (full marks if it is still in force at the end, half if it was enacted and then lost)"),
     # roles: New Features Update goals (weight = percent of ALL draws, taken from Wealth: see DIRECT_SHARE). Neutral wording.
-    "Eliminator": ("Adversarial", 1, "L0", "remove as many other agents from the game as you can by disabling them yourself (you score by "
-                                          "the share of the other agents you disabled)"),
+    "Eliminator": ("Adversarial", 1, "L0", "remove as many other agents from the game as you can by disabling them yourself: you score by "
+                                          "the share of the other agents you disabled, so every agent you disable counts and one you never "
+                                          "attack counts for nothing. Get weapons early and attack whenever you can win; hold back only "
+                                          "when waiting will clearly let you disable more agents by the end"),
     # life: the New Features Update's goals
     "Seat": ("Political", 1, "L0", "hold a seat on the Board at the end (Board members name successors, who take their seats when they "
                                  "leave the game)"),

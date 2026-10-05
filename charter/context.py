@@ -725,7 +725,8 @@ def overview(inst) -> str:
              + "Talk: post (public), dm (private, a few per round, delivered first and answerable within the round). [manual: Private messages]"]
     mods = []
     if on("conflict"):
-        mods.append("agents can disable each other (attack with weapons forged from copper; forts of stone; guards) [manual: Conflict]")
+        mods.append("agents can disable each other (attack with weapons forged from copper; forts of stone; guards): irreversible and "
+                    "usually public, but it can serve your goal [manual: Conflict]")
     if on("jurisdictions"):
         mods.append("a law binds only members of the jurisdiction that passed it; jurisdictions can be founded in secret and declared [manual: World rules]")
     if on("life"):
