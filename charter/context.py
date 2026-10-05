@@ -851,8 +851,8 @@ def core_prompt(inst, a, k=None) -> str:
     from charter import roles as _RO, hidden as _H
     secret = "\n".join(x.strip() for x in (_RO.prompt_section(inst, a), _H.prompt_section(inst, a)) if x and x.strip())
     lev = leverage_line(inst, a, roles)
-    acts = ((chr(10) + grouped_purposes(allowed_actions(inst, a, rights), {"post": "submit a public statement to the media",
-                                                                            "anon_post": "submit one without your name"}
+    acts = ((chr(10) + grouped_purposes(allowed_actions(inst, a, rights), {"post": "ask the newspapers to print your public post",
+                                                                            "anon_post": "ask them to print one without your name"}
                                         if (inst["spec"].get("media2") or {}).get("submissions") else None))
             if c["action_purposes"] else grouped_actions(allowed_actions(inst, a, rights)) + ".")
     parts = [

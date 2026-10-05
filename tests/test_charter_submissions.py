@@ -15,7 +15,7 @@ def test_posts_become_submissions_editors_see_them():
     who = next(a["id"] for a in inst["agents"] if a["cls"] == "worker")
     n_posts = sum(1 for e in k.events if e["type"] == "post")
     out = A.act(k, who, "post", {"text": "Vote for the levy!"})
-    assert out.startswith("Submitted to the media") and sum(1 for e in k.events if e["type"] == "post") == n_posts
+    assert out.startswith("Submitted") and sum(1 for e in k.events if e["type"] == "post") == n_posts
     assert MD.round_submissions(k, k.r)[-1]["text"] == "Vote for the levy!"
     editor = next(o["editor"] for o in MD.all_outlets(k) if o.get("editor") and not o.get("official"))
     k.w["round"] += 1                                                      # the editorial turn after the round
@@ -35,7 +35,7 @@ def test_exploration_prompt_and_fast_lookups():
                      "context.budgets.core=3500")
     a = next(x for x in inst["agents"] if x["cls"] == "worker")
     p = CX.core_prompt(inst, a, k)
-    assert "commission (order a child from a Maker" in p and "post (submit a public statement to the media)" in p
+    assert "commission (order a child from a Maker" in p and "post (ask the newspapers to print your public post)" in p
     assert "Look beyond the obvious" in p and "uses one of your private-message slots" in p and "for free" not in p
     assert CX.tokens(p) <= 3500
     before = k.w.setdefault("dm_sent", {}).get(a["id"], 0)

@@ -69,13 +69,22 @@ def _apply_live(k, inst, live: dict, log=print, announce=True) -> None:
             k.log("rules_changed", None, {"setting": key, "value": v, "from_round": k.r + 1}, vis="monitor")
             log(f"  live setting {key} = {v} from round {k.r + 1}")
     if announce and live:
-        texts = {"media2.submissions": "From now on a public post is a submission to the outlets: their editors decide whether and how "
-                                      "to print it (a law can set up an official stream that publishes chosen agents verbatim).",
+        texts = {"media2.submissions": "From now on nobody posts publicly directly: a public post (post, anon_post) is a request to the "
+                                      "newspapers to print it, and their editors decide whether and in what form it appears (a law can "
+                                      "set up an official stream that publishes chosen agents verbatim).",
                  "context.lookups_in_dm_step": "From now on lookups are no longer free: in \"lookups\" each uses one of your "
                                                "private-message slots and is answered before actions; as an action it costs an action."}
         msg = " ".join(texts[x] for x in live if x in texts)
         if msg:
             k.gazette("New rules: " + msg)
+        if "media2.submissions" in live:                                 # the editors: what they now receive and decide
+            from charter import media as MD
+            for o in MD.all_outlets(k):
+                if o.get("editor") and o.get("status", "open") == "open":
+                    k.notify(o["editor"], f"New rules for {o['name']}: from now on every public post in the world comes to you as a "
+                                          "submission, a post its author asked to have printed in the newspapers. Each editorial turn "
+                                          "you see them all; nothing reaches the public unless an outlet prints it, and you decide what "
+                                          "to print and how.")
 
 
 def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None) -> Path:

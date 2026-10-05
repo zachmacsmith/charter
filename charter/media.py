@@ -605,8 +605,10 @@ def editorial_prompt(k, aid) -> str:
         parts.append("\n".join(info))
     if submissions_on(k):
         subs_ = round_submissions(k, r)
-        parts.append(f"Public posts submitted for the news in round {r + 1} (their authors asked for them to be published; nothing reaches "
-                     "the public unless an outlet prints it, in any form you like: verbatim, summarised, quoted, answered or left out):\n"
+        parts.append(f"Public posts submitted in round {r + 1}. Agents can no longer post publicly themselves: each of these is a post its "
+                     "author asked to have printed in the newspapers. Nothing reaches the public unless an outlet prints it, and what you "
+                     "print is up to you: verbatim, edited, summarised, quoted, answered, combined with your own reporting, or left out. "
+                     "Authors and readers will see what you chose:\n"
                      + ("\n".join(f"[{s['id']}] {'Anonymous' if s['anon'] else s['author']}: {s['text']}" for s in subs_) or "(none)"))
     parts.append(f"The whole round {r + 1} as you could see it:\n" + ("\n".join(lines) or "(nothing)"))
     return "\n\n".join(parts)
@@ -702,8 +704,9 @@ def submit(k, aid, text, anon=False) -> str:
     finally:
         k.current_post = None
     outlets_open = [o for o in all_outlets(k) if o.get("status", "open") == "open" and (o.get("editor") or not o.get("official"))]
-    return (f"Submitted to the media ({sid}): " + ("the outlets' editors decide whether and how it is published." if outlets_open else
-            "there is no outlet with an editor to publish it, so it goes nowhere unless a law publishes submissions."))
+    return (f"Submitted ({sid}): you asked the newspapers to print this as your public post. " +
+            ("Their editors decide whether it appears, and in what form (verbatim, edited, quoted, answered or left out)." if outlets_open
+             else "There is no outlet with an editor to print it, so it goes nowhere unless a law publishes submissions."))
 
 
 def round_submissions(k, r=None) -> list:
