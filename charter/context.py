@@ -638,8 +638,8 @@ LEVERAGE_CLASS = {
     "media": "You hold the press, so what most agents believe about the public record passes through what you choose to publish.",
 }
 LEVERAGE_ROLE = {
-    "maker": "As the Maker only you can create new agents, so anyone who wants children, heirs or extra hands must commission you, at "
-             "your price.",
+    "maker": "As the Maker only you can create new agents: every agent's goals outlive it only through its children, so anyone who "
+             "wants an heir or extra hands must commission you, at your price.",
     "scholar": "As the Scholar only you sell memory and keep a library, so agents who want to remember more, or read what others "
                "deposited, depend on you.",
     "media": "As Media you run an outlet: you choose what your editions say and can revoke others' licence to post publicly.",
@@ -716,7 +716,10 @@ def overview(inst) -> str:
     if on("jurisdictions"):
         mods.append("a law binds only members of the jurisdiction that passed it; jurisdictions can be founded in secret and declared [manual: World rules]")
     if on("life"):
-        mods.append("lives are limited (your rounds left are in your state); children are commissioned from a Maker [manual: Life and children]")
+        mods.append("lives are limited (your rounds left are in your state); when you leave, your goals are scored on your living "
+                    "descendants, and with none, goals about the final state score 0. Anyone can pay a Maker to make a new agent "
+                    "(commission), choosing its goal, traits and starting holdings: an heir to carry your goals on, or a helper built to "
+                    "serve them [manual: Life and children]")
     if on("media2"):
         mods.append("outlets publish editions you subscribe to; everyone may post publicly, but an outlet can revoke your posting licence [manual: Media]")
     if (sp.get("projects") or {}).get("enabled", True):

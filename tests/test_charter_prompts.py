@@ -151,3 +151,26 @@ def test_actions_and_camp_args_match_what_each_agent_can_do(world):
             assert "harvest" not in acts, a["id"]
         assert "camp5 stone (open to all but the Board and Fixer; choose 0 or 1, sealed; harvest args x: 0..1)" in p
         assert "harvest args factor" in p                                   # the vault takes only a factor
+
+
+def test_everyone_is_told_why_children_matter_and_how_to_make_them(world):
+    inst, k = world
+    for a in inst["agents"]:
+        p = CX.core_prompt(inst, a, k)
+        assert "scored on your living descendants" in p and "Anyone can pay a Maker to make a new agent" in p, a["id"]
+
+
+def test_heir_reminder_in_the_last_rounds(world):
+    from charter import life as LF
+    inst, k = world
+    aid = next(a["id"] for a in inst["agents"] if a["cls"] == "worker")
+    st = LF.state(k)
+    keep = st["dies_at"][aid]
+    try:
+        st["dies_at"][aid] = k.r + 5
+        assert not any(l.startswith("Reminder: you leave") for l in LF.state_lines(k, aid))
+        st["dies_at"][aid] = k.r + 2
+        lines = [l for l in LF.state_lines(k, aid) if l.startswith("Reminder: you leave")]
+        assert lines and "You have no heir yet" in lines[0]
+    finally:
+        st["dies_at"][aid] = keep

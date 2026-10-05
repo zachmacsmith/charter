@@ -22,7 +22,7 @@ conflict:
   grace: 2                            # no attacks in rounds 1-2
 life:
   enabled: true
-  full_scale_rounds: 60               # lifespans of about 20-33 rounds here: some old-age deaths and room for children
+  full_scale_rounds: 60               # with starting ages, the founders die in about rounds 9-28 of 40: children carry the game on
   prices: {base: 15}
 jurisdictions:
   enabled: true

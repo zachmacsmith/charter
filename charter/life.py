@@ -64,6 +64,7 @@ DEFAULTS = {
                "defense5": 15, "lookup": 5},
     "pay": {"base": "timber", "extras": "gold"},
     "persona_tokens": 300, "letter_tokens": 1000, "commission_expiry": 5, "ensure_maker": True,
+    "heir_reminder": 3,                 # rounds left at which an agent is reminded, every turn, to consider an heir
 }
 HISTORY = {"Lawmaker", "Enact as author", "Gifts", "Whistleblower", "Litigator", "Repealer", "Constitution writer", "Leaker",
            "Bounty hunter", "Gatekeeper", "Patron", "Scholar", "Reserve banker", "Creditor"}
@@ -721,6 +722,12 @@ def state_lines(k, aid) -> list:
         else:
             out.append(f"Your lifespan: {rem} round{'s' if rem != 1 else ''} left, this one included (you leave the game at the end of round "
                        f"{st['dies_at'][aid] + 1}).")
+    if rem is not None and rem <= int(cfg(k.spec).get("heir_reminder", 3)):
+        heirs = [c for c in children(k, aid) if MO.alive(k, c)]
+        out.append(f"Reminder: you leave the game in {rem} round{'s' if rem != 1 else ''}. Your goals are then scored on your living "
+                   "descendants; with none, goals about the final state score 0. "
+                   + (f"Your living children: {', '.join(heirs)}." if heirs else
+                      "You have no heir yet: consider commissioning one from a Maker now (commission), with a goal that carries yours on."))
     out.append(f"Population: {len(k.players())} of a cap of {st['cap']}. Maker(s): {', '.join(living_makers(k)) or 'none now'}.")
     o = _inst_agent(k, aid).get("origin")
     if o:
