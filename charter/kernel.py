@@ -546,6 +546,7 @@ class Kernel:
             **CF.law_api(k, lid),                                          # conflict: forts, weapons_of, attacks, ...
             **J.law_api(k, lid),   # jurisdictions: jurisdiction, members, admit, expel, lawful_attack
             **MD.law_api(k, lid),  # media2: outlets, official statistics, licensing rules (no-ops with it off)
+            **__import__("charter.life", fromlist=["law_api"]).law_api(k, lid),   # life: makers, commissions, births, birth rules
         })
 
     # ------------------------------------------------------------------ laws

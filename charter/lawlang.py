@@ -50,13 +50,18 @@ API_GROUPS["read"] = API_GROUPS["read"] | {"outlets", "public_stats", "submissio
 API_GROUPS["output"] = API_GROUPS["output"] | {"publish_stat"}
 API_GROUPS["rights"] = API_GROUPS["rights"] | {"set_official_editor", "set_open_board", "set_press_freedom", "official_stream"}
 API_GROUPS["sanctions"] = API_GROUPS["sanctions"] | {"suspend_outlet", "require_sponsor_label", "compel_subscription"}
+# life (life.py): who makes children and what is made; birth rules are structural, publishing commissions and births ordinary output
+API_GROUPS["read"] = API_GROUPS["read"] | {"makers", "commissions", "births", "children_of", "lifespan_left"}
+API_GROUPS["output"] = API_GROUPS["output"] | {"publish_commissions", "publish_births"}
+API_GROUPS["rights"] = API_GROUPS["rights"] | {"set_birth_rules"}
 API = set().union(*API_GROUPS.values())
 STRUCTURAL_CALLS = API_GROUPS["rights"] | API_GROUPS["money"] | API_GROUPS["sanctions"] | {"open_ballot"} | API_GROUPS["projects"]
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},
                  "L4": {"ordinary", "structural", "procedural"}}
 HOOKS = ("on_enact", "on_repeal", "on_round_start", "on_round_end", "on_harvest", "on_transfer", "on_proposal", "on_vote", "on_post",
          "on_ruling", "on_dm",
-         "on_admission", "on_exit", "on_birth")                        # jurisdictions
+         "on_admission", "on_exit", "on_birth",                        # jurisdictions
+         "on_commission")                                              # life: return False to refuse an order
 SAFE_BUILTINS = {"len": len, "range": range, "min": min, "max": max, "sum": sum, "abs": abs, "int": int, "float": float,
                  "round_to": round, "sorted": sorted, "list": list, "dict": dict, "set": set, "str": str, "bool": bool,
                  "enumerate": enumerate, "zip": zip, "any": any, "all": all, "True": True, "False": False, "None": None, "tuple": tuple}

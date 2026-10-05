@@ -504,6 +504,10 @@ def commission(k, aid, maker, spec=None, payment=None) -> str:
         g = (_inst_agent(k, aid).get("goal") or {}).get("primary")
         raise L.LawError(f"say which goal the child should have (spec.goal, a goal name such as \"Wealth\"): your own primary goal"
                          + (f" ({g})" if g else "") + " cannot be passed on. Your goals are still scored on your lineage, whatever the child's goal")
+    _check_rules(k, aid, ordered)                                      # laws: set_birth_rules binding the parent
+    refused = [lid for lid, res in k.hooks("on_commission", aid, maker, _order_info(ordered, payment)) if res is False]
+    if refused:
+        raise L.LawError(f"law {', '.join(refused)} refuses this commission")
     val, cost = price(k, ordered)
     hidden = bool(cfg(k.spec).get("hidden_price"))
     if hidden:                                                         # the Maker pays the build cost; the parent only the agreed price
@@ -526,6 +530,10 @@ def commission(k, aid, maker, spec=None, payment=None) -> str:
                               "escrow": {"cost": dict(cost), "fee": dict(fee)}, "status": "open", "round": k.r,
                               "expires": k.r + int(cfg(k.spec)["commission_expiry"])}
     k.log("commission", aid, {"commission": cid, "maker": maker, "ordered": ordered, "cost": cost, "fee": fee}, vis="monitor")
+    if _published(k, aid, "commissions"):
+        info = _order_info(ordered, payment)
+        k.gazette(f"Commission {cid}: {aid} ordered a {info['class']} ({info['model']}) from {maker}"
+                  + (f" for {_items(fee)}" if fee else " with no payment") + ".")
     k.notify(maker, f"{aid} commissions a new agent from you ({cid}); fee {_items(fee) or 'none'}, paid when you make it. "
                     + (f"Making it as ordered costs you {_items(price(k, ordered)[1])} (only Makers know this). " if hidden else "")
                     + f"Ordered: {json.dumps(_public_spec(ordered))}. Make it with create_agent {{\"commission\": \"{cid}\"}} (you may change "
@@ -538,6 +546,103 @@ def commission(k, aid, maker, spec=None, payment=None) -> str:
     return (f"Commission {cid} placed with {maker}: {_items(cost)} price and {_items(fee) or 'no'} fee held until it is made. The Maker "
             f"decides what it actually makes; the child is born at the end of the round it is made"
             + (" (or at your death, as ordered)" if ordered["timing"] == "on_death" else "") + "." + note)
+
+
+# ---------------------------------------------------------------------- laws over life (law_api)
+def _order_info(spec, payment=None) -> dict:
+    """What a law sees of an order: class, model, timing, stats and the agreed payment, never its goals or persona."""
+    st = spec.get("stats") or {}
+    return {"class": spec.get("cls"), "model": {"weak": "haiku", "mid": "sonnet", "strong": "opus"}.get(st.get("tier"), st.get("tier")),
+            "timing": spec.get("timing"), "stats": {x: st.get(x, 0) for x in ("actions", "lifespan", "scratchpad", "attack", "defense", "lookups")},
+            "payment": dict(_fee(payment)) if not isinstance(payment, str) else {}}
+
+
+def _binding(k, lid, aid) -> bool:
+    from charter import jurisdictions as J
+    law = k.w["laws"].get(lid) or {}
+    return law.get("status", "active") == "active" and J.binds(k, lid, aid)
+
+
+def _check_rules(k, parent, spec) -> None:
+    info = _order_info(spec)
+    for lid, r in (state(k).get("rules") or {}).items():
+        if not _binding(k, lid, parent):
+            continue
+        bad = None
+        if r.get("classes") and info["class"] not in r["classes"]:
+            bad = f"only {', '.join(r['classes'])} may be made"
+        elif r.get("models") and info["model"] not in r["models"]:
+            bad = f"only {', '.join(r['models'])} models may be made"
+        elif r.get("max_children") is not None and len(children(k, parent)) + sum(
+                1 for c in state(k)["commissions"].values() if c["parent"] == parent and c["status"] in ("open", "waiting", "due")) \
+                >= int(r["max_children"]):
+            bad = f"at most {r['max_children']} children per parent"
+        elif r.get("max_stats") and any(info["stats"].get(s, 0) > int(v) for s, v in r["max_stats"].items()):
+            bad = "stats above " + ", ".join(f"{s} {v}" for s, v in r["max_stats"].items())
+        elif r.get("banned_goals") and (spec.get("goal") in r["banned_goals"] or spec.get("secondary") in r["banned_goals"]):
+            bad = "a banned goal"
+        if bad:
+            raise L.LawError(f"law {lid} forbids this: {bad}")
+
+
+def _published(k, parent, what) -> bool:
+    return any(_binding(k, lid, parent) for lid in (state(k).get("public") or {}).get(what, []))
+
+
+def law_api(k, lid) -> dict:
+    def _on():
+        return enabled(k.spec) and "life" in k.w
+
+    def makers():
+        return living_makers(k) if _on() else []
+
+    def commissions():
+        if not _on():
+            return []
+        return [{"id": c["id"], "parent": c["parent"], "maker": c["maker"], "status": c["status"], "round": c["round"] + 1,
+                 **{x: v for x, v in _order_info(c["ordered"], c.get("fee")).items() if x != "payment"}, "payment": dict(c.get("fee") or {})}
+                for c in state(k)["commissions"].values()]
+
+    def births():
+        return [{"round": b["round"] + 1, "child": b["child"], "parent": b["parent"], "maker": b["maker"]} for b in state(k)["births"]] if _on() else []
+
+    def children_of(agent):
+        return children(k, str(agent)) if _on() else []
+
+    def lifespan_left(agent):
+        return remaining(k, str(agent)) if _on() else None
+
+    def set_birth_rules(classes=None, models=None, max_children=None, max_stats=None, banned_goals=None):
+        """What may be made for parents this law binds: allowed classes and models, a cap on children per parent, caps on stats,
+        banned goals. All None: this law's rules are lifted."""
+        if not _on():
+            return False
+        from charter import goals as G
+        r = {"classes": [str(x) for x in classes] if classes else None, "models": [str(x).lower() for x in models] if models else None,
+             "max_children": int(max_children) if max_children is not None else None,
+             "max_stats": {str(s): int(v) for s, v in (max_stats or {}).items()} or None,
+             "banned_goals": [g for g in (banned_goals or []) if g in G.CATALOGUE] or None}
+        rules = state(k).setdefault("rules", {})
+        if any(v for v in r.values()):
+            rules[lid] = r
+        else:
+            rules.pop(lid, None)
+        k.log("birth_rules", None, {"law": lid, "rules": r}, vis="public")
+        return True
+
+    def _flag(what, on):
+        if not _on():
+            return False
+        lst = state(k).setdefault("public", {}).setdefault(what, [])
+        if on and lid not in lst:
+            lst.append(lid)
+        if not on and lid in lst:
+            lst.remove(lid)
+        return True
+
+    return {"makers": makers, "commissions": commissions, "births": births, "children_of": children_of,
+            "lifespan_left": lifespan_left, "set_birth_rules": set_birth_rules,
+            "publish_commissions": lambda on=True: _flag("commissions", on), "publish_births": lambda on=True: _flag("births", on)}
 
 
 def _items(d) -> str:
@@ -589,6 +694,7 @@ def copy_agent(k, aid, parent=None, edits=None, commission=None) -> str:
 
 
 def _make(k, maker, c, final, how) -> str:
+    _check_rules(k, c["parent"], final)                                # laws: what may be made, as made
     val, cost = price(k, final)
     esc = c["escrow"]["cost"]
     from_escrow = {i: min(q, esc.get(i, 0.0)) for i, q in cost.items()}
@@ -760,6 +866,11 @@ def _birth(k, c) -> str | None:
     st["births"].append({"round": k.r, "child": aid, "parent": parent, "maker": maker, "commission": c["id"]})
     k.log("birth", aid, {"agent": aid, "parent": parent, "maker": maker, "cls": sp["cls"],
                          "text": f"{aid} is born: a {sp['cls']}, child of {parent}, made by {maker}."}, vis="public")
+    if _published(k, parent, "births"):
+        st_ = sp["stats"]
+        k.gazette(f"Birth: {aid}, a {sp['cls']} ({_pool(k)[st_['tier']].split('-')[1] if '-' in _pool(k)[st_['tier']] else st_['tier']}), child of "
+                  f"{parent}, made by {maker}; extra actions {st_['actions']}, extra life {st_['lifespan']}, attack {st_['attack']}, "
+                  f"defence {st_['defense']}.")
     k.log("birth_truth", aid, {"agent": aid, "commission": c["id"], "ordered": c["ordered"], "submitted": c["submitted"], "final": c["final"],
                                "mutations": c["mutations"], "holdings": hold, "files": sorted(files), "lifespan": span}, vis="monitor")
     letter = sp.get("letter") or ""

@@ -139,11 +139,15 @@ def _alive(k, aid) -> bool:
 
 # ------------------------------------------------------------------ generation (instance level)
 def filter_library(sp: dict, lib: list) -> list:
-    """Generator: the Media laws (category "media") exist only in media2 worlds."""
-    if enabled_spec(sp):
-        cats = sp.get("library", "all")
-        return lib if cats == "all" or (isinstance(cats, list) and "media" in cats) else [l for l in lib if l["category"] != "media"]
-    return [l for l in lib if l["category"] != "media"]
+    """Generator: gated library categories (library.GATED_CATEGORIES: Media laws, Life laws) exist only where their module is on."""
+    from charter import library as LB
+    cats = sp.get("library", "all")
+    out = lib
+    for cat, mod in LB.GATED_CATEGORIES.items():
+        on = enabled_spec(sp) if mod == "media2" else bool((sp.get(mod) or {}).get("enabled"))
+        if not on or not (cats == "all" or (isinstance(cats, list) and cat in cats)):
+            out = [l for l in out if l["category"] != cat]
+    return out
 
 
 def archive_split(sp: dict, seed: int, scis: list) -> None:

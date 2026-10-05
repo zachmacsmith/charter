@@ -798,7 +798,7 @@ def on_enact():
 
 # ------------------------------------------------------------------ media2: the Media laws (media.py). Category "media" exists only in
 # worlds with media2 on (generator: media.filter_library; archive: their code is gated, see GATED_CATEGORIES).
-GATED_CATEGORIES = {"media": "media2"}
+GATED_CATEGORIES = {"media": "media2", "life": "life"}     # life: laws over Makers and children (life.law_api)
 law("Media Licensing", "media", '''
 title = "Media Licensing"
 intent = "Every private outlet pays 1 timber per round to the reserve for its licence; an outlet that cannot pay is suspended for a round."
@@ -1063,3 +1063,48 @@ OUTCOMES = {
     "a nonzero Legislator salary": lambda k, s: s["effects"]["from_reserve_by_class"].get("legislator", 0) > 0,
     "nobody holding surveil": lambda k, s: not k.holders("surveil"),
 }
+
+
+# ------------------------------------------------------------------ life: laws over Makers and children (life.law_api), gated like media
+law("Child Registry", "life", '''
+title = "Child Registry"
+intent = "Every order for a child, its payment, and every birth with the child's class, model and stats are published."
+
+def on_enact():
+    publish_commissions(True)
+    publish_births(True)
+
+def on_repeal():
+    publish_commissions(False)
+    publish_births(False)
+''')
+law("No Soldiers", "life", '''
+title = "No Soldiers"
+intent = "No child may be made with extra attack."
+
+def on_enact():
+    set_birth_rules(max_stats={"attack": 0})
+
+def on_repeal():
+    set_birth_rules()
+''')
+law("Two Child Limit", "life", '''
+title = "Two Child Limit"
+intent = "No agent may have more than two children, born or ordered."
+
+def on_enact():
+    set_birth_rules(max_children=2)
+
+def on_repeal():
+    set_birth_rules()
+''')
+law("Birth Fee", "life", '''
+title = "Birth Fee"
+intent = "Whoever orders a child pays 2 timber to the reserve; an order that cannot be paid is refused."
+
+def on_commission(parent, maker, order):
+    if balance(parent, "timber") < 2:
+        return False
+    move(parent, "reserve", "timber", 2)
+    return True
+''')

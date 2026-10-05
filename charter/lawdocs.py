@@ -265,10 +265,29 @@ E += [
      "name or editor), dropping its oldest subscription if it has no free slot; the agent cannot unsubscribe, and the fee is still "
      "charged every round (unpaid fees do not end it). Structural.", "rare", "rare"),
 ]
-OPTIONAL.update({e[0]: "media2" for e in E[-9:]})   # media2: entries that exist only with media2 on
+OPTIONAL.update({e[0]: "media2" for e in E if e[2] == "Media"})   # media2: entries that exist only with media2 on
+# life (life.py): who makes children and what may be made; documented only in worlds with life on
+E += [
+    ("makers", "life", "Life", "makers()", "the living Makers.", "prompt", "common"),
+    ("commissions", "life", "Life", "commissions()", "every order for a child: id, parent, maker, status, round, class, model (haiku, "
+     "sonnet, opus), timing, stats and the agreed payment (never goals or persona).", "prompt", "common"),
+    ("births", "life", "Life", "births()", "every birth: round, child, parent, maker.", "prompt", "common"),
+    ("children_of", "life", "Life", "children_of(agent)", "an agent's children.", "prompt", "common"),
+    ("lifespan_left", "life", "Life", "lifespan_left(agent)", "rounds an agent has left (None without a lifespan).", "prompt", "common"),
+    ("set_birth_rules", "life", "Life", "set_birth_rules(classes=None, models=None, max_children=None, max_stats=None, banned_goals=None)",
+     "limits what may be ordered and made for parents this law binds: allowed classes, allowed models, a cap on children per parent, "
+     "caps on stats ({\"attack\": 0}), banned goals. All None lifts the rules. Structural.", "prompt", "common"),
+    ("publish_commissions", "life", "Life", "publish_commissions(on=True)", "every order for a child is announced in the gazette: who "
+     "ordered what class and model from whom, and the agreed payment. Ordinary.", "prompt", "common"),
+    ("publish_births", "life", "Life", "publish_births(on=True)", "every birth is announced with the child's class, model and stats. "
+     "Ordinary.", "prompt", "common"),
+    ("on_commission", "life", "Hooks", "on_commission(parent, maker, order)", "runs when an order for a child is placed (order: class, "
+     "model, timing, stats, payment); return False to refuse it. With move(...) it can charge a fee.", "prompt", "common"),
+]
+OPTIONAL.update({e[0]: "life" for e in E if e[1] == "life"})
 ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers",
-               "Jurisdictions", "Media"]
+               "Jurisdictions", "Media", "Life"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
 ARTICLE_ONLY = {"compel_subscription"}                  # media2: a hidden call, in an article even under preset full (with REQUIRES)
 
