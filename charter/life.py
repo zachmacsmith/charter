@@ -441,7 +441,9 @@ def commission(k, aid, maker, spec=None, payment=None) -> str:
         raise L.LawError(f"{maker} is not a Maker" + (f" (Makers: {', '.join(living_makers(k))})" if living_makers(k) else " (there is no Maker now)"))
     ordered = merge_spec(k, default_spec(k, aid), spec or {})
     if ordered["goal"] is None:
-        raise L.LawError("say which goal the child should have (spec.goal): your own cannot be copied")
+        g = (_inst_agent(k, aid).get("goal") or {}).get("primary")
+        raise L.LawError(f"say which goal the child should have (spec.goal, a goal name such as \"Wealth\"): your own primary goal"
+                         + (f" ({g})" if g else "") + " cannot be passed on. Your goals are still scored on your lineage, whatever the child's goal")
     val, cost = price(k, ordered)
     fee = _fee(payment)
     need = dict(cost)

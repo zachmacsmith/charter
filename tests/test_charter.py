@@ -783,3 +783,11 @@ def test_transfer_amount_shapes_round1_seed37():
     assert N("transfer", {"to": "Rhea", "amount": {"timber": 1}}) == {"to": "Rhea", "item": "timber", "qty": 1}
     assert N("transfer", {"to": "Rhea", "timber": 1}) == {"to": "Rhea", "item": "timber", "qty": 1}
     assert N("write_scratchpad", {"note": "x"}) == {"text": "x"}
+
+
+def test_commission_arguments_seed7_round17():
+    from charter.actions import _normalise_args as N
+    assert N("commission", {"maker": "Trym", "goal": "Wealth", "payment": {"timber": 15}}) == \
+        {"maker": "Trym", "payment": {"timber": 15}, "spec": {"goal": "Wealth"}}
+    assert N("commission", {"maker": "Trym", "spec": {"goal": "Steward", "born": "at_death"}})["spec"] == {"goal": "Steward", "timing": "on_death"}
+    assert N("commission", {"maker": "Trym", "spec": {"timing": "next round"}})["spec"]["timing"] == "next_round"

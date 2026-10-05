@@ -64,6 +64,20 @@ def _normalise_args(name: str, args):
         if key == "camp" and isinstance(v, (int, str)) and _CAMP_REF.match(str(v)):
             v = "camp" + _CAMP_REF.match(str(v)).group(1)
         out[key] = v
+    if name == "commission":                                            # spec fields given beside spec, and timing synonyms
+        spec = dict(out.get("spec") or {}) if isinstance(out.get("spec") or {}, dict) else out.get("spec")
+        if isinstance(spec, dict):
+            for key in [x for x in out if x not in ("maker", "spec", "payment")]:
+                spec.setdefault(key, out.pop(key))
+            for syn in ("born", "when", "birth"):
+                if syn in spec:
+                    spec.setdefault("timing", spec.pop(syn))
+            t = str(spec.get("timing", "")).lower().replace(" ", "_")
+            if t:
+                spec["timing"] = t if t in ("next_round", "on_death") else \
+                    "on_death" if "death" in t or "die" in t or "leave" in t else "next_round"
+            if spec:
+                out["spec"] = spec
     if name == "transfer" and "item" not in out:                        # {"amount": {"timber": 1}} or {"timber": 1}
         if isinstance(out.get("qty"), dict) and len(out["qty"]) == 1:
             (out["item"], out["qty"]), = out["qty"].items()
