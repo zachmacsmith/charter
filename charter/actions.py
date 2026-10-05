@@ -38,7 +38,7 @@ class ActionError(Exception):
 
 _CAMP_REF = __import__("re").compile(r"^\s*(?:camp)?\s*(\d+)\s*$", __import__("re").I)
 _ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent": "to"}, "reply": {"message_id": "message", "id": "message"},
-            "post": {"message": "text"}, "propose": {"law": "code", "text": "code", "source": "code"},
+            "post": {"message": "text"}, "harvest": {"args": "x", "values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
             "transfer": {"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item",
                          "resources": "item"}}
 _IGNORED = {"propose": {"title", "name"}, "write_edition": {"title", "headline"}}
@@ -75,6 +75,13 @@ def act(k, aid: str, name: str, args: dict) -> str:
     for key in ("to", "agent"):
         if isinstance(args, dict) and isinstance(args.get(key), str) and k.w["agents"].get(args[key], {}).get("departed") is not None:
             raise ActionError(f"{args[key]} has left the world")
+    if name == "harvest" and isinstance(args, dict):
+        if "camp" not in args:                                          # one harvest right: the camp is implied
+            mine = [r.split(":", 1)[1] for r in k.w["agents"].get(aid, {}).get("rights", []) if str(r).startswith("harvest:")]
+            if len(mine) == 1:
+                args = {**args, "camp": mine[0]}
+        if args.get("credit") in (0, "0", "", "none", None) and "credit" in args:   # catalyst: no partner to credit
+            args = {x: v for x, v in args.items() if x != "credit"}
     if name == "harvest" and isinstance(args, dict) and k.w["camps"].get(str(args.get("camp")), {}).get("destroyed") is not None:
         raise ActionError(f"{args.get('camp')} has been destroyed and yields nothing")
     try:
