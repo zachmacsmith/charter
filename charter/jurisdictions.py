@@ -58,10 +58,15 @@ from charter import lawlang as L
 
 KEY = "jurisdictions"
 DEFAULTS = {"enabled": False, "start": "j0", "board_scope": "founding", "admission": "ballot", "j0_name": "the Commonwealth",
-            "scripted_founder": None}
-ACTIONS = ("found", "invite", "join", "leave", "declare")
+            "scripted_founder": None,
+            "declare_cost": 0,          # value the hidden jurisdiction's treasury must hold before it can be declared (members fund it)
+            "declare_min_members": 1,   # members (founder and pledges) needed to declare
+            "max_charter": 5}           # starting laws a founder may set (found {"laws": [...]}, set_charter)
+ACTIONS = ("found", "invite", "join", "leave", "declare", "fund", "set_charter")
 ACTION_DOC = {
-    "found": 'found {"name": "..."}: secretly found a new jurisdiction; only members you invite will know it exists. Laws passed there have no effect until it is declared',
+    "found": 'found {"name": "...", "laws": ["<law code>", ...]}: secretly found a new jurisdiction; only members you invite will know it exists. "laws" (optional) is its charter: starting laws enacted, without a vote, when it is declared. Laws passed there meanwhile have no effect until it is declared',
+    "fund": 'fund {"jurisdiction": "J2", "item": "timber", "qty": 10}: put goods into a jurisdiction\'s treasury (a hidden one you belong to must hold enough before it can be declared); refunded in proportion if it dissolves before declaring',
+    "set_charter": 'set_charter {"jurisdiction": "J2", "laws": ["<law code>", ...]}: founder only, before it is declared: replace its charter (the starting laws enacted at declaration)',
     "invite": 'invite {"jurisdiction": "J2", "agent": "Name"}: offer an agent a place in a hidden jurisdiction you belong to (they are told it exists; nobody else is). They become a member only if they pledge (join)',
     "join": 'join {"jurisdiction": "J1"}: a declared jurisdiction: ask to move there publicly; its admission law decides (by default its members vote this round) and you leave your old one at the end of the round. A hidden one you were invited to: pledge to it; you become a secret member, can see and vote on its draft laws, and move into it when it is declared',
     "leave": 'leave {"jurisdiction": null}: leave your declared jurisdiction at the end of the round (its laws may tax or seize from you as you go), or a hidden one at once',
@@ -736,7 +741,28 @@ def _on(k):
         raise L.LawError("there are no jurisdictions in this world")
 
 
-def act_found(k, aid, name):
+def _charter_laws(k, aid, jid, laws) -> list:
+    """Charter laws: checked like proposals (law level), held as status "charter" until declaration."""
+    laws = [laws] if isinstance(laws, str) else list(laws or [])
+    if len(laws) > int(cfg(k)["max_charter"]):
+        raise L.LawError(f"a charter has at most {cfg(k)['max_charter']} laws")
+    out = []
+    for code in laws:
+        lid = k.new_law(str(code), aid)
+        law = k.w["laws"][lid]
+        if law["cls"] not in L.LEVEL_CLASSES[k.inst["law_level"]]:
+            del k.w["laws"][lid]
+            raise L.LawError(f"a {law['cls']} law is not allowed at law level {k.inst['law_level']}")
+        law["jurisdiction"], law["status"] = jid, "charter"
+        out.append(lid)
+    return out
+
+
+def treasury_value(k, jid) -> float:
+    return sum(float(q) * float(k.unit_value(i)) for i, q in (jurs(k)[jid]["reserve"] or {}).items() if q > 0)
+
+
+def act_found(k, aid, name, laws=None):
     _on(k)
     jr = k.w["jur"]
     jid = f"J{jr['seq']}"
@@ -744,9 +770,58 @@ def act_found(k, aid, name):
     j = _new_j(jid, name, "hidden", aid, k.r)
     j["hidden_members"] = [aid]
     jurs(k)[jid] = j
-    k.log("jur_founded", aid, {"jurisdiction": jid, "name": j["name"]}, vis=[aid])
-    return (f"Founded {jid} '{j['name']}' in secret. Invite members (invite), propose its laws (propose with \"jurisdiction\": "
-            f"\"{jid}\"; its members vote, majority of those voting), and declare it when ready.")
+    try:
+        j["charter"] = _charter_laws(k, aid, jid, laws)
+    except L.LawError:
+        del jurs(k)[jid]
+        jr["seq"] -= 1
+        raise
+    k.log("jur_founded", aid, {"jurisdiction": jid, "name": j["name"], "charter": list(j["charter"])}, vis=[aid])
+    c = cfg(k)
+    need = (f" To declare it you need {c['declare_min_members']} members" if int(c["declare_min_members"]) > 1 else "") + \
+           (f" and {c['declare_cost']:g} value in its treasury (fund)" if float(c["declare_cost"]) > 0 else "")
+    return (f"Founded {jid} '{j['name']}' in secret" + (f" with a charter of {len(j['charter'])} law(s)" if j["charter"] else "") +
+            ". Invite members (invite: they join only by pledging), propose its laws (propose with \"jurisdiction\": "
+            f"\"{jid}\"; its members vote, majority of those voting), and declare it when ready.{need}")
+
+
+def act_set_charter(k, aid, jurisdiction, laws=None):
+    _on(k)
+    j = _hidden(k, aid, jurisdiction)
+    if j["founder"] != aid:
+        raise L.LawError(f"only {j['founder']}, the founder, can set {j['id']}'s charter")
+    new = _charter_laws(k, aid, j["id"], laws)
+    for lid in j.get("charter") or []:
+        k.w["laws"][lid]["status"] = "withdrawn"
+    j["charter"] = new
+    k.log("jur_charter", aid, {"jurisdiction": j["id"], "charter": new}, vis=[aid])     # pledged members are not told
+    return f"{j['id']}'s charter is now {len(new)} law(s): " + "; ".join(k.w["laws"][x]["title"] for x in new)
+
+
+def act_fund(k, aid, jurisdiction, item, qty):
+    _on(k)
+    jid = str(jurisdiction)
+    j = jurs(k).get(jid)
+    if not j or j["status"] == "dissolved" or (j["status"] == "hidden" and aid not in j["hidden_members"]):
+        raise L.LawError(f"no jurisdiction {jid} you can fund")
+    qty = float(qty)
+    if qty <= 0 or k.bal(aid, item) < qty:
+        raise L.LawError(f"you have {k.bal(aid, item):g} {item}")
+    k.move(aid, f"reserve:{jid}" if not j.get("legacy") else "reserve", item, qty, why="fund", by=aid)
+    fu = j.setdefault("funders", {})
+    fu[aid] = fu.get(aid, 0.0) + qty * float(k.unit_value(item))
+    k.log("jur_funded", aid, {"jurisdiction": jid, "item": item, "qty": qty},
+          vis=list(j["hidden_members"]) if j["status"] == "hidden" else "public")
+    return f"Put {qty:g} {item} into {jid}'s treasury (now worth {treasury_value(k, jid):g})."
+
+
+def _refund(k, j) -> None:
+    """A hidden jurisdiction dissolved before declaring: its treasury goes back to its funders in proportion."""
+    tot = sum((j.get("funders") or {}).values())
+    for item, q in list((j["reserve"] or {}).items()):
+        for a, v in (j.get("funders") or {}).items():
+            if tot > 0 and q > 0 and k.w["agents"].get(a, {}).get("departed") is None:
+                k.move(f"reserve:{j['id']}", a, item, q * v / tot, why="refund", by=None)
 
 
 def _hidden(k, aid, jurisdiction):
@@ -767,8 +842,11 @@ def act_invite(k, aid, jurisdiction, agent):
     if agent not in inv:
         inv.append(agent)
     k.log("jur_invited", aid, {"jurisdiction": j["id"], "agent": agent}, vis=list(j["hidden_members"]) + [agent])
+    ch = [k.w["laws"][x] for x in (j.get("charter") or [])]
     k.notify(agent, f"{aid} invites you to pledge to {j['id']} '{j['name']}', a jurisdiction founded in secret by {j['founder']} "
-                    f"(members so far: {', '.join(j['hidden_members'])}). To accept, pledge with join {{\"jurisdiction\": \"{j['id']}\"}}: you "
+                    f"(members so far: {', '.join(j['hidden_members'])}"
+                    + (f"; its charter, enacted when it is declared: " + "; ".join(f"{x['title']}: {x['intent']}" for x in ch) if ch else "")
+                    + "). To accept, pledge with join {{\"jurisdiction\": \"{j['id']}\"}}: you "
                     "then become a secret member, can see and vote on its draft laws, and move into it when it is declared. You are not "
                     "bound to accept, and nobody outside it knows it exists.")
     return f"Invited {agent} to {j['id']}: they become a member only if they pledge."
@@ -779,6 +857,13 @@ def act_declare(k, aid, jurisdiction):
     j = _hidden(k, aid, jurisdiction)
     if j["founder"] != aid and j["founder"] in j["hidden_members"]:
         raise L.LawError(f"only {j['founder']}, the founder, can declare {j['id']} while a member")
+    c = cfg(k)
+    alive = [a for a in j["hidden_members"] if k.w["agents"].get(a, {}).get("departed") is None]
+    if len(alive) < int(c["declare_min_members"]):
+        raise L.LawError(f"{j['id']} needs {c['declare_min_members']} members to be declared; it has {len(alive)} (invite others to pledge)")
+    if treasury_value(k, j["id"]) < float(c["declare_cost"]):
+        raise L.LawError(f"{j['id']}'s treasury holds {treasury_value(k, j['id']):g} value; declaring needs {c['declare_cost']:g} "
+                         "(its members fund it: fund)")
     j["declare_pending"] = True
     k.log("jur_declare_pending", aid, {"jurisdiction": j["id"]}, vis=list(j["hidden_members"]))
     return f"{j['id']} will be declared at the end of this round: its laws then take effect and its members leave their old jurisdiction."
@@ -830,6 +915,7 @@ def act_leave(k, aid, jurisdiction=None):
         k.log("jur_left_hidden", aid, {"jurisdiction": j["id"]}, vis=list(j["hidden_members"]) + [aid])
         if not j["hidden_members"]:
             j["status"] = "dissolved"
+            _refund(k, j)
         return f"You left hidden {j['id']}."
     jid = member_of(k, aid)
     if jid is None or (jurisdiction is not None and str(jurisdiction) != jid):
@@ -895,6 +981,13 @@ def declare_now(k, jid):
         if k.w["agents"].get(aid, {}).get("departed") is None and aid not in mem:
             k.notify(aid, f"{jid} '{j['name']}', which you were invited to, is now declared. You can move there publicly with join "
                           f"{{\"jurisdiction\": \"{jid}\"}} (its admission rule decides), for instance if you promised to.")
+    for lid in j.pop("charter", []) or []:                               # the founder's charter: enacted without a vote
+        if k.w["laws"][lid]["status"] == "charter":
+            try:
+                k.enact(lid)
+            except L.LawError as e:
+                k.w["laws"][lid]["status"] = "failed"
+                k.log("proposal_failed", j["founder"], {"law": lid, "why": f"charter law failed on enactment: {e}"}, vis="public")
     dormant, j["dormant"] = list(j["dormant"]), []
     for lid in dormant:
         if k.w["laws"][lid]["status"] == "dormant":
@@ -942,6 +1035,10 @@ def rules_text(inst) -> str:
             "effect at the end of the round, after its laws on leaving apply to you. Anyone can found a jurisdiction in secret (found), "
             "invite others (invite: an offer; an invited agent becomes a secret member only by pledging with join, or may promise to "
             "move in later and join once it is declared; nobody can be put in a jurisdiction against their will), and pass laws there (propose with \"jurisdiction\"; they have no effect while it is hidden); "
+            "a founder can give it a charter (found with \"laws\", or set_charter while it is hidden): starting laws enacted without a "
+            "vote when it is declared" + (f"; declaring it needs {c['declare_cost']:g} value in its treasury, paid in with fund by anyone "
+            "who wants it to exist (one rich founder, several members together, or goods transferred to whoever funds it), and refunded "
+            "if it dissolves first" if float(c.get("declare_cost") or 0) > 0 else "") + ". "
             "declare makes it public at the end of the round, when its laws take effect and its members leave their old jurisdiction. "
             "Members of a jurisdiction other than J0 propose its laws without needing the propose right. Laws can also use "
             "jurisdiction(), members(), admit(agent), expel(agent), lawful_attack(attacker, target, units) (force paid from the "

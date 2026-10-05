@@ -53,7 +53,7 @@ def welfare(k) -> float:
 # Runtime-only settings that may be switched on part-way through a run (--live): they change how turns are played, not how the world
 # was generated, so a run with a checkpoint can still resume. The change is logged, announced to every agent, and kept in the state.
 LIVE_KEYS = {"media2.submissions", "context.lookups_in_dm_step", "context.action_purposes", "context.explore_nudge",
-             "context.budgets.core"}
+             "context.budgets.core", "jurisdictions.declare_cost"}
 
 
 def _apply_live(k, inst, live: dict, log=print, announce=True) -> None:

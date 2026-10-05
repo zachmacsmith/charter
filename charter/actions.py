@@ -1124,8 +1124,16 @@ def _buy_initiative(k, aid, n):
 def _contract(k, aid, to, target, item=None, qty=0, text=""):
     return CF.act_contract(k, aid, to, target, item, qty, text)
 # ------------------------------------------------------------------ jurisdictions (charter/jurisdictions.py; refused when the module is off)
-def _found(k, aid, name):
-    return J.act_found(k, aid, name)
+def _found(k, aid, name, laws=None):
+    return J.act_found(k, aid, name, laws)
+
+
+def _fund(k, aid, jurisdiction, item, qty):
+    return J.act_fund(k, aid, jurisdiction, item, qty)
+
+
+def _set_charter(k, aid, jurisdiction, laws=None):
+    return J.act_set_charter(k, aid, jurisdiction, laws)
 
 
 def _invite(k, aid, jurisdiction, agent):

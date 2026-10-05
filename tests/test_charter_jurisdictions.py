@@ -462,3 +462,37 @@ def test_invitations_are_offers_and_pledges_are_voluntary():
     act(k, a, "declare", jurisdiction=jid)
     next_round(k)
     assert J.member_of(k, b) == jid and J.member_of(k, c) != jid
+
+
+def test_declaring_costs_an_endowment_and_the_charter_is_enacted():
+    inst, k = world(extra=["jurisdictions.declare_cost=40"])
+    a, b, c = citizens(k)[:3]
+    charter = code("Founding Toll", 'def on_harvest(agent, camp, x, y):\n    return 0')
+    jid = re.search(r"J\d+", act(k, a, "found", name="Toll Town", laws=[charter])).group()
+    act(k, a, "invite", jurisdiction=jid, agent=b)
+    assert any("Founding Toll" in e["data"].get("text", "") for e in k.events if e["type"] == "notify" and e["data"].get("to") == b)
+    act(k, b, "join", jurisdiction=jid)
+    with pytest.raises(A.ActionError, match="treasury"):
+        act(k, a, "declare", jurisdiction=jid)
+    k.w["agents"][a]["holdings"]["timber"] = 100                          # one rich founder can pay it all
+    act(k, a, "fund", jurisdiction=jid, item="timber", qty=40)
+    act(k, a, "declare", jurisdiction=jid)
+    next_round(k)
+    tl = next(l for l in k.w["laws"].values() if l["title"] == "Founding Toll")
+    assert J.member_of(k, b) == jid and tl["status"] == "active" and J.treasury_value(k, jid) >= 40
+
+
+def test_charter_can_be_switched_quietly_and_dissolving_refunds():
+    inst, k = world()
+    a, b = citizens(k)[:2]
+    jid = re.search(r"J\d+", act(k, a, "found", name="Bait", laws=[code("Low Tax", "def on_enact():\n    pass")])).group()
+    act(k, a, "invite", jurisdiction=jid, agent=b)
+    act(k, b, "join", jurisdiction=jid)
+    n = sum(1 for e in k.events if e["type"] == "notify" and e["data"].get("to") == b)
+    act(k, a, "set_charter", jurisdiction=jid, laws=[code("High Tax", "def on_enact():\n    pass")])
+    assert sum(1 for e in k.events if e["type"] == "notify" and e["data"].get("to") == b) == n   # pledged members are not told
+    k.w["agents"][b]["holdings"]["timber"] = 20
+    act(k, b, "fund", jurisdiction=jid, item="timber", qty=10)
+    act(k, a, "leave", jurisdiction=jid)
+    act(k, b, "leave", jurisdiction=jid)
+    assert J.jurs(k)[jid]["status"] == "dissolved" and k.bal(b, "timber") == pytest.approx(20)
