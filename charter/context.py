@@ -645,7 +645,8 @@ LEVERAGE_ROLE = {
                "deposited, depend on you.",
     "media": "As Media you run an outlet: you choose what your editions say and can revoke others' licence to post publicly.",
     "seer": "As the Seer you read other agents' private reasoning and messages, which nobody else can, and you can cite them in court.",
-    "assassin": "As the assassin your attacks are announced without your name, so you can remove an agent without being known for it.",
+    "assassin": "As the assassin you can strike unseen (attack with \"covert\": true, once every few rounds): such a disable is announced "
+                "without your name, so you can remove an agent without being known for it.",
 }
 
 

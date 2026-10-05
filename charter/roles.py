@@ -226,8 +226,9 @@ def role_text(k_or_inst, role: str) -> str:
     if role == "assassin":
         on = bool((sp.get("conflict") or {}).get("enabled"))
         return ("You secretly hold the assassin role. Nobody is told who holds it. "
-                + ("When you disable another agent with an attack, the announcement does not name you; how often you may strike, your "
-                   "attack bonus and contracts are described in the conflict rules." if on else
+                + ("An attack made with \"covert\": true (possible once every few rounds) is announced without your name when it "
+                   "succeeds; an ordinary attack names you like anyone else's. How often you may strike unseen, your attack bonus and "
+                   "contracts are described in the conflict rules." if on else
                    "There are no attacks in this world, so the role has no use here."))
     names = {"scholar": "Scholar (the scholar right: you sell memory and keep a library)",
              "maker": "Maker (the maker right: you create new agents on commission)",
