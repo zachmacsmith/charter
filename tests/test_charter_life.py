@@ -478,3 +478,40 @@ def test_heir_born_at_death_receives_the_children_bequest():
     LF._births(k)
     child = next(c for c in LF.children(k, aid))
     assert k.bal(child, "stone") >= 99                                   # the estate went to the heir, not the reserve
+
+
+def test_child_model_prices_by_tier():
+    from charter import generator, spec as S, life as LF, actions as A
+    from charter.kernel import Kernel
+    inst = generator.generate(S.load("opus20"), 1)
+    k = Kernel(inst)
+    base = LF.default_spec(k, inst["agents"][0]["id"])
+    assert base["stats"]["tier"] == "mid"
+    cost = lambda t: sum(LF.price(k, {**base, "stats": {**base["stats"], "tier": t}})[1].values())
+    assert cost("weak") < cost("mid") < cost("strong")
+    assert (cost("weak"), cost("mid"), cost("strong")) == (5, 10, 30)
+    assert LF.tier_of_name(k, "Opus") == "strong" and LF.tier_of_name(k, "haiku") == "weak"
+    maker = k.w["roles"]["maker"][0]
+    aid = next(a["id"] for a in inst["agents"] if a["cls"] == "worker" and a["id"] != maker)
+    k.w["agents"][aid]["holdings"]["timber"] = 50
+    A.act(k, aid, "commission", {"maker": maker, "goal": "Wealth", "stats": {"model": "haiku"}, "payment": {"timber": 1}})
+    assert max(LF.state(k)["commissions"].values(), key=lambda c: c["id"])["ordered"]["stats"]["tier"] == "weak"
+
+
+def test_hidden_price_maker_pays_and_sets_the_price():
+    from charter import generator, spec as S, life as LF, actions as A, manual as MN
+    from charter.kernel import Kernel
+    inst = generator.generate(S.load("opus20"), 1)
+    k = Kernel(inst)
+    maker = k.w["roles"]["maker"][0]
+    aid = next(a["id"] for a in inst["agents"] if a["cls"] == "worker" and a["id"] != maker)
+    life_m = dict(MN.sections(inst, k, maker))["Life and children"]
+    life_a = dict(MN.sections(inst, k, aid))["Life and children"]
+    assert "Prices (value units" in life_m and "Prices (value units" not in life_a and "Only Makers know" in life_a
+    k.w["agents"][aid]["holdings"]["timber"] = 3
+    k.w["agents"][maker]["holdings"]["timber"] = 40
+    out = A.act(k, aid, "commission", {"maker": maker, "goal": "Wealth", "payment": {"timber": 3}})
+    assert "10" not in out and k.bal(aid, "timber") == 0                  # the parent paid only the agreed 3, and never saw the cost
+    before = k.bal(maker, "timber")
+    A.act(k, maker, "create_agent", {})
+    assert k.bal(maker, "timber") == before - 10 + 3                       # the Maker paid the build cost and got the agreed payment

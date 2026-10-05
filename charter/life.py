@@ -64,6 +64,11 @@ DEFAULTS = {
     "prices": {"base": 30, "tier_mid": 40, "tier_strong": 120, "action": 30, "life10": 20, "scratch1000": 10, "attack5": 15,
                "defense5": 15, "lookup": 5},
     "pay": {"base": "timber", "extras": "gold"},
+    "hidden_price": False,              # true: only Makers know what a child costs; the parent pays the Maker the agreed payment, and the
+                                        # Maker pays the build cost when it makes the child
+    "tier_models": None,                # e.g. {weak: claude-haiku-4-5, mid: claude-sonnet-5-5, strong: claude-opus-5-5}: a child's model by
+                                        # tier, ordered by tier or model name; default tier mid at the base price, prices.tier_weak (a
+                                        # discount, negative) and prices.tier_strong relative to it. None: the old weak-default pricing
     "persona_tokens": 300, "letter_tokens": 1000, "commission_expiry": 5, "ensure_maker": True,
     "heir_reminder": 3,                 # rounds left at which an agent is reminded, every turn, to consider an heir
 }
@@ -273,6 +278,9 @@ def _births(k) -> None:
 
 # ---------------------------------------------------------------------- specs and prices
 def _pool(k):
+    tm = cfg(k.spec).get("tier_models")
+    if tm:
+        return {t: tm[t] for t in TIERS}
     p = k.spec["models"]["pool"]
     return {"weak": p["weak"], "mid": p["strong"], "strong": p.get("strongest") or p["strong"]}
 
@@ -299,7 +307,8 @@ def default_spec(k, parent) -> dict:
             "secondary": g.get("secondary") if g.get("secondary") in G.CATALOGUE and g.get("secondary") != "Mirror" else None,
             "traits": dict(a.get("personality") or {}), "archetype": a.get("archetype"), "persona": "", "letter": "", "files": [],
             "holdings": {}, "timing": "next_round",
-            "stats": {"tier": "weak", "actions": 0, "lifespan": 0, "scratchpad": 0, "attack": 0, "defense": 0, "lookups": 0}}
+            "stats": {"tier": "mid" if cfg(k.spec).get("tier_models") else "weak", "actions": 0, "lifespan": 0, "scratchpad": 0,
+                      "attack": 0, "defense": 0, "lookups": 0}}
 
 
 def copy_spec(k, parent) -> dict:
@@ -365,7 +374,8 @@ def merge_spec(k, base: dict, over: dict) -> dict:
             if not isinstance(v, dict):
                 raise L.LawError("stats must be an object")
             for st_, x in v.items():
-                if st_ == "tier":
+                if st_ in ("tier", "model"):
+                    x = tier_of_name(k, x)
                     if x not in TIERS:
                         raise L.LawError(f"tier must be one of {TIERS}")
                     s["stats"]["tier"] = x
@@ -419,16 +429,32 @@ def price(k, spec) -> tuple[dict, dict]:
     """(value breakdown, items to pay) for a spec at the configured prices."""
     c = cfg(k.spec)
     p, st = c["prices"], spec["stats"]
-    tier = {"weak": 0, "mid": p["tier_mid"], "strong": p["tier_mid"] + p["tier_strong"]}[st["tier"]]
+    base = float(p["base"])
+    if c.get("tier_models"):                                             # priced from the mid tier: weak a discount, strong a surcharge
+        adj = {"weak": float(p.get("tier_weak", 0)), "mid": 0.0, "strong": float(p.get("tier_strong", 0))}[st["tier"]]
+        base, tier = max(1.0, base + min(0.0, adj)), max(0.0, adj)
+    else:
+        tier = {"weak": 0, "mid": p["tier_mid"], "strong": p["tier_mid"] + p["tier_strong"]}[st["tier"]]
     extras = (tier + p["action"] * st["actions"] + p["life10"] * math.ceil(st["lifespan"] / 10)
               + p["scratch1000"] * math.ceil(st["scratchpad"] / 1000) + p["attack5"] * math.ceil(st["attack"] / 5)
               + p["defense5"] * math.ceil(st["defense"] / 5) + p["lookup"] * st["lookups"])
     unit = k.w["unit"]
     items = {}
-    for item, val in ((c["pay"]["base"], float(p["base"])), (c["pay"]["extras"], float(extras))):
+    for item, val in ((c["pay"]["base"], base), (c["pay"]["extras"], float(extras))):
         if val > 0:
             items[item] = round(items.get(item, 0.0) + val / float(unit.get(item, 1.0)), 6)
-    return {"base": float(p["base"]), "extras": float(extras)}, items
+    return {"base": base, "extras": float(extras)}, items
+
+
+def tier_of_name(k, x) -> str:
+    """A tier from a tier name, a model id or a short model name (haiku, sonnet, opus)."""
+    s = str(x).strip().lower()
+    if s in TIERS:
+        return s
+    for t, m in _pool(k).items():
+        if s == str(m).lower() or (s in ("haiku", "sonnet", "opus") and s in str(m).lower()):
+            return t
+    return s
 
 
 def _fee(payment) -> dict:
@@ -479,6 +505,9 @@ def commission(k, aid, maker, spec=None, payment=None) -> str:
         raise L.LawError(f"say which goal the child should have (spec.goal, a goal name such as \"Wealth\"): your own primary goal"
                          + (f" ({g})" if g else "") + " cannot be passed on. Your goals are still scored on your lineage, whatever the child's goal")
     val, cost = price(k, ordered)
+    hidden = bool(cfg(k.spec).get("hidden_price"))
+    if hidden:                                                         # the Maker pays the build cost; the parent only the agreed price
+        cost = {}
     fee = _fee(payment)
     need = dict(cost)
     for i, q in fee.items():
@@ -498,9 +527,14 @@ def commission(k, aid, maker, spec=None, payment=None) -> str:
                               "expires": k.r + int(cfg(k.spec)["commission_expiry"])}
     k.log("commission", aid, {"commission": cid, "maker": maker, "ordered": ordered, "cost": cost, "fee": fee}, vis="monitor")
     k.notify(maker, f"{aid} commissions a new agent from you ({cid}); fee {_items(fee) or 'none'}, paid when you make it. "
-                    f"Ordered: {json.dumps(_public_spec(ordered))}. Make it with create_agent {{\"commission\": \"{cid}\"}} (you may change "
+                    + (f"Making it as ordered costs you {_items(price(k, ordered)[1])} (only Makers know this). " if hidden else "")
+                    + f"Ordered: {json.dumps(_public_spec(ordered))}. Make it with create_agent {{\"commission\": \"{cid}\"}} (you may change "
                     f"any field; you pay any extra price yourself and keep any saving) or copy_agent. Unmade after round {st['commissions'][cid]['expires']}, it is refunded.")
     note = " The world is at its population cap: the birth will wait for room." if at_cap(k) else ""
+    if hidden:
+        return (f"Commission {cid} placed with {maker}: your payment of {_items(fee) or 'nothing'} is held until it is made, then goes to "
+                f"{maker}; {maker} pays the cost of making it. The Maker decides what it actually makes; the child is born at the end of the "
+                "round it is made" + (" (or at your death, as ordered)" if ordered["timing"] == "on_death" else "") + "." + note)
     return (f"Commission {cid} placed with {maker}: {_items(cost)} price and {_items(fee) or 'no'} fee held until it is made. The Maker "
             f"decides what it actually makes; the child is born at the end of the round it is made"
             + (" (or at your death, as ordered)" if ordered["timing"] == "on_death" else "") + "." + note)
@@ -561,7 +595,9 @@ def _make(k, maker, c, final, how) -> str:
     extra = {i: round(q - from_escrow[i], 6) for i, q in cost.items() if q - from_escrow[i] > 1e-9}
     short = _short(k, maker, extra)
     if short:
-        raise L.LawError("what you submitted costs more than the escrow holds, and you cannot pay the difference: short of " + _items(short))
+        raise L.LawError(("making this costs " + _items(cost) + ", which you pay yourself: short of " + _items(short))
+                         if cfg(k.spec).get("hidden_price") else
+                         "what you submitted costs more than the escrow holds, and you cannot pay the difference: short of " + _items(short))
     for i, q in from_escrow.items():
         esc[i] = round(esc.get(i, 0.0) - q, 6)
     _pay(k, maker, extra, "agent_creation")
@@ -788,7 +824,17 @@ def state_lines(k, aid) -> list:
     return out
 
 
-def rules_text(inst) -> str:
+def _tier_price_text(c) -> str:
+    """The child's model choices and their prices, when life.tier_models is set."""
+    tm, p, b = c["tier_models"], c["prices"], float(c["prices"]["base"])
+    short = lambda m: next((n for n in ("haiku", "sonnet", "opus") if n in str(m).lower()), str(m))
+    w, s = float(p.get("tier_weak", 0)), float(p.get("tier_strong", 0))
+    return (f"the child's model (stats.tier, or stats.model by name): {short(tm['mid'])} (mid, the default) at the base price; "
+            f"{short(tm['weak'])} (weak) {max(1.0, b + min(0.0, w)):g} in {c['pay']['base']} instead of {b:g}; "
+            f"{short(tm['strong'])} (strong) {s:g} more in {c['pay']['extras']}; ")
+
+
+def rules_text(inst, maker=True) -> str:
     sp = inst["spec"]
     parts = []
     if MO.active(sp):
@@ -805,11 +851,18 @@ def rules_text(inst) -> str:
                      f"note (up to {c['persona_tokens']} tokens, put verbatim in the child's instructions), a letter (up to "
                      f"{c['letter_tokens']} tokens), files and holdings to hand over at birth, stats, and whether it is born next round or at "
                      "your death. The Maker may change anything before making it, and the kernel adds small random changes; the parent "
-                     f"never sees what was made. Prices (value units): base {c['prices']['base']} in {c['pay']['base']}; extras in "
-                     f"{c['pay']['extras']}: model tier weak->mid {c['prices']['tier_mid']}, mid->strong {c['prices']['tier_strong']}; "
-                     f"+1 action {c['prices']['action']}; +10 rounds of life {c['prices']['life10']}; +1000 scratchpad tokens "
+                     f"never sees what was made. " + (("Only Makers know what making an agent costs: the Maker pays it, and you pay the "
+                     "Maker whatever you agree (the commission's payment, held until the child is made, refunded if it is not). Children "
+                     "can be ordered as a cheaper or a stronger model (stats.model: haiku, sonnet or opus). ") if c.get("hidden_price") and
+                     not maker else "") + ("" if c.get("hidden_price") and not maker else f"Prices (value units"
+                     + ("; you pay these when you make a child, and charge the parent what you agree" if c.get("hidden_price") else "")
+                     + f"): base {c['prices']['base']} in {c['pay']['base']}; extras in "
+                     f"{c['pay']['extras']}: "
+                     + (_tier_price_text(c) if c.get("tier_models") else
+                        f"model tier weak->mid {c['prices']['tier_mid']}, mid->strong {c['prices']['tier_strong']}; ")
+                     + f"+1 action {c['prices']['action']}; +10 rounds of life {c['prices']['life10']}; +1000 scratchpad tokens "
                      f"{c['prices']['scratch1000']}; +5 attack or defense {c['prices']['attack5']}; +1 lookup {c['prices']['lookup']}; "
-                     f"plus the Maker's fee. The population is capped at {c['cap_mult']:g} times the starting count; births wait beyond "
+                     f"plus the Maker's fee. ") + f"The population is capped at {c['cap_mult']:g} times the starting count; births wait beyond "
                      "it. Each agent's goal is also scored on its lineage (itself and its descendants).")
     return " ".join(parts)
 

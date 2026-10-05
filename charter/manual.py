@@ -46,6 +46,10 @@ def _known_powers(inst, k, aid) -> list:
     return list(((inst.get("hidden") or {}).get("knows") or {}).get(aid, []))
 
 
+def _is_maker(k, aid) -> bool:
+    return k is not None and aid in ((k.w.get("roles") or {}).get("maker") or [])
+
+
 def sections(inst, k, aid) -> list:
     """The base manual: [(title, text)] in a fixed order."""
     from charter import agents as AG
@@ -63,7 +67,7 @@ def sections(inst, k, aid) -> list:
     out.append(("World rules", AG.world_rules(inst)))                   # the full rules (the core prompt carries what fits)
     from charter import conflict as _CF, media as _MD, life as _LF
     for title, txt in (("Conflict", _CF.prompt_section(inst, a) if _CF.enabled_inst(inst) else ""), ("Media", _MD.prompt_section(inst, a)),
-                       ("Life and children", "\n".join(x for x in ((_LF.rules_text(inst) if _LF.enabled(sp) else ""),
+                       ("Life and children", "\n".join(x for x in ((_LF.rules_text(inst, maker=_is_maker(k, aid)) if _LF.enabled(sp) else ""),
                                                                    _LF.prompt_section(inst, a)) if x))):
         if txt and txt.strip():
             out.append((title, txt.strip()))

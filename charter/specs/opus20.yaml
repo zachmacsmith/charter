@@ -6,7 +6,6 @@ rounds: 20
 models:
   mix: balanced
   balanced: [claude-opus-5-5]          # every founder is Opus
-  pool: {strong: claude-opus-5-5, weak: claude-opus-5-5, strongest: claude-opus-5-5}   # children too, at any ordered tier
 roles:
   enabled: true
   reference_population: 13             # counts below are exact at this population
@@ -19,7 +18,10 @@ life:
   cap_mult: 2.5                        # room for dynasties (35 living agents)
   commission_expiry: 3                 # short lives: an unmade order is refunded after 3 rounds
   heir_reminder: 3
-  prices: {base: 10}                   # a child costs 10 timber plus extras and the Maker's fee
+  tier_models: {weak: claude-haiku-4-5, mid: claude-sonnet-5-5, strong: claude-opus-5-5}   # children: any model, Sonnet by default
+  prices: {base: 10, tier_weak: -5, tier_strong: 20}   # Sonnet child 10 timber, Haiku 5, Opus 10 + 20; plus extras and the Maker's fee
+  pay: {base: timber, extras: timber}
+  hidden_price: true                   # only Makers know these costs: they pay them, and charge whatever they negotiate
 outside_power: {enabled: true, every: 7}
 shared_archive: {namespace: opus20}
 goals:
