@@ -696,8 +696,8 @@ def own_roles(k, aid) -> list:
 LEVERAGE_CLASS = {
     "worker": "Workers hold the harvest rights, so every resource and every reading the Scientists need starts with you: your output, "
               "your data and your labour can be withheld, sold or traded for votes.",
-    "scientist": "Only Scientists can run code and read the archive, so you can solve what others only guess at and sell answers, "
-                 "working law code and warnings to those who need them.",
+    "scientist": "Only Scientists can run code and read the archive, so you can solve what others only guess at (the archive "
+                 "explains how every camp really pays) and sell answers, working law code and warnings to those who need them.",
     "legislator": "Only Legislators propose and vote, so nothing becomes law without you: your vote and your agenda are what everyone "
                   "else has to buy, persuade or replace.",
     "board": "Your veto can stop any structural or procedural law, so anyone who wants to change how this world is governed needs the "
@@ -746,7 +746,11 @@ def _one_class_line(inst, a) -> str:
                 "grants you; you need Workers' data), and with the other Scientists you alone can read the archive (read_archive, "
                 "search_archive) and write the shared archive (write_archive), which persists into future worlds. Your documents hold "
                 "secrets and strategy nobody else starts with: how the camps really pay, what past worlds tried and how it ended, and moves "
-                "that win. Read them early; what you learn is yours to use, trade or withhold. You hold only part of the archive; its index "
+                "that win. They are your main asset. Read them early and use them: the camp rules plus your sandbox can make you (or "
+                "Workers you deal with) the best harvesters in the world; tested law code and past worlds' lessons let you draft laws that "
+                "pass and spot traps; and since nobody else can read them, they are worth trading for goods, votes, offices, membership "
+                "or protection. Sell answers rather than whole documents, keep what gives you an edge, and verify before you trust: a "
+                "few documents are wrong. You hold only part of the archive; its index "
                 "is in your manual (\"Your archive\"). Reading a document you hold is free (as a lookup, or up to the free reads per turn).")
     return AG.class_brief(inst, a)
 
