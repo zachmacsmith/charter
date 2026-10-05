@@ -37,8 +37,8 @@ class ActionError(Exception):
 
 
 _CAMP_REF = __import__("re").compile(r"^\s*(?:camp)?\s*(\d+)\s*$", __import__("re").I)
-_ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent": "to"}, "reply": {"message_id": "message", "id": "message"},
-            "post": {"message": "text"}, "harvest": {"args": "x", "values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
+_ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent": "to", "target": "to"}, "reply": {"message_id": "message", "id": "message"},
+            "post": {"message": "text"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
             "transfer": {"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item",
                          "resources": "item"}}
 _IGNORED = {"propose": {"title", "name"}, "write_edition": {"title", "headline"}}
@@ -49,6 +49,9 @@ def _normalise_args(name: str, args):
     text, amount for qty) when the proper name is absent; a law's title passed beside its code is ignored (it is set in the code)."""
     if not isinstance(args, dict):
         return args
+    if name == "harvest" and "args" in args:                           # harvest {"camp", "args": [...]} or {"camp", "args": {...}}
+        inner, args = args["args"], {x: v for x, v in args.items() if x != "args"}
+        args = {**args, **inner} if isinstance(inner, dict) else ({**args, "x": inner} if "x" not in args else args)
     out, alias = {}, _ALIASES.get(name, {})
     for key, v in args.items():
         if key in alias and alias[key] not in args:

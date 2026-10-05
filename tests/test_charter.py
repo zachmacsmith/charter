@@ -769,3 +769,10 @@ def test_forgiving_argument_names_round1_society():
     assert N("propose", {"law": "x = 1", "title": "T"}) == {"code": "x = 1"}
     assert N("transfer", {"to": "Ada", "items": {"timber": 3}}) == {"to": "Ada", "item": "timber", "qty": 3}
     assert N("write_edition", {"text": "t", "title": "h"}) == {"text": "t"}
+
+
+def test_harvest_args_wrapper_is_unpacked():
+    from charter.actions import _normalise_args as N
+    assert N("harvest", {"camp": "camp1", "args": [7, 7]}) == {"camp": "camp1", "x": [7, 7]}
+    assert N("harvest", {"camp": "camp5", "args": {"partner": "Ada", "move": "share"}}) == {"camp": "camp5", "partner": "Ada", "move": "share"}
+    assert N("dm", {"target": "Ada", "text": "hi"}) == {"to": "Ada", "text": "hi"}
