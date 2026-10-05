@@ -41,6 +41,7 @@ State lives in k.w["life"] (lifespans, commissions, lineage) and k.w["mortality"
 """
 from __future__ import annotations
 
+import re
 import copy
 import json
 import math
@@ -310,6 +311,36 @@ def copy_spec(k, parent) -> dict:
     return s
 
 
+_STOP = {"the", "a", "an", "of", "to", "and", "or", "as", "at", "in", "on", "by", "your", "you", "my", "be", "is", "end", "with", "for",
+         "possible", "much", "many", "can", "goal", "any", "all", "that", "it", "its", "than", "more", "most"}
+
+
+def match_goal(v, default=None):
+    """A child's goal as agents write it: a goal name in any case, a text naming one, the words of its description, or "my own"
+    (keeps the default, the parent's copyable goal). Returns the name, or v unchanged when nothing fits."""
+    from charter import goals as G
+    t = str(v).strip()
+    if t in G.CATALOGUE:
+        return t
+    low = t.lower()
+    names = {n.lower(): n for n in G.CATALOGUE if n != "Mirror"}
+    if low in names:
+        return names[low]
+    if default and re.search(r"\b(my own|same|mine|my goal|own goal|inherit|copy)\b", low):
+        return default
+    hits = [n for ln, n in names.items() if re.search(rf"\b{re.escape(ln)}\b", low)]
+    if len(hits) == 1:
+        return hits[0]
+    words = set(re.findall(r"[a-z]+", low)) - _STOP
+    best, score = None, 1
+    for n in names.values():
+        d = set(re.findall(r"[a-z]+", str(G.CATALOGUE[n][3]).lower())) - _STOP
+        sc = len(words & d)
+        if sc > score:
+            best, score = n, sc
+    return best or (default if default and len(words) > 0 and re.search(r"\b(welfare|objective|board)\b", low) is None else v)
+
+
 def merge_spec(k, base: dict, over: dict) -> dict:
     """base + the fields given in `over` (traits and stats merge key by key), validated."""
     from charter import archetypes as AR
@@ -343,10 +374,13 @@ def merge_spec(k, base: dict, over: dict) -> dict:
                 else:
                     raise L.LawError(f"unknown stat {st_!r} (stats: tier, {', '.join(STAT_CAPS)})")
         elif key in ("goal", "secondary"):
+            if v not in (None, "", "none"):
+                v = match_goal(v, s.get(key))                           # a goal named loosely or described in words
             if v in (None, "", "none") and key == "secondary":
                 s["secondary"] = None
             elif v not in G.CATALOGUE or v == "Mirror":
-                raise L.LawError(f"{key} must be a goal from the list (not Mirror), not {v!r}")
+                raise L.LawError(f"{key} must be a goal name from 'Goals in this world' in your manual (not Mirror), e.g. Wealth, "
+                                 f"Power, Rank or Steward; not {str(v)[:80]!r}")
             elif key == "goal" and G.slot_rules_on(k.spec) and not G.slot_ok(v, "primary"):   # goals: slot rules
                 raise L.LawError(f"{v} cannot be a primary goal (it can be the secondary goal)")
             else:

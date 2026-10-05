@@ -791,3 +791,11 @@ def test_commission_arguments_seed7_round17():
         {"maker": "Trym", "payment": {"timber": 15}, "spec": {"goal": "Wealth"}}
     assert N("commission", {"maker": "Trym", "spec": {"goal": "Steward", "born": "at_death"}})["spec"] == {"goal": "Steward", "timing": "on_death"}
     assert N("commission", {"maker": "Trym", "spec": {"timing": "next round"}})["spec"]["timing"] == "next_round"
+
+
+def test_commission_goal_written_as_words():
+    from charter.life import match_goal as M
+    assert M("highest holdings value", None) == "Wealth"
+    assert M("Keep every camp's stock high", None) == "Steward"
+    assert M("my own goal", "Power") == "Power"
+    assert M("Welfare", None) == "Welfare"                                # unresolvable: left for the error
