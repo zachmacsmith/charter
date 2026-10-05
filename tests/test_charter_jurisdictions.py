@@ -496,3 +496,15 @@ def test_charter_can_be_switched_quietly_and_dissolving_refunds():
     act(k, a, "leave", jurisdiction=jid)
     act(k, b, "leave", jurisdiction=jid)
     assert J.jurs(k)[jid]["status"] == "dissolved" and k.bal(b, "timber") == pytest.approx(20)
+
+
+def test_declaration_is_rechecked_against_the_treasury():
+    inst, k = world(extra=["jurisdictions.declare_cost=40"])
+    a = citizens(k)[0]
+    k.w["agents"][a]["holdings"]["timber"] = 100
+    jid = re.search(r"J\d+", act(k, a, "found", name="Drained")).group()
+    act(k, a, "fund", jurisdiction=jid, item="timber", qty=40)
+    act(k, a, "declare", jurisdiction=jid)
+    J.jurs(k)[jid]["reserve"]["timber"] = 5                               # drained before the end of the round
+    next_round(k)
+    assert J.jurs(k)[jid]["status"] == "hidden"

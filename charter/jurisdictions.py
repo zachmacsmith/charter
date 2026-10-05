@@ -968,6 +968,13 @@ def end_round(k):
 
 def declare_now(k, jid):
     j = jurs(k)[jid]
+    cost = float(cfg(k).get("declare_cost") or 0)
+    if cost > 0 and treasury_value(k, jid) < cost:                       # paid before going public: checked again at declaration
+        j["declare_pending"] = False
+        for m in j["hidden_members"]:
+            k.notify(m, f"{jid} '{j['name']}' was not declared: its treasury holds {treasury_value(k, jid):g} value and declaring needs "
+                        f"{cost:g} (fund it, then declare again).")
+        return
     j["status"], j["declare_pending"], j["declared_round"] = "declared", False, k.r
     if k.w["jur"]["founding"] is None:
         k.w["jur"]["founding"] = jid                                   # state of nature: the first declared is the founding one

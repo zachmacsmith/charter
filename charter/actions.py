@@ -38,7 +38,8 @@ class ActionError(Exception):
 
 _CAMP_REF = __import__("re").compile(r"^\s*(?:camp)?\s*(\d+)\s*$", __import__("re").I)
 _ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent": "to", "target": "to"}, "reply": {"message_id": "message", "id": "message"},
-            "post": {"message": "text"}, "vote": {"option": "choice", "vote": "choice", "answer": "choice", "value": "choice",
+            "post": {"message": "text"}, "fortify": {"amount": "qty", "stone": "qty", "quantity": "qty"},
+            "forge": {"amount": "qty", "copper": "qty", "quantity": "qty"}, "vote": {"option": "choice", "vote": "choice", "answer": "choice", "value": "choice",
                                                     "position": "choice", "selection": "choice", "ballot_id": "ballot"}, "write_scratchpad": {"note": "text", "notes": "text", "content": "text"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
             "transfer": {"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item",
                          "resources": "item"}}
