@@ -87,7 +87,17 @@ def _apply_live(k, inst, live: dict, log=print, announce=True) -> None:
                                           "to print and how.")
 
 
-def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None) -> Path:
+def _post_notices(k, notices, log=print) -> None:
+    """--notice: public notices posted once each (kept in the state so a later resume does not repeat them)."""
+    done = k.w.setdefault("notices_posted", [])
+    for t in notices or ():
+        if t and t not in done:
+            k.gazette(str(t))
+            done.append(t)
+            log(f"  notice posted: {str(t)[:80]}")
+
+
+def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=()) -> Path:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     k = Kernel(inst, sandbox)
@@ -112,6 +122,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         _apply_live(k, inst, dict(k.w.get("live") or {}), log, announce=False)   # settings switched on in earlier resumes
         if live:
             _apply_live(k, inst, {x: v for x, v in live.items() if (k.w.get("live") or {}).get(x) != v}, log)
+        _post_notices(k, notices, log)
     else:
         shared_snap = archive.snapshot(k.shared_archive)
         (out / "instance.json").write_text(json.dumps(inst, indent=1, default=str))
@@ -120,6 +131,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         RG.enact_statutes(k, inst)                                     # a regime's starting statutes (none without a regime)
         if live:
             _apply_live(k, inst, live, log)
+        _post_notices(k, notices, log)
         for name in inst["spec"].get("start_laws") or []:              # library laws in force from round 0 (spec start_laws)
             k.enact(k.new_law(LB.LIB[name]["code"], "constitution"))
         notes, cursors, results, guesses, welfare_series = {}, {}, {}, {}, []

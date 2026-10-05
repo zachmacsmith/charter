@@ -93,7 +93,7 @@ def sandbox_for(dry, mode):
     return DockerSandbox()
 
 
-def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fresh=False, live=None):
+def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fresh=False, live=None, notices=()):
     inst = generator.generate(sp, seed)
     tag = Path(spec_name).stem
     parent = parent or RUNS / tag
@@ -119,17 +119,17 @@ def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fr
     print(f"[{out.name}] {len(inst['agents'])} agents x {inst['rounds']} rounds, constitution {inst['constitution']}, "
           + (f"regime {inst['regime']['name']}, " if inst.get("regime") else "") +
           f"law level {inst['law_level']}, backend {backend}" + (" (resuming)" if resume else ""))
-    _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live)
+    _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live, notices)
     res = scorer.score(out)
     from charter import report
     report.build(out)
     return out, res["summary"]
 
 
-def _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live=None):
+def _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live=None, notices=()):
     try:
         runner.run(inst, policy_for(inst["spec"], dry, seed), out, sandbox_for(dry, sandbox_mode),
-                   log=(lambda *a: None) if quiet else print, resume=resume, live=live)
+                   log=(lambda *a: None) if quiet else print, resume=resume, live=live, notices=notices)
     except runner.RunStopped as e:
         print(f"[{out.name}] stopped: {e}\nContinue later with the same command, or: python -m charter resume {out}")
         raise SystemExit(2)
@@ -193,7 +193,7 @@ def cmd_generate(a):
 def cmd_run(a):
     sp = build_spec(a.spec, a.set, getattr(a, 'fast', False))
     live = {key: S.yaml.safe_load(v) for key, _, v in (x.partition("=") for x in getattr(a, "live", []) or [])}
-    out, s = run_one(a.spec, sp, a.seed, a.dry, a.sandbox, fresh=a.fresh, live=live)
+    out, s = run_one(a.spec, sp, a.seed, a.dry, a.sandbox, fresh=a.fresh, live=live, notices=getattr(a, "notice", []) or [])
     print(json.dumps(s, indent=1))
     print(f"run dir: {out}")
 
@@ -282,6 +282,8 @@ def main(argv=None):
         p.add_argument("--fast", action="store_true", help="simultaneous turns: everyone decides from the same view, model calls in parallel")
         p.add_argument("--live", action="append", default=[], help="a runtime-only setting switched on when the run (re)starts, e.g. "
                        "media2.submissions=true; announced to the agents and kept for later resumes (runner.LIVE_KEYS)")
+        p.add_argument("--notice", action="append", default=[], help="a public notice (gazette) posted once when the run (re)starts, "
+                       "e.g. to announce a rule change")
         p.add_argument("--fresh", action="store_true", help="a separate run in a new timestamped directory (default: stable directory; "
                                                              "skip if complete, resume if not)")
 
