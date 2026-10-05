@@ -174,3 +174,17 @@ def test_heir_reminder_in_the_last_rounds(world):
         assert lines and "You have no heir yet" in lines[0]
     finally:
         st["dies_at"][aid] = keep
+
+
+def test_life_rules_are_in_everyones_manual(world):
+    inst, k = world
+    for a in inst["agents"]:
+        secs = dict(MN.sections(inst, k, a["id"]))
+        assert "Life and children" in secs and "commission a new agent" in secs["Life and children"], a["id"]
+
+
+def test_camp_line_names_harvest_inputs():
+    inst = generator.generate(S.load("society"), 37)
+    k = Kernel(inst)
+    p = CX.core_prompt(inst, inst["agents"][0], k)
+    assert "each harvest uses 1 copper" in p

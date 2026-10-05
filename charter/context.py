@@ -689,7 +689,9 @@ def harvest_args(c) -> str:
     from charter.camptypes import framework as _CT
     extra = tuple(getattr(_CT.get(c["type"]), "extra_args", ()))
     x = ((f"x: {c['dials']} numbers 0..{c['max']}" if c["dials"] > 1 else f"x: 0..{c['max']}"),) if c.get("dials") else ()
-    return "harvest args " + ", ".join(x + extra)
+    needs = {**(c.get("consumes") or {}), **(((c.get("mods") or {}).get("chain") or {}).get("needs") or {})}
+    use = ("; each harvest uses " + ", ".join(f"{q:g} {i}" for i, q in needs.items())) if needs else ""
+    return "harvest args " + ", ".join(x + extra) + use
 
 
 def overview(inst) -> str:

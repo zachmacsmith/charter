@@ -63,7 +63,8 @@ def sections(inst, k, aid) -> list:
     out.append(("World rules", AG.world_rules(inst)))                   # the full rules (the core prompt carries what fits)
     from charter import conflict as _CF, media as _MD, life as _LF
     for title, txt in (("Conflict", _CF.prompt_section(inst, a) if _CF.enabled_inst(inst) else ""), ("Media", _MD.prompt_section(inst, a)),
-                       ("Life and children", _LF.prompt_section(inst, a))):
+                       ("Life and children", "\n".join(x for x in ((_LF.rules_text(inst) if _LF.enabled(sp) else ""),
+                                                                   _LF.prompt_section(inst, a)) if x))):
         if txt and txt.strip():
             out.append((title, txt.strip()))
     out.append(("How your turn works", (

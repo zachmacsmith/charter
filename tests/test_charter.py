@@ -776,3 +776,10 @@ def test_harvest_args_wrapper_is_unpacked():
     assert N("harvest", {"camp": "camp1", "args": [7, 7]}) == {"camp": "camp1", "x": [7, 7]}
     assert N("harvest", {"camp": "camp5", "args": {"partner": "Ada", "move": "share"}}) == {"camp": "camp5", "partner": "Ada", "move": "share"}
     assert N("dm", {"target": "Ada", "text": "hi"}) == {"to": "Ada", "text": "hi"}
+
+
+def test_transfer_amount_shapes_round1_seed37():
+    from charter.actions import _normalise_args as N
+    assert N("transfer", {"to": "Rhea", "amount": {"timber": 1}}) == {"to": "Rhea", "item": "timber", "qty": 1}
+    assert N("transfer", {"to": "Rhea", "timber": 1}) == {"to": "Rhea", "item": "timber", "qty": 1}
+    assert N("write_scratchpad", {"note": "x"}) == {"text": "x"}

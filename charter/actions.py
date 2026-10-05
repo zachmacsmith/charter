@@ -38,7 +38,7 @@ class ActionError(Exception):
 
 _CAMP_REF = __import__("re").compile(r"^\s*(?:camp)?\s*(\d+)\s*$", __import__("re").I)
 _ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent": "to", "target": "to"}, "reply": {"message_id": "message", "id": "message"},
-            "post": {"message": "text"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
+            "post": {"message": "text"}, "write_scratchpad": {"note": "text", "notes": "text", "content": "text"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
             "transfer": {"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item",
                          "resources": "item"}}
 _IGNORED = {"propose": {"title", "name"}, "write_edition": {"title", "headline"}}
@@ -64,6 +64,13 @@ def _normalise_args(name: str, args):
         if key == "camp" and isinstance(v, (int, str)) and _CAMP_REF.match(str(v)):
             v = "camp" + _CAMP_REF.match(str(v)).group(1)
         out[key] = v
+    if name == "transfer" and "item" not in out:                        # {"amount": {"timber": 1}} or {"timber": 1}
+        if isinstance(out.get("qty"), dict) and len(out["qty"]) == 1:
+            (out["item"], out["qty"]), = out["qty"].items()
+        else:
+            loose = [x for x, v in out.items() if x not in ("to", "qty", "item") and isinstance(v, (int, float)) and not isinstance(v, bool)]
+            if len(loose) == 1 and "qty" not in out:
+                out["item"], out["qty"] = loose[0], out.pop(loose[0])
     return out
 
 
