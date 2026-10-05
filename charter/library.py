@@ -865,7 +865,7 @@ law("Verbatim Press", "media", '''
 title = "Verbatim Press"
 intent = "Every public post submitted to the media is also printed verbatim in the gazette, once."
 
-def on_round_end():
+def on_round_end(r):
     done = state.get("done", [])
     for s in submissions():
         if s["id"] not in done:
