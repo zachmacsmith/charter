@@ -291,7 +291,7 @@ def class_brief(inst: dict, a: dict) -> str:
     if cls == "scientist":
         sh = archive.shared_dir(inst["spec"])
         free = int((inst["spec"].get("archive_reading") or {}).get("free_per_turn", 3))
-        return ("You are a Scientist: you have a private Python sandbox to analyse data (you cannot harvest; you need Workers' data), and with the "
+        return ("You are a Scientist: you have a private Python sandbox to analyse data (you start with no harvest rights: only open camps, or rights a law grants you; you need Workers' data), and with the "
                 "other Scientists you alone can read the archive (read_archive, search_archive). You can also write to the shared archive "
                 "(write_archive): every Scientist can read it, and it persists into future worlds, so what you record there outlives this one. "
                 "What you learn is yours to use, share, withhold or sell. The archive is split between the Scientists: you hold only part "

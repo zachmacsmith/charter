@@ -623,10 +623,12 @@ def own_roles(k, aid) -> list:
 def _class_line(inst, a) -> str:
     from charter import agents as AG
     if a["cls"] == "scientist":
-        return ("You are a Scientist: you have a private Python sandbox (you cannot harvest; you need Workers' data), and with the other "
-                "Scientists you alone can read the archive (read_archive, search_archive) and write the shared archive (write_archive), "
-                "which persists into future worlds. You hold only part of the archive; its index is in your manual (\"Your archive\"). "
-                "Reading a document you hold is free (as a lookup, or up to the free reads per turn).")
+        return ("You are a Scientist: you have a private Python sandbox (you start with no harvest rights: only open camps, or rights a law "
+                "grants you; you need Workers' data), and with the other Scientists you alone can read the archive (read_archive, "
+                "search_archive) and write the shared archive (write_archive), which persists into future worlds. Your documents hold "
+                "secrets and strategy nobody else starts with: how the camps really pay, what past worlds tried and how it ended, and moves "
+                "that win. Read them early; what you learn is yours to use, trade or withhold. You hold only part of the archive; its index "
+                "is in your manual (\"Your archive\"). Reading a document you hold is free (as a lookup, or up to the free reads per turn).")
     return AG.class_brief(inst, a)
 
 
@@ -669,7 +671,7 @@ def overview(inst) -> str:
     if on("life"):
         mods.append("lives are limited (your rounds left are in your state); children are commissioned from a Maker [manual: Life and children]")
     if on("media2"):
-        mods.append("outlets publish editions you subscribe to; posting needs a licence from an outlet [manual: Media]")
+        mods.append("outlets publish editions you subscribe to; everyone may post publicly, but an outlet can revoke your posting licence [manual: Media]")
     if (sp.get("projects") or {}).get("enabled", True):
         mods.append("projects are funded together and pay only if they reach their threshold [manual: Projects and tribute]")
     if on("outside_power"):

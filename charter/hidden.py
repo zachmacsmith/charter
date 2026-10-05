@@ -209,7 +209,7 @@ def prompt_section(inst: dict, a: dict) -> str:
          "and some articles are wrong. Notices may also bring rumours.")
     if held:
         s += ("\nCodex articles you hold (read one with read_archive {\"doc\": \"<id>\"}; search them with search_archive {\"query\": \"...\"}; "
-              "each read or search uses an action): " + "; ".join(f"{d} ({cat[d]['title']})" for d in held if d in cat))
+              "reading one is free, as a lookup or within the free reads per turn; a search uses an action): " + "; ".join(f"{d} ({cat[d]['title']})" for d in held if d in cat))
     return s
 
 

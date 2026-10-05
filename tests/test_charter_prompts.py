@@ -115,3 +115,14 @@ def test_every_non_rare_document_reaches_some_scientist(world):
     inst, _ = world
     held = {d for a in inst["agents"] if a["cls"] == "scientist" for d in a.get("archive_docs") or []}
     assert not {d for d in A.docs(None) if not d.startswith("rare/")} - held     # only rare records may go unheld
+
+
+def test_prompts_do_not_contradict_the_rules(world):
+    inst, k = world
+    for a in inst["agents"]:
+        p = CX.core_prompt(inst, a, k)
+        assert "cannot harvest" not in p                                # Scientists can harvest at open camps or with a granted right
+        assert "each read or search uses an action" not in p          # reading a held document is free
+        assert "posting needs a licence" not in p                       # everyone starts licensed
+        if a["cls"] == "scientist":
+            assert "secrets and strategy" in p
