@@ -95,6 +95,10 @@ def act(k, aid: str, name: str, args: dict) -> str:
     hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MD.ACTIONS))   # context, media2: off = unknown
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
+    if name == "commission" and isinstance(args, dict) and not args.get("maker"):            # no Maker named: the one living Maker
+        from charter import life as LF
+        if LF.enabled(k.spec) and "life" in k.w and len(LF.living_makers(k)) == 1 and LF.living_makers(k)[0] != aid:
+            args = {**args, "maker": LF.living_makers(k)[0]}
     if name == "commission" and isinstance(args, dict) and str(args.get("maker") or aid) == aid:   # a Maker "commissioning" an order it holds
         from charter import life as LF, roles as RO
         if LF.enabled(k.spec) and "life" in k.w and RO.has_role(k, aid, "maker"):
@@ -704,7 +708,12 @@ def _name_successor(k, aid, agent):
 
 def _commission(k, aid, maker, spec=None, payment=None):
     from charter import life as LF
-    return LF.commission(k, aid, maker, spec, payment)
+    out = LF.commission(k, aid, maker, spec, payment)
+    if str(maker) == aid:                                               # a Maker ordering its own child makes it at once
+        mine = [c for c in LF.state(k)["commissions"].values() if c["parent"] == aid and c["maker"] == aid and c["status"] == "open"]
+        if mine:
+            out += " " + LF.create_agent(k, aid, commission=max(mine, key=lambda c: int(c["id"][1:]))["id"])
+    return out
 
 
 def _create_agent(k, aid, spec=None, commission=None):

@@ -448,3 +448,16 @@ def test_dry_run_with_children_scores_lineages(tmp_path):
     assert all("lineage_score" in sc["agents"][a] for a in sc["lineage"])
     ev = [json.loads(l) for l in (out / "events.jsonl").read_text().splitlines()]
     assert any(e["type"] == "turn" and e["agent"] in {b["child"] for b in gt["life"]["births"]} for e in ev)
+
+
+def test_maker_orders_own_heir_in_one_action_and_default_maker():
+    from charter import generator, spec as S, actions as A
+    from charter.kernel import Kernel
+    inst = generator.generate(S.load("society"), 7)
+    k = Kernel(inst)
+    maker = k.w["roles"]["maker"][0]
+    k.w["agents"][maker]["holdings"]["timber"] = 40
+    assert "Made the agent" in A.act(k, maker, "commission", {"maker": maker, "spec": {"goal": "Power", "traits": ["x"]}})
+    aid = next(a["id"] for a in inst["agents"] if a["cls"] == "worker" and a["id"] != maker)
+    k.w["agents"][aid]["holdings"]["timber"] = 40
+    assert "placed with " + maker in A.act(k, aid, "commission", {"goal": "Wealth"})

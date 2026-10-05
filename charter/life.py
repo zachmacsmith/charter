@@ -354,8 +354,8 @@ def merge_spec(k, base: dict, over: dict) -> dict:
     c = cfg(k.spec)
     for key, v in over.items():
         if key == "traits":
-            if not isinstance(v, dict):
-                raise L.LawError("traits must be an object of trait -> 0..1")
+            if not isinstance(v, dict):                                 # traits not given as {trait: 0..1}: keep the default ones
+                continue
             known = set(k.spec["personality"]["traits"])
             for t, x in v.items():
                 if t not in known:
