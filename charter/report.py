@@ -330,7 +330,7 @@ def agent_docs(d, inst, ev, rs, gt):
 
 
 MESSAGE_TYPES = ("post", "anon_post", "dm", "channel_post", "story", "digest", "report", "gazette", "notify", "channel_created",
-                 "post_hidden", "post_revealed", "world_event")
+                 "post_hidden", "post_revealed", "world_event", "edition", "annotation", "leak")
 
 
 def messages(d, inst, ev):
@@ -368,6 +368,15 @@ def messages(d, inst, ev):
             body = f"{head} {who} (Media digest):"
         elif t == "report":
             body = f"{head} {who} (Media report on {x['about']}'s post {x['source']}):"
+        elif t == "edition":                                             # media2: an outlet's edition (per audience version)
+            aud = "everyone" if e.get("vis") == "public" else f"{len(e['vis'])} readers" if isinstance(e.get("vis"), list) else "readers"
+            body = (f"{head} {x['name']} ({who + ', editor' if who else 'official'}; edition"
+                    + (f" version {x['version']}" if x.get("version") else "") + f", to {aud}):")
+        elif t == "annotation":
+            body = f"{head} {x['name']} annotates {x['post']} ({who}):"
+        elif t == "leak":
+            L += [f"{head} {who} leaked {x['event']} to {x['name']}:", "", _q(x.get("shown", "")), ""]
+            continue
         elif t == "gazette":
             body = f"{head} Gazette{' (' + who + ')' if who else ''}:"
         elif t == "notify":
