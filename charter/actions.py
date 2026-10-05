@@ -69,6 +69,9 @@ def _normalise_args(name: str, args):
         if isinstance(spec, dict):
             for key in [x for x in out if x not in ("maker", "spec", "payment")]:
                 spec.setdefault(key, out.pop(key))
+            for syn, real in (("role", "cls"), ("class", "cls")):
+                if syn in spec:
+                    spec.setdefault(real, str(spec.pop(syn)).lower())
             for syn in ("born", "when", "birth"):
                 if syn in spec:
                     spec.setdefault("timing", spec.pop(syn))
@@ -92,6 +95,17 @@ def act(k, aid: str, name: str, args: dict) -> str:
     hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MD.ACTIONS))   # context, media2: off = unknown
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
+    if name == "commission" and isinstance(args, dict) and str(args.get("maker") or aid) == aid:   # a Maker "commissioning" an order it holds
+        from charter import life as LF, roles as RO
+        if LF.enabled(k.spec) and "life" in k.w and RO.has_role(k, aid, "maker"):
+            ref = args.get("commission") or args.get("id")
+            parent = args.get("for") or args.get("parent") or args.get("to")
+            if not ref:
+                mine = sorted((c for c in LF.state(k)["commissions"].values() if c["maker"] == aid and c["status"] == "open"
+                               and (parent is None or c["parent"] == parent)), key=lambda c: c["id"])
+                ref = mine[0]["id"] if mine else None
+            if ref:
+                name, args = "create_agent", {"commission": ref}
     fn = globals()[f"_{name}"]
     args = _normalise_args(name, args)
     if k.w["agents"].get(aid, {}).get("departed") is not None:        # world events: departed agents are out of play
