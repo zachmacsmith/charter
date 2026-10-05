@@ -161,6 +161,7 @@ DIRECT_X = ("Currency Magnate", "Lineage Wealth", "Lineage Influence", "Reaper",
 HAVOC = tuple(g for g in EXTRA_GATES if CATALOGUE[g][0] == "Havoc")
 DIRECT_SHARE = DIRECT_SHARE | set(DIRECT_X)
 HAVOC_SHARE, HAVOC_MIX_SHARE = 8.0, 25.0
+OPT_IN = ("Reaper", "Depopulator")                                 # never drawn unless goals.eliminator_variants: true (keeps old draws)
 REVOLUTION_PURPOSES = [                                              # Revolutionary: a sampled purpose (shown, not scored)
     "a collectivist order, where holdings are shared out evenly and the camps are held in common",
     "a monarchy, where one ruler decides the laws",
@@ -221,6 +222,8 @@ def enabled_modules(sp: dict | None) -> set:
 
 def goal_on(goal: str, spec_goals: dict, spec: dict | None = None) -> bool:
     """Whether a goal can be drawn: the update's goals need the update's features and their own module."""
+    if goal in OPT_IN and not (spec_goals or (spec or {}).get("goals") or {}).get("eliminator_variants"):
+        return False                                                 # opt-in: drawn only with goals.eliminator_variants (explicit always)
     if goal in EXTRA_GATES:                                          # goals: features on and every module the goal uses
         sp = dict(spec or {})
         sp.setdefault("goals", spec_goals or {})

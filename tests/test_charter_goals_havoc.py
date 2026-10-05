@@ -224,3 +224,11 @@ def test_reaper_and_depopulator_scores():
     assert G.s_reaper(gt, "A", {}) == 2 / 5                                # B (attack) and K (law) of the 5 others ever: B, C, D, K, L
     assert abs(G.s_depopulator(gt, "A", {}) - (1 - 2 / 6)) < 1e-9         # 2 alive at the end, 6 at the peak
     assert {"Reaper", "Depopulator"} <= set(G.SCORERS) and G.CATALOGUE["Reaper"][0] == "Adversarial"
+
+
+def test_eliminator_variants_are_opt_in():
+    from charter import goals as G, spec as S
+    sp = S.load("society")
+    assert G.weights(sp["goals"], "worker", spec=sp).get("Reaper", 0) == 0
+    sp["goals"]["eliminator_variants"] = True
+    assert G.weights(sp["goals"], "worker", spec=sp)["Depopulator"] > 0
