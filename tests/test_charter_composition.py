@@ -62,3 +62,10 @@ def test_default_world_is_unchanged_and_plugins_register():
         assert "A plug-in note." not in CX.core_prompt(inst, inst["agents"][0] if inst["agents"][0]["id"] != "Kasper" else inst["agents"][1], k)
     finally:
         CP._CORE[:] = [r for r in CP._CORE if r[0] != "test_note"]
+
+
+def test_planner_profile_adds_memory_tips_once():
+    inst, k = _world({"assign": [{"profile": "planner", "agents": ["Kasper"]}, {"profile": "planner", "classes": ["worker"]}]})
+    kas = next(a for a in inst["agents"] if a["id"] == "Kasper")
+    p = CX.core_prompt(inst, kas, k)
+    assert p.count("Use your memory as your plan") == 1 and p.index("Use your memory as your plan") > p.index("Memory: every turn")

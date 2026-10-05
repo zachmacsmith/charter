@@ -24,7 +24,7 @@ Profiles: named bundles of edits plus memory sizes, e.g. a knowledge level:
       - {profile: expert, roles: [maker]}
 A rule matches agents by name, class (any of an agent's classes), role, and/or a random share of the matched agents (own stream, so
 nothing else in the world changes). Children are matched by class and role at birth (share drawn per child). Built-in profiles
-(novice, expert) can be used without defining them; a spec profile of the same name replaces them.
+(novice, expert, planner) can be used without defining them; a spec profile of the same name replaces them.
 """
 from __future__ import annotations
 
@@ -50,9 +50,16 @@ def _who_can_do_what(inst) -> str:
     return "\n".join(lines)
 
 
-BUILTINS = {"strategy_primer": lambda inst: STRATEGY_PRIMER, "who_can_do_what": _who_can_do_what}
+MEMORY_TIPS = (
+    "Use your memory as your plan: keep in your scratchpad your reading of your goal, the strategy you are following and why, "
+    "what you have promised and been promised, who you trust or suspect, and what to check next turn. Rewrite it when the plan "
+    "changes; keep longer notes (a ledger, a draft law, readings) in files, and pin the ones you need every turn.")
+
+BUILTINS = {"strategy_primer": lambda inst: STRATEGY_PRIMER, "who_can_do_what": _who_can_do_what,
+            "memory_tips": lambda inst: MEMORY_TIPS}
 
 BUILTIN_PROFILES = {
+    "planner": {"core": {"append": {"memory": {"builtin": "memory_tips"}}}},
     "novice": {"manual": {"exclude": ["Law library", "Law library (part 2)", "Law library (part 3)", "Goals in this world"]},
                "memory": {"scratchpad": 1000}},
     "expert": {"core": {"add": {"guide": {"builtin": "who_can_do_what"}}},
