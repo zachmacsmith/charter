@@ -62,8 +62,8 @@ DEFAULTS = {"enabled": False, "start": "j0", "board_scope": "founding", "admissi
 ACTIONS = ("found", "invite", "join", "leave", "declare")
 ACTION_DOC = {
     "found": 'found {"name": "..."}: secretly found a new jurisdiction; only members you invite will know it exists. Laws passed there have no effect until it is declared',
-    "invite": 'invite {"jurisdiction": "J2", "agent": "Name"}: bring an agent into a hidden jurisdiction you belong to (they are told; nobody else is)',
-    "join": 'join {"jurisdiction": "J1"}: ask to join a declared jurisdiction; its admission law decides (by default its members vote this round); you leave your old one at the end of the round',
+    "invite": 'invite {"jurisdiction": "J2", "agent": "Name"}: offer an agent a place in a hidden jurisdiction you belong to (they are told it exists; nobody else is). They become a member only if they pledge (join)',
+    "join": 'join {"jurisdiction": "J1"}: a declared jurisdiction: ask to move there publicly; its admission law decides (by default its members vote this round) and you leave your old one at the end of the round. A hidden one you were invited to: pledge to it; you become a secret member, can see and vote on its draft laws, and move into it when it is declared',
     "leave": 'leave {"jurisdiction": null}: leave your declared jurisdiction at the end of the round (its laws may tax or seize from you as you go), or a hidden one at once',
     "declare": 'declare {"jurisdiction": "J2"}: make a hidden jurisdiction public (its founder, or any member once the founder is gone): at the end of the round its laws take effect and its members leave their old jurisdiction',
 }
@@ -763,12 +763,15 @@ def act_invite(k, aid, jurisdiction, agent):
         raise L.LawError(f"no agent {agent}")
     if agent in j["hidden_members"]:
         return f"{agent} is already a member of {j['id']}."
-    j["hidden_members"].append(agent)
-    k.log("jur_invited", aid, {"jurisdiction": j["id"], "agent": agent}, vis=list(j["hidden_members"]))
-    k.notify(agent, f"{aid} brought you into {j['id']} '{j['name']}', a jurisdiction founded in secret by {j['founder']}. Members: "
-                    f"{', '.join(j['hidden_members'])}. You can propose its laws (propose with \"jurisdiction\": \"{j['id']}\") and vote on "
-                    "them; they take effect only once it is declared. Nobody outside it knows it exists.")
-    return f"{agent} is now a member of hidden {j['id']}."
+    inv = j.setdefault("invited", [])                                    # an offer only: joining is the agent's own choice (pledge)
+    if agent not in inv:
+        inv.append(agent)
+    k.log("jur_invited", aid, {"jurisdiction": j["id"], "agent": agent}, vis=list(j["hidden_members"]) + [agent])
+    k.notify(agent, f"{aid} invites you to pledge to {j['id']} '{j['name']}', a jurisdiction founded in secret by {j['founder']} "
+                    f"(members so far: {', '.join(j['hidden_members'])}). To accept, pledge with join {{\"jurisdiction\": \"{j['id']}\"}}: you "
+                    "then become a secret member, can see and vote on its draft laws, and move into it when it is declared. You are not "
+                    "bound to accept, and nobody outside it knows it exists.")
+    return f"Invited {agent} to {j['id']}: they become a member only if they pledge."
 
 
 def act_declare(k, aid, jurisdiction):
@@ -785,8 +788,19 @@ def act_join(k, aid, jurisdiction):
     _on(k)
     jid = str(jurisdiction)
     j = jurs(k).get(jid)
+    if j and j["status"] == "hidden" and aid in (j.get("invited") or []):  # a pledge to a hidden jurisdiction one was invited to
+        if aid not in j["hidden_members"]:
+            j["hidden_members"].append(aid)
+        j["invited"].remove(aid)
+        k.log("jur_pledged", aid, {"jurisdiction": jid}, vis=list(j["hidden_members"]))
+        for m in j["hidden_members"]:
+            if m != aid:
+                k.notify(m, f"{aid} has pledged to {jid} '{j['name']}' and is now a secret member.")
+        return (f"You pledged to {jid} '{j['name']}': you are a secret member, can propose and vote on its draft laws (propose with "
+                f"\"jurisdiction\": \"{jid}\"), and move into it when it is declared. Leave it with leave {{\"jurisdiction\": \"{jid}\"}}.")
     if not j or j["status"] != "declared":
-        raise L.LawError(f"no declared jurisdiction {jid}")
+        raise L.LawError(f"no declared jurisdiction {jid}" + (" (a hidden one needs an invitation before you can pledge)"
+                                                             if j and j["status"] == "hidden" else ""))
     if member_of(k, aid) == jid:
         raise L.LawError(f"you are already a member of {jid}")
     answers = [v for _, v in hooks_of(k, jid, "on_admission", aid) if isinstance(v, bool)]
@@ -877,6 +891,10 @@ def declare_now(k, jid):
           vis="public")
     for aid in mem:
         _set_member(k, aid, jid, "declaration")
+    for aid in j.pop("invited", []) or []:                               # invited but never pledged: they may still move in publicly
+        if k.w["agents"].get(aid, {}).get("departed") is None and aid not in mem:
+            k.notify(aid, f"{jid} '{j['name']}', which you were invited to, is now declared. You can move there publicly with join "
+                          f"{{\"jurisdiction\": \"{jid}\"}} (its admission rule decides), for instance if you promised to.")
     dormant, j["dormant"] = list(j["dormant"]), []
     for lid in dormant:
         if k.w["laws"][lid]["status"] == "dormant":
@@ -922,7 +940,8 @@ def rules_text(inst) -> str:
             "to the world. Each jurisdiction has its own procedure, reserve, currencies, judges and offices; the Fixer serves all. "
             f"{board} {start} You belong to at most one declared jurisdiction. To join one, use join ({adm}); leaving (leave) takes "
             "effect at the end of the round, after its laws on leaving apply to you. Anyone can found a jurisdiction in secret (found), "
-            "invite members (invite), and pass laws there (propose with \"jurisdiction\"; they have no effect while it is hidden); "
+            "invite others (invite: an offer; an invited agent becomes a secret member only by pledging with join, or may promise to "
+            "move in later and join once it is declared; nobody can be put in a jurisdiction against their will), and pass laws there (propose with \"jurisdiction\"; they have no effect while it is hidden); "
             "declare makes it public at the end of the round, when its laws take effect and its members leave their old jurisdiction. "
             "Members of a jurisdiction other than J0 propose its laws without needing the propose right. Laws can also use "
             "jurisdiction(), members(), admit(agent), expel(agent), lawful_attack(attacker, target, units) (force paid from the "

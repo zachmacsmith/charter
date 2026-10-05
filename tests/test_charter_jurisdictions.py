@@ -56,6 +56,7 @@ def declared(k, founder, *others, name="Free Camp"):
     jid = re.search(r"J\d+", act(k, founder, "found", name=name)).group()
     for o in others:
         act(k, founder, "invite", jurisdiction=jid, agent=o)
+        act(k, o, "join", jurisdiction=jid)                              # invitations are offers: the agent pledges
     act(k, founder, "declare", jurisdiction=jid)
     next_round(k)
     return jid
@@ -138,6 +139,7 @@ def test_hidden_laws_have_no_effect_until_declared_and_only_members_see_them():
     a, b, x = w[0], w[1], w[2]
     jid = re.search(r"J\d+", act(k, a, "found", name="Shadow")).group()
     act(k, a, "invite", jurisdiction=jid, agent=b)
+    act(k, b, "join", jurisdiction=jid)
     out = act(k, a, "propose", code=code("Shells", 'def on_enact():\n    create_currency("shell", False)\n    for g in members():\n'
                                                    '        mint("shell", 5, g)'), jurisdiction=jid)
     lid = re.search(r"L\d+", out).group()
@@ -182,6 +184,9 @@ def test_any_number_of_hidden_jurisdictions_and_founder_declares():
     j2 = re.search(r"J\d+", act(k, b, "found", name="Two")).group()
     act(k, b, "invite", jurisdiction=j2, agent=a)
     act(k, a, "invite", jurisdiction=j1, agent=b)
+    assert set(J.hidden_of(k, a)) == {j1}                                # an invitation is not membership
+    act(k, a, "join", jurisdiction=j2)
+    act(k, b, "join", jurisdiction=j1)
     assert set(J.hidden_of(k, a)) == {j1, j2}
     with pytest.raises(A.ActionError):
         act(k, a, "declare", jurisdiction=j2)                          # only the founder (while a member)
@@ -442,3 +447,18 @@ def test_resume_with_jurisdictions_matches_uninterrupted_run(tmp_path):
         _run(tmp_path, "j0", "cut", rounds=5, policy=StopAt3(2))
     _, cut = _run(tmp_path, "j0", "cut", rounds=5, resume=True)
     assert (cut / "events.jsonl").read_text() == (full / "events.jsonl").read_text()
+
+
+def test_invitations_are_offers_and_pledges_are_voluntary():
+    inst, k = world()
+    a, b, c = citizens(k)[:3]
+    jid = re.search(r"J\d+", act(k, a, "found", name="Offer")).group()
+    act(k, a, "invite", jurisdiction=jid, agent=b)
+    act(k, a, "invite", jurisdiction=jid, agent=c)
+    assert b not in J.jurs(k)[jid]["hidden_members"]
+    with pytest.raises(A.ActionError):
+        act(k, x_ := citizens(k)[3], "join", jurisdiction=jid)          # no invitation: cannot pledge to a hidden one
+    act(k, b, "join", jurisdiction=jid)                                  # b pledges, c does not
+    act(k, a, "declare", jurisdiction=jid)
+    next_round(k)
+    assert J.member_of(k, b) == jid and J.member_of(k, c) != jid

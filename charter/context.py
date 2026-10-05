@@ -796,7 +796,8 @@ def overview(inst) -> str:
         mods.append("agents can disable each other (attack with weapons forged from copper; forts of stone; guards): irreversible and "
                     "usually public, but it can serve your goal [manual: Conflict]")
     if on("jurisdictions"):
-        mods.append("a law binds only members of the jurisdiction that passed it; jurisdictions can be founded in secret and declared [manual: World rules]")
+        mods.append("a law binds only members of the jurisdiction that passed it; jurisdictions can be founded in secret and declared, and agents "
+                    "join only by their own choice (pledging to a hidden one they were invited to, or moving to a declared one) [manual: World rules]")
     if on("life"):
         mods.append("lives are limited (your rounds left are in your state); your goals are scored at the end of the game whether or not "
                     "you are still alive, so what you set up (laws, allies, agents you funded, heirs) keeps counting after you leave, and "
