@@ -461,3 +461,20 @@ def test_maker_orders_own_heir_in_one_action_and_default_maker():
     aid = next(a["id"] for a in inst["agents"] if a["cls"] == "worker" and a["id"] != maker)
     k.w["agents"][aid]["holdings"]["timber"] = 40
     assert "placed with " + maker in A.act(k, aid, "commission", {"goal": "Wealth"})
+
+
+def test_heir_born_at_death_receives_the_children_bequest():
+    from charter import generator, spec as S, actions as A, mortality as MO, life as LF
+    from charter.kernel import Kernel
+    inst = generator.generate(S.load("society"), 7)
+    k = Kernel(inst)
+    maker = k.w["roles"]["maker"][0]
+    aid = next(a["id"] for a in inst["agents"] if a["cls"] == "worker" and a["id"] != maker)
+    k.w["agents"][aid]["holdings"].update({"timber": 40, "stone": 100})
+    A.act(k, aid, "commission", {"maker": maker, "goal": "Wealth", "timing": "on_death"})
+    A.act(k, maker, "create_agent", {})
+    A.act(k, aid, "bequest", {"holdings": {"@children": 1.0}})
+    MO.disable(k, aid, "old_age")
+    LF._births(k)
+    child = next(c for c in LF.children(k, aid))
+    assert k.bal(child, "stone") >= 99                                   # the estate went to the heir, not the reserve

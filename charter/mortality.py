@@ -186,10 +186,20 @@ def _group(k, aid, who, cause, by) -> list:
     if who in ("@attacker_enemies", "@killer_enemies"):              # @killer_enemies: old name, still accepted
         return enemies(k, by) if by else []
     if who == "@children":
-        return [c for c in LF.children(k, aid) if alive(k, c)]
+        return [c for c in LF.children(k, aid) if alive(k, c)] + _unborn(k, aid)
     if who == "@descendants":
-        return [c for c in LF.descendants(k, aid) if alive(k, c)]
+        return [c for c in LF.descendants(k, aid) if alive(k, c)] + _unborn(k, aid)
     return [who] if who != aid and alive(k, who) else []
+
+
+def _unborn(k, aid) -> list:
+    """Children ordered to be born at this agent's death (life.on_death has just made them due): they count as its children, and what
+    they are left goes with them at birth."""
+    from charter import life as LF
+    if not LF.enabled(k.spec) or "life" not in k.w:
+        return []
+    return [f"unborn:{c['id']}" for c in sorted(LF.state(k)["commissions"].values(), key=lambda c: c["id"])
+            if c["parent"] == aid and c["status"] == "due" and c.get("due_round") == k.r and c.get("reserved") is not None]
 
 
 def _reserve_dst(k, aid):
@@ -245,7 +255,13 @@ def _run_bequest(k, aid, cause, by) -> dict:
             amt = min(amt, k.bal(aid, item))
             if amt <= 0:
                 continue
-            _give(k, aid, (res_dst if g == "reserve" else g), item, amt, "bequest")
+            if g.startswith("unborn:"):                                    # an heir born at this death: handed over at birth
+                from charter import life as LF
+                c = LF.state(k)["commissions"][g.split(":", 1)[1]]
+                k._add(aid, item, -amt)
+                c["reserved"][item] = round(c["reserved"].get(item, 0.0) + amt, 6)
+            else:
+                _give(k, aid, (res_dst if g == "reserve" else g), item, amt, "bequest")
             given.setdefault(g, {})[item] = round(given.get(g, {}).get(item, 0.0) + amt, 6)
         rest = k.bal(aid, item)
         if rest > 1e-9:
