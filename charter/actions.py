@@ -37,9 +37,11 @@ class ActionError(Exception):
 
 
 _CAMP_REF = __import__("re").compile(r"^\s*(?:camp)?\s*(\d+)\s*$", __import__("re").I)
-_ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to"}, "reply": {"message_id": "message"},
-            "post": {"message": "text"}, "transfer": {"recipient": "to", "amount": "qty", "quantity": "qty"}}
-_IGNORED = {"propose": {"title", "name"}}
+_ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent": "to"}, "reply": {"message_id": "message", "id": "message"},
+            "post": {"message": "text"}, "propose": {"law": "code", "text": "code", "source": "code"},
+            "transfer": {"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item",
+                         "resources": "item"}}
+_IGNORED = {"propose": {"title", "name"}, "write_edition": {"title", "headline"}}
 
 
 def _normalise_args(name: str, args):
@@ -53,6 +55,9 @@ def _normalise_args(name: str, args):
             key = alias[key]
         if key in _IGNORED.get(name, ()):
             continue
+        if key == "item" and isinstance(v, dict) and len(v) == 1 and "qty" not in args:   # {"timber": 3} for item and qty
+            (v, q), = v.items()
+            out["qty"] = q
         if key == "camp" and isinstance(v, (int, str)) and _CAMP_REF.match(str(v)):
             v = "camp" + _CAMP_REF.match(str(v)).group(1)
         out[key] = v
@@ -91,6 +96,9 @@ def _harvest(k, aid, camp, x=None, **extra):
         raise ActionError(f"no such camp: {camp}. Camps: {', '.join(H.visible_camps(k))}")
     if k.w["camps"][camp].get("type"):                                 # camps: typed camps (camps.model: types) run in the framework
         from charter.camptypes import framework as CT
+        if x is None and len(extra) == 1 and next(iter(extra)) in ("choice", "amount", "value", "side", "guess", "dials", "setting") \
+                and next(iter(extra)) not in getattr(CT.get(k.w["camps"][camp]["type"]), "extra_args", ()):
+            x = extra.pop(next(iter(extra)))                              # a camp's single input under another name means x
         return CT.harvest_action(k, aid, camp, x, extra)               # camps-b: non-dial args (submit, shift, partner, ...)
     if extra or x is None:                                             # camps-b: legacy camps take exactly camp and x, as before
         raise TypeError(f"_harvest() got unexpected or missing arguments: {sorted(extra) if extra else 'x'}")

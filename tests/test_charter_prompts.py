@@ -138,3 +138,16 @@ def test_every_prompt_states_its_leverage_per_class_and_role(world):
             assert CX.LEVERAGE_ROLE[r] in line, (a["id"], r)
         for r in set(CX.LEVERAGE_ROLE) - set(CX.own_roles(k, a["id"])):
             assert CX.LEVERAGE_ROLE[r] not in p, (a["id"], r)               # nobody is told another's (secret) edge
+
+
+def test_actions_and_camp_args_match_what_each_agent_can_do(world):
+    inst, k = world
+    for a in inst["agents"]:
+        p = CX.core_prompt(inst, a, k)
+        acts = set(re.findall(r"[a-z_]+", _actions_line(p).split(":", 1)[1]))
+        if "sandbox" not in k.w["agents"][a["id"]]["rights"]:
+            assert "run_python" not in acts, a["id"]
+        if a["cls"] in ("board", "fixer"):
+            assert "harvest" not in acts, a["id"]
+        assert "camp5 stone (open to all but the Board and Fixer; choose 0 or 1, sealed; harvest args x: 0..1)" in p
+        assert "harvest args factor" in p                                   # the vault takes only a factor

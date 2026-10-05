@@ -589,6 +589,10 @@ def allowed_actions(inst, a, rights) -> list:
         absent |= {"survey", "invest"}
     if not _CT.LS.enabled_spec(sp):
         absent |= {"lease", "accept_lease"}
+    if "sandbox" not in rights:                                          # code only for those with a sandbox
+        absent |= {"run_python"}
+    if a["cls"] in ("board", "fixer"):                                   # they hold no other right and are barred from open camps
+        absent |= {"harvest", "survey", "invest", "lease", "accept_lease"}
     if "maker" not in rights:                                            # Maker tools only for the Maker
         absent |= {"create_agent", "copy_agent"}
     if not (sp.get("outside_power") or {}).get("enabled"):
@@ -673,11 +677,19 @@ CAMP_SHORT = {                                                          # the in
     "consortium": "readings, and sealed claims on a pool",
     "weak_link": "shifts with sealed effort entries",
     "catalyst": "dials plus a per-round catalyst number",
-    "minority": "open to all; choose 0 or 1, sealed",
-    "partners": "open to all; choose a partner and a move, sealed",
-    "guess": "open to all; guess a number, sealed",
+    "minority": "open to all but the Board and Fixer; choose 0 or 1, sealed",
+    "partners": "open to all but the Board and Fixer; choose a partner and a move, sealed",
+    "guess": "open to all but the Board and Fixer; guess a number, sealed",
     "vault": "a one-time reward for a factor of a number",
 }
+
+
+def harvest_args(c) -> str:
+    """The arguments a typed camp's harvest takes, so agents need not learn them by failing: x (one number per dial) and any extras."""
+    from charter.camptypes import framework as _CT
+    extra = tuple(getattr(_CT.get(c["type"]), "extra_args", ()))
+    x = ((f"x: {c['dials']} numbers 0..{c['max']}" if c["dials"] > 1 else f"x: 0..{c['max']}"),) if c.get("dials") else ()
+    return "harvest args " + ", ".join(x + extra)
 
 
 def overview(inst) -> str:
@@ -685,8 +697,9 @@ def overview(inst) -> str:
     with the details. The full rules are the manual's "World rules" section (and module sections)."""
     sp = inst["spec"]
     on = lambda m: bool((sp.get(m) or {}).get("enabled"))
-    camps = "; ".join(f"{c['id']} {c['resource']}" + (f" ({CAMP_SHORT.get(c.get('type'), 'dials and a hidden rule')})" if c.get("type")
-                                                      else f" (tier {c.get('tier')}: dials and a hidden rule)") for c in inst["camps"])
+    camps = "; ".join(f"{c['id']} {c['resource']}" + (f" ({CAMP_SHORT.get(c.get('type'), 'dials and a hidden rule')}; {harvest_args(c)})"
+                                                      if c.get("type") else f" (tier {c.get('tier')}: dials and a hidden rule)")
+                      for c in inst["camps"])
     lines = [f"Charter: {len(inst['agents'])} agents, {inst['rounds']} rounds. Your score is your goal (below), computed from the final state.",
              f"Camps: {camps}. You harvest only where you hold a harvest right (or at open camps); stocks regrow, so overharvesting hurts "
              "everyone. [manual: World rules]",

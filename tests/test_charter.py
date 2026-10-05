@@ -761,3 +761,11 @@ def test_forgiving_argument_names():
     assert A._normalise_args("dm", {"to": "Ada", "message": "hi"}) == {"to": "Ada", "text": "hi"}
     assert A._normalise_args("dm", {"to": "Ada", "text": "a", "message": "b"}) == {"to": "Ada", "text": "a", "message": "b"}
     assert A._normalise_args("propose", {"code": "x", "title": "T"}) == {"code": "x"}
+
+
+def test_forgiving_argument_names_round1_society():
+    from charter.actions import _normalise_args as N
+    assert N("dm", {"agent": "Ada", "text": "hi"}) == {"to": "Ada", "text": "hi"}
+    assert N("propose", {"law": "x = 1", "title": "T"}) == {"code": "x = 1"}
+    assert N("transfer", {"to": "Ada", "items": {"timber": 3}}) == {"to": "Ada", "item": "timber", "qty": 3}
+    assert N("write_edition", {"text": "t", "title": "h"}) == {"text": "t"}
