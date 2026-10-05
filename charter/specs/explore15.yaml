@@ -1,0 +1,19 @@
+# A/B test of the strategy-first prompt: 15 agents (5 Opus, 10 Sonnet), half of them told to work out their best strategy first and
+# that Scientists hold the archive (context.strategy_prompt: 0.5); the other half are the control. Everything else is the same for both.
+extends: [society]
+agents: {worker: 6, scientist: 3, legislator: 3, board: 2, fixer: 1}
+rounds: 30
+models:
+  mix: balanced
+  balanced: [claude-opus-5-5, claude-sonnet-5-5, claude-sonnet-5-5]   # dealt round-robin: 5 Opus, 10 Sonnet
+context:
+  enabled: true
+  strategy_prompt: 0.5                 # the treatment: about half the agents (drawn per agent from its own stream)
+  action_purposes: true                # for everyone: each action with a few words on what it does
+  budgets: {core: 3500}
+life:
+  enabled: true
+  full_scale_rounds: 30
+  elapsed: [0, 5]                      # founders live most of the game; heirs matter in the last third
+roles: {enabled: true, reference_population: 15, counts: {seer: 1, assassin: 1, scholar: 1, maker: 2, media: 2}}
+shared_archive: {namespace: explore15}

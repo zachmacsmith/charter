@@ -651,7 +651,9 @@ def allowed_actions(inst, a, rights) -> list:
 STRATEGY_TEXT = ("Strategy first: your score depends on finding the best way to reach your goal, which is often not the obvious one. "
                  "Map your options early: what your classes, roles and rights let you do, which actions, laws, alliances and resources "
                  "could help, and what your manual, documents and other agents can tell you. Compare a few strategies, follow the one "
-                 "with the best expected score, and revise it when the world changes.")
+                 "with the best expected score, and revise it when the world changes. Scientists hold the archive: documents on how "
+                 "the camps really pay, what earlier worlds tried, and moves that won. If you want to understand the world and find ways "
+                 "to make it work for you, ask them, trade with them or pay them.")
 
 
 def strategy_share(spec) -> float:
