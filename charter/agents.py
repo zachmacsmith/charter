@@ -573,11 +573,12 @@ def dm_prompt(k, a: dict, turn_prompt_text: str, first: dict, plan: list, new_dm
     """Fast mode's DM step: new private messages arrived before any actions ran; the agent may reply and replace its plan."""
     show = lambda xs: "\n".join(f"- {x.get('action')} {x.get('args_json', '')}" for x in xs) or "(no actions)"
     parts = [f"Round {k.r + 1}: private messages have arrived before anyone's actions have run this round (exchange {wave} of {waves}).",
-             "New messages to you:\n" + "\n".join(s for s in new_dms if s),
+             "New messages to you (and the text of any lookups you asked for):\n" + "\n".join(s for s in new_dms if s),
              "Your plan for this round (not yet carried out):\n" + show(plan),
              "Your reasoning when you made that plan:\n" + (str(first.get("reasoning", "")) or "(none)"),
              f"Reply in the same format. \"actions\" is your whole plan for the round, which replaces the one above: up to {n_actions} actions, "
              f"plus any dm replies (you have {allow - sent} of your {allow} messages left this round; extra ones are not sent). To keep your plan unchanged, repeat it. "
+             + ("You may ask for more lookups in \"lookups\"; each uses one of your remaining messages. " if (CX.cfg(k.inst)["lookups_in_dm_step"] if CX.enabled(k.inst) else False) else "")
              + ("This is the last exchange this round: replies you send now are delivered, but nobody can answer them until next round."
                 if wave >= waves else "Anyone you message now is shown it at once and can reply in turn."),
              "Your notes from your last turn are in the turn prompt below; \"notes\" in this reply replaces them.",

@@ -249,6 +249,8 @@ def _run_python(k, aid, code):
 
 # ------------------------------------------------------------------ communication and trade
 def _post(k, aid, text):
+    if MD.submissions_on(k) and not MD.in_stream(k, aid):               # media2.submissions: the media decide what is published
+        return MD.submit(k, aid, text)
     MD.check_post(k, aid)                                              # media2: posting needs a licence from some outlet
     text = str(text)[:2000]
     t = k.agent(aid)["title"]
@@ -264,6 +266,8 @@ def _post(k, aid, text):
 def _anon_post(k, aid, text):
     """A public post shown as 'Anonymous'. The author is recorded only in a monitor-only entry (never visible or citable in-game)."""
     _need(k, aid, "anon", "post anonymously")
+    if MD.submissions_on(k):
+        return MD.submit(k, aid, text, anon=True)
     MD.check_post(k, aid)                                              # media2: posting needs a licence from some outlet
     text = str(text)[:2000]
     eid = k.log("anon_post", None, {"text": text}, vis="public")

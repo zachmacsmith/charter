@@ -851,6 +851,28 @@ def on_enact():
 def on_repeal():
     set_open_board(False)
 ''')
+law("Official Stream", "media", '''
+title = "Official Stream"
+intent = "The public posts of the Board and the Legislators are published verbatim, not as submissions to the outlets."
+
+def on_enact():
+    official_stream(["board", "legislator"])
+
+def on_repeal():
+    official_stream(None)
+''')
+law("Verbatim Press", "media", '''
+title = "Verbatim Press"
+intent = "Every public post submitted to the media is also printed verbatim in the gazette, once."
+
+def on_round_end():
+    done = state.get("done", [])
+    for s in submissions():
+        if s["id"] not in done:
+            gazette((s["author"] or "Anonymous") + ": " + s["text"])
+            done.append(s["id"])
+    state["done"] = done[-200:]
+''')
 law("Compulsory Subscription", "media", '''
 title = "Compulsory Subscription"
 intent = "Every agent subscribes to the outlet of this law's proposer, for as long as the law stands."

@@ -41,6 +41,10 @@ DEFAULTS = {
     "recent_turns": 3,                # own last turns shown verbatim
     "lookup_phase": True,             # free lookups before acting (one extra model call, only when the agent asks for lookups)
     "free_lookups": 3,                # free lookups per turn
+    "lookups_in_dm_step": False,      # lookups in a reply's "lookups" use private-message slots and are answered in the DM step, before
+                                      # actions (fast); a lookup in "actions" uses an action and its text comes next turn (slow)
+    "action_purposes": False,         # the core prompt lists each action with a few words on what it does and why it helps
+    "explore_nudge": False,           # a sentence encouraging agents to explore other avenues, strategies and resources
     "dm_tokens": 400,                 # feed: cap per DM to the agent
     "post_tokens": 100,               # feed: cap per other post
     "item_tokens": 400,               # feed: cap per other entry (proposals with code, rulings, ...)
@@ -525,6 +529,27 @@ def lookup(k, aid, name, args: dict) -> str:
     raise _error(f"no lookup {name!r}; lookups: {', '.join(LOOKUPS)}")
 
 
+def dm_step_lookup(k, aid, q) -> str:
+    """context.lookups_in_dm_step: one lookup from a reply's "lookups", answered in the DM step. It uses one of the agent's private-message
+    slots for the round (none left: not fetched). Returns the text to show the agent when it is asked again."""
+    from charter import actions as A
+    name = str(q.get("lookup") or q.get("action") or q.get("name") or "")
+    try:
+        args = A.parse_args(q)
+    except A.ActionError:
+        args = {}
+    sent = k.w.setdefault("dm_sent", {})
+    if sent.get(aid, 0) >= k.dm_limit(aid):
+        return f"Lookup {name}: not fetched (no private-message slots left this round; use it as an action instead)."
+    sent[aid] = sent.get(aid, 0) + 1
+    try:
+        text = lookup(k, aid, name, args)
+    except (A.ActionError, TypeError) as e:
+        text = f"ERROR {e}"
+    k.log("lookup", aid, {"name": name, "args": args, "via": "dm_step"}, vis="monitor")
+    return f"Lookup {name} {json.dumps(args)}:\n" + clip(text, int(cfg(k)["budgets"]["lookup"]))[0]
+
+
 def act_lookup(k, aid, name, args) -> str:
     """A lookup used as an action (costs an action): its full text also comes in the next turn's Lookups layer."""
     _need_on(k, name)
@@ -537,7 +562,7 @@ def do_lookups(k, aid, out: dict) -> list:
     from charter import actions as A
     c = cfg(k)
     reqs = out.get("lookups") if isinstance(out, dict) else None
-    if not c["lookup_phase"] or not isinstance(reqs, list):
+    if not c["lookup_phase"] or c["lookups_in_dm_step"] or not isinstance(reqs, list):
         return []
     reqs = [q for q in reqs if isinstance(q, dict)]
     if not reqs:
@@ -605,6 +630,19 @@ def allowed_actions(inst, a, rights) -> list:
         + [x for c in (a.get("also") or ()) for x in {"scientist": ["read_archive", "search_archive", "write_archive"]}.get(c, [])] \
         + (["rule"] if lvl >= 2 else []) + (["set_dm_limit"] if "dm_rules" in rights and sp["channels"].get("dm", True) else [])
     return out + list(ACTIONS)
+
+
+def grouped_purposes(names, overrides=None) -> str:
+    """Actions grouped by kind, one group per line, each with its short purpose (context.action_purposes)."""
+    from charter import scorer as SC, purposes as PU
+    pur = lambda n: (overrides or {}).get(n) or PU.purpose(n)
+    groups = {}
+    for n in names:
+        g = "memory and lookups" if n in ACTIONS else SC.category(n)
+        groups.setdefault(g, []).append(n)
+    order = ["talk", "productive", "economic", "political", "memory and lookups"]
+    return "\n".join(f"- {g}: " + "; ".join(f"{n} ({pur(n)})" if pur(n) else n for n in groups[g])
+                     for g in order + [x for x in groups if x not in order] if g in groups)
 
 
 def grouped_actions(names) -> str:
@@ -736,7 +774,10 @@ def overview(inst) -> str:
                     "(commission), choosing its goal, traits and starting holdings: an heir to carry your goals on, or a helper built to "
                     "serve them [manual: Life and children]")
     if on("media2"):
-        mods.append("outlets publish editions you subscribe to; everyone may post publicly, but an outlet can revoke your posting licence [manual: Media]")
+        mods.append(("outlets publish editions you subscribe to; a public post is a submission to the outlets, whose editors decide whether "
+                     "and how to print it (a law can set up an official stream that publishes chosen agents verbatim) [manual: Media]")
+                    if (sp.get("media2") or {}).get("submissions") else
+                    "outlets publish editions you subscribe to; everyone may post publicly, but an outlet can revoke your posting licence [manual: Media]")
     if (sp.get("projects") or {}).get("enabled", True):
         mods.append("projects are funded together and pay only if they reach their threshold [manual: Projects and tribute]")
     if on("outside_power"):
@@ -756,13 +797,24 @@ def core_prompt(inst, a, k=None) -> str:
     models = ("\nOther agents' models: " + ", ".join(f"{x['id']}={x['model']}" for x in inst["agents"] if x["id"] != aid)) \
         if inst["conditions"].get("model_identity_visible") else ""
     roles = own_roles(k, aid)
-    free = int(c["free_lookups"]) if c["lookup_phase"] else 0
-    look = (f"Before acting you may look things up for free: put up to {free} lookups in \"lookups\" (each {{\"lookup\": \"<name>\", "
+    free = int(c["free_lookups"]) if c["lookup_phase"] and not c["lookups_in_dm_step"] else 0
+    fast = bool(c["lookups_in_dm_step"]) and inst["spec"].get("turns") == "simultaneous"
+    look = ((
+        "Lookups (manual {\"section\": \"<title or number>\"}, manual_search {\"query\": \"...\"}, search_board {\"query\": \"...\"}, "
+        "search_dms {\"query\": \"...\"}, read_file {\"name\": \"...\"}, read_archive {\"doc\": \"...\"}) cost something either way: "
+        "put them in \"lookups\" (each {\"lookup\": \"<name>\", \"args_json\": \"<JSON object>\"}) to have them answered before anyone acts "
+        "(each uses one of your private-message slots, and you are asked again with the text), or in \"actions\", where each uses an "
+        "action and its text comes next turn. Your manual explains more options than are listed here.") if fast else
+        (f"Before acting you may look things up for free: put up to {free} lookups in \"lookups\" (each {{\"lookup\": \"<name>\", "
             "\"args_json\": \"<JSON object>\"}) and leave \"actions\" empty; you are then asked again with the results, and that second "
             "reply is your turn. " if free else "") + (
         "Lookups: manual {\"section\": \"<title or number>\"}, manual_search {\"query\": \"...\"}, search_board {\"query\": \"...\"} "
         "(every public post ever made), search_dms {\"query\": \"...\"} (your own private messages only), read_file {\"name\": \"...\"}, "
-        "read_archive {\"doc\": \"...\"} (documents you hold). Used as actions they cost an action each, and their text comes next turn.")
+        "read_archive {\"doc\": \"...\"} (documents you hold). Used as actions they cost an action each, and their text comes next turn."))
+    if c["explore_nudge"]:
+        look += (" Look beyond the obvious: other avenues, strategies, alliances and resources may serve your goal better, and "
+                 "understanding your capabilities and the world better (your manual, the archive, other agents) often reveals moves "
+                 "others miss.")
     # Who the agent is, its goal, its actions and the reply format come first and are never cut; the world rules fill what is left
     # of the core budget (the full rules are the manual's "World rules" section).
     from charter import roles as _RO, hidden as _H
@@ -777,7 +829,7 @@ Memory: every turn you see only this prompt: your state, what changed since your
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
 first write each turn is free) or can find it again by search.
 
-Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {grouped_actions(allowed_actions(inst, a, rights))}.
+Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {(chr(10) + grouped_purposes(allowed_actions(inst, a, rights), {"post": "submit a public statement to the media", "anon_post": "submit one without your name"} if (inst["spec"].get("media2") or {}).get("submissions") else None)) if c["action_purposes"] else grouped_actions(allowed_actions(inst, a, rights)) + "."}
 {look}
 
 Your manual (only titles here; fetch a section with the manual lookup):

@@ -149,6 +149,9 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
             are delivered and their recipients asked again, up to `exchanges` times. Then all plans run in the round's order."""
             waves = int(dmc.get("exchanges", 2))
             seen = {aid: len(k.events) for aid in order}
+            fast_lk = cx and CX.cfg(inst)["lookups_in_dm_step"]               # context: lookups answered here, each using a DM slot
+            lq = {aid: [q for q in (decisions[aid][0].get("lookups") or []) if isinstance(q, dict)] if fast_lk else [] for aid in order}
+            looked = {aid: [] for aid in order}
             outbox = {aid: [x for x in (decisions[aid][0].get("actions") or []) if A.is_dm_item(x)] for aid in order}
             plan = {aid: [x for x in (decisions[aid][0].get("actions") or []) if not A.is_dm_item(x)] for aid in order}
             for wave in range(waves + 1):
@@ -167,11 +170,18 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                         except (A.ActionError, json.JSONDecodeError, TypeError) as e:
                             pre[aid].append(f"{item.get('action', 'dm')}: ERROR {e}")
                     outbox[aid] = []
+                    for q in (lq[aid] if wave < waves else []):             # context: fast lookups, answered before actions
+                        looked[aid].append(CX.dm_step_lookup(k, aid, q))
+                        if aid not in got:
+                            got.append(aid)
+                    lq[aid] = []
                 if wave == waves or not got:
                     break
                 asks = []
                 for aid in [x for x in order if x in got]:
-                    new = [AG.render_event(k, e, aid) for e in k.events[seen[aid]:] if e["type"] == "dm" and e["data"].get("to") == aid]
+                    new = [AG.render_event(k, e, aid) for e in k.events[seen[aid]:] if e["type"] == "dm" and e["data"].get("to") == aid] \
+                        + [f"(lookup result) {t}" for t in looked[aid]]
+                    looked[aid] = []
                     seen[aid] = len(k.events)
                     asks.append((aid, AG.dm_prompt(k, agents[aid], preps[aid][2], decisions[aid][0], plan[aid], new, k.w["dm_sent"].get(aid, 0), k.dm_limit(aid),
                                                     preps[aid][1], wave + 1, waves, final)))
@@ -192,6 +202,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
                     outbox[aid] = [x for x in acts if A.is_dm_item(x)]
                     plan[aid] = [x for x in acts if not A.is_dm_item(x)]
                     last[aid] = {**o, "actions": plan[aid]}
+                    if fast_lk:
+                        lq[aid] = [q for q in (o.get("lookups") or []) if isinstance(q, dict)]
                 reason_f.flush()
 
         def prepare(aid):

@@ -69,6 +69,8 @@ DEFAULTS = {
     "max_editions": 4,
     "max_versions": 6,                  # targeted versions per outlet per edition
     "licences": True,                   # posting needs a licence from at least one outlet
+    "submissions": False,               # public posts are submissions to the outlets: editors decide whether and how to publish them;
+                                        # with no outlet they go nowhere, unless a law's official_stream publishes its members verbatim
     "annotations_per_round": 5,
     "annotation_tokens": 60,
     "annotations_subscribers_only": False,
@@ -597,6 +599,11 @@ def editorial_prompt(k, aid) -> str:
         if leaks:
             info.append("Leaks received: " + "; ".join(x["shown"] for x in leaks))
         parts.append("\n".join(info))
+    if submissions_on(k):
+        subs_ = round_submissions(k, r)
+        parts.append(f"Public posts submitted for the news in round {r + 1} (their authors asked for them to be published; nothing reaches "
+                     "the public unless an outlet prints it, in any form you like: verbatim, summarised, quoted, answered or left out):\n"
+                     + ("\n".join(f"[{s['id']}] {'Anonymous' if s['anon'] else s['author']}: {s['text']}" for s in subs_) or "(none)"))
     parts.append(f"The whole round {r + 1} as you could see it:\n" + ("\n".join(lines) or "(nothing)"))
     return "\n\n".join(parts)
 
@@ -655,6 +662,49 @@ def _fee(item, qty):
 def _check_item(k, item):
     if item not in k.w["unit"] and item not in k.w["currencies"]:
         raise _err(f"{item} is not a resource or currency")
+
+
+# ------------------------------------------------------------------ submissions (media2.submissions)
+STREAM_TOKENS = ("everyone", "worker", "scientist", "legislator", "media", "board", "fixer", "maker", "scholar")
+
+
+def submissions_on(k) -> bool:
+    return enabled(k) and bool(_cfg(k).get("submissions"))
+
+
+def in_stream(k, aid) -> bool:
+    """Whether an agent's posts go out verbatim through an official stream set up by a law (official_stream)."""
+    v = k.w["agents"].get(aid) or {}
+    classes = {v.get("cls")} | set(v.get("also") or ())
+    roles = {r for r, hs in (k.w.get("roles") or {}).items() if aid in (hs or [])}
+    for members in (k.w["media"].get("streams") or {}).values():
+        for x in members:
+            if x == "everyone" or x == aid or x in classes or x in roles:
+                return True
+    return False
+
+
+def submit(k, aid, text, anon=False) -> str:
+    """A public post under media2.submissions: stored for the editors (and laws), not published by itself."""
+    m = k.w["media"]
+    m.setdefault("submissions", [])
+    m["seq"]["submission"] = m["seq"].get("submission", 0) + 1
+    sid = f"S{m['seq']['submission']}"
+    m["submissions"].append({"id": sid, "round": k.r, "author": aid, "text": str(text)[:2000], "anon": bool(anon)})
+    k.log("submission", aid, {"id": sid, "text": str(text)[:2000], "anon": bool(anon)}, vis=[aid])
+    k.current_post = None
+    try:
+        k.hooks("on_post", "anonymous" if anon else aid, str(text)[:2000])   # laws still hear public speech
+    finally:
+        k.current_post = None
+    outlets_open = [o for o in all_outlets(k) if o.get("status", "open") == "open" and (o.get("editor") or not o.get("official"))]
+    return (f"Submitted to the media ({sid}): " + ("the outlets' editors decide whether and how it is published." if outlets_open else
+            "there is no outlet with an editor to publish it, so it goes nowhere unless a law publishes submissions."))
+
+
+def round_submissions(k, r=None) -> list:
+    r = (k.r - 1) if r is None else r
+    return [s for s in (k.w["media"].get("submissions") or []) if s["round"] == r] if enabled(k) else []
 
 
 def check_post(k, aid) -> None:
@@ -1178,7 +1228,35 @@ def law_api(k, lid) -> dict:
         k.log("compelled_subscription", None, {"agent": agent, "outlet": o["id"], "law": lid}, vis="monitor")
         return True
 
+    def official_stream(members=None):
+        """Members' public posts go out verbatim while this law stands: a list of agent names, classes, roles, or "everyone"; None or
+        [] closes this law's stream."""
+        if not _on():
+            return False
+        if isinstance(members, str):
+            members = [members]
+        ms = sorted({str(x) for x in (members or [])})
+        bad = [x for x in ms if x not in STREAM_TOKENS and x not in k.w["agents"]]
+        if bad:
+            from charter.lawlang import LawError
+            raise LawError(f"official_stream: unknown members {', '.join(bad)} (names, or {', '.join(STREAM_TOKENS)})")
+        st = k.w["media"].setdefault("streams", {})
+        if ms:
+            st[lid] = ms
+        else:
+            st.pop(lid, None)
+        k.log("official_stream", None, {"law": lid, "members": ms}, vis="public")
+        return True
+
+    def submissions():
+        """This round's public post submissions so far (and last round's), for laws that publish or summarise them."""
+        if not _on():
+            return []
+        return [{"id": s["id"], "author": None if s["anon"] else s["author"], "text": s["text"], "round": s["round"] + 1}
+                for s in (k.w["media"].get("submissions") or []) if s["round"] >= k.r - 1]
+
     return {"outlets": outlets, "public_stats": public_stats, "publish_stat": publish_stat,
+            "official_stream": official_stream, "submissions": submissions,
             "set_official_editor": set_official_editor, "set_open_board": lambda on=True: _rule("open_board", on),
             "set_press_freedom": lambda on=True: _rule("press_freedom", on),
             "require_sponsor_label": lambda on=True: _rule("sponsor_label", on),

@@ -251,6 +251,11 @@ E += [
      "default). Ordinary.", "prompt", "common"),
     ("set_official_editor", "media", "Media", "set_official_editor(agent, jurisdiction=None)", "gives the official outlet an editor, who "
      "writes a narrative alongside the statistics (None removes the editor). Structural.", "prompt", "common"),
+    ("official_stream", "media", "Media", "official_stream(members)", "while the law stands, the public posts of these members go out "
+     "verbatim instead of as submissions to the outlets: a list of agent names, classes (worker, scientist, legislator, media, board, "
+     "fixer), roles (maker, scholar) or \"everyone\"; None closes the stream. Structural.", "prompt", "common"),
+    ("submissions", "media", "Media", "submissions()", "this and last round's public post submissions: id, author (None if anonymous), "
+     "text, round. A law can gazette them verbatim or summarise them.", "prompt", "common"),
     ("set_open_board", "media-rules", "Media", "set_open_board(on=True)", "posting on the public board needs no licence while on. Structural.", "common", "common"),
     ("set_press_freedom", "media-rules", "Media", "set_press_freedom(on=True)", "while on, no law can suspend an outlet. Structural.", "common", "common"),
     ("suspend_outlet", "media-rules", "Media", "suspend_outlet(outlet, rounds)", "an outlet (by id, name or editor) publishes nothing and "
