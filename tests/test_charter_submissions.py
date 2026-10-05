@@ -52,3 +52,19 @@ def test_strategy_prompt_ab_assignment():
     assert CX.STRATEGY_TEXT in CX.core_prompt(inst, a, k) and CX.STRATEGY_TEXT not in CX.core_prompt(inst, b, k)
     base = generator.generate(S.load("opus20"), 1)
     assert [x["goal"]["primary"] for x in base["agents"]] == [x["goal"]["primary"] for x in inst["agents"]]   # other draws unchanged
+
+
+def test_live_settings_switch_on_mid_run():
+    import pytest
+    from charter import runner
+    sp = S.load("opus20")
+    inst = generator.generate(sp, 1)
+    k = Kernel(inst)
+    who = next(a["id"] for a in inst["agents"] if a["cls"] == "worker")
+    assert A.act(k, who, "post", {"text": "before"}).startswith("Posted")
+    runner._apply_live(k, inst, {"media2.submissions": True}, log=lambda *a: None)
+    assert A.act(k, who, "post", {"text": "after"}).startswith("Submitted")
+    assert k.w["live"] == {"media2.submissions": True}
+    assert any(e["type"] == "gazette" and "New rules" in e["data"]["text"] for e in k.events)
+    with pytest.raises(ValueError):
+        runner._apply_live(k, inst, {"rounds": 99}, log=lambda *a: None)

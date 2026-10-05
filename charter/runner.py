@@ -50,7 +50,35 @@ def welfare(k) -> float:
     return sum(k.holdings_value(a) for a in k.w["agents"]) + sum(c["S"] * k.w["unit"][c["resource"]] for c in k.w["camps"].values())
 
 
-def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> Path:
+# Runtime-only settings that may be switched on part-way through a run (--live): they change how turns are played, not how the world
+# was generated, so a run with a checkpoint can still resume. The change is logged, announced to every agent, and kept in the state.
+LIVE_KEYS = {"media2.submissions", "context.lookups_in_dm_step", "context.action_purposes", "context.explore_nudge",
+             "context.budgets.core"}
+
+
+def _apply_live(k, inst, live: dict, log=print, announce=True) -> None:
+    for key, v in live.items():
+        if key not in LIVE_KEYS:
+            raise ValueError(f"--live {key}: only {', '.join(sorted(LIVE_KEYS))} can change during a run")
+        cur = inst["spec"]
+        for part in key.split(".")[:-1]:
+            cur = cur.setdefault(part, {})
+        cur[key.split(".")[-1]] = v
+        if announce:
+            k.w.setdefault("live", {})[key] = v
+            k.log("rules_changed", None, {"setting": key, "value": v, "from_round": k.r + 1}, vis="monitor")
+            log(f"  live setting {key} = {v} from round {k.r + 1}")
+    if announce and live:
+        texts = {"media2.submissions": "From now on a public post is a submission to the outlets: their editors decide whether and how "
+                                      "to print it (a law can set up an official stream that publishes chosen agents verbatim).",
+                 "context.lookups_in_dm_step": "From now on lookups are no longer free: in \"lookups\" each uses one of your "
+                                               "private-message slots and is answered before actions; as an action it costs an action."}
+        msg = " ".join(texts[x] for x in live if x in texts)
+        if msg:
+            k.gazette("New rules: " + msg)
+
+
+def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None) -> Path:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     k = Kernel(inst, sandbox)
@@ -72,12 +100,17 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False) -> P
         n_ev = len(k.events)
         FS.clear(out)
         log(f"  resuming after round {first_round} of {inst['rounds']}")
+        _apply_live(k, inst, dict(k.w.get("live") or {}), log, announce=False)   # settings switched on in earlier resumes
+        if live:
+            _apply_live(k, inst, {x: v for x, v in live.items() if (k.w.get("live") or {}).get(x) != v}, log)
     else:
         shared_snap = archive.snapshot(k.shared_archive)
         (out / "instance.json").write_text(json.dumps(inst, indent=1, default=str))
         const = k.new_law(inst["constitution_code"], "constitution")
         k.enact(const)
         RG.enact_statutes(k, inst)                                     # a regime's starting statutes (none without a regime)
+        if live:
+            _apply_live(k, inst, live, log)
         for name in inst["spec"].get("start_laws") or []:              # library laws in force from round 0 (spec start_laws)
             k.enact(k.new_law(LB.LIB[name]["code"], "constitution"))
         notes, cursors, results, guesses, welfare_series = {}, {}, {}, {}, []
