@@ -8,3 +8,6 @@ __pycache__/
 # run outputs and the persistent shared archive (publish selected runs separately)
 charter/out/
 runs/
+
+# header design drafts (python docs/assets/make_headers.py --candidates)
+docs/assets/candidates/
