@@ -91,6 +91,7 @@ PURPOSE = {
     "manual_search": "search your manual",
     "search_board": "search past newspapers, notices and public posts",
     "recent": "the latest editions, posts, gazette or messages",
+    "read_law": "read a law's full code, intent, status and patches",
     "search_dms": "search your messages",
     "read_file": "read a file",
     "write_scratchpad": "keep notes, shown every turn",

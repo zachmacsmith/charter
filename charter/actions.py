@@ -84,7 +84,7 @@ def _normalise_args(name: str, args):
                 if syn in spec and "payment" not in out:
                     out["payment"] = spec.pop(syn)
                 spec.pop(syn, None)
-            for syn, real in (("role", "cls"), ("class", "cls")):
+            for syn, real in (("role", "cls"), ("class", "cls"), ("agent_class", "cls"), ("type", "cls")):
                 if syn in spec:
                     spec.setdefault(real, str(spec.pop(syn)).lower())
             for syn in ("born", "when", "birth"):
@@ -152,6 +152,11 @@ def act(k, aid: str, name: str, args: dict) -> str:
                 name, args = "create_agent", {"commission": ref}
     fn = globals()[f"_{name}"]
     args = _normalise_args(name, args)
+    if name == "veto" and isinstance(args, dict):                      # {"should_veto": false} means: no veto
+        flag = args.get("should_veto", args.get("veto", True))
+        if flag is False or str(flag).lower() in ("false", "no"):
+            return "No veto cast."
+        args = {x: v for x, v in args.items() if x not in ("should_veto", "veto", "reason")}
     if name == "propose" and isinstance(args, dict) and not str(args.get("code") or "").strip():
         raise ActionError("propose needs the law's code, not only a title or a description. " + LAW_TEMPLATE)
     if k.w["agents"].get(aid, {}).get("departed") is not None:        # world events: departed agents are out of play
@@ -1111,6 +1116,10 @@ def _search_board(k, aid, query):
 
 def _recent(k, aid, kind="all", n=5):
     return CX.act_lookup(k, aid, "recent", {"kind": kind, "n": n})
+
+
+def _read_law(k, aid, law=None):
+    return CX.act_lookup(k, aid, "read_law", {"law": law})
 
 
 def _search_dms(k, aid, query):

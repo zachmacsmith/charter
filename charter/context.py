@@ -60,10 +60,11 @@ DEFAULTS = {
     "max_pin_slots": 2,               # hard ceiling on pin slots
     "free_scratchpad_writes": 1,      # write_scratchpad actions per turn that use no action
 }
-LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_file", "read_archive", "search_archive", "run_python")
+LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file", "read_archive", "search_archive",
+           "run_python")
 DM_ONLY_LOOKUPS = ("search_archive", "run_python")                    # usable as lookups in the DM step (as actions they are actions)
 FILE_ACTIONS = ("write_scratchpad", "write_file", "rename_file", "share_file", "delete_file", "pin", "unpin")
-ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_file") + FILE_ACTIONS   # agent actions this module adds
+ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file") + FILE_ACTIONS   # agent actions this module adds
 BOARD_TYPES = ("post", "anon_post", "story", "report", "digest", "gazette")                       # what search_board searches
 FETCHED_HEADER = "## Lookups (fetched this turn)"
 KNOWN_MODULES = ("conflict", "jurisdictions", "media", "mortality", "life", "roles", "scholars", "camptypes", "resources")
@@ -415,6 +416,24 @@ def recent(k, aid, kind="all", n=5) -> str:
     return f"The latest {len(out)} ({kind}), newest first:\n" + ("\n".join(out) or "(none)")
 
 
+def read_law(k, aid, ref) -> str:
+    """A law's full record (any law ever proposed, by id or title): title, intent, class, status, author, code and patches."""
+    ref = str(ref or "").strip()
+    laws = k.w["laws"]
+    law = laws.get(ref) or next((l for l in laws.values() if l["title"].lower() == ref.lower()), None)
+    if law is None:
+        listing = "; ".join(f"{l['id']} '{l['title']}' ({l['status']})" for l in laws.values())
+        raise _error(f"no law {ref!r}. Laws: {listing}")
+    from charter import jurisdictions as _J
+    if (k.spec.get("jurisdictions") or {}).get("enabled") and law.get("status") in ("dormant", "hidden_draft") and not _J.binds(k, law["id"], aid):
+        raise _error(f"{law['id']} is a draft of a hidden jurisdiction you do not belong to")
+    patches = law.get("patches") or []
+    head = (f"{law['id']} '{law['title']}' ({law.get('cls')}, {law.get('status')}), proposed by {law.get('author')}"
+            + (f", enacted in round {law['enacted_round'] + 1}" if law.get("enacted_round") is not None else "") + f".\nIntent: {law.get('intent', '')}")
+    hist = ("\nPatches: " + "; ".join(f"round {p.get('round', 0) + 1} by {p.get('by')}: {str(p.get('reason', ''))[:120]}" for p in patches)) if patches else ""
+    return f"{head}{hist}\nCode:\n{law['code']}"
+
+
 def search_dms(k, aid, query) -> str:
     """Only DMs this agent sent or received: never anyone else's (surveillance does not extend to search)."""
     from charter import agents as AG
@@ -574,6 +593,8 @@ def lookup(k, aid, name, args: dict) -> str:
         return search_dms(k, aid, q)
     if name == "recent":
         return recent(k, aid, args.get("kind", "all"), args.get("n", 5))
+    if name == "read_law":
+        return read_law(k, aid, args.get("law", args.get("id", first)))
     if name == "read_file":
         init_agent(k, aid)
         nm = args.get("name", first)
@@ -732,7 +753,7 @@ HARVEST_EDGE = ("harvest",)                                             # for ho
 EDGE_CORE = {"press": ("write_edition", "publish"), "maker": ("create_agent",), "scholar": ("set_memory_price", "library_permit")}
 CORE_GROUPS = (                                                         # core primitives: listed with a purpose every turn
     ("TALK AND TRADE", ("dm", "reply", "post", "transfer")),
-    ("INFORMATION", ("manual", "manual_search", "recent", "search_board", "search_dms", "read_file")),
+    ("INFORMATION", ("manual", "manual_search", "recent", "read_law", "search_board", "search_dms", "read_file")),
     ("MEMORY", ("write_scratchpad",)),
     ("PRODUCE", ("harvest",)),
     ("POLITICS", ("propose", "vote")),
@@ -758,7 +779,7 @@ PRE_DM = ("dm", "reply")                                                # messag
 PRE_ARGS = {"manual": '{"section": "<title or number>"}', "manual_search": '{"query": "..."}', "recent": '{"kind": "editions|posts|gazette|dms|all", "n": 5}',
             "search_board": '{"query": "..."}', "search_dms": '{"query": "..."}', "read_file": '{"name": "..."}',
             "read_archive": '{"doc": "..."}', "search_archive": '{"query": "..."}', "run_python": '{"code": "..."}',
-            "dm": '{"to": "Name", "text": "..."}', "reply": '{"message": "e42", "text": "..."}'}
+            "dm": '{"to": "Name", "text": "..."}', "reply": '{"message": "e42", "text": "..."}', "read_law": '{"law": "L5"}'}
 PRE_RIGHTS = {"read_archive": "archive", "search_archive": "archive", "run_python": "sandbox"}
 
 

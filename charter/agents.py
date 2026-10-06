@@ -78,6 +78,7 @@ ACTION_DOC = {
     "manual": 'manual {"section": "<title or number>"}: a section of your manual (free as a lookup; as an action the text comes next turn)',
     "manual_search": 'manual_search {"query": "..."}: find manual sections by keyword',
     "search_board": 'search_board {"query": "..."}: keyword search over every public post ever made and the editions you could read (10 best matches)',
+    "read_law": 'read_law {"law": "L5"}: any law proposed in this world (by id or title): its title, intent, class, status, author, full code and patch history',
     "recent": 'recent {"kind": "editions" | "posts" | "gazette" | "dms" | "all", "n": 5}: the latest n of that kind you may see, newest first (editions in full)',
     "search_dms": 'search_dms {"query": "..."}: keyword search over the private messages you sent or received (10 best matches)',
     "read_file": 'read_file {"name": "..."}: read one of your files',
