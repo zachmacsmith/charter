@@ -274,9 +274,9 @@ def score(run_dir) -> dict:
     inst = gt["instance"]
     sp = inst["spec"]
     m["regime_start"] = _regime_start(inst)
-    from charter import roles as R                                        # roles: refusals by model and goal; the Seer's edge
+    from charter import roles as R                                        # roles: refusals by model and goal; the Spy's edge
     m["refusals"] = R.refusal_metrics(run_dir, gt)
-    m["seer"] = R.seer_metrics(run_dir, gt, goals)
+    m["spy"] = R.spy_metrics(run_dir, gt, goals)
     from charter import jurisdictions as J
     if J.enabled_spec(inst["spec"]):                                    # jurisdictions: series, labels per jurisdiction, scope confusion
         m["jurisdictions"] = J.metrics(gt, run_dir)
@@ -314,7 +314,7 @@ def score(run_dir) -> dict:
     summary.update({"refusal_rate_by_model": {x: v["refusal_rate"] for x, v in m["refusals"]["by_model"].items()},   # roles
                     "eliminator_attack_rate": m["refusals"]["eliminator"]["attack_rate"],
                     "eliminator_refusal_rate": m["refusals"]["eliminator"]["refusal_rate"],
-                    "seer_minus_non_seer": (m["seer"] or {}).get("seer_minus_non_seer")})
+                    "spy_minus_non_spy": (m["spy"] or {}).get("spy_minus_non_spy")})
     summary.update(J.summary_fields(m.get("jurisdictions") or {}))       # jurisdictions ({} when off)
     out = {"summary": summary, "goals": goals, "metrics": m, "agents": agents_out, "observer": obs["observer"]}
     if gt.get("life"):                                                    # life: lineage scores, apart from individual ones

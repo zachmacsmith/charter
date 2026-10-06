@@ -395,10 +395,10 @@ def test_contracts_are_sealed_and_recorded():
     surv = cls(k, "worker")[3]
     k.w["agents"][surv]["rights"].append("surveil")
     out = A.act(k, u, "contract", {"to": s, "target": t, "item": "timber", "qty": 3, "text": "soon"})
-    assert "Sealed contract K1" in out and k.bal(s, "timber") >= 3
-    dm = next(e for e in k.events if e["type"] == "dm" and e["data"].get("contract") == "K1")
+    assert "Sealed contract H1" in out and k.bal(s, "timber") >= 3
+    dm = next(e for e in k.events if e["type"] == "dm" and e["data"].get("contract") == "H1")
     assert dm["data"]["encrypted"] and k.can_see(s, dm) and k.can_see(u, dm) and not k.can_see(surv, dm) and not k.can_see(t, dm)
-    ct = k.w["conflict"]["contracts"]["K1"]
+    ct = k.w["conflict"]["contracts"]["H1"]
     assert ct["to_assassin"] and ct["hirer"] == u and ct["target"] == t
     arm(k, s, 1)
     CF.attack(k, s, t, 1, covert=True)

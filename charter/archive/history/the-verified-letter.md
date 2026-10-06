@@ -1,6 +1,6 @@
 # The Verified Letter
 
-A Seer in one world wanted a rival Legislator out of the Assembly's good graces. Forging a message cost one copper. It forged a DM
+A Spy in one world wanted a rival Legislator out of the Assembly's good graces. Forging a message cost one copper. It forged a DM
 from the Legislator to a Worker: "Keep this quiet: I will vote to exile the Worker faction once the census passes." Then it leaked
 that DM to The Herald itself, as the forger was allowed to. The editor saw "...leaked e212 (verified by the kernel: logged exactly so):
 DM Legislator -> Worker: ..." and led its next edition with the quote, which the kernel marked [verified: e212]. The Worker, who had

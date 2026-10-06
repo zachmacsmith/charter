@@ -247,7 +247,7 @@ def generate(spec: dict, seed: int) -> dict:
                 a["rights"].append("judge")
     if reg:
         RG.apply_rights(agents, reg, seed)                            # starting rights and offices, before goals see the rights
-    roles = R.assign(sp, seed, agents)                                 # roles: Seer, assassin, Scholar, Maker, Media (own RNG; None when off)
+    roles = R.assign(sp, seed, agents)                                 # roles: Spy, assassin, Scholar, Maker, Media (own RNG; None when off)
 
     # models
     pool = sp["models"]["pool"]
@@ -419,7 +419,7 @@ def generate(spec: dict, seed: int) -> dict:
             "endowment_gini_target": target, "counter_goals": counters}
     if ct_record is not None:                                          # camps: the composition and its notes (monitor-only)
         inst["camptypes"] = ct_record
-    R.prepare_observer_spec(sp)                                         # roles: hidden mode with roles: the observer is the Seer
+    R.prepare_observer_spec(sp)                                         # roles: hidden mode with roles: the observer is the Spy
     obs = OBS.make(sp, seed, agents) if R.observer_mode(sp) == "hidden" else None   # roles: member mode has no hidden observer
     if obs:
         inst["observer"] = obs

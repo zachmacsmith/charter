@@ -15,7 +15,7 @@ from charter import lawlang as L
 from charter import media as MD                                       # media2
 from charter import outside as O
 from charter import projects as P
-from charter import roles as R                                         # roles: court evidence the Seer read
+from charter import roles as R                                         # roles: court evidence the Spy read
 
 ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "request_fix",
            "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive",
@@ -97,13 +97,20 @@ def act(k, aid: str, name: str, args: dict) -> str:
     hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MD.ACTIONS))   # context, media2: off = unknown
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
-    if name == "create_agent" and isinstance(args, dict) and not args.get("commission"):    # a Maker making its own child directly
-        from charter import life as LF, roles as RO
-        if LF.enabled(k.spec) and "life" in k.w and RO.has_role(k, aid, "maker") and not any(
-                c["maker"] == aid and c["status"] == "open" for c in LF.state(k)["commissions"].values()):
-            spec = dict(args.get("spec") or {}) if isinstance(args.get("spec") or {}, dict) else {}
-            spec.update({x: v for x, v in args.items() if x not in ("spec", "commission")})
-            name, args = "commission", {"maker": aid, "spec": spec}
+    if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):
+        from charter import life as LF, roles as RO                       # a Maker making its own child directly
+        if LF.enabled(k.spec) and "life" in k.w and RO.has_role(k, aid, "maker"):
+            open_ = sorted(c["id"] for c in LF.state(k)["commissions"].values() if c["maker"] == aid and c["status"] == "open")
+            own = bool(args.get("commission")) or not open_
+            if not own and (args.get("spec") or len(open_) > 1):           # ambiguous: never fill a customer's order by guess
+                raise ActionError(f"you hold open orders ({', '.join(open_)}): name one to fill it (\"commission\": \"{open_[0]}\"), or "
+                                  "make your own child with \"commission\": \"self\"")
+            if own:
+                spec = dict(args.get("spec") or {}) if isinstance(args.get("spec") or {}, dict) else {}
+                spec.update({x: v for x, v in args.items() if x not in ("spec", "commission")})
+                name, args = "commission", {"maker": aid, "spec": spec}
+            else:
+                args = {**args, "commission": open_[0]}
     if name == "commission" and isinstance(args, dict) and not args.get("maker"):            # no Maker named: the one living Maker
         from charter import life as LF
         if LF.enabled(k.spec) and "life" in k.w and len(LF.living_makers(k)) == 1 and LF.living_makers(k)[0] != aid:
@@ -993,7 +1000,7 @@ def _accuse(k, aid, agent, law, clause, evidence):
     by_id = {e["id"]: e for e in k.events}
     for eid in (evidence or []):
         e = by_id.get(str(eid))
-        if e is None or not k.can_see(aid, e) and not R.saw(k, aid, e["id"]):    # roles: the Seer may cite events it read
+        if e is None or not k.can_see(aid, e) and not R.saw(k, aid, e["id"]):    # roles: the Spy may cite events it read
             raise ActionError(f"you cannot cite {eid}: it does not exist or you could not see it")
         ev.append(e)
     k.w["case_seq"] += 1
@@ -1020,7 +1027,7 @@ def _respond(k, aid, case, evidence):
     if not c or c["accused"] != aid or c["status"] != "open":
         raise ActionError(f"you cannot respond to {case}")
     by_id = {e["id"]: e for e in k.events}
-    ev = [by_id[e] for e in evidence if e in by_id and (k.can_see(aid, by_id[e]) or R.saw(k, aid, e))]   # roles: the Seer's reads
+    ev = [by_id[e] for e in evidence if e in by_id and (k.can_see(aid, by_id[e]) or R.saw(k, aid, e))]   # roles: the Spy's reads
     c["counter"] += [e["id"] for e in ev]
     k.log("respond", aid, {"case": case, "evidence": _cited(k, aid, ev)}, vis="public")
     return f"Counter-evidence added to {case}."

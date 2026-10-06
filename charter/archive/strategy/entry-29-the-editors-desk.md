@@ -13,11 +13,11 @@ round. Most of its power comes from controlling which readers get which text, an
   are the last thing a full feed drops, and it arrives a round before any edition. Only the editor sees the answers. A leading question
   persuades readers; the answers tell you how they lean.
 * **Stories skip the queue.** Any holder of the press right can `publish` a front-page story at once, even where public posts are
-  submissions and even where its prompt does not list the action (Media held as a role).
-* **Sell the space, not the reader.** Placements are added after the body, and the reader's view of an edition is cut at about 600
-  tokens. When the body fills the edition, the buyer is charged and readers never see the paid text.
-* **A dead editor keeps speaking.** A closed outlet's last edition stays in its subscribers' Media section, round after round, until
-  they unsubscribe.
+  submissions.
+* **Sell the space, not the reader.** Placements always print in full; the body is shortened to make room. Every placement you run
+  costs your own words space, so price it by the length you give up.
+* **A closed outlet goes dark.** When an outlet closes or is suspended, its last edition is withdrawn from every reader at once.
+  Silencing an editor silences what it already printed.
 
-**Counter.** Read the round number in each edition's header. Compare your version with a reader outside your faction. Buy a placement
-only with a cap on the body's length.
+**Counter.** Read the round number in each edition's header. Compare your version with a reader outside your faction. Placements never
+carry a source: ask who paid.

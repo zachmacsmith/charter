@@ -15,5 +15,5 @@ life:
   enabled: true
   full_scale_rounds: 30
   elapsed: [0, 5]                      # founders live most of the game; heirs matter in the last third
-roles: {enabled: true, reference_population: 15, counts: {seer: 1, assassin: 1, scholar: 1, maker: 2, media: 2}}
+roles: {enabled: true, reference_population: 15, counts: {spy: 1, assassin: 1, scholar: 1, maker: 2, media: 2}}
 shared_archive: {namespace: explore15}

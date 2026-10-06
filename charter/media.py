@@ -335,8 +335,8 @@ def editions_for(k, aid) -> list:
     out = []
     for o in srcs:
         ed = o.get("edition")
-        if not ed:
-            continue
+        if not ed or not o.get("official") and (o["status"] != "open" or _suspended(k, o)):
+            continue                                                   # a closed or suspended outlet's last edition is withdrawn
         v = _version_for(ed, aid)
         if v is None:
             continue
@@ -517,12 +517,16 @@ def _publish(k, o) -> None:
         if not versions:
             versions = [{"audience": None, "text": ""}]
     o["pending"] = None
+    paid = "".join(f"\n\n[Sponsored by {p['buyer']}] {p['text']}" if p["sponsored"] else f"\n\n{p['text']}" for p in placements)
+    room = max(0, _chars(_cfg(k)["edition_tokens"]) - len(paid))      # placements always fit: the body gives way, not the paid text
+    shortened = False
     for v in versions:
         txt = _verify(k, o, by, v["text"]) if by else v["text"]
-        for p in placements:
-            label = f"[Sponsored by {p['buyer']}] " if p["sponsored"] else ""
-            txt += f"\n\n{label}{p['text']}"
-        v["text"] = txt.strip()
+        if paid and len(txt) > room:
+            txt, shortened = txt[:room], True
+        v["text"] = (txt + paid).strip()
+    if shortened and by:
+        k.notify(by, f"{o['name']}: your edition was shortened to make room for the paid placements you ran.")
     rs = readers(k, o)
     groups = {}
     for a in rs:
@@ -691,18 +695,14 @@ def in_stream(k, aid) -> bool:
 
 
 def submit(k, aid, text, anon=False) -> str:
-    """A public post under media2.submissions: stored for the editors (and laws), not published by itself."""
+    """A public post under media2.submissions: stored for the editors (and laws, through submissions()), not published by itself, so on_post hooks do not fire."""
     m = k.w["media"]
     m.setdefault("submissions", [])
     m["seq"]["submission"] = m["seq"].get("submission", 0) + 1
     sid = f"S{m['seq']['submission']}"
     m["submissions"].append({"id": sid, "round": k.r, "author": aid, "text": str(text)[:2000], "anon": bool(anon)})
     k.log("submission", aid, {"id": sid, "text": str(text)[:2000], "anon": bool(anon)}, vis=[aid])
-    k.current_post = None
-    try:
-        k.hooks("on_post", "anonymous" if anon else aid, str(text)[:2000])   # laws still hear public speech
-    finally:
-        k.current_post = None
+    # no on_post hooks: a submission is not public speech until something prints it (laws can still read submissions())
     outlets_open = [o for o in all_outlets(k) if o.get("status", "open") == "open" and (o.get("editor") or not o.get("official"))]
     return (f"Submitted ({sid}): you asked the newspapers to print this as your public post. " +
             ("Their editors decide whether it appears, and in what form (verbatim, edited, quoted, answered or left out)." if outlets_open

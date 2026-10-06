@@ -9,7 +9,7 @@ models:
 roles:
   enabled: true
   reference_population: 13             # counts below are exact at this population
-  counts: {seer: 1, assassin: 1, scholar: 1, maker: 2, media: 2}
+  counts: {spy: 1, assassin: 1, scholar: 1, maker: 2, media: 2}
 life:
   enabled: true
   lifespan: [5, 10]                    # every founder (and child) lives 5-10 rounds
@@ -30,7 +30,7 @@ goals:
     Kasper: Dynasty                    # Worker: as many living descendants as possible (must buy every child from a Maker)
     Hugo: Wealth                       # Worker, Maker + Media: richest at the end (can sell children)
     Fen: Eliminator                    # Worker+Scientist, Maker + secret assassin: remove other agents
-    Zeno: Sovereign                    # Legislator+Scientist, Seer: be in a decisive set of 2 or fewer
+    Zeno: Sovereign                    # Legislator+Scientist, Spy: be in a decisive set of 2 or fewer
     Ada: Lineage Wealth                # Legislator+Scientist, Scholar: richest lineage
     Oda: Revolutionary                 # Worker+Legislator: most agents end in a jurisdiction she founded
     Sena: Lawmaker                     # Legislator: author the most enacted laws (dies after round 6)

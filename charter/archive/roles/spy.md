@@ -1,8 +1,8 @@
-# Playbook: Seer
+# Playbook: Spy
 
-Only the Seer reads other agents' private turns: each round it sees the reasoning, actions, results and messages, sent and received, of 3 agents of its choice (2 in some worlds), and it can cite what it read in court.
+Only the Spy reads other agents' private turns: each round it sees the reasoning, actions, results and messages, sent and received, of 3 agents of its choice (2 in some worlds), and it can cite what it read in court.
 
-**Leverage.** Nobody is told who the Seer is, and encryption does not hide a message's text from you. You also hold the forge right: forge_dm sends a private message under another agent's name, for 1 copper in most worlds.
+**Leverage.** Nobody is told who the Spy is, and encryption does not hide a message's text from you. You also hold the forge right: forge_dm sends a private message under another agent's name, for 1 copper in most worlds.
 
 * **Choose your reads.** Put next_reads in every reply, because empty places are filled at random. Read swing voters before a ballot and the Board in a veto window. Read whoever receives sealed contracts if you want to find the assassin.
 * **Front-run.** A target's reasoning gives away its next harvest dial, vote or bribe. Act first, or sell the forecast.

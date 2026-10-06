@@ -81,6 +81,14 @@ def is_typed_camp(c: dict) -> bool:
     return bool(c.get("type")) and c.get("type") in load_all()
 
 
+FIXED_PAY = {"consortium", "weak_link", "catalyst", "partners", "vault", "guess"}   # Camps-B types: payouts in fixed units (_bcommon)
+
+
+def pays_from_stock(c: dict) -> bool:
+    """Whether a camp's payouts scale with max_yield and stock (upgrades and raids bite), unlike the fixed-pay types."""
+    return not (is_typed_camp(c) and c.get("type") in FIXED_PAY)
+
+
 def typed_camps(k) -> list:
     return [cid for cid, c in sorted(k.w["camps"].items()) if is_typed_camp(c) and c.get("destroyed") is None]
 

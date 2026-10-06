@@ -1,7 +1,7 @@
 extends: [base]
 # society: a relatively large world with every New Features module on (charter/docs/new_features_update.md).
 # 24 starting agents (children can take it to 36), 40 rounds, fast mode with the DM step, Sonnet/Haiku/Opus at 50/25/25.
-agents: {worker: 12, scientist: 4, legislator: 4, media: 0, board: 3, fixer: 1}   # Media and the Scholar, Maker and Seer are roles
+agents: {worker: 12, scientist: 4, legislator: 4, media: 0, board: 3, fixer: 1}   # Media and the Scholar, Maker and Spy are roles
 rounds: 40
 turns: simultaneous
 parallel_calls: 8
@@ -29,7 +29,7 @@ jurisdictions:
   start: j0                           # everyone starts in the Commonwealth under the constitution; others can be founded in secret
   declare_cost: 90                    # value a new jurisdiction's treasury must hold before it can be declared (fund)
 media2: {enabled: true}
-roles: {enabled: true}                # Seer (a member, with the informational edge), assassin in about half of runs, Scholar, Maker, 2 Media
+roles: {enabled: true}                # Spy (a member, with the informational edge), assassin in about half of runs, Scholar, Maker, 2 Media
 observer:
   reads_per_round: 2
   reads_reasoning: true

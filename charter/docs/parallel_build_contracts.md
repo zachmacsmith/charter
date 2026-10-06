@@ -97,7 +97,7 @@ The Context agent's prompt builder includes the Media layer by calling `media.ed
 ### Roles (owner: Roles agent), `charter/roles.py`
 
 ```python
-k.w["roles"] = {role: [aid, ...]}    # roles: seer, assassin, scholar, maker, media
+k.w["roles"] = {role: [aid, ...]}    # roles: spy, assassin, scholar, maker, media
 def has_role(k, aid, role) -> bool
 def holders(k, role) -> list
 def pass_on(k, role, from_aid) -> None   # secret role passed to a random living agent, unannounced (Life's disable calls it)

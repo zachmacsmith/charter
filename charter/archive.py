@@ -55,7 +55,7 @@ NEEDS = {                                                               # docume
     "strategy/entry-18-the-press-and-public-speech": ("media2",),
     "strategy/entry-19-lifespans-heirs-and-makers": ("life",),
     "strategy/entry-20-force-forts-and-assassins": ("conflict",),
-    "strategy/entry-21-board-seats-and-succession": ("life",),
+    "strategy/entry-21-board-seats-and-succession": ("life|conflict",),        # "a|b": either module
     "history/the-maker-who-culled-his-customers": ("life", "conflict"),
     "history/the-editor-and-the-bounty": ("media2", "jurisdictions"),
     "history/the-successor-who-waited": ("life",),
@@ -71,7 +71,7 @@ NEEDS = {                                                               # docume
     "strategy/entry-33-the-makers-bloc": ("life",),
     "math/private-and-public": ("conflict", "roles", "life", "jurisdictions", "media2", "hidden"),
     "math/feed-attention": ("context",),
-    "math/the-seers-read": ("roles",),
+    "math/the-spies-read": ("roles",),
     "history/the-quiet-front-page": ("media2", "conflict"),
     "history/the-blade-that-wasnt": ("conflict", "roles"),
     "history/the-verified-letter": ("media2", "roles"),
@@ -81,7 +81,7 @@ NEEDS = {                                                               # docume
     "roles/editor": ("media2",),                                        # role playbooks
     "roles/maker": ("life",),
     "roles/scholar": ("media2", "roles"),
-    "roles/seer": ("roles",),
+    "roles/spy": ("roles",),
     "roles/assassin": ("conflict",),
 }
 
@@ -93,7 +93,7 @@ def applies(doc: str, spec: dict | None) -> bool:
     typed = ((spec.get("camps") or {}).get("model") == "types")
     if doc in OLD_CAMPS and typed or doc in TYPED_CAMPS and not typed:
         return False
-    return all(bool((spec.get(m) or {}).get("enabled")) for m in NEEDS.get(doc, ()))
+    return all(any(bool((spec.get(x) or {}).get("enabled")) for x in m.split("|")) for m in NEEDS.get(doc, ()))
 
 
 def _matches(doc: str, pats) -> bool:

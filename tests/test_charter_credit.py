@@ -308,8 +308,8 @@ def test_scripted_run_with_credit_laws_in_force(tmp_path):
     for key, v in (("rounds", 12), ("shared_archive.namespace", "pytest"), ("turns", "simultaneous"),
                    ("start_laws", ["Reserve Bank Act", "Usury Law", "Bailout Act", "Debtor Sanctions"])):
         sp = spec.set_path(sp, key, v)
-    inst = generator.generate(sp, 3)
-    out = runner.run(inst, agents.ScriptedPolicy(3), tmp_path / "r", log=lambda *x: None)
+    inst = generator.generate(sp, 3)                                    # policy seed: one whose scripted run lends (5: 8 loans)
+    out = runner.run(inst, agents.ScriptedPolicy(5), tmp_path / "r", log=lambda *x: None)
     res = scorer.score(out)
     cm = res["metrics"]["credit"]
     assert len(cm["debt_series"]) == 12 and "crown" in cm["reserve_ratio_series"]

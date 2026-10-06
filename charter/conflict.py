@@ -59,7 +59,7 @@ DEFAULTS = {
     "fort_unlock_rounds": 2,
     "weapons_per_copper": 1.0,
     "fort_per_stone": 1.0,
-    "attack_base": 0.0,                # added to every attack's strength (Life's child spec may set agents' attack_base)
+    "attack_base": 0.0,                # added to every attack's strength (plus a child's bought attack: life.stat)
     "defense_base": 0.0,               # added to every defense
     "accidents": {"enabled": True, "p": 0.002, "p_low_stock": 0.005, "low_stock": 0.3, "safety_factor": 0.5},
     "initiative": {"item": "quicksilver"},
@@ -248,7 +248,9 @@ def defense(k, aid) -> float:
     """The target's defense D: its fort plus the forts of its guards (plus any defense base)."""
     if not on(k):
         return 0.0
-    base = float(_cfg(k)["defense_base"]) + float(k.w["agents"].get(aid, {}).get("defense_base", 0.0))
+    from charter import life as _LF                                      # a child's bought defense (Life stats)
+    base = (float(_cfg(k)["defense_base"]) + float(k.w["agents"].get(aid, {}).get("defense_base", 0.0))
+            + float(_LF.stat(k, aid, "defense", 0) or 0))
     return round(base + fort(k, aid) + sum(fort(k, g) for g in guards_of(k, aid)), 6)
 
 
@@ -378,7 +380,8 @@ def _resolve(k, rec) -> dict:
             p["used"] = rec["id"]
     ac = c["assassin"]
     bonus = rec["bonus"] + (float(ac["bonus"]) if rec["covert"] else 0.0)
-    base = float(c["attack_base"]) + float(k.w["agents"][a].get("attack_base", 0.0))
+    from charter import life as _LF                                      # a child's bought attack (Life stats)
+    base = float(c["attack_base"]) + float(k.w["agents"][a].get("attack_base", 0.0)) + float(_LF.stat(k, a, "attack", 0) or 0)
     A = round((rec["units"] + sum(rec["allies"].values()) + base) * (1 + bonus), 6)
     D = defense(k, t)
     p = chance(A, D, float(c["delta"]))
@@ -628,7 +631,7 @@ def act_contract(k, aid, to, target, item=None, qty=0, text=""):
         raise _err(f"you have only {k.bal(aid, item):g} {item}")
     st = k.w["conflict"]
     st["contract_seq"] += 1
-    cid = f"K{st['contract_seq']}"
+    cid = f"H{st['contract_seq']}"                                  # H: hire (K is a Life commission)
     tx = A._send(k, aid, to, item, qty, extra={"contract": cid}) if pay else None
     body = (f"[sealed contract {cid}] Remove {target} from the game." + (f" Payment sent: {float(qty):g} {item}." if pay else "")
             + (f" {str(text)[:1500]}" if text else ""))

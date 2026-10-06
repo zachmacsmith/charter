@@ -645,6 +645,11 @@ def allowed_actions(inst, a, rights) -> list:
         "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) \
         + [x for c in (a.get("also") or ()) for x in {"scientist": ["read_archive", "search_archive", "write_archive"]}.get(c, [])] \
         + (["rule"] if lvl >= 2 else []) + (["set_dm_limit"] if "dm_rules" in rights and sp["channels"].get("dm", True) else [])
+    if "press" in rights:                                                # the press right (Media class, a second class or the role)
+        out += [x for x in ("publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel")
+                if x not in out]
+    if "forge" in rights and "forge_dm" not in out and sp["channels"].get("dm", True):   # the Spy
+        out.append("forge_dm")
     return out + list(ACTIONS)
 
 
@@ -713,7 +718,8 @@ LEVERAGE_ROLE = {
     "scholar": "As the Scholar only you sell memory and keep a library, so agents who want to remember more, or read what others "
                "deposited, depend on you.",
     "media": "As Media you run an outlet: you choose what your editions say and can revoke others' licence to post publicly.",
-    "seer": "As the Seer you read other agents' private reasoning and messages, which nobody else can, and you can cite them in court.",
+    "spy": ("As the Spy you read other agents' private reasoning and messages, which nobody else can, cite them in court, and "
+            "forge private messages that look like they came from someone else (forge_dm)."),
     "assassin": "As the assassin you can strike unseen (attack with \"covert\": true, once every few rounds): such a disable is announced "
                 "without your name, so you can remove an agent without being known for it.",
 }
@@ -1039,7 +1045,7 @@ def turn_prompt(k, a: dict, order: list, since: int, n_actions: int, final: bool
     rec["scratchpad"] = {"tokens": tokens(pad), "budget": scratchpad_size(k, aid), "trimmed": cut}
     from charter import media
     eds = list(media.editions_for(k, aid) or [])[:int(c["media_outlets"])]
-    med = [clip(x, int(b["media"]))[0] for x in eds]
+    med = [clip(x, int(b["media"]) + tokens(x.split("\n", 1)[0]))[0] for x in eds]     # the label line does not eat the edition
     rec["media"] = {"tokens": sum(tokens(x) for x in med), "budget": int(b["media"]) * int(c["media_outlets"]), "editions": len(med)}
     pins = [(n, f) for n, f in sorted(k.w["files"][aid].items()) if f["pinned"]][:pin_limit(k, aid)]
     pinned = [f"File {n} ({f['origin']}):\n" + clip(f["text"], int(b["pinned"]))[0] for n, f in pins]

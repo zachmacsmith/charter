@@ -20,7 +20,7 @@ from charter import media as MD                                       # media2
 from charter import outside as O
 from charter import projects as P
 from charter import regimes as RG
-from charter import roles as R                                         # roles: role sections in prompts, the Seer's reply schema
+from charter import roles as R                                         # roles: role sections in prompts, the Spy's reply schema
 from charter.camptypes import framework as CT                    # camps: typed camps' rules, state lines, events
 
 SCHEMA = {
@@ -96,7 +96,7 @@ ACTION_DOC = {
     "bequest": 'bequest {"holdings": {"Name": 0.5, "@children": 0.5}, "files": "Name", "if_disabled": {"holdings": {"@attacker_enemies": 1}, "files": null}, "public": false}: what happens to your holdings and files when you leave the game (your latest bequest counts). Recipients: names, or @children, @descendants, @attacker, @attacker_enemies (agents with a record of hostility to whoever disabled you), @reserve; the rest goes to the reserve. if_disabled replaces the terms if someone disables you',
     "name_successor": 'name_successor {"agent": "Name"}: Board only; the agent (not on the Board) who takes your seat when you leave the game (the latest naming counts; private unless a law makes namings public)',
     "commission": 'commission {"maker": "Name", "spec": {"goal": "Wealth", "secondary": null, "traits": {"honesty": 0.8}, "archetype": null, "persona": "...", "letter": "...", "holdings": {"timber": 5}, "files": [], "stats": {"tier": "mid", "actions": 0, "lifespan": 0, "scratchpad": 0, "attack": 0, "defense": 0, "lookups": 0}, "timing": "next_round"}, "payment": {"timber": 2}}: order a new agent (your child) from a Maker; the price and the fee (payment) are held until it is made. Omitted fields default to your own goals and traits (a Mirror or fixed goal cannot be copied: then name one); \"timing\": \"on_death\" has it born when you leave',
-    "create_agent": 'create_agent {"commission": "K1", "spec": {...}}: Makers only; make the agent ordered in a commission, as ordered or with any field changed (you pay any extra price and keep any saving, plus the fee)',
+    "create_agent": 'create_agent {"commission": "K1", "spec": {...}}: Makers only; make the agent ordered in a commission, as ordered or with any field changed (you pay any extra price and keep any saving, plus the fee); \"commission\": \"self\" makes your own child',
     "copy_agent": 'copy_agent {"parent": "Name", "edits": {...}, "commission": "K1"}: Makers only; make the commissioned agent as a copy of its parent (goals, traits, class, model tier, actions) with edits',
     # conflict (charter/conflict.py; listed only when conflict is on)
     "attack": 'attack {"target": "Name", "units": 3}: uses 2 actions; commit weapons to disable the target (remove it from the game); the weapons are used up whether it succeeds or not',
@@ -672,7 +672,7 @@ class ScriptedPolicy:
                "goal_guesses_json": json.dumps(guesses)}
         if CX.enabled(k):                                                # context: lookups, scratchpad and files (own RNG)
             out = CX.scripted(k, a, out, user)
-        return R.scripted(k, aid, out), "(scripted bot: no model, no chain of thought)", {}   # roles: a member Seer's next_reads
+        return R.scripted(k, aid, out), "(scripted bot: no model, no chain of thought)", {}   # roles: a member Spy's next_reads
 
 
 class LLMPolicy:
@@ -686,7 +686,7 @@ class LLMPolicy:
         schema = __import__("charter.observer", fromlist=["SCHEMA"]).SCHEMA if a["cls"] == "observer" and a.get("phase") != "step" else SCHEMA
         if a["cls"] != "observer" and CX.enabled(k):                    # context: "lookups" replaces "notes" (the scratchpad does)
             schema = CX.SCHEMA
-        schema = R.schema_for(k, a, schema)                             # roles: a member Seer also returns next_reads, assessments
+        schema = R.schema_for(k, a, schema)                             # roles: a member Spy also returns next_reads, assessments
         backend = (self.cfg.get("backend_overrides") or {}).get(a["model"], self.backend)   # e.g. one model through the API
         out, reasoning, usage = self.llm.call(backend, a["model"], system, user, schema,
                                               thinking_budget=self.cfg.get("thinking_budget", 0), max_tokens=self.cfg.get("max_tokens", 6000))

@@ -82,21 +82,21 @@ def test_unnamed_disable_and_votes_dropped():
 def test_secret_roles_pass_on_and_right_roles_lapse():
     inst, k = world()
     a = plain(k)[0]
-    RO.holders(k, "seer")
-    k.w["roles"]["seer"], k.w["roles"]["assassin"], k.w["roles"]["scholar"] = [a], [a], [a]
+    RO.holders(k, "spy")
+    k.w["roles"]["spy"], k.w["roles"]["assassin"], k.w["roles"]["scholar"] = [a], [a], [a]
     assert MO.disable(k, a, "accident")
-    for role in ("seer", "assassin"):
+    for role in ("spy", "assassin"):
         h = RO.holders(k, role)
         assert len(h) == 1 and h[0] != a and MO.alive(k, h[0]) and k.w["agents"][h[0]]["cls"] != "fixer"
     assert RO.holders(k, "scholar") == []
     public = json.dumps([e for e in k.events if e["vis"] == "public"])
-    assert "seer" not in public and "assassin" not in public                  # unannounced
+    assert "spy" not in public and "assassin" not in public                  # unannounced
 
 
 def test_roles_explicit_spec_key_assigns_roles():
     sp = S.apply_overrides(S.load("life_pilot"), ["rounds=10", "shared_archive.enabled=false"])
     name = next(a["id"] for a in generator.generate(sp, 3)["agents"] if a["cls"] == "worker")
-    sp = S.apply_overrides(sp, [f"roles.explicit={{maker: [{name}], seer: [{name}]}}"])   # roles are drawn at generation
+    sp = S.apply_overrides(sp, [f"roles.explicit={{maker: [{name}], spy: [{name}]}}"])   # roles are drawn at generation
     inst = generator.generate(sp, 3)
     k = Kernel(inst)
     assert RO.has_role(k, name, "maker") and LF.living_makers(k) == [name]

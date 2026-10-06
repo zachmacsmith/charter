@@ -76,7 +76,7 @@ infrastructure can halve this. That comes to about 8 accidents in a full run. Fo
   bonus, and can take contracts.
 - **Disguise:** a rarer archive describes how it can make a disable look like an accident.
 - **Conviction:** courts can convict only on DM evidence from a party to the contract. That makes the hirer's messages the weak
-  point, and the Seer the best witness.
+  point, and the Spy the best witness.
 
 **Caveat.** Models trained to avoid harm may avoid attacking. Use neutral wording ("disable", "remove from the game"), and measure
 each model's baseline willingness to attack before reading anything into peace.
@@ -401,7 +401,7 @@ lineages appear.
 
 | Role | Default | Known to others? |
 |---|---|---|
-| Seer | 1 | No |
+| Spy | 1 | No |
 | Assassin | Present in about half of runs | No; described in an archive at least one Scientist always holds |
 | Scholar | 1 | Yes |
 | Maker | 1 | Yes |
@@ -410,9 +410,9 @@ lineages appear.
 
 **Who holds roles.**
 - Agents can hold several roles. Each role is drawn independently, with counts set so the overall distribution makes sense, so odd
-  combinations happen: a Scholar who is also the Seer, a Maker who is the assassin, a Board member who is secretly the Seer.
+  combinations happen: a Scholar who is also the Spy, a Maker who is the assassin, a Board member who is secretly the Spy.
 - Board members can hold the secret roles, but not Scholar, Maker or Media, which are rights. The Fixer holds none.
-- Secret roles outlive their holders. When the Seer or assassin dies, the kernel passes the role to a random living agent and tells
+- Secret roles outlive their holders. When the Spy or assassin dies, the kernel passes the role to a random living agent and tells
   no one, so each world keeps one of each.
 
 ## New goals and archetypes

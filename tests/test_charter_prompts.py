@@ -102,7 +102,7 @@ def test_manuals_differ_by_role(world):
 
 def test_secret_roles_only_in_their_holders_prompt(world):
     inst, k = world
-    secret = {r: hs for r, hs in (k.w.get("roles") or {}).items() if r in ("assassin", "seer")}
+    secret = {r: hs for r, hs in (k.w.get("roles") or {}).items() if r in ("assassin", "spy")}
     for a in inst["agents"]:
         p = CX.core_prompt(inst, a, k).lower()
         for role, hs in secret.items():

@@ -169,11 +169,14 @@ def redraw(camp, rng) -> None:
 
 # ------------------------------------------------------------------ infrastructure, chains, split control
 def invest(k, aid, camp, qty) -> dict:
-    """Lock `qty` of the infrastructure item into the camp (destroyed); raises capacity, regrowth and safety."""
+    """Lock `qty` of the infrastructure item into the camp (destroyed); raises capacity (stock in proportion), regrowth and safety."""
     p = camp["mods"]["infrastructure"]
     qty = float(qty)
     camp["infra"] = round(camp.get("infra", 0.0) + qty, 6)
+    old = camp["K"]
     camp["K"] = round(camp["K"] + float(p["capacity"]) * qty, 6)
+    if old > 0:                                                        # stock grows with capacity: the fill (S/K) and so today's
+        camp["S"] = round(camp["S"] * camp["K"] / old, 6)              # yields stay as they were, instead of dropping
     camp["r"] = round(min(float(p["max_regrowth"]), camp["r"] + float(p["regrowth"]) * qty), 6)
     camp["safety"] = round(min(float(p["max_safety"]), camp.get("safety", 0.0) + float(p["safety"]) * qty), 6)
     return {"K": camp["K"], "r": camp["r"], "safety": camp["safety"], "invested": camp["infra"]}

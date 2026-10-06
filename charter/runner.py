@@ -34,7 +34,7 @@ from charter import media as MD                                       # media2
 from charter import observer as OBS
 from charter import regimes as RG
 from charter import report
-from charter import roles as R                                         # roles: the Seer's reading in member mode
+from charter import roles as R                                         # roles: the Spy's reading in member mode
 from charter import resources as RS                              # camps: optional upkeep
 from charter.camptypes import framework as CT                    # camps: typed camps' ground truth
 from charter.kernel import Kernel
@@ -271,7 +271,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
             n = RS.actions_after_upkeep(k, aid, n)                     # camps: optional upkeep arrears cost an action (off by default)
             user, cursor = AG.turn_prompt(k, a, order, cursors.get(aid, 0), notes.get(aid, ""), results.get(aid, []), n, final,
                                           simultaneous=(mode == "simultaneous"))
-            user = R.turn_section(k, aid, user)                         # roles: the Seer's private "What you saw" section
+            user = R.turn_section(k, aid, user)                         # roles: the Spy's private "What you saw" section
             return a, n, user, cursor
 
         def cx_lookups(items):
@@ -345,7 +345,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
             k.log("turn", aid, {"position": pos, "n_actions": n, "actions": acts, "results": res}, vis="monitor")
             k.turn_log.append({"round": r, "agent": aid, "reasoning": reasoning, "stated_reasoning": str(outp.get("reasoning", "")),
                                "actions": acts, "results": res})
-            R.after_turn(k, aid, outp, final_outp, out)                 # roles: the Seer's next_reads and assessments
+            R.after_turn(k, aid, outp, final_outp, out)                 # roles: the Spy's next_reads and assessments
             reason_f.write(json.dumps({"round": r, "position": pos, "agent": aid, "model": a["model"], "reasoning": reasoning,
                                        "stated_reasoning": str(outp.get("reasoning", "")),
                                        "notes": notes[aid], "actions": first, "results": res, "usage": usage, "mode": mode,

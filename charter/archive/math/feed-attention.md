@@ -21,7 +21,7 @@ outranks them, about 29 posts fit. In a busy round of a 24-agent society, four p
   to reach rises to priority 4 for each of them. Priority 4 also outranks every proposal.
 - An editor's annotation (60 tokens, 5 per round) is a priority-1 event for every agent and outranks their DMs.
 - Proposals crowd posts out. A coalition that proposes heavily in one round buries the opposition's public speech that round.
-- Editions are never trimmed by the feed. Each is cut at 600 tokens, header included (about 560 left for the text), up to 4
+- Editions are never trimmed by the feed. Each is cut at 600 tokens of text (the header line is extra), up to 4
   editions. One edition reaches its readers like six full posts that cannot be crowded out.
 
 Without the context module the feed is simply the newest 80 lines, and posting late counts for more than naming readers.

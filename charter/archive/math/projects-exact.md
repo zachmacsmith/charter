@@ -14,15 +14,15 @@ so a refund that falls in the raid round can be seized. Without refunds, the poo
 switch refunds on or off for an open project (set_refund).
 
 **Rights.**
-- Road: every contributor, however little it gave (0.001 timber is enough). Every Worker only if no agent contributed.
+- Road: every contributor who gave at least 1 value. Every Worker only if no agent gave that much.
 - Expedition: every Worker, whether it gave or not, and every contributor. Success also needs at least 60% of agents (the Board, the
   Fixer and agents who have left are not counted) to give at least 1 value each.
 - The Board and the Fixer never receive rights.
 
 **Effects.**
-- Granary: at the camp with the lowest stock fraction that has no granary yet. Its floor is 40% and it never expires. It does not
-  stop a raid's stock loss.
-- Upgrade: at a random camp, yields x1.5 for 20 rounds after the round it is funded. It does nothing at a fixed-pay camp.
+- Granary: at the camp with the lowest stock fraction that has no granary yet. Its floor is 40% and it never expires. It also
+  holds against a raid's stock loss.
+- Upgrade: at a random camp that pays from stock (never a fixed-pay camp), yields x1.5 for 20 rounds counting the round it is funded.
 - New camp: an old-style camp with capacity 100, 8 x S/K per perfect harvest, 2 harvests per right, and start stock 60-100%. Where
-  camps are typed it is always stone or copper, whatever the notice says. A copper camp holds 300-500 value of stock and sustains
+  camps are typed it is always stone or copper, and the notice says which. A copper camp holds 300-500 value of stock and sustains
   1.25-5 copper per round (math/tree-camps).

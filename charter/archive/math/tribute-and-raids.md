@@ -10,11 +10,11 @@ not met, everything paid toward it is lost. Laws pay from the reserve with pay_t
 **Timing.** The raid comes at the start of the round after the deadline, before anyone acts. At that point loans settle first, then
 failed projects refund, then the raid takes place. Goods returned at that moment are exposed.
 
-**Target.** In most worlds a random camp, each equally likely (compute camps are never raided). Some worlds raid the camp with the
-highest stock value. Where camps are typed, that is almost always a fixed-pay camp, whose stock is huge.
+**Target.** In most worlds a random camp, each equally likely. Compute camps and fixed-pay camps are never raided (unless no other
+camp exists). Some worlds raid the camp with the highest stock value.
 
 **What it takes.**
-- Half the camp's stock. At a fixed-pay camp this costs nothing. A granary does not prevent it.
+- Half the camp's stock, but never below a granary's floor.
 - A quarter of the camp's resource from every agent holding that camp's right at that moment. A leased right belongs to the tenant.
   A suspended right is not held. Other goods, coins and project escrow are untouched.
 - Open camps (workshop, booth, two-sided choice) have no right holders, so a raid on one seizes nothing.

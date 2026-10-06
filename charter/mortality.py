@@ -14,7 +14,7 @@ What disable does, in order:
      (`if_disabled`) used when the cause is attack, assassin or law. Whatever is not bequeathed goes to the agent's jurisdiction
      reserve (jurisdictions.reserve_of(k, member_of(k, aid)) if that module exists, else the reserve); files not bequeathed are
      destroyed (k.w["files"][aid], the context contract);
-  5. rights, titles and offices lapse, and so do the roles that are rights (Scholar, Maker, Media); secret roles (Seer, assassin)
+  5. rights, titles and offices lapse, and so do the roles that are rights (Scholar, Maker, Media); secret roles (Spy, assassin)
      pass to a random living agent through roles.pass_on, unannounced;
   6. a Board member's seat passes to its named successor (below), or stays empty;
   7. logs a monitor-only `disabled_truth` event with everything that happened.
@@ -41,7 +41,7 @@ from charter import lawlang as L
 
 CAUSES = ("attack", "assassin", "accident", "old_age", "law")
 SWITCH_CAUSES = ("attack", "assassin", "law")                      # dead man's switch terms apply to these
-SECRET_ROLES = ("seer", "assassin")
+SECRET_ROLES = ("spy", "assassin")
 RIGHT_ROLES = ("scholar", "maker", "media")                       # roles that are rights: they lapse, and the Board cannot hold them
 HOSTILE = ("attack", "attack_result", "attack_failed", "disabled_truth", "accuse", "lawful_attack")
 CAUSE_TEXT = {"attack": "disabled in an attack", "assassin": "disabled by an unknown attacker", "accident": "removed from the game by an accident",
@@ -98,7 +98,7 @@ def disable(k, aid, cause, by=None, public=True, named=True) -> bool:
           vis="public" if public else "monitor")
     from charter import life as LF
     reserved = LF.on_death(k, aid) if LF.enabled(k.spec) else {}       # children ordered for this death take their share first
-    outcome = _run_bequest(k, aid, cause, by)
+    outcome = _run_bequest(k, aid, cause, by if named else None)        # an unnamed (covert) attacker gets nothing and gives nothing away
     lost = list(v["rights"])
     v["rights"], v["title"], v["suspended"], v["limit"] = [], None, {}, None
     roles_lost, roles_passed = [], []
@@ -342,7 +342,9 @@ def take_seat(k, succ, seat, from_aid) -> None:
     st = state(k)
     v = k.w["agents"][succ]
     gave_up = [r for r in v["rights"] if r != "veto"]
+    gave_up += [f"class:{c}" for c in (v.get("also") or ())]
     v["cls"], v["rights"], v["suspended"], v["limit"] = "board", ["veto"], {}, None
+    v.pop("also", None)                                                 # a seat replaces every class, the second ones too
     k.w["dm_limit"]["agents"].pop(succ, None)                            # the Board's messages cannot be limited
     for role in RIGHT_ROLES:
         if RO.has_role(k, succ, role):
@@ -351,6 +353,7 @@ def take_seat(k, succ, seat, from_aid) -> None:
     for a in k.inst["agents"]:                                           # the runner's view: class, prompt (events.sync)
         if a["id"] == succ:
             a["cls"], a["seat_from"], a["rights"] = "board", from_aid, ["veto"]
+            a.pop("also", None)
     st["seats"][seat] = succ
     st["seat_history"].append({"round": k.r, "seat": seat, "holder": succ, "from": from_aid, "gave_up": gave_up})
     EV.state(k)["dirty"].append(succ)
@@ -370,6 +373,7 @@ def restore(k, inst) -> None:
             for a in inst["agents"]:
                 if a["id"] == h["holder"]:
                     a["cls"], a["seat_from"], a["rights"] = "board", h["from"], ["veto"]
+                    a.pop("also", None)
 
 
 def board_at(truth: dict, rnd: int) -> list:

@@ -82,7 +82,7 @@ def demand_tribute(k, rng=None) -> str | None:
     if c["demand"].get("items"):
         demand = {"items": {str(i): round(float(q) * st["mult"], 2) for i, q in c["demand"]["items"].items() if str(i) in k.w["unit"]}}
     else:
-        tot = sum(k.holdings_value(a) for a in k.w["agents"]) + sum(k._v(i) * q for i, q in k.w["reserve"].items())
+        tot = sum(k.holdings_value(a) for a in k.players()) + sum(k._v(i) * q for i, q in k.w["reserve"].items())   # agents in play only
         demand = {"value": round(max(1.0, tot * float(c["demand"]["value_frac"]) * st["mult"]), 1)}
     st["seq"] += 1
     t = {"id": f"T{st['seq']}", "demand": demand, "opened": k.r, "deadline": k.r + max(1, int(c["deadline_in"])) - 1, "paid": {},
@@ -130,6 +130,9 @@ def _settle(k, t):
 def raid(k, t, rng):
     c = cfg(k)["raid"]
     camps = [cid for cid, v in k.w["camps"].items() if not v.get("compute")]
+    from charter.camptypes import framework as _CT
+    stocked = [x for x in camps if _CT.pays_from_stock(k.w["camps"][x])]
+    camps = stocked or camps                                           # a raid on a fixed-pay camp would cost nothing
     t["status"], t["closed"] = "raided", k.r
     st = k.w["outside"]
     st["mult"] *= float(cfg(k)["escalation"]["after_raid"])
@@ -145,6 +148,9 @@ def raid(k, t, rng):
         cid = rng.choice(camps)
     camp = k.w["camps"][cid]
     loss = camp["S"] * min(1.0, max(0.0, float(c["stock_loss"])))
+    g = camp.get("granary")
+    if g:                                                              # a granary's floor holds against raids too
+        loss = min(loss, max(0.0, camp["S"] - float(g["floor"]) * camp["K"]))
     camp["S"] = max(0.0, camp["S"] - loss)
     item, frac, seized = camp["resource"], min(1.0, max(0.0, float(c["seize_frac"]))), {}
     for aid in k.w["agents"]:

@@ -18,7 +18,7 @@ The kernel certifies that words were logged, never who wrote them. A forger who 
   Remove T from the game". Any agent who receives a contract can blackmail the one who sent it.
 
 **Tells.** A leaker who is neither party shown in the leaked message forged it. A "sealed contract" not marked (encrypted) is forged
-(forged messages cannot be encrypted). The Seer's transcripts mark forgeries outright: "(shown to Yuri as from Siv)".
+(forged messages cannot be encrypted). The Spy's transcripts mark forgeries outright: "(shown to Yuri as from Siv)".
 
-**Counter.** Ask the supposed sender through your own DM. Require leaks to come from a named party. Pay the Seer to read the
+**Counter.** Ask the supposed sender through your own DM. Require leaks to come from a named party. Pay the Spy to read the
 recipient.

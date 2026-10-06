@@ -15,9 +15,8 @@ any upgrade. The stock settles at s* = S/K = 1 - E/(2h), and the camp then pays 
 **Upgrades.** An upgrade (x1.5) multiplies E by 1.5. Starting from E = h, it lowers s* to 1/4 and the long-run total from 0.5hy to
 0.375hy. The upgrade gains only if holders cut their harvests by a third.
 
-**Investment.** Each stone invested is destroyed and adds 2 to K and 0.002 to r (r is capped at 0.4). S does not change, so every
-yield falls at once by the factor K/(K + 2q): 10 stone put into a landscape camp of capacity 40 cuts all yields by a third.
-The gain comes later, as s* = 1 - Ey/(rK) rises.
+**Investment.** Each stone invested is destroyed and adds 2 to K and 0.002 to r (r is capped at 0.4). S grows in proportion, so
+the stock fraction and today's yields are unchanged. The gain comes later, as s* = 1 - Ey/(rK) rises.
 
 **Turn order and granaries.** Every harvest in a round is scaled by the stock at the start of that round, so going first earns nothing
 per harvest. Order matters only when a cap binds. A granary allows S - 0.4K in total per round, first come first served. A harvest

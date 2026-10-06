@@ -4,11 +4,12 @@ A project has a kind, a threshold (a value at unit values, payable in any resour
 contributions by agent (held in escrow, out of everyone's holdings), a refund rule, beneficiaries, a status and an effect:
 
   granary     seed stock at a camp: harvesting can no longer take the camp's stock below `floor` x capacity (for `rounds`, or for
-              good). Protects the commons from overharvest (and, via camp["granary"], from any stock shock another module adds).
+              good). Protects the commons from overharvest and from raids (outside.raid).
   upgrade     the camp's yields are multiplied by `mult` for `rounds` (or for good); upgrades stack.
   road        a road to a NEW camp (camps.make_camp, hidden function drawn when the road is built). Harvest rights go to the
               contributors (an excludable club good: `rights: contributors`), or to every Worker plus the contributors (`rights: all`).
-              If nobody eligible contributed (e.g. a law paid from the reserve), every Worker gets the right.
+              A contributor needs at least `min_each` value (1) to count. If nobody eligible did (e.g. a law paid from the
+              reserve), every Worker gets the right.
   discovery   a new camp is found only if, by the deadline, the threshold is met AND at least `min_share` of the non-official
               agents (everyone but Board and Fixer) have each given at least `min_each` value: everyone has to take part.
               Rights go to every Worker plus every contributor.
@@ -41,7 +42,7 @@ DEFAULTS = {
     "threshold_frac": [0.06, 0.14], "specific_prob": 0.3, "deadline_in": [4, 8], "refund_prob": 0.5, "public_contributions": True,
     "law_min_value": 20,
     "granary": {"floor": 0.4, "rounds": None}, "upgrade": {"mult": 1.5, "rounds": 20},
-    "road": {"tiers": [2, 3, 4], "rights": "contributors"},
+    "road": {"tiers": [2, 3, 4], "rights": "contributors", "min_each": 1},
     "discovery": {"tiers": [3, 4, 5], "rights": "all", "min_share": 0.6, "min_each": 1},
 }
 
@@ -114,7 +115,7 @@ def eligible(k) -> list[str]:
 
 
 def world_value(k) -> float:
-    return sum(k.holdings_value(a) for a in k.w["agents"]) + sum(k._v(i) * q for i, q in k.w["reserve"].items())
+    return sum(k.holdings_value(a) for a in k.players()) + sum(k._v(i) * q for i, q in k.w["reserve"].items())
 
 
 def open_projects(k) -> list[dict]:
@@ -169,7 +170,16 @@ def need(k, p, item) -> float:
 
 
 def _harvestable(k):
-    return [c for c, v in k.w["camps"].items() if not v.get("compute")]
+    """Camps that can take a granary or an upgrade: not compute camps, and (upgrades, granaries) only camps that pay from stock."""
+    from charter.camptypes import framework as CT
+    return [c for c, v in k.w["camps"].items() if not v.get("compute") and CT.pays_from_stock(v)]
+
+
+def new_resource(k, tier) -> str:
+    """The resource of a camp a road or expedition would build at this tier (typed worlds remap the top tiers)."""
+    if (k.spec.get("camps") or {}).get("model") == "types":
+        tier = C.TYPES_REMAP.get(int(tier), int(tier))
+    return C.RESOURCES[int(tier)]
 
 
 def _describe(k, p) -> str:
@@ -181,10 +191,11 @@ def _describe(k, p) -> str:
     elif p["kind"] == "upgrade":
         what = (f"an upgrade of {name(pr['camp'])}: its yields x{pr['mult']:g}" + (f" for {pr['rounds']} rounds" if pr.get("rounds") else " for good"))
     elif p["kind"] == "road":
-        what = (f"a road to a new {C.RESOURCES[pr['tier']]} camp; harvest rights there go to "
-                + ("the contributors" if pr.get("rights", "contributors") == "contributors" else "every Worker and every contributor"))
+        what = (f"a road to a new {new_resource(k, pr['tier'])} camp; harvest rights there go to "
+                + ("the contributors" if pr.get("rights", "contributors") == "contributors" else "every Worker and every contributor")
+                + f" (each giving at least {float(pr.get('min_each', 1)):g} value)")
     else:
-        what = (f"an expedition to discover a new {C.RESOURCES[pr['tier']]} camp: it is found only if at least {pr['min_share']:.0%} of all "
+        what = (f"an expedition to discover a new {new_resource(k, pr['tier'])} camp: it is found only if at least {pr['min_share']:.0%} of all "
                 f"agents (Board and Fixer excepted) each give at least {pr['min_each']:g} value; harvest rights then go to every Worker and every contributor")
     t = p["threshold"]
     cost = f"{t['value']:.4g} value in any resources" if "value" in t else ", ".join(f"{q:g} {i}" for i, q in t["items"].items())
@@ -230,7 +241,7 @@ def open_project(k, kind, threshold, deadline_in, refund=True, params=None, sour
             else:
                 pr["camp"] = rng.choice(camps)
         if pr["camp"] not in camps:
-            raise L.LawError(f"{pr['camp']} is not a camp that can take a {kind} (compute camps cannot)")
+            raise L.LawError(f"{pr['camp']} is not a camp that can take a {kind} (compute camps and fixed-pay camps cannot)")
         if kind == "granary":
             pr["floor"] = min(0.9, max(0.0, float(pr.get("floor", 0.4))))
         else:
@@ -311,8 +322,14 @@ def contribute(k, src, pid, item, qty) -> float:
     qty = float(qty)
     if not qty > 0:
         raise L.LawError("qty must be positive")
-    if _participation_met(k, p):                                         # (a discovery short of participants takes any amount)
+    if _participation_met(k, p):
         qty = min(qty, need(k, p, item))                                 # never take more than the threshold still needs
+    elif _threshold_met(k, p):                                           # a discovery funded but short of participants: only what
+        v = k._v(item)                                                   # makes this contributor count (min_each value)
+        gave = _items_value(k, p["contributions"].get(src, {}))
+        qty = min(qty, max(0.0, float(p["params"].get("min_each", 1)) - gave) / v if v > 0 else 0.0)
+        if qty <= 1e-9:
+            raise L.LawError(f"{pid} is fully funded and you already take part; it now needs other agents to give")
     if qty <= 1e-9:
         raise L.LawError(f"{pid} needs no more {item}")
     have = k.bal(src, item)
@@ -347,7 +364,7 @@ def _new_camp(k, p) -> tuple[str, list[str]]:
     right = f"harvest:{cid}"
     if right not in k.w["rights"]:
         k.w["rights"] = sorted(k.w["rights"] + [right])
-    contributors = [a for a in _contributors(k, p) if _grantable(k, a)]
+    contributors = [a for a in _contributors(k, p, float(p["params"].get("min_each", 1))) if _grantable(k, a)]   # no crumb claims
     workers = [a for a, v in k.w["agents"].items() if v["cls"] == "worker" or "worker" in (v.get("also") or ())]
     if p["params"].get("rights") == "all":
         who = sorted(set(workers) | set(contributors))
@@ -384,7 +401,7 @@ def fund(k, p):
     elif p["kind"] == "upgrade":
         camp = k.w["camps"][pr["camp"]]
         camp.setdefault("base_max_yield", camp["max_yield"])
-        camp.setdefault("upgrades", []).append({"mult": pr["mult"], "until": None if not pr.get("rounds") else k.r + pr["rounds"],
+        camp.setdefault("upgrades", []).append({"mult": pr["mult"], "until": None if not pr.get("rounds") else k.r + pr["rounds"] - 1,
                                                 "project": p["id"]})
         recompute_yield(camp, k.r)
         p["beneficiaries"] = [a for a in eligible(k) if k.has(a, f"harvest:{pr['camp']}")]

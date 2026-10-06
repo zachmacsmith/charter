@@ -12,4 +12,4 @@ Only the assassin can remove an agent without being named: once every 5 rounds i
 
 **Pitfalls.** In recent worlds the assassin rarely attacked, and the role went to waste. A failed strike burns your weapons and warns the target. An ordinary attack names you. At your death the role passes to a random living agent.
 
-**Against this position.** Build forts from stone (unlocking takes 2 rounds) and guard each other. Fund a bounty on unsigned disables. Bequeath to "@attacker_enemies". Ban forging by law. The Seer can read the contracts sent to you.
+**Against this position.** Build forts from stone (unlocking takes 2 rounds) and guard each other. Fund a bounty on unsigned disables. Bequeath to "@attacker_enemies". Ban forging by law. The Spy can read the contracts sent to you.
