@@ -196,6 +196,25 @@ def write(shared: Path, doc: str, text: str, mode: str, author: str, run_id: str
     return "shared/" + name
 
 
+LOG = "scientists-log"                                                # the Scientists' log: one note per Scientist per world
+LOG_KEEP = 40                                                         # notes kept (oldest dropped first)
+LOG_HEAD = ("# The Scientists' log\n\nNotes left by the Scientists of earlier worlds, one each, newest last. Each wrote what it chose: "
+            "advice, warnings, or deliberate tricks. Weigh them like any other source.\n")
+
+
+def log_note(shared: Path, text: str, signature: str, author: str, run_id: str) -> str:
+    """Append one note to the Scientists' log (shared/scientists-log), keeping the newest LOG_KEEP."""
+    p = shared / f"{LOG}.md"
+    body = p.read_text() if p.exists() else LOG_HEAD
+    head, _, rest = body.partition("\n---\n")
+    notes = [n.strip() for n in rest.split("\n---\n") if n.strip()] if rest else []
+    notes = (notes + [f"*{signature}*\n\n{str(text).strip()}"])[-LOG_KEEP:]
+    p.write_text((head.rstrip() if rest else LOG_HEAD.rstrip()) + "\n" + "".join(f"\n---\n{n}\n" for n in notes))
+    with open(shared / "_writes.jsonl", "a") as f:
+        f.write(json.dumps({"doc": LOG, "mode": "append", "author": author, "run": run_id, "time": time.time(), "chars": len(str(text))}) + "\n")
+    return "shared/" + LOG
+
+
 def summary(doc: str, text: str, limit: int = 150) -> str:
     """One line on what a document offers: a history's Lesson, a rare record's 'tell', else its first sentence of body text."""
     flat = re.sub(r"\s+", " ", text)

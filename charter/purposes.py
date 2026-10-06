@@ -23,7 +23,7 @@ PURPOSE = {
     "run_python": "compute: solve camps, check law code",
     "read_archive": "read a document you hold: secrets, strategy",
     "search_archive": "find archive documents on a topic",
-    "write_archive": "leave notes for future worlds",
+    "write_archive": "leave your one note for future Scientists",
     "library_read": "read a library document",
     "create_agent": "make an ordered agent (Makers)",
     "copy_agent": "make a copy of an agent (Makers)",

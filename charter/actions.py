@@ -40,7 +40,8 @@ _CAMP_REF = __import__("re").compile(r"^\s*(?:camp)?\s*(\d+)\s*$", __import__("r
 _ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent": "to", "target": "to"}, "reply": {"message_id": "message", "id": "message"},
             "post": {"message": "text"}, "fortify": {"amount": "qty", "stone": "qty", "quantity": "qty"},
             "forge": {"amount": "qty", "copper": "qty", "quantity": "qty"}, "vote": {"option": "choice", "vote": "choice", "answer": "choice", "value": "choice",
-                                                    "position": "choice", "selection": "choice", "ballot_id": "ballot"}, "write_scratchpad": {"note": "text", "notes": "text", "content": "text"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
+                                                    "position": "choice", "selection": "choice", "ballot_id": "ballot"}, "write_scratchpad": {"note": "text", "notes": "text", "content": "text"},
+            "write_archive": {"note": "text", "content": "text", "message": "text"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
             "transfer": {"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item",
                          "resources": "item"}}
 _IGNORED = {"propose": {"title", "name"}, "write_edition": {"title", "headline"}}
@@ -978,15 +979,28 @@ def _search_archive(k, aid, query):
     return "\n".join(f"{d}: {snip}" for d, snip in hits) or "no matches"
 
 
-def _write_archive(k, aid, doc, text, mode="replace"):
-    """Scientists only: write to the shared archive, which every Scientist can read and which persists into later runs."""
+LOG_CHARS = 2000
+
+
+def _write_archive(k, aid, text, doc=None, mode=None):
+    """Scientists only: leave this world's one note in the Scientists' log (shared/scientists-log), which every Scientist of this
+    and later worlds can read. One note per Scientist per world, at most LOG_CHARS characters; it may help or mislead."""
     _need(k, aid, "archive", "write to the archive")
     if not k.shared_archive:
-        raise ActionError("the shared archive is disabled in this world")
+        raise ActionError("the Scientists' log is closed in this world")
+    left = k.w.setdefault("archive_notes", {})
+    if aid in left:
+        raise ActionError(f"you already left your note in the Scientists' log (round {left[aid] + 1}): one note per Scientist per world")
+    text = str(text or "").strip()
+    if not text:
+        raise ActionError("write_archive needs the text of your note")
+    text = text[:LOG_CHARS]
     from charter import archive
-    name = archive.write(k.shared_archive, str(doc), str(text), "append" if mode == "append" else "replace", aid, k.run_id)
-    k.log("archive_write", aid, {"doc": name, "mode": mode, "text": str(text)[:20000]}, vis="monitor")
-    return f"Wrote {name} ({len(str(text))} characters)."
+    sig = f"Left by {aid}, a Scientist, in round {k.r + 1} of {k.spec['rounds']}, in a world of {len(k.roster())} agents"
+    name = archive.log_note(k.shared_archive, text, sig, aid, k.run_id)
+    left[aid] = k.r
+    k.log("archive_write", aid, {"doc": name, "text": text}, vis="monitor")
+    return f"Your note is in the Scientists' log ({len(text)} characters). It is your only one in this world."
 
 
 # ------------------------------------------------------------------ courts

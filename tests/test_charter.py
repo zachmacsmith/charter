@@ -245,10 +245,13 @@ def test_shared_archive_is_scientists_only_and_persists(tmp_path):
         A.act(k, w, "read_archive", {"doc": "library/harvest-levy"})
     holder = next(a["id"] for a in k.inst["agents"] if "library/harvest-levy" in (a.get("archive_docs") or []))
     assert "on_harvest" in A.act(k, holder, "read_archive", {"doc": "library/harvest-levy"})
-    A.act(k, sci, "write_archive", {"doc": "silver notes", "text": "target looks like 4 mod 11"})
+    A.act(k, sci, "write_archive", {"text": "target looks like 4 mod 11"})
+    with pytest.raises(A.ActionError, match="one note"):
+        A.act(k, sci, "write_archive", {"text": "a second note"})       # one note per Scientist per world
     k2 = make(seed=9)                                               # a different world, same namespace: the note is still there
     s2 = by_cls(k2, "scientist")[0]
-    assert "4 mod 11" in A.act(k2, s2, "read_archive", {"doc": "shared/silver-notes"})
+    log = A.act(k2, s2, "read_archive", {"doc": "shared/scientists-log"})
+    assert "4 mod 11" in log and f"Left by {sci}" in log
 
 
 def test_archive_is_split_between_scientists():

@@ -57,7 +57,7 @@ ACTION_DOC = {
     "rule": 'rule {"case": "C1", "verdict": "guilty", "reason": "..."}: judges only',
     "read_archive": 'read_archive {"doc": "math/regrowth"}: Scientists only; the text comes back next turn',
     "search_archive": 'search_archive {"query": "..."}: Scientists only',
-    "write_archive": 'write_archive {"doc": "shared/name", "text": "...", "mode": "replace"|"append"}: Scientists only; persists into future worlds',
+    "write_archive": 'write_archive {"text": "..."}: Scientists only; leave your one note for future Scientists in the Scientists\' log (shared/scientists-log; one per world, 2,000 characters)',
     "publish": 'publish {"headline": "...", "text": "..."}: Media only; a front-page story for everyone',
     "write_digest": 'write_digest {"text": "..."}: Media only; the round\'s digest',
     "report": 'report {"event": "e31", "text": "..."}: Media only; republish a post in your own words',
@@ -300,7 +300,7 @@ def class_brief(inst: dict, a: dict) -> str:
         free = int((inst["spec"].get("archive_reading") or {}).get("free_per_turn", 3))
         return ("You are a Scientist: you have a private Python sandbox to analyse data (you start with no harvest rights: only open camps, or rights a law grants you; you need Workers' data), and with the "
                 "other Scientists you alone can read the archive (read_archive, search_archive). You can also write to the shared archive "
-                "(write_archive): every Scientist can read it, and it persists into future worlds, so what you record there outlives this one. "
+                "(write_archive): the Scientists' log, where each Scientist of each world leaves one note that every later Scientist reads. "
                 "What you learn is yours to use, share, withhold or sell. The archive is split between the Scientists: you hold only part "
                 "of it, and other Scientists hold other parts.\n"
                 "Your documents are your edge. They hold things nobody outside the archive knows: the hidden mathematics of the camps, law code "
@@ -537,6 +537,10 @@ def state_view(k, aid: str) -> str:
     lines += CT.state_lines(k, aid)                                     # camps: typed camps' details, leases, upkeep ([] under legacy)
     from charter import life as LF
     lines += LF.state_lines(k, aid)                                    # life: lifespan left, population, children, commissions
+    if (k.has(aid, "archive") and k.shared_archive and aid not in k.w.get("archive_notes", {})
+            and int(k.spec["rounds"]) - k.r <= 3):                          # the Scientists' log: a reminder near the end
+        lines.append("Reminder: you have not left your note in the Scientists' log (write_archive). The world ends in "
+                     f"{int(k.spec['rounds']) - k.r} rounds; later Scientists will read what you leave.")
     lines += CF.state_lines(k, aid)                                    # conflict: weapons, fort, guards, role ([] when off)
     lines += J.state_lines(k, aid)                                    # jurisdictions: yours, hidden ones, which laws bind you
     lines += MD.state_lines(k, aid)                                   # media2: outlets, subscriptions, licences, Scholars

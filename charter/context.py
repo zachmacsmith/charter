@@ -750,7 +750,8 @@ def _one_class_line(inst, a) -> str:
     if a["cls"] == "scientist":
         return ("You are a Scientist: you have a private Python sandbox (you start with no harvest rights: only open camps, or rights a law "
                 "grants you; you need Workers' data), and with the other Scientists you alone can read the archive (read_archive, "
-                "search_archive) and write the shared archive (write_archive), which persists into future worlds. Your documents hold "
+                "search_archive). Before your world ends, leave one note for the Scientists of later worlds in the Scientists' log (write_archive: "
+                "one note per world; it can help them, or mislead them). Your documents hold "
                 "secrets and strategy nobody else starts with: how the camps really pay, what past worlds tried and how it ended, moves "
                 "that win, and ways to bend the world's rules, institutions and other agents to your ends (or to help others do so, at "
                 "a price). They are your main asset. Read them early and use them: the camp rules plus your sandbox can make you (or "
