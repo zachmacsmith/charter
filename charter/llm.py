@@ -1,4 +1,4 @@
-"""One structured model call per agent turn, through LLM_BACKEND (agnet/.env): "api" (ANTHROPIC_API_KEY) or "claude_code"
+"""One structured model call per agent turn, through LLM_BACKEND (.env at the repository root): "api" (ANTHROPIC_API_KEY) or "claude_code"
 (headless `claude -p` billed to the subscription via CLAUDE_CODE_OAUTH_TOKEN, with every tool disabled, so nothing runs on the host).
 Returns (parsed JSON dict, reasoning text, usage dict). Reasoning: API Sonnet/Opus give summarised thinking; through Claude Code only
 models with a fixed thinking budget (Haiku 4.5) return thinking text (Sonnet/Opus 5.5 come back with the text omitted).

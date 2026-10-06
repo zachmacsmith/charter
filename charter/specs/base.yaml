@@ -141,7 +141,7 @@ law_docs:                         # how much of the law language the prompt docu
   overrides: {}                   # per function/hook/feature: {hide_post: prompt, rng: common, on_dm: legendary, ...}
 shared_archive:                   # Scientists' writable archive, shared by all Scientists and persistent between runs
   enabled: true
-  path: runs/charter/shared_archive   # relative to agnet/
+  path: runs/charter/shared_archive   # relative to the repository root
   namespace: default              # separate namespaces keep experiment families apart
 observer:                         # a secret observer (charter/observer.py): an extra agent nobody is told about; monitor-only record
   enabled: false

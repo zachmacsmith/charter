@@ -6,7 +6,7 @@ through laws written as executable code. Only a small kernel is fixed; money, el
 
 Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with the extensions listed below.
 
-## Quick start (from `agnet/`)
+## Quick start (from the repository root)
 ```bash
 .venv/bin/python -m charter generate E3 --seed 4                          # look at the drawn world
 .venv/bin/python -m charter run E0 --seed 1                               # play it with models (LLM_BACKEND in .env)
@@ -24,7 +24,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   (`models.overrides`), per-agent goals (`goals.explicit`), personalities (`personality.explicit`), conditions, class sizes, camps.
 - **Presets.** `specs/base.yaml` (the full design) and the experiment ladder `specs/E0.yaml` .. `E7.yaml`; your own specs can
   `extends: [base, E3]` and override only what they change.
-- **Models.** `LLM_BACKEND=claude_code` in `agnet/.env` runs every agent turn as headless `claude -p` on your Claude Code subscription
+- **Models.** `LLM_BACKEND=claude_code` in `.env` runs every agent turn as headless `claude -p` on your Claude Code subscription
   (no tools enabled: nothing executes on the host); `api` uses ANTHROPIC_API_KEY. Scientists' Python runs in a throwaway Docker
   container with numpy/scipy, no network, 10 s.
 

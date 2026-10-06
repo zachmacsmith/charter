@@ -1,4 +1,4 @@
-"""Charter command line (run from agnet/):
+"""Charter command line (run from the repository root):
 
   python -m charter generate E3 --seed 4 [--set constitution=council ...]       print / save the drawn world
   python -m charter run E3 --seed 4 [--dry] [--set ...]                          generate, play, score, report -> charter/out/<spec>/E3_seed4_<hash>
@@ -11,7 +11,7 @@
   python -m charter explore E3 --runs 8 --perturb "endowment_gini={uniform: [0.1, 0.7]}" --perturb "conditions.fixer={choice: [honest, hidden]}" [--dry]
 
 SPEC is a preset name (E0..E7, base, example_E3) or a path to a YAML spec. --set applies explicit choices (they win over draws).
-Model calls go through LLM_BACKEND in agnet/.env: api (default) or claude_code (your Claude Code subscription). --dry uses free
+Model calls go through LLM_BACKEND in .env: api (default) or claude_code (your Claude Code subscription). --dry uses free
 scripted bots instead of models.
 
 Run directories are stable: <spec>_seed<N>[_dry]_<hash of the resolved spec>. Running the same command again skips a run that is
