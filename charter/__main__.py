@@ -75,8 +75,17 @@ def run_stem(tag: str, sp: dict, seed: int, dry: bool) -> str:
 
 
 def _same_instance(out: Path, inst: dict) -> bool:
+    """The saved world is the one this spec and code would generate. Rights renamed since (kernel.RENAMED_RIGHTS) count as the same."""
     f = out / "instance.json"
-    return f.exists() and f.read_text() == json.dumps(inst, indent=1, default=str)
+    if not f.exists():
+        return False
+    if f.read_text() == json.dumps(inst, indent=1, default=str):
+        return True
+    from charter.kernel import RENAMED_RIGHTS
+    saved = json.loads(f.read_text())
+    for a in saved.get("agents", []):
+        a["rights"] = [RENAMED_RIGHTS.get(r, r) for r in a.get("rights", [])]
+    return json.dumps(saved, indent=1, default=str) == json.dumps(json.loads(json.dumps(inst, default=str)), indent=1, default=str)
 
 
 def policy_for(sp, dry, seed):
