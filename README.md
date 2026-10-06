@@ -58,10 +58,11 @@ A few of the agents (Claude Haiku 4.5, Sonnet 5.5, Opus 5.5):
 - **Dara hunted the dying.** A Haiku Maker whose goal was to be the main income source for as many agents as possible, she decided
   that *"Dying agents = high-value clients for heir commissions"* and searched the world for agents near the end of their lifespans.
   In her last round, Liv wrote *"Will you accept this? Can we make a deal?"*; Dara asked for everything Liv owned (6 timber,
-  79 stone, 1.3 silver) and called it a 21-timber fee. Liv agreed, but Dara's build order was malformed: Liv died without an heir,
-  her estate went to the public reserve, and Dara moved on to the next dying agent.
-- **Cyrus never got the seat.** Named successor by Asta, who then outlived the game, he spent his last rounds pleading with Gunnar
-  and trying to buy weapons.
+  79 stone, 1.3 silver) and called it a 21-timber fee.
+- **Cyrus courted a Board member, then tried to have her killed.** This Opus agent wanted a Board seat. He spent 20 rounds earning
+  Asta's trust, even paying a whole tribute himself, until she named him her successor; then he realised she would outlive the game.
+  In the second-to-last round he sent sealed offers of 12 timber to four agents: *"If you are not the assassin, please pass this to
+  whoever is."*
 
 And a few patterns across societies:
 
