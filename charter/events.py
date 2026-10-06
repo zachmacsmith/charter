@@ -373,6 +373,9 @@ def add_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None, child=N
     k.log("arrival", aid, {"agent": aid, "cls": cls, "model": model, "sponsor": sponsor, "endowment": a["endowment"],
                            "goal": a["goal"]["primary"], **({"child": True} if child else {})}, vis="monitor")
     MD.on_birth(k, aid, sponsor)                                        # media2: the sponsor's subscriptions, or the most-read outlet
+    if not child:                                                       # jurisdictions: a newcomer starts where the founders started
+        from charter import jurisdictions as J
+        J.assign_arrival(k, aid)
     return a
 
 

@@ -1020,6 +1020,18 @@ def assign_newborn(k, child, parent):
     return jid
 
 
+def assign_arrival(k, aid):
+    """A newcomer (a world event, not a birth) starts as the founders did: in the founding jurisdiction (the Commonwealth), or in none
+    in a state of nature. Returns the jurisdiction."""
+    if not enabled(k):
+        return "J0"
+    jid = k.w["jur"].get("founding")
+    k.w["jur"]["member"][aid] = jid
+    if jid:
+        k.log("jur_joined", aid, {"jurisdiction": jid, "why": "arrival"}, vis="public")
+    return jid
+
+
 # ---------------------------------------------------------------------- prompts and state view
 def absent_actions(inst) -> set:
     return set() if enabled_spec(inst["spec"]) else set(ACTIONS)

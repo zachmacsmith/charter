@@ -866,7 +866,7 @@ def _birth(k, c) -> str | None:
     st["stats"][aid] = {x: sp["stats"][x] for x in ("scratchpad", "attack", "defense", "lookups")}
     try:
         from charter import jurisdictions as J
-        st["jurisdiction"][aid] = J.member_of(k, parent)
+        st["jurisdiction"][aid] = J.assign_newborn(k, aid, parent) if J.enabled(k) else J.member_of(k, parent)   # a member at birth
     except ImportError:
         st["jurisdiction"][aid] = None
     if "file_space" in k.w and sp["stats"]["scratchpad"]:

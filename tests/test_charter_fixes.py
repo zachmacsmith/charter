@@ -158,3 +158,17 @@ def test_a_child_is_born_with_the_strategy_prompt_on():
     assert len(k.w["agents"]) == before + 1
     child = inst["agents"][-1]
     assert child.get("strategy_prompt") is True
+
+
+def test_children_and_newcomers_belong_to_a_jurisdiction():
+    from charter import events as EV, jurisdictions as J, life as LF
+    inst, k = _world("jurisdictions.enabled=true")
+    k._add("Kasper", "timber", 60)
+    A.act(k, "Kasper", "commission", {"maker": "Hugo", "spec": {"cls": "worker"}})
+    k._add("Hugo", "timber", 30)
+    A.act(k, "Hugo", "create_agent", {"commission": "K1"})
+    LF._births(k)
+    child = inst["agents"][-1]["id"]
+    assert J.member_of(k, child) == J.member_of(k, "Kasper") == "J0"     # born into the parent's jurisdiction
+    a = EV.add_agent(k, inst, cls="worker", rng=random.Random(1))
+    assert J.member_of(k, a["id"]) == "J0"                              # a newcomer starts in the Commonwealth

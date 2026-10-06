@@ -237,6 +237,16 @@ def log_note(shared: Path, text: str, signature: str, author: str, run_id: str) 
     return "shared/" + LOG
 
 
+def title(doc: str) -> str:
+    """A document's title (its first heading), without reading the rest."""
+    p = docs(None, gated=True).get(doc)
+    if p is None:
+        return doc.split("/", 1)[-1].replace("-", " ").title()
+    with open(p) as f:
+        first = f.readline()
+    return first.lstrip("# ").strip() or doc
+
+
 def summary(doc: str, text: str, limit: int = 150) -> str:
     """One line on what a document offers: a history's Lesson, a rare record's 'tell', else its first sentence of body text."""
     flat = re.sub(r"\s+", " ", text)

@@ -147,6 +147,9 @@ def sections(inst, k, aid) -> list:
             idx = archive.index(archive.shared_dir(sp), only=only, run_id=inst.get("run_id"), summaries=True)
         except Exception:                                              # the shared archive may be unreachable: keep the manual working
             idx = archive.index(None, only=only, summaries=True)
+        others = _others_titles(inst, aid)
+        if others:
+            out.append(("What other Scientists hold", others))
         out.append(("Your archive", _archive_head(k, aid, only) + "Read with read_archive {\"doc\": \"<id>\"} (as a lookup it is answered "
                     "before you act this round).\n" + _mark_read(k, aid, idx)))
     return out
@@ -186,3 +189,24 @@ def _mark_read(k, aid, idx) -> str:
         d = line[2:].split(":", 1)[0] if line.startswith("- ") else None
         out.append(line + (f" [you read it in round {seen[d]}]" if d in seen else ""))
     return "\n".join(out)
+
+
+def _others_titles(inst, aid) -> str:
+    """Titles (never contents) of the documents each other Scientist holds: whom to ask, trade with or pay for what you lack."""
+    from charter import archive
+    if not (inst["spec"].get("archive_split") or {}).get("show_others", True):
+        return ""
+    mine = set(next((a.get("archive_docs") or [] for a in inst["agents"] if a["id"] == aid), []))
+    lines = []
+    for a in inst["agents"]:
+        if a["id"] == aid or not a.get("archive_docs"):
+            continue
+        theirs = [d for d in a["archive_docs"] if d != "README" and not d.startswith("library/")]
+        if not theirs:
+            lines.append(f"- {a['id']}: only the README")
+            continue
+        lines.append(f"- {a['id']}: " + "; ".join(archive.title(d) + ("" if d not in mine else " (you hold it too)") for d in theirs))
+    if not lines:
+        return ""
+    return ("Titles only: what each other Scientist holds (the library's law code aside). The contents are theirs to share, trade, sell "
+            "or withhold.\n" + "\n".join(lines))
