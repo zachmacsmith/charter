@@ -668,6 +668,10 @@ def allowed_actions(inst, a, rights) -> list:
     return out + list(ACTIONS)
 
 
+FULL_TURN_TEXT = ("Any actions you do not use are wasted. If you don't know what to do, explore: your own capabilities, the world "
+                  "(Scientists have knowledge!), or better ways to reach your goals; coordinate with others, barter, or plan strategies in "
+                  "your notes. There are many other things you can explore to achieve things.")
+
 STRATEGY_TEXT = ("Strategy first: your score depends on finding the best way to reach your goal, which is often not the obvious one. "
                  "Map your options early: what your classes, roles and rights let you do, which actions, laws, alliances and resources "
                  "could help, and what your manual, documents and other agents can tell you. Compare a few strategies, follow the one "
@@ -887,10 +891,15 @@ def core_prompt(inst, a, k=None) -> str:
     from charter import roles as _RO, hidden as _H
     secret = "\n".join(x.strip() for x in (_RO.prompt_section(inst, a), _H.prompt_section(inst, a)) if x and x.strip())
     lev = leverage_line(inst, a, roles)
-    acts = ((chr(10) + grouped_purposes(allowed_actions(inst, a, rights), {"post": "ask the newspapers to print your public post",
-                                                                            "anon_post": "ask them to print one without your name"}
-                                        if (inst["spec"].get("media2") or {}).get("submissions") else None))
-            if c["action_purposes"] else grouped_actions(allowed_actions(inst, a, rights)) + ".")
+    over = dict({"post": "ask the newspapers to print your public post", "anon_post": "ask them to print one without your name"}
+                if (inst["spec"].get("media2") or {}).get("submissions") else {})
+    unread = unread_counts(k, a)                                        # what the agent has not read yet, shown every turn
+    from charter import purposes as _PU
+    for nm, n in unread.items():
+        over[nm] = f"{over.get(nm) or _PU.purpose(nm)} [{n} unread]"
+    acts = ((chr(10) + grouped_purposes(allowed_actions(inst, a, rights), over or None))
+            if c["action_purposes"] else grouped_actions(allowed_actions(inst, a, rights)) + "."
+            + ("".join(f" [{nm}: {n} unread]" for nm, n in unread.items())))
     parts = [
         ("identity", f"You are {aid}. {_class_line(inst, a)}" + ((" Your roles: " + ", ".join(roles) + ".") if roles else "")),
         ("leverage", lev),
@@ -902,7 +911,7 @@ def core_prompt(inst, a, k=None) -> str:
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
 first write each turn is free) or can find it again by search."""),
         ("actions", f"""Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {acts}"""
-                    + (f"\nAn action you leave unused is lost: most turns, use all {a['actions']} of them." if c.get("full_turn_nudge", True) else "")
+                    + ("\n" + FULL_TURN_TEXT if c.get("full_turn_nudge", True) else "")
                     + ("\nYou cannot propose laws yourself: a law you draft must be proposed by a holder of the propose right (a Legislator)."
                        if "propose" not in rights and inst["law_level"] != "L0" and a["cls"] not in ("board", "fixer") else "")),
         ("lookups", look),
@@ -1178,3 +1187,20 @@ def scripted(k, a, out: dict, user: str) -> dict:
 from charter import manual as _manual                                  # noqa: E402  (registers the base sections)
 
 MANUAL_SECTIONS.append(_manual.sections)
+
+
+def unread_counts(k, a) -> dict:
+    """{action: how many it has not read}: manual sections never fetched, and (Scientists) held archive documents never read."""
+    if k is None or a["id"] not in k.w["agents"]:
+        return {}
+    aid, out = a["id"], {}
+    init_agent(k, aid)
+    secs = [t for t, _ in build_manual(k.inst, k, aid)]
+    read = set(_st(k, aid)["manual_reads"].get(aid, {}))
+    if secs:
+        out["manual"] = sum(1 for t in secs if t not in read)
+    held = [d for d in (a.get("archive_docs") or []) if d != "README"]
+    if held and "archive" in k.w["agents"][aid]["rights"]:
+        seen = {str(e["data"].get("doc")).removesuffix(".md").strip("/") for e in k.events if e["type"] == "archive_read" and e["agent"] == aid}
+        out["read_archive"] = sum(1 for d in held if d not in seen)
+    return {nm: n for nm, n in out.items() if n}

@@ -201,7 +201,7 @@ def world_rules(inst: dict) -> str:
                   "confirm a deal within a round. All other actions then run in the round's order; agreeing to something does not carry it out.")
     ctl = dmc.get("controller", "media")
     who = "Media" if ctl == "media" else f"the {ctl}s" if any(a["cls"] == ctl for a in inst["agents"]) else "nobody"
-    turns += (f"\nThe private-message limit (starting at {dmc.get('dms_per_round', 5)} per agent per round, never above {dmc.get('max_per_round', 10)}) "
+    turns += (f"\nThe private-message limit (starting at {dmc.get('dms_per_round', 5)} or more per agent per round, set for each agent, never above {dmc.get('max_per_round', 10)}) "
               f"is set by holders of the dm_rules right ({who} at the start), for everyone or for one agent; laws can set it too, and can "
               "grant or revoke dm_rules.") if sp["channels"].get("dm", True) else ""
     turns += " Your feed shows what you are allowed to see that changed since your last turn."

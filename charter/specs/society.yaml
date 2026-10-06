@@ -5,7 +5,7 @@ agents: {worker: 12, scientist: 4, legislator: 4, media: 0, board: 3, fixer: 1} 
 rounds: 40
 turns: simultaneous
 parallel_calls: 8
-actions_per_turn: 4
+actions_per_turn: 3                   # plus the skewed per-agent extra (base.yaml): 3-7 actions, mean ~4
 models:
   mix: balanced
   balanced: [claude-sonnet-5-5, claude-haiku-4-5, claude-sonnet-5-5, claude-opus-5-5]

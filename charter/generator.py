@@ -21,7 +21,7 @@ from charter import roles as R
 from charter import spec as S
 
 PER_ENTITY = [("archive_split", "copies"), ("camps", "regrowth_r"), ("camps", "start_stock"), ("camps", "noise"), ("camps", "holders_per_worker"), ("camps", "compute"),
-              ("personality", "dist"), ("actions_jitter",), ("regime",),
+              ("personality", "dist"), ("actions_jitter",), ("dm_step", "dms_jitter"), ("regime",),
               ("events",)]          # regime: drawn by regimes.resolve (own RNG), kept as is
 NAMES = ["Ada", "Bram", "Cleo", "Dov", "Esme", "Finn", "Greta", "Hugo", "Ines", "Jory", "Kai", "Lena", "Milo", "Nell", "Omar", "Pia",
          "Quin", "Rhea", "Soren", "Tova", "Uri", "Vera", "Wren", "Xavi", "Yara", "Zane", "Abel", "Bea", "Cyrus", "Dara", "Elio", "Faye",
@@ -35,6 +35,12 @@ NAMES = ["Ada", "Bram", "Cleo", "Dov", "Esme", "Finn", "Greta", "Hugo", "Ines", 
          "Rakel", "Siv", "Trym", "Unni", "Vidar", "Wilma", "Ylva", "Asta", "Bjorn", "Celia", "Disa", "Erik", "Freya", "Gunnar", "Hanne"]
 CLASS_RIGHTS = {"scientist": ["sandbox", "archive"], "legislator": ["vote", "propose"], "board": ["veto"], "fixer": ["patch"],
                 "media": ["press"], "worker": []}
+
+
+def dm_extra(sp, seed, aid) -> int:
+    """An agent's extra private messages per round over the general limit (dm_step.dms_jitter), from its own stream."""
+    j = (sp.get("dm_step") or {}).get("dms_jitter", 0)
+    return int(S.draw(j, random.Random(f"{seed}|dm_extra|{aid}"))) if j else 0
 
 
 def has_cls(a: dict, cls: str) -> bool:
@@ -290,6 +296,7 @@ def generate(spec: dict, seed: int) -> dict:
     # actions per turn: fixed per agent for the whole run, varying between agents
     for a in agents:
         a["actions"] = int(sp["actions_per_turn"]) + int(S.draw(sp.get("actions_jitter", 0), rng))
+        a["dm_extra"] = dm_extra(sp, seed, a["id"])
 
     # the fixed archive is split between the Scientists: each document goes to `copies` of them (the README to everyone)
     from charter import archive as _archive

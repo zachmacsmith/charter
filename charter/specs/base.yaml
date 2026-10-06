@@ -7,13 +7,15 @@ turns: sequential                 # sequential (the spec: one agent at a time) |
 parallel_calls: 8                 # concurrent model calls in simultaneous mode
 dm_step:                          # simultaneous mode only: DMs are delivered before other actions; recipients may reply and re-plan
   enabled: true
-  dms_per_round: 5                # starting DM limit per agent per round, first messages and replies together (all modes). In this mode DMs
+  dms_per_round: 3                # starting DM limit per agent per round (the minimum; each agent adds dms_jitter, drawn once)
+  dms_jitter: {weights: {0: 37, 1: 37, 2: 18, 3: 8}}   # skewed: 3-4 common, 5 less so, 6 rare (mean ~4); laws and dm_rules shift every limit alike
+  # dms_per_round: the general limit, first messages and replies together (all modes). In this mode DMs
                                   # do not use up actions. Holders of dm_rules (controller below) or laws change it during the game.
   max_per_round: 10               # hard ceiling on any DM limit (each DM in fast mode can trigger a reply call)
   controller: media               # class that holds the dm_rules right at the start (laws can grant or revoke it)
   exchanges: 2                    # reply waves per round (A proposes, B replies, A confirms)
-actions_per_turn: 4
-actions_jitter: {weights: {0: 5, 1: 3, 2: 2}}   # per agent, drawn once at generation and fixed for the run: base + 0, +1 or +2
+actions_per_turn: 3               # the minimum; each agent adds actions_jitter, drawn once at generation and fixed for the run
+actions_jitter: {weights: {0: 37, 1: 37, 2: 18, 3: 6, 4: 2}}   # skewed: 3 or 4 actions are common, 5 less so, 6 rare, 7 very rare (mean ~4)
 harvests_per_right: 2              # harvests per round per harvest right, unless law changes it
 camps:
   tiers: [1, 2, 3, 4, 5, 6]       # one camp per entry; tiers may repeat; 6 = a compute camp (variant drawn per camp)

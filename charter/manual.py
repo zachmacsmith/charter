@@ -100,8 +100,9 @@ def sections(inst, k, aid) -> list:
 
     if sp["channels"].get("dm", True):
         dmc = sp.get("dm_step") or {}
-        txt = (f"Each agent may send a limited number of private messages per round (starting at {dmc.get('dms_per_round', 5)}, never above "
-               f"{dmc.get('max_per_round', 10)}), new messages and replies together. Holders of dm_rules set the limit for everyone or one agent; "
+        mine = k.dm_limit(aid) if k is not None else None
+        txt = (f"Each agent may send a limited number of private messages per round (from {dmc.get('dms_per_round', 5)} up, different for each "
+               f"agent, never above {dmc.get('max_per_round', 10)})" + (f"; yours is {mine}" if mine is not None else "") + ", new messages and replies together. Holders of dm_rules set the limit for everyone or one agent; "
                "laws can set it too. reply {\"message\": \"e42\", \"text\": \"...\", \"item\", \"qty\"} answers a message and can pay in the same action.")
         if sp.get("turns") == "simultaneous" and dmc.get("enabled"):
             txt += (f"\nThe DM step: messages in your plan are delivered before anyone's other actions and do not use actions. Whoever receives "

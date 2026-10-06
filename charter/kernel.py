@@ -89,6 +89,7 @@ class Kernel:
             "harvest_count": {}, "quota_used": {}, "effects": {}, "law_seq": 0, "ballot_seq": 0, "case_seq": 0,
             "channels": {}, "digest": {}, "hidden": [],
             "dm_limit": {"all": int((self.spec.get("dm_step") or {}).get("dms_per_round", 5)), "agents": {}}, "dm_sent": {},
+            "dm_extra": {a["id"]: int(a.get("dm_extra", 0)) for a in instance["agents"]},   # each agent's drawn extra DMs
             "loans": {}, "loan_seq": 0, "loan_law": None, "loan_enforce": False,
         }
         for a in self.w["agents"].values():
@@ -153,7 +154,10 @@ class Kernel:
     def dm_limit(self, aid) -> int:
         """DMs this agent may send this round (new messages and replies together). Set by holders of dm_rules or by law."""
         lim = self.w["dm_limit"]
-        return max(0, min(self.dm_cap(), int(lim["agents"].get(aid, lim["all"]))))
+        if aid in lim["agents"]:                                        # a limit set for this agent (dm_rules or a law) is exact
+            return max(0, min(self.dm_cap(), int(lim["agents"][aid])))
+        extra = int((self.w.get("dm_extra") or {}).get(aid, 0))        # its own drawn extra on top of the general limit
+        return max(0, min(self.dm_cap(), int(lim["all"]) + extra))
 
     def set_dm_limit(self, n, agent=None, by=None):
         n = max(0, min(self.dm_cap(), int(n)))
