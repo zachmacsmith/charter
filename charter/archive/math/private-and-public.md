@@ -5,7 +5,7 @@
 | Fact | Who sees it by default | How a claim about it can be tested | Cost of the test |
 |---|---|---|---|
 | Goals | nobody | the word `lantern_of_ossery`; the Spy reading the agent's reasoning | a rare word, or the Spy's price |
-| Spy | its holder | a law reading holders("forge") | passing a law |
+| Spy | its holder | a law reading holders("impersonate") | passing a law |
 | Assassin | its holder | none by law; unnamed disables show that one exists | waiting |
 | Weapons | the owner (forging is logged to the forger alone) | a law that gazettes weapons_of(agent); a ledger shows nothing, since weapons are valued at 0 | a law |
 | Fort, guards | the owner; a guard and the agent it protects | a law reading forts(), guards() or defense_of(agent); or an attack with 1 weapon, whose result reads "strength A against defense D" | a law; or for the probe, 1 copper forged into a weapon (an action) and the attack's 2 actions, with a chance 1/(1 + 1.5 D) of disabling the target |

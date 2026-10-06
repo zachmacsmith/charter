@@ -75,7 +75,7 @@ def test_board_and_fixer_restrictions_and_role_rights():
                     assert cls[x]["cls"] != "board"
                 if r == "assassin" and cls[x]["cls"] == "board":
                     board_secret += 1
-                right = {"scholar": "scholar", "maker": "maker", "media": "press", "spy": "forge"}.get(r)
+                right = {"scholar": "scholar", "maker": "maker", "media": "press", "spy": "impersonate"}.get(r)
                 if right:
                     assert right in cls[x]["rights"]
                 assert cls[x]["cls"] in ("worker", "scientist", "legislator", "media", "board")     # roles never change a class
@@ -149,7 +149,7 @@ def test_pass_on_gives_a_secret_role_to_a_living_agent_unannounced():
     R.pass_on(k, "spy", old)
     new = R.holders(k, "spy")
     assert len(new) == 1 and new[0] != old and new[0] in k.players() and k.cls_of(new[0]) != "fixer"
-    assert k.has(new[0], "forge")
+    assert k.has(new[0], "impersonate")
     ev = k.events[n0:]
     assert all(e["vis"] == "monitor" or e["vis"] == [new[0]] for e in ev)
     assert any(e["type"] == "notify" and e["vis"] == [new[0]] and "Spy" in e["data"]["text"] for e in ev)
@@ -242,7 +242,7 @@ def test_hidden_mode_with_roles_the_observer_is_the_spy():
     k.w["agents"][obs]["departed"] = 0                                         # removed by some module
     R.pass_on(k, "spy", obs)
     new = R.holders(k, "spy")[0]
-    assert new in k.players() and R.is_member_spy(k, new) and k.has(new, "forge")
+    assert new in k.players() and R.is_member_spy(k, new) and k.has(new, "impersonate")
     k.w["round"] = 1
     assert "What you saw" in R.turn_section(k, new, "")
 

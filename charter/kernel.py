@@ -687,10 +687,13 @@ class Kernel:
         return {"w": self.w, "events": self.events, "snapshots": self.snapshots, "eff": self.eff, "fn_n": self._fn_n, "turn_log": self.turn_log,
                 "rng": self.rng.getstate(), "law_rng": self.law_rng.getstate(), "ns_data": ns_data, "fns": fns}
 
+    SECRET_RIGHTS = ("impersonate",)                                    # held by secret roles: never shown in public previews
+
     def restore_state(self, st: dict) -> None:
         """Inverse of checkpoint_state (on a fresh Kernel built from the same instance). Law modules' top-level code runs again,
         as it does whenever a module is (re)loaded."""
         self.w, self.events, self.snapshots, self.eff, self._fn_n = st["w"], st["events"], st["snapshots"], st["eff"], st["fn_n"]
+        _migrate_rights(self.w)
         self.turn_log = st.get("turn_log", [])
         self.rng.setstate(st["rng"])
         self.law_rng.setstate(st["law_rng"])
@@ -720,7 +723,7 @@ class Kernel:
         if "leases" in w:                                              # camps: lease rules show in previews
             rules["lease_rules"] = dict(w["leases"]["rules"])
         return {"holdings": {a: dict(v["holdings"]) for a, v in ag.items()},
-                "rights": {a: list(v["rights"]) for a, v in ag.items()}, "rules": rules,
+                "rights": {a: [r for r in v["rights"] if r not in self.SECRET_RIGHTS] for a, v in ag.items()}, "rules": rules,
                 "reserve": dict(w["reserve"]), "currencies": {c: dict(v) for c, v in w["currencies"].items()},
                 "procedures": {c: k.split("#")[0] for c, k in w["procedures"].items()},
                 "camps": {c: {"quota": v["quota"], "harvest_limit": v["harvest_limit"], "fee": v["fee"]} for c, v in w["camps"].items()},
@@ -1192,3 +1195,18 @@ def _load_fn(blob: dict, ns: dict):
         return ns[blob["top"]]
     cells = tuple(types.CellType() if k == "empty" else types.CellType(_load_fn(v, ns) if k == "fn" else v) for k, v in blob["cells"])
     return types.FunctionType(marshal.loads(blob["code"]), ns, blob["name"], blob["defaults"], cells or None)
+
+
+RENAMED_RIGHTS = {"forge": "impersonate"}                               # the Spy's right was "forge", which read as forging weapons
+
+
+def _migrate_rights(w) -> None:
+    """Checkpoints from before a right was renamed: rename it in every agent's rights and in the catalogue."""
+    for old, new in RENAMED_RIGHTS.items():
+        for v in (w.get("agents") or {}).values():
+            if old in v.get("rights", []):
+                v["rights"] = sorted({new if r == old else r for r in v["rights"]})
+            if old in (v.get("suspended") or {}):
+                v["suspended"][new] = v["suspended"].pop(old)
+        if old in (w.get("rights") or []):
+            w["rights"] = sorted({new if r == old else r for r in w["rights"]})

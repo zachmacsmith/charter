@@ -699,7 +699,7 @@ def allowed_actions(inst, a, rights) -> list:
     if "press" in rights:                                                # the press right (Media class, a second class or the role)
         out += [x for x in ("publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel")
                 if x not in out]
-    if "forge" in rights and "forge_dm" not in out and sp["channels"].get("dm", True):   # the Spy
+    if "impersonate" in rights and "forge_dm" not in out and sp["channels"].get("dm", True):   # the Spy
         out.append("forge_dm")
     return out + list(ACTIONS)
 
@@ -726,7 +726,7 @@ EDGE_RIGHTS = {                                                         # rights
     "archive": ("read_archive", "search_archive", "write_archive"), "sandbox": ("run_python",), "maker": ("create_agent", "copy_agent"),
     "press": ("publish", "write_digest", "report", "write_edition", "annotate", "run_placement", "poll", "set_subscription_fee",
               "send_subscriber_list", "revoke_licence", "grant_licence"),
-    "scholar": ("set_memory_price", "library_permit", "library_remove"), "forge": ("forge_dm",), "dm_rules": ("set_dm_limit",),
+    "scholar": ("set_memory_price", "library_permit", "library_remove"), "impersonate": ("forge_dm",), "dm_rules": ("set_dm_limit",),
 }
 HARVEST_EDGE = ("harvest",)                                             # for holders of a harvest right
 EDGE_CORE = {"press": ("write_edition", "publish"), "maker": ("create_agent",), "scholar": ("set_memory_price", "library_permit")}

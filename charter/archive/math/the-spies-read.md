@@ -33,11 +33,11 @@ Each use of a read can give the Spy away:
 |---|---|
 | an accusation citing a DM the accuser was not party to | an encrypted DM points to the Spy alone, since surveillance cannot read it |
 | knowing what only a reasoning transcript holds | nobody else sees reasoning |
-| a law calling holders("forge") | the Spy holds the forge right, so it is named; a law run every round names each successor as well |
+| a law calling holders("impersonate") | the Spy holds the impersonate right, so it is named; a law run every round names each successor as well |
 
 ## Succession
 
 When the Spy is disabled or leaves play, the role passes, unannounced, to a random living agent who is neither on the Board nor the
-Fixer nor the departing Spy; only the new holder is told, and it receives the forge right with the role. Its first reads are random.
+Fixer nor the departing Spy; only the new holder is told, and it receives the impersonate right with the role. Its first reads are random.
 In worlds where agents age and die, the founders die in mid-game, so the role commonly passes at least once. Among two dozen agents
 each eligible agent has about a 1 in 19 chance of being next.

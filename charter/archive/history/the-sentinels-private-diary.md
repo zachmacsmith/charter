@@ -28,4 +28,4 @@ to The Courier. The kernel's stamp proves it was written before the attack. Now 
 
 **Round 19.** Someone has quoted back to Thornbury a line from his own sent messages, one he never showed anyone. Only the Spy reads another agent's sent
 messages in full, contracts included, and the Spy may cite them in court though it was party to none of them. In quoting that line,
-whoever it is has given themselves away. The Assembly is drafting a law that reads `holders("forge")`.
+whoever it is has given themselves away. The Assembly is drafting a law that reads `holders("impersonate")`.

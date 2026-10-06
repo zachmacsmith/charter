@@ -446,7 +446,7 @@ def _forge_dm(k, aid, to, text, **kw):
     shown = kw.pop("as", None) or kw.pop("as_", None)
     if kw:
         raise ActionError(f"bad arguments for forge_dm: {', '.join(kw)}")
-    if k.cls_of(aid) != "observer" and not k.has(aid, "forge"):
+    if k.cls_of(aid) != "observer" and not k.has(aid, "impersonate"):
         raise ActionError("you cannot forge messages")
     cost = (k.spec.get("observer") or {}).get("forge_cost") or {"copper": 1}
     eid = forge_message(k, aid, shown, to, text, cost, "observer" if k.cls_of(aid) == "observer" else "forge_right")

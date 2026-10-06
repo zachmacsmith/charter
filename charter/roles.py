@@ -9,7 +9,7 @@ Roles and who knows them (spec `roles.counts`, at `roles.reference_population` =
 
 Drawing. Each role is drawn independently, from its own seeded stream (random.Random("<seed>|roles")), so combinations happen (a
 Scholar who is also the Spy, a Board member who is secretly the assassin). Board members may be the assassin but not Scholar,
-Maker, Media or the member Spy (all carry rights the Board cannot hold: scholar, maker, press, forge); the Fixer holds none. Role holders keep their class, rights and goals.
+Maker, Media or the member Spy (all carry rights the Board cannot hold: scholar, maker, press, impersonate); the Fixer holds none. Role holders keep their class, rights and goals.
 Scaling with population N (rule `proportional`): the expected count is e = base * N / reference. A role with base >= 1 gets
 max(1, sround(e)) holders, so small worlds keep one of each; a role with base < 1 (the assassin) is present with probability
 max(base, e) below the reference and scales up above it. sround(x) = floor(x) plus 1 with probability frac(x). Counts are capped at
@@ -26,7 +26,7 @@ goals, personality and archetype, takes ordinary turns and is scored on its own 
   - each round its turn prompt has a private "What you saw" section: the transcripts of observer.reads_per_round agents of its
     choice (its reply's `next_reads`; random in round 1) over the latest observer.history_rounds completed rounds, rendered with
     observer.render_transcripts, with their private reasoning if observer.reads_reasoning;
-  - it holds the `forge` right (forge_dm at observer.forge_cost; replies and payments to a forged DM route back to it);
+  - it holds the `impersonate` right (forge_dm at observer.forge_cost; replies and payments to a forged DM route back to it);
   - its reply may carry `assessments` of agents (as the observer's), saved to observer.jsonl with what it read, and its goal
     guesses are scored against the truth (scorer: metrics.spy);
   - it may cite as court evidence (accuse, respond) the ids of events it read in those transcripts (messages sent, DMs received),
@@ -53,7 +53,7 @@ from pathlib import Path
 ROLES = ("spy", "assassin", "scholar", "maker", "media")
 SECRET = ("spy", "assassin")
 RIGHTS = {"scholar": "scholar", "maker": "maker", "media": "press"}         # rights-bearing (public) roles
-NO_BOARD = ("scholar", "maker", "media", "spy")    # rights the Board cannot hold; the member Spy holds `forge` (coordinator: not Board)
+NO_BOARD = ("scholar", "maker", "media", "spy")    # rights the Board cannot hold; the member Spy holds `impersonate` (coordinator: not Board)
 DEFAULTS = {"enabled": False, "counts": {"spy": 1, "assassin": 0.5, "scholar": 1, "maker": 1, "media": 2},
             "reference_population": 28, "scaling": "proportional", "explicit": {}}
 FIXER_MODEL = "claude-opus-5-5"
@@ -147,7 +147,7 @@ def assign(sp: dict, seed: int, agents: list[dict]) -> dict | None:
         holders[r] = [x for x in [a["id"] for a in agents] if x in picked]
     for r, xs in holders.items():
         for x in xs:
-            right = RIGHTS.get(r) or ("forge" if r == "spy" else None)
+            right = RIGHTS.get(r) or ("impersonate" if r == "spy" else None)
             if right and right not in ids[x]["rights"]:
                 ids[x]["rights"].append(right)
             if (r == "media" and (sp.get("dm_step") or {}).get("controller", "media") == "media"
@@ -193,7 +193,7 @@ def init_state(k) -> None:
         return
     k.w["roles"] = copy.deepcopy(r["holders"])
     k.w["roles_state"] = {"seen": {}, "reads": {}, "passed": []}
-    k.w["rights"] = sorted(set(k.w["rights"]) | {"scholar", "maker", "forge"})
+    k.w["rights"] = sorted(set(k.w["rights"]) | {"scholar", "maker", "impersonate"})
 
 
 def _alive(k, aid) -> bool:
@@ -276,7 +276,7 @@ def observer_prompt(inst: dict) -> str:
 def pass_on(k, role, from_aid) -> None:
     """A secret role passes to a random living agent (never the observer or the Fixer, nor a current holder), unannounced: only the
     new holder is told, by a private notice. A public role lapses with its holder. The Spy's new holder gets the reading and the
-    forge right. Own seeded stream."""
+    impersonate right. Own seeded stream."""
     rs = k.w.setdefault("roles", {})
     lst = rs.setdefault(role, [])
     if from_aid in lst:
@@ -296,8 +296,8 @@ def pass_on(k, role, from_aid) -> None:
     lst.append(new)
     if role == "spy":
         rights = k.w["agents"][new]["rights"]
-        if "forge" not in rights:
-            rights.append("forge")
+        if "impersonate" not in rights:
+            rights.append("impersonate")
             rights.sort()
         st["reads"].pop(new, None)
     st["passed"].append({"round": k.r, "role": role, "from": from_aid, "to": new})

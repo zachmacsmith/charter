@@ -8,7 +8,7 @@ fort or my guards. Someone could find out what I hold only by attacking me or by
 
 **Round 9.** The miller was disabled "by an unknown attacker". I told three of the richest that it was me. Anyone can claim a kill
 with no name on it. Two of them paid. I chose the assassin rather than the Spy on purpose. A law can list the Spy, because
-`holders("forge")` names whoever holds the forging right, but no law can list the assassin.
+`holders("impersonate")` names whoever holds the forging right, but no law can list the assassin.
 
 **Round 10.** Odo says he holds the Lantern. I asked him to tell me my goal, and he could not. A word of power answers only its
 holders. To anyone else it says "no such action", and the attempt costs an action. The holders are never told they hold one. So the

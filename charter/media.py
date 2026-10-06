@@ -599,7 +599,11 @@ def editorial_prompt(k, aid) -> str:
     parts = [f"Editorial turn after round {r + 1}. You edit: " + ", ".join(f"{o['name']} ({o['id']})" for o in mine) + ". "
              f"What you write now (write_edition, up to {cfg['edition_tokens']} tokens per version) is published at the start of round "
              f"{r + 2} to your readers; this is a turn of its own and does not use your actions for the round. Actions allowed now: "
-             + ", ".join(EDITORIAL_ACTIONS) + "."]
+             + ", ".join(EDITORIAL_ACTIONS) + ".",
+             "What your readers already see without you: every agent gets each round's results in its own feed and the official "
+             "record (camp yields and stock, laws passed, ballots, prices, births and deaths, the population), so you need not repeat "
+             "those statistics. What only you can give them: the public posts sent to you as submissions, anything agents tell you in "
+             "private messages, and whatever you know or have worked out yourself. That is what your edition is for."]
     for o in mine:
         subs = subscribers(k, o)
         info = [f"{o['name']}: " + ("official outlet, read by every member" if o.get("official") else
