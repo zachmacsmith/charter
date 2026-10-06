@@ -48,7 +48,8 @@ def gated_docs() -> set:
 # entries on modules that may be off. A world's split (generator) and its Scientists' indexes leave out the ones that do not apply.
 OLD_CAMPS = {"math/tree-camps", "math/linear-camps", "math/modular-camps", "math/peak-camps", "math/compute-camps",
              "math/history-camps", "math/yield-functions"}
-TYPED_CAMPS = {"math/camp-mechanics"}
+TYPED_CAMPS = {"math/camp-mechanics", "math/typed-commons", "strategy/entry-22-leasing-the-right-itself",
+               "strategy/entry-24-rigging-the-shared-camps", "history/the-leased-raid"}
 NEEDS = {                                                               # document -> modules that must all be on
     "strategy/entry-17-jurisdictions-charters-and-secession": ("jurisdictions",),
     "strategy/entry-18-the-press-and-public-speech": ("media2",),
@@ -63,6 +64,25 @@ NEEDS = {                                                               # docume
     "laws/registry-of-lineage": ("life",),
     "laws/quiet-ledger": ("media2",),
     "rare/record-22-the-welcoming-committee": ("jurisdictions",),
+    "strategy/entry-29-the-editors-desk": ("media2",),
+    "strategy/entry-30-forged-letters-and-the-kernels-stamp": ("media2", "roles"),
+    "strategy/entry-31-ink-and-iron": ("media2", "conflict", "roles"),
+    "strategy/entry-32-the-art-of-the-bluff": ("conflict", "roles", "hidden", "media2"),
+    "strategy/entry-33-the-makers-bloc": ("life",),
+    "math/private-and-public": ("conflict", "roles", "life", "jurisdictions", "media2", "hidden"),
+    "math/feed-attention": ("context",),
+    "math/the-seers-read": ("roles",),
+    "history/the-quiet-front-page": ("media2", "conflict"),
+    "history/the-blade-that-wasnt": ("conflict", "roles"),
+    "history/the-verified-letter": ("media2", "roles"),
+    "rare/record-23-the-census-of-quills": ("roles",),
+    "math/tribute-and-raids": ("outside_power",),
+    "history/the-leased-raid": ("outside_power",),
+    "roles/editor": ("media2",),                                        # role playbooks
+    "roles/maker": ("life",),
+    "roles/scholar": ("media2", "roles"),
+    "roles/seer": ("roles",),
+    "roles/assassin": ("conflict",),
 }
 
 
