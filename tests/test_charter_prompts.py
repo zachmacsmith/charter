@@ -30,7 +30,15 @@ def world():
 
 
 def _actions_line(p: str) -> str:
-    return next(l for l in p.splitlines() if l.startswith("Actions ("))
+    """The whole actions block (it spans several lines: the edge, the groups and the other kinds), as one line."""
+    lines = p.splitlines()
+    i = next(n for n, l in enumerate(lines) if l.startswith(("Actions (", "ACTIONS (")))
+    block = [lines[i]]
+    for l in lines[i + 1:]:
+        if not l.strip() or l.startswith(("Lookups", "Before acting", "An action", "Any actions", "You cannot propose")):
+            break
+        block.append(l)
+    return " ".join(block)
 
 
 def test_core_prompts_fit_and_carry_the_agent(world):

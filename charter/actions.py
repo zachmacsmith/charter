@@ -1100,6 +1100,10 @@ def _search_board(k, aid, query):
     return CX.act_lookup(k, aid, "search_board", {"query": query})
 
 
+def _recent(k, aid, kind="all", n=5):
+    return CX.act_lookup(k, aid, "recent", {"kind": kind, "n": n})
+
+
 def _search_dms(k, aid, query):
     return CX.act_lookup(k, aid, "search_dms", {"query": query})
 

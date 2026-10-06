@@ -89,7 +89,8 @@ PURPOSE = {
     # memory and lookups
     "manual": "read a manual section: rules, more options",
     "manual_search": "search your manual",
-    "search_board": "search past public posts",
+    "search_board": "search past newspapers, notices and public posts",
+    "recent": "the latest editions, posts, gazette or messages",
     "search_dms": "search your messages",
     "read_file": "read a file",
     "write_scratchpad": "keep notes, shown every turn",

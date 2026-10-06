@@ -21,7 +21,7 @@ def test_combined_classes_inherit_everything():
     p = CX.core_prompt(inst, ls, k)
     assert "You are a Legislator" in p and "You are also a Scientist" in p
     assert CX.LEVERAGE_CLASS["legislator"] in p and CX.LEVERAGE_CLASS["scientist"] in p
-    acts = CX._actions_line(p) if hasattr(CX, "_actions_line") else next(l for l in p.splitlines() if l.startswith("Actions ("))
+    acts = p[p.index("PRE-ACTIONS"):p.index("Your manual (only titles")]   # pre-actions (archive, sandbox) and actions together
     assert "read_archive" in acts and "propose" in acts and "run_python" in acts
     assert "Your archive" in dict(MN.sections(inst, k, ls["id"]))
     wlm = next(a for a in inst["agents"] if a.get("also") == ["legislator", "media"])

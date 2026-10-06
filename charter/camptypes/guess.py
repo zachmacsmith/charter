@@ -48,9 +48,9 @@ class Guess(CampType):
     def state_line(self, k, aid) -> str:
         hist = B.peek(self.camp, PLAY)["history"]
         if not hist:
-            return "open to all"
+            return who_plays(k.inst)
         h = hist[-1]
-        return (f"open to all; last round {h['n']} entrants, average {h['mean']:.3g}, target {h['target']:.3g}, won by "
+        return (who_plays(k.inst) + f"; last round {h['n']} entrants, average {h['mean']:.3g}, target {h['target']:.3g}, won by "
                 f"{', '.join(h['winners']) or 'nobody'}")
 
     def resolve(self, entries: dict) -> tuple:

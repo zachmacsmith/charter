@@ -55,6 +55,7 @@ def sections(inst, k, aid) -> list:
     from charter import agents as AG
     from charter import archive
     from charter import context as CX
+    from charter import purposes as PU
     from charter import hidden as H
     from charter import projects as P
     from charter import scorer
@@ -93,10 +94,16 @@ def sections(inst, k, aid) -> list:
     out.append(("Goals in this world", AG.goal_prior(sp.get("goals"))))
 
     allowed = CX.allowed_actions(inst, a, rights)
-    for cat in ("productive", "economic", "political", "talk"):
-        names = [n for n in allowed if scorer.category(n) == cat and n in AG.ACTION_DOC]
-        if names:
-            out.append((f"Actions: {cat}", "\n".join("- " + AG.action_doc(n, inst, a) for n in names)))
+    edge, groups, kinds = CX.action_layout(allowed, rights)
+    doc = lambda ns: "\n".join("- " + (AG.action_doc(n, inst, a) if n in AG.ACTION_DOC else f"{n}: {PU.purpose(n)}") for n in ns)
+    if edge:
+        out.append(("Actions: your edge", "Only your class or roles can do these.\n" + doc(edge)))
+    for g, ns in groups:
+        out.append((f"Actions: {g.lower()}", doc(ns)))
+    for kd, ns in kinds:
+        out.append((f"Actions: {kd}", doc(ns)))
+    out.append(("Actions: all", "Every action you can take, by kind (open a kind's section for the arguments):\n" + "\n".join(
+        f"- {t}: " + ", ".join(ns) for t, ns in ([("your edge", edge)] if edge else []) + [(g.lower(), ns) for g, ns in groups] + kinds)))
 
     if sp["channels"].get("dm", True):
         dmc = sp.get("dm_step") or {}

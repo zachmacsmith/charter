@@ -283,6 +283,6 @@ def test_core_prompt_never_loses_the_agent_with_every_module_on():
     k = _K(inst)
     for a in inst["agents"]:
         p = _CX.core_prompt(inst, a, k)
-        assert f"You are {a['id']}" in p and "Reply with a JSON object" in p and " post," in p
+        assert f"You are {a['id']}" in p and "Reply with a JSON object" in p and "post (" in p
         assert (a["goal"].get("text") or "")[:40] in p
         assert _CX.tokens(p) <= int(_CX.cfg(inst)["budgets"]["core"]) + 2500      # essentials are never cut; the overview fits around them

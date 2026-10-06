@@ -77,7 +77,8 @@ ACTION_DOC = {
     # context: lookups used as actions, scratchpad and files (charter/context.py; listed only when context is on)
     "manual": 'manual {"section": "<title or number>"}: a section of your manual (free as a lookup; as an action the text comes next turn)',
     "manual_search": 'manual_search {"query": "..."}: find manual sections by keyword',
-    "search_board": 'search_board {"query": "..."}: keyword search over every public post ever made (10 best matches)',
+    "search_board": 'search_board {"query": "..."}: keyword search over every public post ever made and the editions you could read (10 best matches)',
+    "recent": 'recent {"kind": "editions" | "posts" | "gazette" | "dms" | "all", "n": 5}: the latest n of that kind you may see, newest first (editions in full)',
     "search_dms": 'search_dms {"query": "..."}: keyword search over the private messages you sent or received (10 best matches)',
     "read_file": 'read_file {"name": "..."}: read one of your files',
     "write_scratchpad": 'write_scratchpad {"text": "...", "mode": "replace"}: your scratchpad, shown every turn (mode "append" adds to it; the first write each turn uses no action)',

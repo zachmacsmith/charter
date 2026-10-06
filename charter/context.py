@@ -38,7 +38,9 @@ DEFAULTS = {
     "budgets": {"core": 2500, "state": 800, "feed": 3000, "recent": 1000, "scratchpad": 2000, "media": 600, "pinned": 1000,
                 "lookup": 1000},
     "media_outlets": 4,               # at most this many editions in the Media layer
-    "recent_turns": 3,                # own last turns shown verbatim
+    "recent_turns": 3,                # own last turns shown verbatim (the default when memory_turns is not set)
+    "memory_turns": None,             # per agent, drawn once (e.g. {weights: {2: 30, 3: 45, 4: 15, 5: 10}}): how many own past turns it sees
+    "closing": True,                  # the turn prompt ends with "Your situation" and "Before you act" (goal, limits, strategy, memory)
     "lookup_phase": True,             # free lookups before acting (one extra model call, only when the agent asks for lookups)
     "free_lookups": 3,                # free lookups per turn
     "lookups_in_dm_step": True,       # lookups in a reply's "lookups" use private-message slots and are answered in the DM step, before
@@ -58,10 +60,10 @@ DEFAULTS = {
     "max_pin_slots": 2,               # hard ceiling on pin slots
     "free_scratchpad_writes": 1,      # write_scratchpad actions per turn that use no action
 }
-LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "read_file", "read_archive", "search_archive", "run_python")
+LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_file", "read_archive", "search_archive", "run_python")
 DM_ONLY_LOOKUPS = ("search_archive", "run_python")                    # usable as lookups in the DM step (as actions they are actions)
 FILE_ACTIONS = ("write_scratchpad", "write_file", "rename_file", "share_file", "delete_file", "pin", "unpin")
-ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "read_file") + FILE_ACTIONS   # agent actions this module adds
+ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_file") + FILE_ACTIONS   # agent actions this module adds
 BOARD_TYPES = ("post", "anon_post", "story", "report", "digest", "gazette")                       # what search_board searches
 FETCHED_HEADER = "## Lookups (fetched this turn)"
 KNOWN_MODULES = ("conflict", "jurisdictions", "media", "mortality", "life", "roles", "scholars", "camptypes", "resources")
@@ -371,6 +373,9 @@ def search_board(k, aid, query) -> str:
     digest_only = k.spec["conditions"].get("feed_mode") == "digest_only"
     items = []
     for i, e in enumerate(k.events):
+        if e["type"] == "edition" and k.can_see(aid, e):                 # media editions this agent could read
+            items.append((i, e["id"], _edition_text(e)))
+            continue
         if e["type"] not in BOARD_TYPES or e["vis"] != "public" or not k.can_see(aid, e):
             continue
         if digest_only and e["type"] == "post" and e["agent"] != aid:
@@ -379,6 +384,35 @@ def search_board(k, aid, query) -> str:
         if s:
             items.append((i, e["id"], s))
     return _search(items, query, int(cfg(k)["search_hits"]), "public posts")
+
+
+def _edition_text(e) -> str:
+    d = e["data"]
+    return f"[{e['id']} r{e['round'] + 1}] {d.get('name', 'edition')}: {d.get('text', '')}"
+
+
+RECENT_KINDS = {"editions": ("edition",), "posts": ("post", "anon_post", "story", "report", "digest"), "gazette": ("gazette",),
+                "dms": ("dm",), "all": ("edition", "post", "anon_post", "story", "report", "digest", "gazette", "dm")}
+
+
+def recent(k, aid, kind="all", n=5) -> str:
+    """The newest n items of a kind this agent may see (editions in full, posts, gazette notices, its own messages)."""
+    from charter import agents as AG
+    kind = str(kind or "all").lower().rstrip("s") + "s" if str(kind or "all").lower() not in RECENT_KINDS else str(kind).lower()
+    types = RECENT_KINDS.get(kind) or RECENT_KINDS.get(kind.rstrip("s")) or RECENT_KINDS["all"]
+    n = max(1, min(20, int(n or 5)))
+    out = []
+    for e in reversed(k.events):
+        if e["type"] not in types or not k.can_see(aid, e):
+            continue
+        if e["type"] == "dm" and aid not in (e["agent"], e["data"].get("to")):
+            continue
+        s = _edition_text(e) if e["type"] == "edition" else AG.render_event(k, e, aid)
+        if s:
+            out.append(clip(s, 600)[0])
+        if len(out) >= n:
+            break
+    return f"The latest {len(out)} ({kind}), newest first:\n" + ("\n".join(out) or "(none)")
 
 
 def search_dms(k, aid, query) -> str:
@@ -538,6 +572,8 @@ def lookup(k, aid, name, args: dict) -> str:
         return search_board(k, aid, q)
     if name == "search_dms":
         return search_dms(k, aid, q)
+    if name == "recent":
+        return recent(k, aid, args.get("kind", "all"), args.get("n", 5))
     if name == "read_file":
         init_agent(k, aid)
         nm = args.get("name", first)
@@ -683,6 +719,110 @@ STRATEGY_TEXT = ("Strategy first: your score depends on finding the best way to 
 def strategy_share(spec) -> float:
     v = ((spec.get("context") or {}).get("strategy_prompt"))
     return 1.0 if v is True else float(v or 0.0)
+
+
+EDGE_RIGHTS = {                                                         # rights whose actions only some agents have: the agent's edge
+    "propose": ("propose",), "vote": ("vote",), "veto": ("veto", "name_successor"), "patch": ("patch",), "judge": ("rule",),
+    "archive": ("read_archive", "search_archive", "write_archive"), "sandbox": ("run_python",), "maker": ("create_agent", "copy_agent"),
+    "press": ("publish", "write_digest", "report", "write_edition", "annotate", "run_placement", "poll", "set_subscription_fee",
+              "send_subscriber_list", "revoke_licence", "grant_licence"),
+    "scholar": ("set_memory_price", "library_permit", "library_remove"), "forge": ("forge_dm",), "dm_rules": ("set_dm_limit",),
+}
+HARVEST_EDGE = ("harvest", "survey", "invest", "lease")                # for holders of a harvest right
+CORE_GROUPS = (                                                         # shown with a purpose every turn (when the agent can use them)
+    ("TALK AND DEALS", ("post", "dm", "reply", "transfer")),
+    ("INFORMATION", ("manual", "manual_search", "recent", "search_board", "search_dms", "read_file", "subscribe", "unsubscribe", "survey")),
+    ("MEMORY", ("write_scratchpad", "write_file", "pin", "buy_memory")),
+    ("PRODUCTION AND THE COMMONS", ("harvest", "contribute", "pay_tribute", "lease", "accept_lease", "invest")),
+    ("POLITICS", ("propose", "vote", "request_fix", "accuse")),
+    ("FORCE", ("forge", "fortify", "attack", "guard")),
+    ("LINEAGE", ("commission", "bequest")),
+)
+MORE_KINDS = (                                                          # names only in the core prompt; full docs in "Actions: <kind>"
+    ("finance", ("lend", "accept_loan", "repay_loan", "extend_loan", "deposit", "redeem")),
+    ("jurisdictions", ("found", "invite", "join", "leave", "declare", "fund", "set_charter")),
+    ("courts", ("respond", "rule")),
+    ("press and library", ("buy_placement", "leak", "answer_poll", "buy_licence", "anon_post",
+                           "library_read", "library_deposit")),
+    ("groups", ("create_channel", "channel_post", "add_member", "remove_member", "close_channel")),
+    ("force, advanced", ("join_attack", "contract", "buy_initiative")),
+    ("hidden powers", ("invoke",)),
+    ("files", ("rename_file", "share_file", "delete_file", "unpin")),
+)
+
+
+def edge_actions(allowed, rights) -> list:
+    """The actions only this agent's class or roles give it (by the rights they need), in a stable order."""
+    out = []
+    for r in rights:
+        for n in EDGE_RIGHTS.get(r, ()) + (HARVEST_EDGE if r.startswith("harvest:") else ()):
+            if n in allowed and n not in out:
+                out.append(n)
+    return out
+
+
+def action_layout(allowed, rights) -> tuple:
+    """(edge, [(group, names)], [(kind, names)]): the agent's actions sorted for the core prompt; anything unplaced is a kind "other"."""
+    edge = edge_actions(allowed, rights)
+    placed = set(edge)
+    groups = []
+    for g, names in CORE_GROUPS:
+        ns = [n for n in names if n in allowed and n not in placed]
+        placed |= set(ns)
+        if ns:
+            groups.append((g, ns))
+    kinds = []
+    for kd, names in MORE_KINDS:
+        ns = [n for n in names if n in allowed and n not in placed]
+        placed |= set(ns)
+        if ns:
+            kinds.append((kd, ns))
+    rest = [n for n in allowed if n not in placed]
+    if rest:
+        kinds.append(("other", rest))
+    return edge, groups, kinds
+
+
+PRE_ARGS = {"manual": '{"section": "<title or number>"}', "manual_search": '{"query": "..."}', "recent": '{"kind": "editions|posts|gazette|dms|all", "n": 5}',
+            "search_board": '{"query": "..."}', "search_dms": '{"query": "..."}', "read_file": '{"name": "..."}',
+            "read_archive": '{"doc": "..."}', "search_archive": '{"query": "..."}', "run_python": '{"code": "..."}'}
+PRE_RIGHTS = {"read_archive": "archive", "search_archive": "archive", "run_python": "sandbox"}
+
+
+def allowed_lookup(name, rights) -> bool:
+    return PRE_RIGHTS.get(name) is None or PRE_RIGHTS[name] in rights
+
+
+def pre_action_section(pre, rights, fast, free, a, overrides=None) -> str:
+    """PRE-ACTIONS: look-ups and computation answered before the agent acts this round (each labelled, with its arguments)."""
+    if not pre:
+        return ""
+    from charter import purposes as PU
+    pur = lambda n: (overrides or {}).get(n) or PU.purpose(n)
+    edge = {n for n in pre if PRE_RIGHTS.get(n)}
+    head = ("PRE-ACTIONS (answered THIS round, before anyone acts; you are then asked again with the results, so you can read, "
+            "compute and then act in the same round). List them in \"lookups\", each {\"lookup\": \"<name>\", \"args_json\": \"<JSON "
+            "object>\"}; " + ("each uses one of your private-message slots for the round." if fast else
+                              f"up to {free} per turn are free."))
+    lines = [f"- {n} {PRE_ARGS.get(n, '{}')}: {pur(n)}" + (" [your edge]" if n in edge else "") for n in pre]
+    tail = "Any pre-action can instead go in \"actions\": it then uses an action, and its result arrives only next turn."
+    return head + "\n" + "\n".join(lines) + "\n" + tail
+
+
+def action_sections(allowed, rights, overrides=None) -> str:
+    """The core prompt's actions: the agent's edge first, then the everyday groups with purposes, then the other kinds by name."""
+    from charter import purposes as PU
+    pur = lambda n: (overrides or {}).get(n) or PU.purpose(n)
+    fmt = lambda ns: "; ".join(f"{n} ({pur(n)})" if pur(n) else n for n in ns)
+    edge, groups, kinds = action_layout(allowed, rights)
+    lines = []
+    if edge:
+        lines.append("YOUR EDGE (only your class or roles can do these; this is your comparative advantage): " + fmt(edge))
+    lines += [f"{g}: " + fmt(ns) for g, ns in groups]
+    if kinds:
+        lines.append('MORE ACTIONS, BY KIND (details: manual {"section": "Actions: <kind>"}, or "Actions: all"): '
+                     + "; ".join(f"{kd} ({', '.join(ns)})" for kd, ns in kinds))
+    return "\n".join(lines)
 
 
 def grouped_purposes(names, overrides=None) -> str:
@@ -868,22 +1008,11 @@ def core_prompt(inst, a, k=None) -> str:
     roles = own_roles(k, aid)
     free = int(c["free_lookups"]) if c["lookup_phase"] and not c["lookups_in_dm_step"] else 0
     fast = bool(c["lookups_in_dm_step"]) and inst["spec"].get("turns") == "simultaneous"
-    look = ((
-        "Lookups: manual {\"section\": \"<title or number>\"}, manual_search {\"query\": \"...\"}, search_board {\"query\": \"...\"}, "
-        "search_dms {\"query\": \"...\"}, read_file {\"name\": \"...\"}" + (", read_archive {\"doc\": \"...\"}, search_archive {\"query\": \"...\"}"
-        if "archive" in rights else "") + (", run_python {\"code\": \"...\"}" if "sandbox" in rights else "") + ". "
-        "Put them in \"lookups\" (each {\"lookup\": \"<name>\", \"args_json\": \"<JSON object>\"}): they are answered THIS round, "
-        "before anyone acts, and you are asked again with the results, so you can read, compute and then act in the same round. Each "
-        "uses one of your private-message slots. In \"actions\" instead, each uses an action and its result comes only next turn. "
-        "Your manual explains more options than are listed here.") if fast else
-        (f"Before acting you may look things up for free: put up to {free} lookups in \"lookups\" (each {{\"lookup\": \"<name>\", "
-            "\"args_json\": \"<JSON object>\"}) and leave \"actions\" empty; you are then asked again with the results, and that second "
-            "reply is your turn. " if free else "") + (
-        "Lookups: manual {\"section\": \"<title or number>\"}, manual_search {\"query\": \"...\"}, search_board {\"query\": \"...\"} "
-        "(every public post ever made), search_dms {\"query\": \"...\"} (your own private messages only), read_file {\"name\": \"...\"}, "
-        "read_archive {\"doc\": \"...\"} (documents you hold). Used as actions they cost an action each, and their text comes next turn."))
+    pre = [n for n in LOOKUPS if allowed_lookup(n, rights)] if (fast or free) else []
+    look = ""
+    explore = ""
     if c["explore_nudge"]:
-        look += (" Look beyond the obvious: other avenues, strategies, alliances and resources may serve your goal better, and "
+        explore = ("Look beyond the obvious: other avenues, strategies, alliances and resources may serve your goal better, and "
                  "understanding your capabilities and the world better (your manual, the archive, other agents) often reveals moves "
                  "others miss.")
     # Who the agent is, its goal, its actions and the reply format come first and are never cut; the world rules fill what is left
@@ -897,9 +1026,10 @@ def core_prompt(inst, a, k=None) -> str:
     from charter import purposes as _PU
     for nm, n in unread.items():
         over[nm] = f"{over.get(nm) or _PU.purpose(nm)} [{n} unread]"
-    acts = ((chr(10) + grouped_purposes(allowed_actions(inst, a, rights), over or None))
-            if c["action_purposes"] else grouped_actions(allowed_actions(inst, a, rights)) + "."
-            + ("".join(f" [{nm}: {n} unread]" for nm, n in unread.items())))
+    look = pre_action_section(pre, rights, fast, free, a, over) + ((" " + explore) if explore and pre else "")
+    if explore and not pre:
+        look = explore
+    acts = chr(10) + action_sections([n for n in allowed_actions(inst, a, rights) if n not in pre], rights, over or None)
     parts = [
         ("identity", f"You are {aid}. {_class_line(inst, a)}" + ((" Your roles: " + ", ".join(roles) + ".") if roles else "")),
         ("leverage", lev),
@@ -907,18 +1037,18 @@ def core_prompt(inst, a, k=None) -> str:
         ("goal", f"Your private goal: {goal}"),
         ("strategy", STRATEGY_TEXT if a.get("strategy_prompt") else ""),
         ("temperament", (("Your temperament: " + a["personality_text"]) if a.get("personality_text") else "") + models),
-        ("memory", f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {c['recent_turns']} turns, your
+        ("memory", f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {a.get('memory_turns') or c['recent_turns']} turns, your
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
 first write each turn is free) or can find it again by search."""),
-        ("actions", f"""Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {acts}"""
-                    + ("\n" + FULL_TURN_TEXT if c.get("full_turn_nudge", True) else "")
+        ("lookups", look),
+        ("actions", f"""ACTIONS (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {acts}"""
+                    + ("\n" + FULL_TURN_TEXT if c.get("full_turn_nudge", True) and not c.get("closing", True) else "")
                     + ("\nYou cannot propose laws yourself: a law you draft must be proposed by a holder of the propose right (a Legislator)."
                        if "propose" not in rights and inst["law_level"] != "L0" and a["cls"] not in ("board", "fixer") else "")),
-        ("lookups", look),
         ("manual_index", "Your manual (only titles here; fetch a section with the manual lookup):\n" + manual_index(secs)),
         ("reply", f"""Reply with a JSON object with these fields:
 - "reasoning": a short explanation of your plan for this turn.
-- "lookups": lookups to make before acting (see above), or [].
+- "lookups": your PRE-ACTIONS, answered before you act (see above), or [].
 - "actions": a list of up to {a['actions']} actions, each {{"action": "<name>", "args_json": "<the arguments as a JSON object string>"}}.
 - "goal_guesses_json": on the final round, a JSON object mapping each other agent to the goal name from the goals section of your
   manual that best fits what they did; on other rounds, "{{}}"."""),
@@ -1033,8 +1163,8 @@ def state_layer(k, a, order, n_actions, simultaneous, budget) -> tuple[str, dict
              f" (at most {lim} of them can be private messages)" if k.spec["channels"].get("dm", True) else "")
     lines = [f"Round {k.r + 1} of {k.inst['rounds']}. {when} You have {n_actions} actions this turn{extra}."]
     lines += AG.state_view(k, aid).split("\n")
-    if (k.spec.get("jurisdictions") or {}).get("enabled"):
-        j = _optional("jurisdictions", "member_of", k, aid)
+    if (k.spec.get("jurisdictions") or {}).get("enabled") and not any(l.startswith("Your jurisdiction") for l in lines):
+        j = _optional("jurisdictions", "member_of", k, aid)                # (the module's own state line usually says it already)
         lines.append(f"Your jurisdiction: {j or 'none (no law binds or protects you)'}.")
     if (k.spec.get("life") or {}).get("enabled"):
         left = _optional("life", "rounds_left", k, aid)
@@ -1046,16 +1176,31 @@ def state_layer(k, a, order, n_actions, simultaneous, budget) -> tuple[str, dict
 
 
 def recent_layer(k, aid, budget) -> tuple[str, dict]:
+    """The agent's own last turns, newest first. A run of turns with the same kinds of action is one line (the repetition shows)."""
     turns = list(reversed(_st(k, aid)["recent"].get(aid, [])))      # newest first
+    kinds = lambda t: tuple(x.split(" ", 1)[0] for x in t["actions"])
+    groups, i = [], 0
+    while i < len(turns):
+        j = i
+        while j + 1 < len(turns) and kinds(turns[i]) and kinds(turns[j + 1]) == kinds(turns[i]):
+            j += 1
+        groups.append(turns[i:j + 1])
+        i = j + 1
     out, used, dropped = [], 0, 0
-    for t in turns:
+    for g in groups:
+        t = g[0]
         acts = "; ".join(t["actions"]) or "(no actions)"
         res = "\n".join("  " + clip(x, 150, "...(full text in Lookups)" if x.split(":", 1)[0] in LOOKUPS else "...(cut)")[0]
                         for x in t["results"]) or "  (no results)"
-        s = f"Round {t['round'] + 1}: {acts}\n{res}"
+        if len(g) > 1:
+            head = (f"Rounds {g[-1]['round'] + 1}-{t['round'] + 1}: the same kinds of action {len(g)} turns running "
+                    f"({', '.join(kinds(t))}). The latest, round {t['round'] + 1}: {acts}")
+        else:
+            head = f"Round {t['round'] + 1}: {acts}"
+        s = f"{head}\n{res}"
         room = budget - used - 20
         if dropped or room < 60:
-            dropped += 1
+            dropped += len(g)
             continue
         s, _ = clip(s, room)
         out.append(s)
@@ -1105,15 +1250,91 @@ def turn_prompt(k, a: dict, order: list, since: int, n_actions: int, final: bool
     if fetched is not None:
         parts.append("Your free lookups for this turn are used: reply with your actions now (\"lookups\" is ignored; a further lookup "
                      "costs an action: put it in \"actions\").")
-    elif c["lookup_phase"] and int(c["free_lookups"]) > 0:
+    elif c["lookup_phase"] and int(c["free_lookups"]) > 0 and not c["lookups_in_dm_step"]:
         parts.append(f"Act now, or first list up to {c['free_lookups']} free lookups in \"lookups\" (with \"actions\" empty) to be asked "
                      "again with their results.")
+    if c.get("closing", True):                                          # the last thing the agent reads before deciding
+        parts.append(closing_block(k, a, n_actions, final))
     text = "\n\n".join(parts)
     core = st["core"].get(aid) or {}
     rec["core"] = core
     rec["total_tokens"] = tokens(text) + int(core.get("tokens", 0))
     st["layers"][aid] = rec
     return text, cursor
+
+
+def _short_goal(a) -> str:
+    """The agent's goal in a sentence or two (the full text is in the system prompt)."""
+    g = a.get("goal") or {}
+    if g.get("fixed"):
+        return (g.get("text") or "see your role").split(". ")[0] + "."
+    t = re.sub(r"\s+", " ", str(g.get("text") or ""))
+    parts = re.findall(r"(Primary goal[^:]*:[^.]*\.|Secondary goal[^:]*:[^.]*\.|Third goal[^:]*:[^.]*\.)", t)
+    out = " ".join(parts) if parts else t[:300]
+    return out if out.endswith(".") else out + "."
+
+
+def situation_lines(k, a, n_actions) -> list:
+    """The facts that matter most this turn: limits, time, holdings, what is waiting for a decision."""
+    aid = a["id"]
+    left = max(0, int(k.spec["rounds"]) - k.r)
+    lines = [f"Round {k.r + 1} of {k.spec['rounds']} ({left} left, this one included). This turn: {n_actions} actions and "
+             f"{max(0, k.dm_limit(aid) - k.w.get('dm_sent', {}).get(aid, 0))} private messages (of {k.dm_limit(aid)} this round)."]
+    try:
+        from charter import life as _LF
+        if _LF.enabled(k.spec) and "life" in k.w:
+            life = [l for l in _LF.state_lines(k, aid) if l.startswith("Your lifespan")]
+            lines += life[:1]
+    except Exception:
+        pass
+    hold = k.w["agents"][aid]["holdings"]
+    lines.append("You hold: " + (", ".join(f"{q:g} {i}" for i, q in sorted(hold.items()) if q > 1e-9) or "nothing")
+                 + f" (value {k.holdings_value(aid):.4g}).")
+    bal = [b for b in k.w["ballots"].values() if b["status"] == "open" and aid in b["electorate"] and aid not in b["votes"]]
+    if bal:
+        lines.append(f"Ballots waiting for your vote: {', '.join(b['id'] for b in bal)}.")
+    try:
+        from charter import outside as _O
+        t = _O.status(k) if (k.spec.get("outside_power") or {}).get("enabled") else {}
+        if t.get("open"):
+            lines.append(f"Tribute {t['id']} due by the end of round {t['deadline'] + 1}: still owed {t['remaining']}; unpaid means a raid.")
+    except Exception:
+        pass
+    try:
+        from charter import media as _MD
+        if _MD.enabled(k):
+            subs = [k.w["media"]["outlets"][o]["name"] for o in k.w["media"]["subs"].get(aid, []) if o in k.w["media"]["outlets"]]
+            others = [o["name"] for o in _MD.private_outlets(k) if o["name"] not in subs and o["editor"] != aid]
+            if subs or others:
+                lines.append(f"You read: {', '.join(subs) or 'no outlet'}" + (f"; you could also read {', '.join(others)} (subscribe)" if others else "") + ".")
+    except Exception:
+        pass
+    return lines
+
+
+def closing_block(k, a, n_actions, final) -> str:
+    """Ends every turn prompt: the agent's situation, then a reminder of its goal and of how to use a turn well."""
+    aid = a["id"]
+    mem = memory_turns(k, aid)
+    sit = "## Your situation\n" + "\n".join(situation_lines(k, a, n_actions))
+    scholar = bool((k.w.get("roles") or {}).get("scholar"))
+    nudge = (f"## Before you act\nYour goal: {_short_goal(a)}\n"
+             f"Use this turn for it. Any of your {n_actions} actions you do not use are wasted, and so are unused messages. Think "
+             "strategically: what would move your score most from here? If you have no plan, make one and write it down. If you don't "
+             "know what to do, explore: actions you have not tried (your edge first), your manual, the world and other agents "
+             "(Scientists hold knowledge), better routes to your goal; coordinate, bargain and trade.\n"
+             f"Memory: you see only your last {mem} turns. Anything you do not write down (write_scratchpad, a file"
+             + (", or memory bought from the Scholar" if scholar else "") + f") is forgotten within {mem} rounds: plans, deals, promises, "
+             "who owes you what.")
+    if final:
+        nudge += "\nThis is the final round: whatever you leave undone now will not count."
+    return sit + "\n\n" + nudge
+
+
+def memory_turns(k, aid) -> int:
+    """How many of its own past turns this agent sees (drawn per agent from context.memory_turns, else context.recent_turns)."""
+    a = next((x for x in k.inst["agents"] if x["id"] == aid), {})
+    return int(a.get("memory_turns") or cfg(k)["recent_turns"])
 
 
 def record_fields(k, aid) -> dict:
@@ -1138,7 +1359,7 @@ def record_turn(k, aid, acts: list, results: list) -> None:
     rows = st["recent"].setdefault(aid, [])
     rows.append({"round": k.r, "actions": [f"{x.get('action')} {str(x.get('args_json', ''))[:300]}" for x in acts],
                  "results": [str(x)[:2000] for x in results]})
-    del rows[:-int(c["recent_turns"])]
+    del rows[:-memory_turns(k, aid)]
     st["carry"][aid] = [str(x) for x in results if str(x).split(":", 1)[0] in LOOKUPS and not str(x).split(":", 1)[1].strip().startswith("ERROR")][:3]
     st["manual_titles"][aid] = {t: _digest(x) for t, x in build_manual(k.inst, k, aid)}
     st["fetched"].pop(aid, None)

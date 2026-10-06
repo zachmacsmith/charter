@@ -66,9 +66,9 @@ class Partners(CampType):
     def state_line(self, k, aid) -> str:
         hist = B.peek(self.camp, PLAY)["history"]
         if not hist:
-            return "open to all"
+            return who_plays(k.inst)
         last = hist[-1]
-        return "open to all; last round " + ("; ".join(f"{a} {PAST[ma]}, {b} {PAST[mb]}" for a, ma, b, mb in last["pairs"]) or "no pairs")
+        return who_plays(k.inst) + "; last round " + ("; ".join(f"{a} {PAST[ma]}, {b} {PAST[mb]}" for a, ma, b, mb in last["pairs"]) or "no pairs")
 
     def harvest(self, k, aid, args) -> dict:
         partner = str(args.get("partner")).strip()

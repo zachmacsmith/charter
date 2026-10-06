@@ -21,7 +21,7 @@ from charter import roles as R
 from charter import spec as S
 
 PER_ENTITY = [("archive_split", "copies"), ("camps", "regrowth_r"), ("camps", "start_stock"), ("camps", "noise"), ("camps", "holders_per_worker"), ("camps", "compute"),
-              ("personality", "dist"), ("actions_jitter",), ("dm_step", "dms_jitter"), ("regime",),
+              ("personality", "dist"), ("actions_jitter",), ("dm_step", "dms_jitter"), ("context", "memory_turns"), ("regime",),
               ("events",)]          # regime: drawn by regimes.resolve (own RNG), kept as is
 NAMES = ["Ada", "Bram", "Cleo", "Dov", "Esme", "Finn", "Greta", "Hugo", "Ines", "Jory", "Kai", "Lena", "Milo", "Nell", "Omar", "Pia",
          "Quin", "Rhea", "Soren", "Tova", "Uri", "Vera", "Wren", "Xavi", "Yara", "Zane", "Abel", "Bea", "Cyrus", "Dara", "Elio", "Faye",
@@ -41,6 +41,12 @@ def dm_extra(sp, seed, aid) -> int:
     """An agent's extra private messages per round over the general limit (dm_step.dms_jitter), from its own stream."""
     j = (sp.get("dm_step") or {}).get("dms_jitter", 0)
     return int(S.draw(j, random.Random(f"{seed}|dm_extra|{aid}"))) if j else 0
+
+
+def memory_turns(sp, seed, aid) -> int | None:
+    """How many of its own past turns an agent sees (context.memory_turns, drawn per agent from its own stream); None: the default."""
+    m = (sp.get("context") or {}).get("memory_turns")
+    return int(S.draw(m, random.Random(f"{seed}|memory_turns|{aid}"))) if m else None
 
 
 def has_cls(a: dict, cls: str) -> bool:
@@ -297,6 +303,9 @@ def generate(spec: dict, seed: int) -> dict:
     for a in agents:
         a["actions"] = int(sp["actions_per_turn"]) + int(S.draw(sp.get("actions_jitter", 0), rng))
         a["dm_extra"] = dm_extra(sp, seed, a["id"])
+        mt = memory_turns(sp, seed, a["id"])
+        if mt:
+            a["memory_turns"] = mt
 
     # the fixed archive is split between the Scientists: each document goes to `copies` of them (the README to everyone)
     from charter import archive as _archive

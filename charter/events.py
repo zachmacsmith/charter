@@ -376,6 +376,9 @@ def add_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None, child=N
     from charter import generator as _GEN                              # its own drawn extra private messages, like the founders'
     a["dm_extra"] = _GEN.dm_extra(sp, k.inst["seed"], aid)
     k.w.setdefault("dm_extra", {})[aid] = a["dm_extra"]
+    mt = _GEN.memory_turns(sp, k.inst["seed"], aid)
+    if mt:
+        a["memory_turns"] = mt
     if not child:                                                       # jurisdictions: a newcomer starts where the founders started
         from charter import jurisdictions as J
         J.assign_arrival(k, aid)

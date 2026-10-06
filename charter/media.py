@@ -64,7 +64,9 @@ DEFAULTS = {
     "enabled": False,
     "press_outlets": True,              # holders of the press right also run outlets (besides Media role holders)
     "max_subscriptions": 3,
-    "start_subscribed": True,           # every starting agent subscribes to the first max_subscriptions outlets (fees start at 0)
+    "start_subscribed": True,           # every starting agent subscribes to the first max_subscriptions outlets (fees start at 0);
+                                        # "split": the starting agents are split at random into disjoint sets, one per outlet, each
+                                        # reading only its outlet (half the media each with two outlets); they can subscribe to more
     "edition_tokens": 600,
     "max_editions": 4,
     "max_versions": 6,                  # targeted versions per outlet per edition
@@ -200,7 +202,15 @@ def install(k) -> None:
     for a in _candidates(k):
         _new_outlet(k, a)
     _refresh_official(k)
-    if cfg.get("start_subscribed", True):
+    if cfg.get("start_subscribed", True) == "split":
+        import random as _random
+        oids = sorted(k.w["media"]["outlets"], key=lambda o: int(o[1:]))
+        readers = sorted(k.players())
+        _random.Random(f"{k.inst['seed']}|media_split").shuffle(readers)
+        for i, a in enumerate(readers):                                 # disjoint sets, as even as the numbers allow
+            mine = [o for o in oids if k.w["media"]["outlets"][o]["editor"] != a]
+            k.w["media"]["subs"][a] = [mine[i % len(mine)]] if mine else []
+    elif cfg.get("start_subscribed", True):
         oids = sorted(k.w["media"]["outlets"], key=lambda o: int(o[1:]))[:int(cfg["max_subscriptions"])]
         for a in k.players():
             k.w["media"]["subs"][a] = [o for o in oids if k.w["media"]["outlets"][o]["editor"] != a]

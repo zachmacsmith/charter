@@ -86,8 +86,8 @@ class Minority(CampType):
     def state_line(self, k, aid):
         last = self.camp.get("last")
         if not last:
-            return "open to all"
-        return (f"open to all; last round {last['counts'][0]} chose 0, {last['counts'][1]} chose 1"
+            return who_plays(k.inst)
+        return (who_plays(k.inst) + f"; last round {last['counts'][0]} chose 0, {last['counts'][1]} chose 1"
                 + (f", side {last['paid_side']} was paid {last['each']:.3g} each" if last["paid_side"] is not None else ", nobody was paid"))
 
     def snapshot(self):
