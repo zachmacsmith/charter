@@ -301,6 +301,8 @@ def test_archive_laws_check_and_dry_run_and_index_reads():
     k = make("E6", seed=3)
     blocks = 0
     for f in sorted((Path(archive.ROOT) / "laws").glob("*.md")):
+        if not archive.applies(f"laws/{f.stem}", k.spec):                # documents for worlds with other modules
+            continue
         for code in re.findall(r"```python\n(.*?)```", f.read_text(), re.S):
             lid = k.new_law(code, by_cls(k, "legislator")[0])
             k.dry_run(lid)                                            # raises if any archive law is broken
@@ -805,3 +807,14 @@ def test_vote_choice_synonyms():
     from charter.actions import _normalise_args as N
     for key in ("option", "vote", "answer", "value", "position"):
         assert N("vote", {"ballot": "B1", key: "yes"}) == {"ballot": "B1", "choice": "yes"}
+
+
+def test_archive_sample_keeps_the_core_and_varies_the_rest():
+    from charter import archive
+    sp = spec.apply_overrides(spec.load("society"), ["archive_split.sample=0.5", "archive_split.always=[roles/, strategy/README]"])
+    a, b = archive.present(sp, 1), archive.present(sp, 2)
+    assert a != b and "strategy/README" in a and "math/camp-mechanics" in a and "math/camp-mechanics" in b
+    inst = generator.generate(sp, 1)
+    held = {d for x in inst["agents"] for d in (x.get("archive_docs") or []) if not d.startswith("rare/")}
+    assert held <= a | {"README"} | set(sp["archive_split"]["required"]) | archive.gated_docs()   # gated docs: handed out by their module
+    assert archive.present(spec.load("E4"), 1) == {d for d in archive.docs(None, spec=spec.load("E4")) if d != "README" and not d.startswith("rare/")}

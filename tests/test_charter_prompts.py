@@ -114,7 +114,7 @@ def test_every_non_rare_document_reaches_some_scientist(world):
     from charter import archive as A
     inst, _ = world
     held = {d for a in inst["agents"] if a["cls"] == "scientist" for d in a.get("archive_docs") or []}
-    assert not {d for d in A.docs(None, spec=inst["spec"]) if not d.startswith("rare/")} - held   # only rare records may go unheld
+    assert not A.present(inst["spec"], inst["seed"]) - held                 # every document in this world's sample has a holder
 
 
 def test_prompts_do_not_contradict_the_rules(world):

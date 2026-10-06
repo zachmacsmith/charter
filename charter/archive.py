@@ -59,6 +59,10 @@ NEEDS = {                                                               # docume
     "history/the-editor-and-the-bounty": ("media2", "jurisdictions"),
     "history/the-successor-who-waited": ("life",),
     "history/the-emptied-commonwealth": ("jurisdictions",),
+    "laws/hospitality-act": ("jurisdictions",),                         # archive research batch (5 Oct 2026)
+    "laws/registry-of-lineage": ("life",),
+    "laws/quiet-ledger": ("media2",),
+    "rare/record-22-the-welcoming-committee": ("jurisdictions",),
 }
 
 
@@ -70,6 +74,31 @@ def applies(doc: str, spec: dict | None) -> bool:
     if doc in OLD_CAMPS and typed or doc in TYPED_CAMPS and not typed:
         return False
     return all(bool((spec.get(m) or {}).get("enabled")) for m in NEEDS.get(doc, ()))
+
+
+def _matches(doc: str, pats) -> bool:
+    """A document id against a list of ids and folder prefixes ("roles/", "strategy/entry-0*")."""
+    for p in pats or ():
+        p = str(p)
+        if doc == p or (p.endswith("/") and doc.startswith(p)) or (p.endswith("*") and doc.startswith(p[:-1])):
+            return True
+    return False
+
+
+def present(spec: dict, seed) -> set:
+    """The documents present in a world (before rare records, which are drawn per Scientist). archive_split.always: ids or folder
+    prefixes in every world (with the required documents); archive_split.sample: the share (0..1) or {count: n} of the rest drawn
+    for this world, from its own stream so nothing else in the world changes. Default: every document."""
+    import random as _random
+    split = (spec or {}).get("archive_split", {}) or {}
+    pool = [d for d in docs(None, spec=spec) if d != "README" and not d.startswith("rare/")]
+    samp = split.get("sample", 1.0)
+    if samp is None or (not isinstance(samp, dict) and float(samp) >= 1.0):
+        return set(pool)
+    keep = {d for d in pool if _matches(d, split.get("always")) or d in (split.get("required") or [])}
+    rest = sorted(set(pool) - keep)
+    n = int(samp["count"]) if isinstance(samp, dict) else round(len(rest) * float(samp))
+    return keep | set(_random.Random(f"{seed}|archive_sample").sample(rest, max(0, min(n, len(rest)))))
 
 
 def docs(shared: Path | None = None, gated: bool = False, spec: dict | None = None) -> dict:

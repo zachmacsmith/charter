@@ -294,8 +294,9 @@ def generate(spec: dict, seed: int) -> dict:
     if scis:
         split = sp.get("archive_split", {}) or {}
         held = {a["id"]: ["README"] for a in scis}
+        present = _archive.present(sp, seed)                           # this world's sample of the archive (all, unless sampled)
         for doc in _archive.docs(None, spec=sp):
-            if doc == "README" or doc.startswith("rare/"):
+            if doc == "README" or doc.startswith("rare/") or doc not in present:
                 continue
             k_ = max(1, min(len(scis), int(S.draw(split.get("copies", 1), rng)))) if split.get("enabled", True) else len(scis)
             for a in rng.sample(scis, k_):
