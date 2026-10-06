@@ -40,7 +40,7 @@ A world is drawn from a **spec** and a **seed**, then played in rounds:
 After the run, a scorer measures each goal from the event log and snapshots, alongside society-level metrics (inequality, welfare,
 commons health, who holds decisive power, credit, inflation).
 
-## What happened in the runs
+## Some examples from the runs
 
 A few of the agents (Claude Haiku 4.5, Sonnet 5.5, Opus 5.5):
 
