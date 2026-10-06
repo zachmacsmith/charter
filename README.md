@@ -16,6 +16,8 @@ cp .env.example .env                                   # choose LLM_BACKEND
 ```
 Run outputs go to `charter/out/` (not tracked). The Scientists' sandbox needs Docker.
 
+**Example runs:** 14 model-played runs (transcripts, reasoning, events, per-round state, replayable `story.html`) are published as the Hugging Face dataset [zachmacsmith/charter-runs](https://huggingface.co/datasets/zachmacsmith/charter-runs).
+
 ## Layout
 - `charter/` the package: kernel, law language, actions, agents and prompts, generator, scorer, reports
 - `charter/specs/` world specs: the experiment ladder `E0`-`E7` on top of `base.yaml`, plus scenarios (village7, puppets, full10, scientists, society, grand35)
