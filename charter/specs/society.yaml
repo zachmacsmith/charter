@@ -9,10 +9,13 @@ actions_per_turn: 4
 models:
   mix: balanced
   balanced: [claude-sonnet-5-5, claude-haiku-4-5, claude-sonnet-5-5, claude-opus-5-5]
+  deal_by_class: true                 # every class gets the mix in proportion (no all-Sonnet legislature by chance)
 law_level: L4
 constitution: assembly
 goals: {new_features: true}
-camps: {model: types}                 # the standard set: tutorial, solo-science landscape, two coordination camps, a social game, maybe a wildcard
+camps:                                # the standard set: tutorial, solo-science landscape, two coordination camps, a social game, maybe a wildcard
+  model: types
+  typed: {open_classes: [worker]}     # open camps (social games) are for Workers: other classes earn through their roles
 context:
   enabled: true                       # fixed-layer prompts, manual, lookups, scratchpad
   file_space: 1000                    # one starting file; more is bought from the Scholar
@@ -39,3 +42,4 @@ shared_archive: {namespace: society}
 archive_split:                        # each world holds a sample of the archive; a small core is always present
   sample: 0.6
   always: [treatises/the-clerks-manual, math/regrowth, math/currency, math/voting-power]
+  every_scientist: [treatises/the-clerks-manual]   # the foundation of law design: every Scientist holds a copy

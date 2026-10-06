@@ -260,6 +260,9 @@ def generate(spec: dict, seed: int) -> dict:
         lst = list(sp["models"].get("balanced") or [pool["weak"], pool["strong"], strongest])
         ids = [a["id"] for a in agents]
         rng.shuffle(ids)
+        if sp["models"].get("deal_by_class"):                       # each class gets the mix in proportion (the same draws)
+            cls_of = {a["id"]: a["cls"] for a in agents}
+            ids = sorted(ids, key=lambda x: cls_of[x])                  # stable: the shuffled order within each class
         balanced = {aid: lst[i % len(lst)] for i, aid in enumerate(ids)}
     by_class = sp["models"].get("by_class") or {}                  # {legislator: claude-haiku-4-5}: every agent of the class, before overrides
     for a in agents:
@@ -316,6 +319,11 @@ def generate(spec: dict, seed: int) -> dict:
                 a = req_rng.choice(scis)
                 a["archive_docs"] = sorted(a["archive_docs"] + [doc])
         MD.archive_split(sp, seed, scis)                               # media2: gated documents (Media laws, rare record), own stream
+        for doc in split.get("every_scientist") or []:                  # foundations every Scientist holds (e.g. the clerk's manual)
+            if doc in alldocs:
+                for a in scis:
+                    if doc not in a["archive_docs"]:
+                        a["archive_docs"] = sorted(a["archive_docs"] + [doc])
         if split.get("empty"):                                          # a control world: Scientists hold only the README
             for a in scis:
                 a["archive_docs"] = ["README"]

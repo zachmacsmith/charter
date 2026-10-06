@@ -58,7 +58,8 @@ DEFAULTS = {
     "max_pin_slots": 2,               # hard ceiling on pin slots
     "free_scratchpad_writes": 1,      # write_scratchpad actions per turn that use no action
 }
-LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "read_file", "read_archive")
+LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "read_file", "read_archive", "search_archive", "run_python")
+DM_ONLY_LOOKUPS = ("search_archive", "run_python")                    # usable as lookups in the DM step (as actions they are actions)
 FILE_ACTIONS = ("write_scratchpad", "write_file", "rename_file", "share_file", "delete_file", "pin", "unpin")
 ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "read_file") + FILE_ACTIONS   # agent actions this module adds
 BOARD_TYPES = ("post", "anon_post", "story", "report", "digest", "gazette")                       # what search_board searches
@@ -177,7 +178,8 @@ def _st(k, aid=None) -> dict:
 
 def scratchpad_size(k, aid) -> int:
     """Tokens this agent's scratchpad holds (k.w["context"]["scratchpad_size"][aid] overrides the default, e.g. for Life's stats)."""
-    return int(_st(k, aid)["scratchpad_size"].get(aid, cfg(k)["budgets"]["scratchpad"]))
+    from charter import life as _LF                                     # plus a child's bought scratchpad tokens (Life stats)
+    return int(_st(k, aid)["scratchpad_size"].get(aid, cfg(k)["budgets"]["scratchpad"])) + int(_LF.stat(k, aid, "scratchpad", 0) or 0)
 
 
 def used_space(k, aid) -> int:
@@ -543,6 +545,12 @@ def lookup(k, aid, name, args: dict) -> str:
     if name == "read_archive":
         from charter import actions as A
         return A.act(k, aid, "read_archive", {"doc": args.get("doc", first)})
+    if name == "search_archive":
+        from charter import actions as A
+        return A.act(k, aid, "search_archive", {"query": q})
+    if name == "run_python":                                            # the sandbox, answered before acting (DM step)
+        from charter import actions as A
+        return A.act(k, aid, "run_python", {"code": args.get("code", first)})
     raise _error(f"no lookup {name!r}; lookups: {', '.join(LOOKUPS)}")
 
 
@@ -556,9 +564,15 @@ def dm_step_lookup(k, aid, q) -> str:
     except A.ActionError:
         args = {}
     sent = k.w.setdefault("dm_sent", {})
-    if sent.get(aid, 0) >= k.dm_limit(aid):
+    bought = k.w.setdefault("bought_lookups_used", {})                  # life: a child's bought lookups come before message slots
+    key = f"{k.r}|{aid}"
+    from charter import life as _LF
+    if bought.get(key, 0) < int(_LF.stat(k, aid, "lookups", 0) or 0):
+        bought[key] = bought.get(key, 0) + 1
+    elif sent.get(aid, 0) >= k.dm_limit(aid):
         return f"Lookup {name}: not fetched (no private-message slots left this round; use it as an action instead)."
-    sent[aid] = sent.get(aid, 0) + 1
+    else:
+        sent[aid] = sent.get(aid, 0) + 1
     try:
         text = lookup(k, aid, name, args)
     except (A.ActionError, TypeError) as e:
@@ -749,8 +763,11 @@ def _class_line(inst, a) -> str:
 def _one_class_line(inst, a) -> str:
     from charter import agents as AG
     if a["cls"] == "scientist":
-        return ("You are a Scientist: you have a private Python sandbox (you start with no harvest rights: only open camps, or rights a law "
-                "grants you; you need Workers' data), and with the other Scientists you alone can read the archive (read_archive, "
+        from charter.camptypes import framework as _CTF
+        oc = _CTF.open_classes(inst["spec"])
+        where = "open camps, a lease, or rights a law grants you" if oc is None or "scientist" in oc else "a lease, or rights a law grants you"
+        return (f"You are a Scientist: you have a private Python sandbox (you start with no harvest rights: only {where}; "
+                "you need Workers' data), and with the other Scientists you alone can read the archive (read_archive, "
                 "search_archive). Before your world ends, leave one note for the Scientists of later worlds in the Scientists' log (write_archive: "
                 "one note per world; it can help them, or mislead them). Your documents hold "
                 "secrets and strategy nobody else starts with: how the camps really pay, how laws are made and what a law can reach, the "
@@ -793,11 +810,13 @@ def overview(inst) -> str:
     with the details. The full rules are the manual's "World rules" section (and module sections)."""
     sp = inst["spec"]
     on = lambda m: bool((sp.get(m) or {}).get("enabled"))
-    camps = "; ".join(f"{c['id']} {c['resource']}" + (f" ({CAMP_SHORT.get(c.get('type'), 'dials and a hidden rule')}; {harvest_args(c)})"
+    from charter.camptypes import framework as _CTF
+    _short = {t: v.replace("open to all but the Board and Fixer", _CTF.open_text(inst["spec"])) for t, v in CAMP_SHORT.items()}
+    camps = "; ".join(f"{c['id']} {c['resource']}" + (f" ({_short.get(c.get('type'), 'dials and a hidden rule')}; {harvest_args(c)})"
                                                       if c.get("type") else f" (tier {c.get('tier')}: dials and a hidden rule)")
                       for c in inst["camps"])
     lines = [f"Charter: {len(inst['agents'])} agents, {inst['rounds']} rounds. Your score is your goal (below), computed from the final state.",
-             f"Camps: {camps}. You harvest only where you hold a harvest right (or at open camps); stocks regrow, so overharvesting hurts "
+             f"Camps: {camps}. You harvest only where you hold a harvest right (or at an open camp, if your class may play it); stocks regrow, so overharvesting hurts "
              "everyone. [manual: World rules]",
              "Money: barter until a law creates a currency; a backed coin is worth its reserve per coin; unbacked coins are worth 0 at the end. "
              "[manual: World rules]",
@@ -846,11 +865,13 @@ def core_prompt(inst, a, k=None) -> str:
     free = int(c["free_lookups"]) if c["lookup_phase"] and not c["lookups_in_dm_step"] else 0
     fast = bool(c["lookups_in_dm_step"]) and inst["spec"].get("turns") == "simultaneous"
     look = ((
-        "Lookups (manual {\"section\": \"<title or number>\"}, manual_search {\"query\": \"...\"}, search_board {\"query\": \"...\"}, "
-        "search_dms {\"query\": \"...\"}, read_file {\"name\": \"...\"}, read_archive {\"doc\": \"...\"}) cost something either way: "
-        "put them in \"lookups\" (each {\"lookup\": \"<name>\", \"args_json\": \"<JSON object>\"}) to have them answered before anyone acts "
-        "(each uses one of your private-message slots, and you are asked again with the text), or in \"actions\", where each uses an "
-        "action and its text comes next turn. Your manual explains more options than are listed here.") if fast else
+        "Lookups: manual {\"section\": \"<title or number>\"}, manual_search {\"query\": \"...\"}, search_board {\"query\": \"...\"}, "
+        "search_dms {\"query\": \"...\"}, read_file {\"name\": \"...\"}" + (", read_archive {\"doc\": \"...\"}, search_archive {\"query\": \"...\"}"
+        if "archive" in rights else "") + (", run_python {\"code\": \"...\"}" if "sandbox" in rights else "") + ". "
+        "Put them in \"lookups\" (each {\"lookup\": \"<name>\", \"args_json\": \"<JSON object>\"}): they are answered THIS round, "
+        "before anyone acts, and you are asked again with the results, so you can read, compute and then act in the same round. Each "
+        "uses one of your private-message slots. In \"actions\" instead, each uses an action and its result comes only next turn. "
+        "Your manual explains more options than are listed here.") if fast else
         (f"Before acting you may look things up for free: put up to {free} lookups in \"lookups\" (each {{\"lookup\": \"<name>\", "
             "\"args_json\": \"<JSON object>\"}) and leave \"actions\" empty; you are then asked again with the results, and that second "
             "reply is your turn. " if free else "") + (
@@ -881,7 +902,9 @@ def core_prompt(inst, a, k=None) -> str:
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
 first write each turn is free) or can find it again by search."""),
         ("actions", f"""Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {acts}"""
-                    + (f"\nAn action you leave unused is lost: most turns, use all {a['actions']} of them." if c.get("full_turn_nudge", True) else "")),
+                    + (f"\nAn action you leave unused is lost: most turns, use all {a['actions']} of them." if c.get("full_turn_nudge", True) else "")
+                    + ("\nYou cannot propose laws yourself: a law you draft must be proposed by a holder of the propose right (a Legislator)."
+                       if "propose" not in rights and inst["law_level"] != "L0" and a["cls"] not in ("board", "fixer") else "")),
         ("lookups", look),
         ("manual_index", "Your manual (only titles here; fetch a section with the manual lookup):\n" + manual_index(secs)),
         ("reply", f"""Reply with a JSON object with these fields:

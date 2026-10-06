@@ -147,5 +147,42 @@ def sections(inst, k, aid) -> list:
             idx = archive.index(archive.shared_dir(sp), only=only, run_id=inst.get("run_id"), summaries=True)
         except Exception:                                              # the shared archive may be unreachable: keep the manual working
             idx = archive.index(None, only=only, summaries=True)
-        out.append(("Your archive", "Your part of the archive (plus the shared archive). Read with read_archive {\"doc\": \"<id>\"}.\n" + idx))
+        out.append(("Your archive", _archive_head(k, aid, only) + "Read with read_archive {\"doc\": \"<id>\"} (as a lookup it is answered "
+                    "before you act this round).\n" + _mark_read(k, aid, idx)))
     return out
+
+
+COLLECTIONS = (("treatises", "treatises (how laws are made and what they can reach)"), ("math", "exact records of how the world works"),
+               ("history", "records of past worlds"), ("laws", "statutes with commentary"), ("rare", "rare records"),
+               ("library", "the code of this world's known laws"))
+
+
+def _archive_head(k, aid, only) -> str:
+    """The Scientist's own share at a glance: how many documents of each collection it holds, and that the rest is elsewhere."""
+    held = [d for d in (only or []) if d != "README"]
+    if not held:
+        return "Your share holds only the README: the other collections are held by other Scientists (or by nobody in this world).\n"
+    n = {c: sum(1 for d in held if d.startswith(c + "/")) for c, _ in COLLECTIONS}
+    parts = [f"{n[c]} {label}" for c, label in COLLECTIONS if n[c]]
+    lacking = [c for c, _ in COLLECTIONS if not n[c]]
+    return ("Your share: " + "; ".join(parts) + ". Start with treatises/the-clerks-manual if you hold it. "
+            + (f"You hold nothing from {', '.join(lacking)}: other Scientists hold the rest of the archive. " if lacking else
+               "Other Scientists hold other parts. ")
+            + "The Scientists' log (shared/scientists-log) holds notes from earlier Scientists.\n")
+
+
+def _mark_read(k, aid, idx) -> str:
+    """Marks documents this agent has already read ([read in round N]), so it need not pay to read them again."""
+    if k is None:
+        return idx
+    seen = {}
+    for e in k.events:
+        if e["type"] == "archive_read" and e["agent"] == aid:
+            seen.setdefault(str(e["data"].get("doc")).removesuffix(".md").strip("/"), e["round"] + 1)
+    if not seen:
+        return idx
+    out = []
+    for line in idx.splitlines():
+        d = line[2:].split(":", 1)[0] if line.startswith("- ") else None
+        out.append(line + (f" [you read it in round {seen[d]}]" if d in seen else ""))
+    return "\n".join(out)

@@ -149,7 +149,10 @@ def test_actions_and_camp_args_match_what_each_agent_can_do(world):
             assert "run_python" not in acts, a["id"]
         if a["cls"] in ("board", "fixer"):
             assert "harvest" not in acts, a["id"]
-        assert "camp5 stone (open to all but the Board and Fixer; choose 0 or 1, sealed; harvest args x: 0..1)" in p
+        from charter.camptypes import framework as CTF
+        if a["cls"] != "worker" and "worker" not in (a.get("also") or ()):
+            assert not CTF.can_take_part(k, a["id"], "camp5"), a["id"]                 # society: the open camp is for Workers
+        assert "camp5 stone (open to Workers only; choose 0 or 1, sealed; harvest args x: 0..1)" in p        # society: open camps are for Workers
         assert "harvest args factor" in p                                   # the vault takes only a factor
 
 

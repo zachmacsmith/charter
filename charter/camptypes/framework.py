@@ -43,6 +43,7 @@ DEFAULTS = {
     "targets": {"tutorial": 1.0, "solo_science": 1.5, "coordination": 2.5, "social": 1.0, "wildcard": 1.0},
     "sustain_harvests": 1.0, "regrowth_r": [0.05, 0.2], "start_stock": [0.7, 1.0], "noise": 0.1, "holders_per_worker": [1, 2],
     "visibility": "sealed", "disclosure": "totals", "modifiers": {}, "types": {},
+    "open_classes": "all",          # who plays the open camps (social games): "all" (everyone but the Board and Fixer) or a list of classes
 }
 ROLE_MODIFIERS = {
     "tutorial": {"infrastructure": True},
@@ -251,10 +252,25 @@ def start_round(k) -> None:
     LS.start_round(k)
 
 
+def open_classes(spec) -> list | None:
+    """The classes that may play open camps (None: every class but the Board and Fixer)."""
+    oc = config(spec).get("open_classes")
+    return None if oc in (None, "all") or (isinstance(oc, list) and "all" in oc) else [str(x) for x in (oc if isinstance(oc, list) else [oc])]
+
+
+def open_text(spec) -> str:
+    oc = open_classes(spec)
+    return "open to all but the Board and Fixer" if oc is None else "open to " + " and ".join(f"{c.title()}s" for c in oc) + " only"
+
+
 def can_take_part(k, aid, cid) -> bool:
     c = k.w["camps"][cid]
     if c.get("open"):
-        return k.w["agents"][aid]["cls"] not in NO_CAMPS and k.w["agents"][aid].get("departed") is None
+        v = k.w["agents"][aid]
+        if v["cls"] in NO_CAMPS or v.get("departed") is not None:
+            return False
+        oc = open_classes(k.spec)
+        return oc is None or bool(({v["cls"]} | set(v.get("also") or ())) & set(oc))
     return k.has(aid, f"harvest:{cid}")
 
 
@@ -293,7 +309,7 @@ def harvest_action(k, aid, cid, x, extra=None) -> str:
         x = []
     if c.get("open"):
         if not can_take_part(k, aid, cid):
-            raise _err(f"the Board and the Fixer cannot take part at {cid}")
+            raise _err(f"{cid} is {open_text(k.spec)}")
     elif not k.has(aid, f"harvest:{cid}"):
         raise _err(f"you need the 'harvest:{cid}' right to harvest at {cid}" + (" (rights can be leased: lease / accept_lease)" if LS.enabled(k) else ""))
     x = _check_x(c, x)

@@ -14,7 +14,7 @@ about 1x with high variance. Steady mutual sharing is the best stable outcome at
 """
 from __future__ import annotations
 
-from charter.camptypes import CampType, register
+from charter.camptypes import CampType, register, who_plays
 from charter.camptypes import _bcommon as B
 
 MOVES = ("share", "take")
@@ -58,7 +58,8 @@ class Partners(CampType):
         return {"partner": rng.choice(others + ["any", "any"]) if others else "any", "move": rng.choice(MOVES)}
 
     def describe(self, inst=None) -> str:
-        return ("A joint workshop open to everyone (no harvest right needed; the Board and the Fixer cannot take part). Once per round, "
+        return ("A joint workshop, " + who_plays(inst) + " (no harvest right needed). "
+                "Once per round, "
                 "harvest with \"partner\": \"Name\" (or \"any\") and \"move\": \"share\" or \"take\" (no x); entries are sealed "
                 "until the end of the round, when you are paid. Every pair and its moves are published.")
 

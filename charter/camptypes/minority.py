@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from charter.camptypes import CampType, register
+from charter.camptypes import CampType, register, who_plays
 
 
 @register("minority")
@@ -78,7 +78,8 @@ class Minority(CampType):
         return [rng.randint(0, 1)]
 
     def describe(self, inst):
-        return ("Open to every agent (no harvest right needed; the Board and the Fixer cannot take part). Each round you may choose "
+        return (who_plays(inst)[:1].upper() + who_plays(inst)[1:] + " (no harvest right needed). "
+                "Each round you may choose "
                 "x = [0] or x = [1] (one choice per round, sealed until the end of the round). Payment comes at the end of the round. "
                 "The number of agents on each side is published.")
 

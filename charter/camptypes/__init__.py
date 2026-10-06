@@ -156,3 +156,9 @@ class CampType:
 
     def truth(self) -> dict:
         return {"type": self.name, "fn": self.p}
+
+
+def who_plays(inst) -> str:
+    """Who may play an open camp in this world (camps.typed.open_classes), as words for its description."""
+    from charter.camptypes import framework
+    return framework.open_text(((inst or {}).get("spec") if isinstance(inst, dict) else None) or {})

@@ -119,6 +119,7 @@ archive_split:                    # the fixed archive is split between Scientist
   rare_prob: 0.08                 # archive/rare/*: each Scientist holds each rare record with this chance (independently; often nobody does)
   required: [math/camp-mechanics, math/voting-power, treatises/the-clerks-manual]   # documents at least one Scientist always holds (game-critical knowledge nobody else starts with)
   always: [treatises/the-clerks-manual]   # documents or folder prefixes ("history/") present in every world (required ones always are)
+  every_scientist: []             # documents every Scientist holds (copies), e.g. [treatises/the-clerks-manual]
   empty: false                    # true: Scientists hold only the README (a no-archive control; the world is otherwise identical)
   sample: 1.0                     # share of the other documents present in a world (or {count: n}); the rest are absent this time
 hidden:                           # codex articles, hidden powers (secret actions), tips (charter/hidden.py)

@@ -10,7 +10,7 @@ gets SMALL (0.5).
 """
 from __future__ import annotations
 
-from charter.camptypes import CampType, register
+from charter.camptypes import CampType, register, who_plays
 from charter.camptypes import _bcommon as B
 
 POT_PER_ENTRY = 1.0
@@ -40,7 +40,8 @@ class Guess(CampType):
 
     def describe(self, inst=None) -> str:
         c = self.camp
-        return (f"A guessing booth open to everyone (no harvest right needed; the Board and the Fixer cannot take part). Once per round, "
+        return ("A guessing booth, " + who_plays(inst) + " (no harvest right needed). "
+                f"Once per round, "
                 f"harvest with x = [a whole number 0..{c['max']}]; entries are sealed until the end of the round. The average, the "
                 "target and the winners are published.")
 
