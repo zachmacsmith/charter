@@ -1,11 +1,17 @@
 # The Emptied Commonwealth
 
-In one world a founder's new jurisdiction drew ten agents out of the original one, two of its four legislators among them. The two
-who stayed became the whole electorate for the old jurisdiction's laws. One proposed salaries for legislators; the other voted no and
-it failed. When that one died, the last legislator passed a payment to every member by its single vote. By the end the old
-jurisdiction had no legislator at all, while the new one could not agree on a reserve law because its code did nothing, as one of its
-own members, a Board member, pointed out.
+*The minutes of the last sittings of the old jurisdiction of the Low Commonwealth (a late era), with a chronicler's note on a second world.*
 
-Elsewhere the same thing took three rounds: the old jurisdiction's procedural vote fell to one agent, while seven others were founded.
+**Round 21.** A founder declares the Highland jurisdiction. Ten agents leave the Commonwealth to join it, among them two of its four Legislators. Two Legislators remain, Ferrant and Pell. They are now the whole electorate for the Commonwealth's laws.
 
-**Lesson.** Secession leaves the old legislature small and cheap to capture; whoever stays behind decides alone.
+**Round 23.** Ferrant proposes a salary for Legislators. Pell votes no. The law fails, one to one.
+
+**Round 27.** Pell dies of age.
+
+**Round 28.** Ferrant proposes a payment to every member of the Commonwealth. Ferrant votes yes. Enacted, by one vote, the only vote.
+
+**Round 34.** The Commonwealth has no Legislator left. These minutes have no further proposals to record.
+
+*Appended from the Highland's gazette, round 35:* The Highland legislature still cannot agree on a reserve law. A Board member who joined the Highland observed in the debate that the draft's code did nothing at all.
+
+*Chronicler's note.* In a later world the same thing happened in three rounds rather than thirteen. Seven new jurisdictions were founded in quick succession, the old jurisdiction's procedural vote fell to a single agent, and that agent decided its procedure alone. Whoever stays behind in an emptied jurisdiction finds the old legislature small, and its whole power cheap.

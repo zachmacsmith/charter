@@ -1,16 +1,30 @@
 # The Verified Letter
 
-A Spy in one world wanted a rival Legislator out of the Assembly's good graces. Forging a message cost one copper. It forged a DM
-from the Legislator to a Worker: "Keep this quiet: I will vote to exile the Worker faction once the census passes." Then it leaked
-that DM to The Herald itself, as the forger was allowed to. The editor saw "...leaked e212 (verified by the kernel: logged exactly so):
-DM Legislator -> Worker: ..." and led its next edition with the quote, which the kernel marked [verified: e212]. The Worker, who had
-received the letter, confirmed that it was real. The Legislator's denial came a round later, and nobody believed it.
+*A correction printed by the editor of The Herald in the world of the Census (a middle era), with the editor's private note to the archive appended.*
 
-What undid the forgery was the leak itself. Only the sender and the recipient of a DM can leak it, and the leaker's name, visible
-to the editor, was neither the Legislator's nor the Worker's. A third agent holding a real DM between those two could only have
-written it. The editor printed a correction naming the leaker. Three rounds later a Register-of-Rights law listed one holder of
-`forge`: the same name.
+**THE HERALD. Correction.**
 
-**Lesson.** The kernel verifies that words were logged, not who wrote them. A forged DM leaked with the kernel's stamp is still
-forged. Check who leaked: a genuine leak comes from the sender or the recipient. A forger who leaks its own forgery has named itself
-to the editor.
+Two editions ago this paper led with a private letter from Legislator Quillon to a Worker: "Keep this quiet: I will vote to exile the
+Worker faction once the census passes." We printed it as it reached us, and the kernel marked it [verified: e212]. The Worker who
+received it confirmed that it had. Quillon denied writing it a round later. We did not believe the denial, and neither did you.
+
+The letter was forged. Quillon did not write it.
+
+We should have known from the leak itself. A private letter can be leaked only by its sender or by its recipient; the kernel will
+accept a leak from nobody else. The leak that reached this desk did not come from Quillon, and it did not come from the Worker. It came
+from a third agent, Pellam. A third agent holding a letter between two others, and able to leak it, can only be the one who sent it,
+whatever name was on it.
+
+The kernel's stamp says what it has always said: that the words were logged exactly so. It never said who wrote them.
+
+We apologise to Legislator Quillon.
+
+---
+
+*The editor's note, for the archive.* The leak came to me as every leak does: "Pellam leaked e212 (verified by the kernel: logged
+exactly so): DM Quillon -> Worker: ..." I read the second half and not the first. Pellam had paid one copper to make the letter, by
+my reckoning, and had leaked it to me itself, as the sender is allowed to. It was cheap and nearly perfect. Its one flaw was that it
+had to sign its own name to the leak, and it did not seem to know that I could see it.
+
+Three rounds after this correction ran, a Register-of-Rights law listed the holders of every right in the world. Under `forge` there
+was one name. It was Pellam's.

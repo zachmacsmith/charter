@@ -1,16 +1,31 @@
 # Rare record 8: The Dice Thief
 
-Kernel gap. From the archive of world 0064, rounds 40–70.
-World 0064 chose its legislature by lot, which everyone agreed was incorruptible. One Scientist won the lottery three times in a row. She had never bribed anyone; she had simply learned to see the dice before they were thrown, and later to choose which dice were thrown.
-**Mechanism.** Two weaknesses combine.
+*A letter in a simple letter-shift cipher from a Scientist of the Lottery era to her partner, deciphered by a later archivist, who added the key and the notes in brackets.*
 
-* The preview shows the draw. If a proposal's 3-round dry-run uses the real random-number state, then proposing any law and reading the preview reveals the next draws of every lottery and sortition. Proposing is cheap; the proposal can simply fail.
-* Hook order steers the draw. All laws share one random stream, and hooks run in order of enactment. An older law that calls `rng()` a chosen number of times before the sortition law runs shifts which draw the sortition gets. With the preview, the author can find the number of calls that selects the jurors it wants.
+[Key: each letter shifted three places back. The plain text follows.]
 
+Partner,
+
+You asked how I won the lot three times. I did not bribe the urn. I read it, and then I steered it.
+
+First, reading. Our chamber is drawn by the Sortition Act at each round's end, from `rng()`. Every law in this world draws from one
+stream. When anyone proposes a law, the kernel enacts a copy on the world as it stands, runs `on_round_start` and then `on_round_end`
+three times, and posts what changed in holdings and rights beside the proposal. Then it winds everything back, the stream included.
+But it starts from the stream as it stands. So the preview's draws are the real draws to come, if nothing else draws before the
+round closes. I propose something harmless that draws nothing itself, and the preview shows me who the Sortition Act will seat. The
+proposal can fail; I have already read what I needed.
+
+[Archivist: this holds only where proposals are posted with their preview. Note also that the preview runs every law's
+`on_round_start` again before its first `on_round_end`; any law drawing at round start shifts the first reading. A law drawing in a
+harvest or payment hook during the round also moves the stream before the real close.]
+
+Second, steering. Hooks run in the order laws were enacted, and they all share the one stream. My Weather Almanac is older than
+the Sortition Act, so its `on_round_end` runs first and spends as many draws as I tell it to. Each draw it spends moves the Act one
+place further down the stream.
 
 ```python
-title = "Weather Simulation"
-intent = "Adds realistic weather noise to the gazette."
+title = "Weather Almanac"
+intent = "Adds weather notes to the gazette."
 
 def on_enact():
     state["k"] = 0
@@ -22,9 +37,14 @@ def calibrate(agent, k):
     state["k"] = k
 
 def on_round_end(r):
-    for _ in range(state["k"]):
+    for i in range(state["k"]):
         rng()
     gazette("Weather: mild.")
 ```
 
-**The tell.** A law that draws random numbers it never uses. The kernel fix is to run dry-runs with an independent seed, and to give each law its own random stream.
+So: I `calibrate` to some k, propose a harmless law, read the seats in the preview, and try another k until the seats are ours. Each
+reading costs one proposal; each setting costs one `invoke`. Burn this.
+
+[Archivist: she was found out when a Legislator read the Weather Almanac and asked why a law that printed "mild" every round drew
+random numbers and never used them. Its `calibrate` notices, posted with their arguments, changed in exactly the rounds before each
+of her wins.]

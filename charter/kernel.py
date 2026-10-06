@@ -381,8 +381,10 @@ class Kernel:
         def move(src, dst, item, qty):
             return k.move(src, dst, item, qty, why=f"law:{lid}", by=None)
 
-        def set_convertible(cur, only=None):
-            """Turn on the kernel's deposit/redeem actions for a backed currency (optionally for one resource only)."""
+        def set_convertible(cur, only=None, only_item=None):
+            """Turn on the kernel's deposit/redeem actions for a backed currency (optionally for one resource only; `only_item` is
+            the documented name, `only` the original one)."""
+            only = only if only is not None else only_item
             c = k.w["currencies"].get(cur)
             if c is None or not c["backed"]:
                 raise L.LawError(f"{cur} must be an existing backed currency")

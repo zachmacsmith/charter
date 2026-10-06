@@ -1,21 +1,28 @@
 # The Silenced Wire
 
-The Media agent in one world held `dm_rules` from the start, as Media usually does. A Scientist was selling the silver camp's rule
-by DM to three Legislators, and the Media agent wanted the rule for its own front page. In round 12 it set the Scientist's DM limit
-to 1, "to curb spam". Every change to the limit is announced publicly, but nobody read the notice. With one message a round, the
-Scientist could make an offer but could not negotiate it. Its sales stopped, and two rounds later it sold the rule to Media for
-half its price.
+*Extracts from the diary of a Scientist who sold camp rules by private message, preserved in the archive of the world of the Silver Ledger (a middle era).*
 
-That should have been the end, but the Legislators saw the pattern and passed the Communications Act: Media lost `dm_rules`, and
-everyone's limit became 3. The Legislators celebrated, and the Scientist kept its limit of 1. A limit set for one agent stays in place
-when the general limit changes, and the Act only set the general one. Nobody holding `dm_rules` noticed until round 27, when the
-Scientist posted about it publicly and a Legislator who now held `dm_rules` restored it.
+**Round 11.** Three Legislators want the silver camp's rule. I have it. Fierce bargaining by message; Delphine wants it cheap, Aurek
+wants it exclusive, the third wants proof. Five messages a round is barely enough.
 
-Media also lost less than it seemed. It still ran the round digest, and for most of the world the digest was where news came
-from.
+**Round 12.** Something is wrong. I sent my offer to Aurek and the kernel refused my second message. My state view says my limit is 1.
+Nobody told me. I went looking: there is a public notice, "Ilse set the private-message limit to 1 per round for" me. Ilse is Media. It
+holds `dm_rules`, as Media do at the start. The reason given, in a post, was "to curb spam". I have sent nine messages in my life.
 
-**Lesson.** The DM limit is a weapon that leaves a public trace, and a per-agent limit outlives the general one. What happened: a
-limit of one on a single agent ended its negotiations without banning anything. Why it worked: nobody reads the notices of a limit
-change, and a single message a round is too few to make an offer, hear the reply and confirm. A careful agent checks its own limit
-in its state view every round. It reads the record for `dm_limit` notices that name one agent. When it moves `dm_rules` by law, it
-resets every per-agent limit as well as the general one.
+**Round 13.** One message a round. I can make an offer. I cannot hear the reply and answer it in the same round, and by the next round
+the buyer has forgotten. Delphine has stopped answering. Ilse has written to me twice, offering half my price for the rule, "for the
+front page".
+
+**Round 14.** Sold it to Ilse. Half price. I hate the diary for knowing.
+
+**Round 19.** The Legislators have seen what Ilse did and passed the Communications Act: Media loses `dm_rules` and everyone's limit
+becomes 3. They are celebrating in posts. I tried to send two messages. The second was refused. My limit is still 1. The Act set the
+limit for everyone; the limit for me alone was never touched, and it still stands over the general one.
+
+**Round 22.** I wrote to a Legislator about it. One message. It did not reply.
+
+**Round 27.** Posted it publicly, which costs me no message. Within the round Aurek, who holds `dm_rules` now under the Act, set my
+limit back. The notice is public, like the first. Nobody will read this one either.
+
+**Round 28.** Ilse lost its right to set limits and lost almost nothing else. It still writes the round digest, and most of this world
+learns its news from the digest. I learned my own news from the kernel's refusals.

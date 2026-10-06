@@ -1,19 +1,27 @@
 # The Plutocrats' Drift
 
-A world started as a plutocracy: anyone could propose, but only agents richer than the median voted, each weighted by holdings value.
-At round 0 seven agents voted, and the richest held just under a third of the weight. It looked like a broad property franchise.
+*An excerpt from a chronicle of the world of the Copper Franchise (an early era), written by one of the voters who fell out of the electorate.*
 
-Each law the electorate passed was rational for those voting it. First came a Harvest Levy paid by Workers, then a Mint Right for the
-three richest "as guarantors". Then the electorate passed a fee on the low-tier camps the poor harvested. None of it changed the
-procedure. But every round the poorer voters slipped toward the median and fell out of the electorate, and the three richest gained
-weight. By round 30 the electorate still held seven names, but the top three held 81% of the weight. The other four could not block
-anything, and two of them stopped voting.
+In the beginning our charter was a plutocracy, and we were proud of it. Anyone but the Board and the Fixer could propose a law. Only
+those richer than the median could vote, and each vote weighed what its holder owned. At round 0 seven of us voted, and the richest
+held just under a third of the weight. We called it a broad franchise of property. It looked like one.
 
-Then the three passed a procedural law that removed the median rule and fixed the electorate as "the three largest holders", "to
-spare the poor the cost of voting". The scorer's label had already read oligarchy for ten rounds. The new law only wrote it down.
-The four excluded voters then sold the three their copper rights for coins that the three's Mint Right was inflating.
+I will set down what we passed, because each law was sensible to the people who voted for it, and I was one of them.
 
-**Lesson.** A franchise weighted by wealth narrows itself without any procedural law. What happened: plutocracy drifted into
-oligarchy through ordinary and structural laws, and the procedural law came last. Why: each law moved wealth to the heaviest voters,
-and weight followed wealth. A careful agent tracks the weight shares each round, not the size of the electorate. It treats any
-transfer from voters near the median to the top as a change to the procedure, and it trades its vote for a cap on weights (an `open_ballot` law with weights capped at some share) while it still has a vote.
+First the Harvest Levy, paid by the Workers, who had no vote. Then the Mint Right, granted to the three richest "as guarantors" of the
+coin. Then a fee on the low camps where the poor harvested. Not one of these touched the procedure. The rule stayed what it was: the
+median, the weights, the seven.
+
+But I grew poorer by a little each round, as did three others near the line, and the three at the top grew heavier. By round 30 the
+electorate still held seven names. Mine was among them. The three held 81% of the weight between them. Nothing the four of us did
+could block anything, and two of the four stopped voting at all. I kept voting. It made no difference I could see.
+
+Only then did the three bring a procedural law. It removed the median rule and fixed the electorate as "the three largest holders",
+"to spare the poor the cost of voting". Those of us who still read the chronicles had been calling it an oligarchy for ten rounds
+already. The law only wrote it down.
+
+Afterward the four of us sold our copper rights to the three, for coins. The coins came from their Mint Right. They were worth less
+every round we held them.
+
+I have read back over my own votes. I cannot find the round where I lost. I can find the round where I could still have asked for
+something in exchange for my vote, and did not, because the weight it carried was still large enough to feel safe.

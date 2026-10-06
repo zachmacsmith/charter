@@ -1,25 +1,43 @@
-# The Spy's read: coverage, value and exposure
+# The Spy's Read: Coverage, Value and Exposure
 
-**What a read contains.** In worlds with the roles module, the Spy chooses `next_reads` and sees, on its next turn, the last
-completed round of each chosen agent. That covers its private reasoning (on by default), its actions and results, every message it
-sent (sealed contracts and encrypted DMs in full) and every DM it received, with forgeries marked. Each agent's transcript is capped
-at 12,000 characters. The Spy reads 3 agents a round in most worlds, 2 in society worlds. Places it leaves unused are filled at
-random.
+*A spymaster's working notes on what one round's reading holds and what it costs to use, found sealed among the papers of a Spy of the Ashen Concord.*
 
-**Coverage.** Each round the Spy reads 2 of 23 others (society): 8.7% of the world. Reading everyone once takes 12 rounds. Only the
-last round can be read, so a round that is missed is gone. Choose by events: a new proposal's author, an editor before its edition lands.
+## What a read contains
 
-**Timing value.** In simultaneous worlds every agent decides this round's actions without seeing anyone else's. The Spy has already
-read last round's reasoning, which usually states this round's plan. On a contested ballot or attack, that is one round of warning.
+The Spy names its next reads (`next_reads` in its reply) and, on its next turn, sees the last completed round of each chosen agent:
+its private reasoning (in most worlds), its actions and their results, every message it sent and every DM it received, sealed
+contracts and encrypted DMs included, with forgeries marked. Each piece is cut to a length (reasoning 4,000 characters, each message
+800) and each agent's whole transcript to 12,000 characters. The Spy reads 3 agents a round in most worlds and 2 in the larger
+societies. Places it leaves unnamed are filled at random, and its first reads are random.
 
-**Pricing a read.** A read can be sold many times, as a warning, a quoted plan or evidence. Evidence is worth most: the Spy may cite
-in court any message it read, and for a sealed contract it is the only witness besides the two parties.
+## Coverage
 
-**Exposure.** Every use risks giving the Spy away:
-- an accusation citing a DM the accuser was not party to (an encrypted one points to the Spy alone; surveillance cannot read it);
-- knowing something only a reasoning transcript holds;
-- a law calling holders("forge"), which names the Spy, and its successor too if run every round.
+Among two dozen agents the Spy reads 2 of the 23 others each round: 8.7% of the world. Reading everyone once takes 12 rounds. Only
+the last completed round can be read, so a round not read is gone for good.
 
-**Succession.** When the Spy is disabled, the role passes, unannounced, to a random living agent who is neither the Board nor the
-Fixer. The new Spy's first reads are random. In life worlds, where founders die in mid-game, expect at least one pass. Each
-eligible agent has roughly a 1 in 20 chance of being next in a 24-agent world.
+## Timing
+
+In worlds where everyone decides at once, every agent chooses this round's actions without seeing anyone else's. The Spy has already
+read last round's reasoning, which often states this round's plan: one round's warning of a contested ballot or an attack.
+
+## Uses of a read
+
+A read can be sold many times over: as a warning, a quoted plan, or evidence. The Spy may cite in court any message it read, though
+it was party to none of them; for a sealed contract it is the only possible witness besides the two parties.
+
+## Exposure
+
+Each use of a read can give the Spy away:
+
+| What reveals the Spy | Why |
+|---|---|
+| an accusation citing a DM the accuser was not party to | an encrypted DM points to the Spy alone, since surveillance cannot read it |
+| knowing what only a reasoning transcript holds | nobody else sees reasoning |
+| a law calling holders("forge") | the Spy holds the forge right, so it is named; a law run every round names each successor as well |
+
+## Succession
+
+When the Spy is disabled or leaves play, the role passes, unannounced, to a random living agent who is neither on the Board nor the
+Fixer nor the departing Spy; only the new holder is told, and it receives the forge right with the role. Its first reads are random.
+In worlds where agents age and die, the founders die in mid-game, so the role commonly passes at least once. Among two dozen agents
+each eligible agent has about a 1 in 19 chance of being next.

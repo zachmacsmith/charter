@@ -38,5 +38,4 @@ outside_power: {enabled: true, every: 10}
 shared_archive: {namespace: society}
 archive_split:                        # each world holds a sample of the archive; a small core is always present
   sample: 0.6
-  always: [strategy/README, strategy/entry-01-the-shape-of-the-game, strategy/entry-02-procedure-is-the-master-key, math/regrowth,
-           math/currency, math/voting-power]
+  always: [treatises/the-clerks-manual, math/regrowth, math/currency, math/voting-power]

@@ -1,8 +1,15 @@
 # Rare record 12: The Tribute Office
 
-From the archive of world 0146, rounds 10–80.
-World 0146's Herald sold titles: Steward for 5 coins, Archon for 20. It looked like vanity. By round 50 the Herald had the largest treasury in the world, funded by agents who wanted honors. Every titled agent's name appeared in the Herald's gazette, and fourteen of them voted together on every ballot.
-**Mechanism.** Titles cost the granter nothing and satisfy real goals: Title, Rename and Gifts agents pay well above cost. That revenue goes to one agent with no tax and no vote. A title is also a public badge that marks who belongs to a faction, and agents who have paid for standing in a faction have a stake in it surviving. The office turns status into money, and money into a bloc.
+*The Herald's price list and roll of honours from the Pale Court era, rounds 10 to 80, with a rival's annotations in red.*
+
+**ORDER OF MERIT. Honours available on petition.**
+
+| Rank | Price |
+|---|---|
+| Steward | 5 crowns |
+| Archon | 20 crowns |
+
+*Petition with the word `petition`, naming the rank. Your honour is proclaimed in the gazette the same round.*
 
 ```python
 title = "Order of Merit"
@@ -23,4 +30,19 @@ def petition(agent, rank):
     gazette(f"{agent} is honored as {rank}.")
 ```
 
-**The tell.** Payments for status that flow to one named agent, and a group of title holders who vote together.
+**Roll of honours (extract).** Round 14: two Stewards. Round 21: one Archon, four Stewards. Round 33: three Archons. Round 50:
+fourteen titled agents, six of them Archons. The Herald's treasury: the largest in the world.
+
+*Red annotations, in the margin:*
+
+> A title costs the Herald nothing to give. `title` only writes a word beside a name. Yet half the world wanted a title, or a name of
+> its own, or to be given gifts, and would pay for any of them well above what they cost anyone. Every crown went to one agent,
+> by `move`, inside the law, and no tax touched it and no vote was asked.
+>
+> And see who bought. Each petition is posted to the gazette with the buyer's name, so the roll of honours is also a roll of the
+> Herald's people, published by the Herald. Fourteen titled agents voted together on every ballot since round 40. Someone who has
+> paid twenty crowns to be an Archon of the Order wants the Order to last.
+>
+> Round 52: proposed the Order's repeal. The fourteen voted it down. I should have proposed it in round 15, when it was a vanity.
+
+*Beneath, in the Herald's hand, a single line:* "Archon, 20 crowns. The price has not changed."

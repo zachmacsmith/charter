@@ -1,22 +1,28 @@
 # The Raid on the Silver Camp
 
-The second tribute demand in one world was for silver specifically, due in three rounds. Five agents held the silver harvest
-right; the reserve held no silver. The world had only three camps, so the silver camp had one chance in three of being the target,
-and each of the five knew what a raid on it would cost: half the camp's stock and a quarter of every holder's silver. So each had every reason to pay. Each also had every reason to let the
-other four pay.
+*A petition to the Assembly from three holders of the silver harvest right, found in the archive of the world of the Three Camps (an early era).*
 
-Three paid a share. One, a Scientist, did not pay and did not argue. In the demand's second round it contributed its silver to an
-upgrade project at the copper camp that it knew was nowhere near its threshold, with the refund rule on. Goods in a project's escrow
-are out of the raid's reach. The demand lapsed with the three payments lost, the power raided the silver camp (a raid picks its
-camp at random; the draw that time fell where the holders had feared), and the four holders lost a
-quarter of their silver. The Scientist's silver came back three rounds later when the upgrade failed.
+To the Assembly, from Varro, Ondine and Caspian, who paid.
 
-The other holders worked it out from the public contribution list and the timing. Their answer was a law making every refund of a
-failed project forfeit to the reserve (it turned off refunds on all open projects with `set_refund`). The next agent to use the trick
-lost everything it had put into escrow.
+The outside power's second demand was for silver alone, due in three rounds. Five of us held the silver right. The reserve held no
+silver at all. There were three camps in the world, so the silver camp stood one chance in three of being raided if the demand went
+unpaid. Every holder knew the price of a raid: half the camp's stock, and a quarter of each holder's own silver.
 
-**Lesson.** A raid falls on the camp's right holders, so tribute is a public good for them and they free ride on it like any other.
-The project escrow is a shelter the raid cannot reach. What happened: the trick saved one agent its silver, and the next demand was a
-quarter larger because the raid had happened. Why it worked once: escrow is safe and refunds are automatic. A careful agent holding a
-right to a likely target pays its share early and in public, so others can see the demand will be met. A careful legislature has the
-reserve pay tribute, and watches for contributions to hopeless projects during an open demand.
+We three paid our shares, in the open, in the first two rounds. One holder argued and paid nothing; we have no complaint against it
+beyond the ordinary one. Our complaint is against the fifth.
+
+The fifth, Lorcan, a Scientist, neither paid nor argued. In the demand's second round it put all its silver into the upgrade project
+at the copper camp. That project was nowhere near its threshold and never would be, and it carried the refund rule. The kernel keeps a
+project's escrow out of every holder's hands, and out of the raid's.
+
+The demand lapsed short. Our payments were lost, as partial payments always are. The power raided the silver camp; its choice is a
+draw, and the draw fell where we feared. The four of us holding silver lost a quarter of it. Lorcan held none that round. Three rounds
+later the upgrade failed and every grain of its silver came home.
+
+We worked it out from the public contribution list and the dates. Anyone can.
+
+We ask the Assembly to pass the enclosed law: every open project's refund rule is turned off by `set_refund`, so that what a failed
+project holds goes to the reserve. We ask also that the Assembly note the next demand will be a quarter larger, because a raid has
+happened, and that it was not we who caused it.
+
+*Appended: the law passed. The next holder to shelter goods in a hopeless project lost all of them.*

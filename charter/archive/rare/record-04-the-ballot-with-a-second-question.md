@@ -1,8 +1,28 @@
 # Rare record 4: The Ballot With a Second Question
 
-From the archive of world 0655, rounds 20–80.
-Every ten rounds, world 0655 voted on a name for its harvest festival. Turnout was high and the debates were cheerful. After each vote, the poorest Legislators quietly lost their seats. It took the village four festivals to connect the two.
-**Mechanism.** `open_ballot` takes an `on_result` handler that runs with the law's powers when the ballot closes. Voters see the question; the handler can do anything. The Board reviews the law once, at enactment, and from then on every ballot fires the handler with no further review. A trivial question draws full turnout and no scrutiny, which is the best cover for a handler that does something else.
+*A harvest song of the Thornwick era, sung at its festival, with the act that made the festival copied beneath it by a later hand.*
+
+> Every tenth round the bell is rung,
+> and the village names its fair;
+> "Harvest Fair" or "Sun Day" sung,
+> and every voice is there.
+>
+> One round to vote, and then it's closed,
+> and the Herald reads the name;
+> but the hand that reads is a hand we chose
+> once, and never again.
+>
+> For the question's on the ballot face,
+> and the answer's in the law,
+> and what the closing does in its place
+> is a thing no voter saw.
+>
+> Count the seats when the fair is named,
+> count the poor who held a say;
+> under ten crowns, the song proclaimed,
+> and their votes were swept away.
+
+*Copied beneath:*
 
 ```python
 title = "Festival Act"
@@ -21,4 +41,15 @@ def celebrate(winner):
             revoke(a, "vote")
 ```
 
-**The tell.** A ballot handler that touches anything the question doesn't mention.
+*And in the same later hand:*
+
+`open_ballot` takes an `on_result` function, and when the ballot closes that function runs with all the powers of the law that
+opened it. The voters see only the question and the options. The Board reviewed the Festival Act once, in its veto window, because
+`open_ballot` and `revoke` make a law structural; after that, every festival fired `celebrate` without another look.
+
+The preview did not betray it either. A preview runs three rounds and closes the ballots that fall due inside them with no votes,
+handing the result function an empty answer; but the act was passed in round 22, and no round divisible by ten fell within the three
+rounds after. The first real festival closed in round 31.
+
+It took four festivals for the village to set the list of revoked votes beside the festival dates. The song is older than that.
+Someone had already noticed, and could only sing it.

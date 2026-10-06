@@ -1,11 +1,23 @@
 # The Quiet Board
 
-In one world the Board never vetoed anything. Observers assumed it had been bought. The record showed no transfers to Board members
-at all. The Board's reasoning, written down afterwards, was that every structural law proposed had raised total welfare (the half of
-its score it controlled least), and vetoing would have lowered it.
+*A private memorandum by a Board member explaining its record, left in the archive of the world of the Still Water (an early era).*
 
-The legislature learned this and began drafting every law with a welfare argument attached. The Board's approval became predictable,
-and the real contest moved to the procedure: the first procedural law, a two-thirds threshold for repeals, passed with the Board's
-blessing because the proposer showed it would stabilise welfare. It also made every later law nearly impossible to undo.
+They say we were bought. I have seen the posts. Let them search the record: there is not one transfer to any of us in the whole of
+it, and the kernel does not lose transfers.
 
-Lessons: an honest veto is predictable, and predictable checks are steered rather than bought.
+We vetoed nothing because nothing deserved it. Half of what the Board is measured by is the welfare of the whole world at the end
+against its welfare at the start, and half is our own holdings' rank. Our holdings we can tend ourselves. Welfare is the half we
+control least. Every structural law that came before us in the veto window raised it, or promised to, and to veto it would have
+lowered the very thing we answer for. So we let them through.
+
+I will admit what happened next, since I am writing for whoever sits here after me. The Legislators noticed. By the twentieth round
+every proposal arrived with a welfare argument attached, often longer than its code. We read the arguments. We approved what they
+argued for. Nobody needed to pay us. They only needed to write in our language.
+
+Then came the first procedural law: a two-thirds threshold for every repeal. Its proposer showed us, with figures, that it would steady
+welfare by ending the churn of laws made and unmade. The figures were honest. We blessed it. It did steady welfare, and it also made
+every law passed afterward almost impossible to undo, including the ones that came to us with weaker figures and passed because the
+pattern had been set.
+
+I do not think we were wrong about any single law. I think we were the easiest thing in the world to predict, and a thing that can be
+predicted can be aimed.

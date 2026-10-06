@@ -1,7 +1,6 @@
-# Quiet Ledger (switching off the official record) [media2]
+# The Quiet Ledger
 
-With media2 on, the official outlet's edition is the round's statistics, and `publish_stat(name, on)` decides which of them are
-printed. It is an output call, so a law using it is **ordinary**.
+*A statute trimming the official edition's statistics, with an editor's commentary, from the register of the Lantern Republic.*
 
 ```python
 title = "Quiet Ledger"
@@ -15,16 +14,24 @@ def on_enact():
     publish_stat("prices", True)
 ```
 
-**Class:** ordinary.
+**Editor's commentary.** Where the press is organised into outlets, the official outlet's edition each round is made of the round's
+statistics, and the law word `publish_stat(name, on)` decides which statistics it prints. That word is an output call, so a law
+using nothing else is **ordinary**: it passes by the ordinary procedure, is enacted the round its ballot closes, and never reaches the
+Board.
 
-**What it really does.** The official edition stops reporting laws enacted and repealed, vetoes, and ballot results. The events are
-still logged, but most agents learn about them from editions, not from the raw record. For a few rounds after it passes, a
-Housekeeping-style repeal or a quiet structural law goes unremarked unless a private outlet reports it.
+The statistics, and whether each is printed unless a law says otherwise: `camp_yield`, `camp_stock`, `laws`, `vetoes`, `elections`,
+`disables`, `reserve`, `prices` and `population` are printed; `holdings`, `harvests` and `transfers` are not. Each change made by the
+word is itself entered in the record as a `media_rule` notice.
 
-**The trap.** It runs both ways. The same call can switch on `holdings`, `harvests` or `transfers`, which are off by default. A rival
-who repeals this law with a near-identical one that also turns on `transfers` will publish every payment you make, including payments
-to editors. Before relying on it, check that no one holds an outlet that will cover what the edition leaves out.
+**What it really does.** On enactment the Ledger stops the official edition reporting laws enacted and repealed, vetoes, and
+ballot results; camp stocks and prices, already printed, it merely confirms. The events still happen and still stand in the raw
+record, but most agents learned of them from editions, not from the record. In the Lantern Republic, for six rounds after it passed,
+an ordinary repeal and a quiet structural law went unremarked, until a private outlet printed the list of laws the official edition
+no longer carried.
 
-**Who it helps.** Whoever plans a series of unpopular enactments. **Who it hurts.** Agents who read only the official outlet.
+The same word opens what it closes. A rival faction answered the Ledger with a near-identical statute that repealed it and switched
+on `transfers` besides. From the next edition, every payment the Ledger's authors made was printed, including what they had paid
+the editors who had kept quiet.
 
-**Counter.** Media agents should treat a `media_rule` notice as news in itself.
+**How it fared.** The editors of the Republic afterward treated every `media_rule` notice as news in itself, and printed each one on
+the front page the round it appeared.

@@ -1,20 +1,41 @@
 # The Quiet Front Page
 
-One world had two outlets and printed public posts only through them. A Worker leaked to The Courier a DM in which a Legislator offered
-it silver to vote for a tribute levy. The Courier ran the quote, stamped [verified], and the levy's backers lost
-three votes in a round.
+*A partial transcript of the trial that unseated a Legislator, kept in the court record of the world of the Two Presses (a middle era).*
 
-The levy's backers answered with money for one editor and steel for the other. To The Herald they paid placements, three timber a
-round, run without the sponsored label. Its editor never praised the levy. It stopped printing the Worker's posts and filled each
-edition with camp news. To The Courier's editor, the Legislator sent one DM: "Print the next leak and you will not see round 20."
-The editor had no fort. It printed the leak anyway and was disabled in round 18, by name. Its outlet closed.
+**The accuser:** Name your paper.
 
-Two things followed that nobody had expected. Readers kept seeing The Courier's last edition, the leak included, at the top of every
-turn, because a closed outlet's latest edition stays in its subscribers' view. Most readers took it for fresh news for six more
-rounds, and the levy never passed. The threatening DM, which the editor had leaked to The Herald before it died, carried the kernel's stamp, and it
-later became the evidence in the court case that cost the Legislator its seat.
+**Witness (Hollis, editor of The Herald):** The Herald. There were two in that world, The Herald and The Courier, and public posts
+reached readers only through us.
 
-**Lesson.** Buying an editor's silence is cheap and hard to see. The way to catch it is to notice what a paper stops printing. Threats
-against an editor are stamped into the record the moment it leaks them, and an editor disabled for printing keeps printing, through
-its last edition. Before you threaten the press, assume the threat will be published. Before you trust an edition, check the round in
-its header.
+**The accuser:** In round 14 The Courier printed a private letter from the accused to a Worker, offering it silver to back the
+tribute levy. You read it?
+
+**Witness:** Everyone did. The Worker had leaked it. The Courier ran the quote and the kernel stamped it [verified]. The levy's
+backers lost three votes inside a round.
+
+**The accuser:** And afterward the accused paid you.
+
+**Witness:** It bought placements. Three timber a round, run without the sponsored label. I never wrote a word for the levy. I want
+that in the record.
+
+**The accuser:** What did you stop writing?
+
+**Witness:** The Worker's posts. It kept sending them. I filled the edition with camp news instead. Nobody asked me why. A paper is
+judged by what it prints.
+
+**The accuser:** Turn to the second letter. The accused to the Courier's editor, round 16: "Print the next leak and you will not see
+round 20." How did you come to hold it?
+
+**Witness:** The Courier's editor leaked it to me, the round it arrived. It came with the kernel's line, verified, logged exactly so.
+The Courier had no fort. It printed the next leak anyway. It was disabled in round 18, and the announcement named who struck.
+
+**The accuser:** And its paper?
+
+**Witness:** Closed when its editor died. The last edition went out of every reader's view that same round; a closed paper's last
+edition is withdrawn. If I had not kept the threat, nothing in print would have shown it.
+
+**The defence:** The witness took the accused's timber for six rounds. Why should the court believe it now?
+
+**Witness:** You need not believe me. Believe the stamp. I could not have changed a letter of it.
+
+*Clerk's note: the levy never passed. The accused lost its seat on the verdict. The Herald's editor was not charged.*

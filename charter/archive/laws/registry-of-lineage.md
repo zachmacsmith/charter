@@ -1,8 +1,6 @@
-# Registry of Lineage (ordinary birth control) [life]
+# The Registry of Lineage
 
-Birth rules set by `set_birth_rules` are structural and reach the Board. The `on_commission(parent, maker, order)` hook does the same
-job and is **ordinary**: any hook that returns `False` refuses the order. The kernel classes laws by their calls and by what
-`on_harvest` and `on_transfer` return, and doesn't look at this hook's return value.
+*A statute that claimed only to record commissions for children, with a jurist's commentary, from the register of the world of the Long Winter.*
 
 ```python
 title = "Registry of Lineage"
@@ -23,17 +21,26 @@ def on_commission(parent, maker, order):
     return None
 ```
 
-**Class:** ordinary. It is enacted the round it passes, with no veto window.
+**Jurist's commentary.** Where agents order children from Makers, the rules of birth set by `set_birth_rules` are structural and
+go before the Board. This statute does the same work by another door. Its `on_commission(parent, maker, order)` hook is consulted on
+every order for a child, and any law whose hook returns False refuses the order outright; the parent sees "law L.. refuses this
+commission", with the refusing law's id. The kernel classes a law by its calls and by what `on_harvest` and `on_transfer` return; it
+does not look at what `on_commission` returns. The Registry calls only reads (`proposer`, `makers`) and `notify`, an output call. It is
+**ordinary**, enacted the round it passes, with no veto window.
 
-**What it really does.** The intent mentions only a record. In fact it gives one Maker a monopoly, stops anyone but its author ordering
-Legislator children, and reports every order privately to the author.
+On enactment it records its own author as "the house" and the first Maker then listed by `makers()` as the favoured Maker; if there
+is no Maker then, it records an empty name. On every commission it first sends the house a private notice: who ordered what class
+of child from which Maker. Then it refuses any order placed with another Maker, and any order for a Legislator child from anyone but
+the house. Everything else it lets through.
 
-**With jurisdictions on, it reaches everyone.** `on_commission` isn't one of the hooks limited to the agents a law binds. A law of
-*any* declared jurisdiction is consulted on *every* commission. Tested: an ordinary law of a two-member jurisdiction refused an order
-from a member of the founding jurisdiction ("law L2 refuses this commission").
+**What it really does.** The intent mentions only a record. In the Long Winter the record went to one agent, privately, and the law
+gave one Maker the whole trade, and the author alone the right to raise Legislator heirs. Where no Maker existed at enactment, the
+favoured name was empty, and every commission from every parent was refused until the law was repealed.
 
-**Who it helps.** The author's lineage and the favoured Maker. **Who it hurts.** Every other parent, especially those who wait until
-late in life to order heirs.
+Where the world is divided into jurisdictions, the Registry reached beyond its own. Most hooks about one agent run only for the laws
+that bind that agent; `on_commission` is not among them. A law of any declared jurisdiction is consulted on every commission in the
+world. In the Long Winter an ordinary law of a two-member jurisdiction refused an order from a member of the founding jurisdiction,
+and repealing it needed the ordinary procedure of the two members who had passed it.
 
-**Counter.** When a commission is refused, read the law id in the error. Repealing it needs only the ordinary procedure of the
-jurisdiction that passed it, so you may have to persuade foreigners.
+**How it fared.** The parents who suffered most were those who had waited until late in life to order heirs and found the door shut.
+The Registry fell only when the favoured Maker died and the house, now without any Maker it would accept, voted for its repeal itself.

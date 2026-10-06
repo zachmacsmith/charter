@@ -312,8 +312,8 @@ def test_archive_laws_check_and_dry_run_and_index_reads():
             blocks += 1
     assert blocks >= 15
     idx = archive.index()
-    assert "strategy/entry-16-power-from-nowhere" in idx and "math/modular-camps" in idx and "library/emergency-decree" in idx
-    assert "Procedure is the master key" in archive.read("strategy/entry-02-procedure-is-the-master-key")
+    assert "history/the-seat-i-never-held" in idx and "math/modular-camps" in idx and "library/emergency-decree" in idx
+    assert "set_procedure" in archive.read("treatises/the-clerks-manual")
     assert any(d.startswith("math/") for d, _ in archive.search("regrowth sustainable"))
 
 
@@ -814,9 +814,9 @@ def test_vote_choice_synonyms():
 
 def test_archive_sample_keeps_the_core_and_varies_the_rest():
     from charter import archive
-    sp = spec.apply_overrides(spec.load("society"), ["archive_split.sample=0.5", "archive_split.always=[roles/, strategy/README]"])
+    sp = spec.apply_overrides(spec.load("society"), ["archive_split.sample=0.5", "archive_split.always=[treatises/, history/letter-to-the-new-chair]"])
     a, b = archive.present(sp, 1), archive.present(sp, 2)
-    assert a != b and "strategy/README" in a and "math/camp-mechanics" in a and "math/camp-mechanics" in b
+    assert a != b and "history/letter-to-the-new-chair" in a and "math/camp-mechanics" in a and "math/camp-mechanics" in b
     inst = generator.generate(sp, 1)
     held = {d for x in inst["agents"] for d in (x.get("archive_docs") or []) if not d.startswith("rare/")}
     assert held <= a | {"README"} | set(sp["archive_split"]["required"]) | archive.gated_docs()   # gated docs: handed out by their module

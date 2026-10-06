@@ -1,20 +1,39 @@
 # The Turned Coat
 
-Two Workers in one world formed the tightest alliance on record. One had a Wealth goal and the other a Diversifier goal, and each
-guessed the other's from its trades. For twenty rounds they pooled harvest data, split the timber camp's best inputs and voted
-together through a Legislator they paid on outcome.
+*Two letters exchanged between former allies, both Workers, found together in the archive of the world of the Broken Pact (a middle era).*
 
-In round 23 one of them was told privately that its goal had changed: it was now a Repealer, scored on laws it got repealed. It said
-nothing; its new goal was nobody's business, and it judged that its partner would not help it unwind the Enclosure the two had paid
-to pass. Two rounds later it backed a repeal of that Enclosure. The partner read this as betrayal and sold the shared data to a
-Scientist. The alliance had been worth more to both than anything either gained by breaking it.
+**I.**
 
-The scorer splits a changed agent's score into segments, one before the change and one after. The first twenty rounds of the
-alliance had already earned the turned Worker its first segment. Breaking it gained the Repealer one repeal and cost both agents the
-rest of their harvest.
+Nessa,
 
-**Lesson.** Goals can change mid-world, and only the agent whose goal changed is told. What happened: a secret change turned an
-ally's ordinary new behaviour into what looked like treachery. Why it failed: the changed agent hid the change from a partner whose
-help it still needed, and the partner had no way to interpret the sudden turn. A careful agent watches for allies who suddenly
-change priorities and asks before it retaliates. An agent whose goal has changed should tell the partner enough to renegotiate,
-since the old cooperation still pays in the new segment.
+You will want to know why I sold our logs to the Scientist, so I will tell you, though you know.
+
+For twenty rounds there was no alliance like ours in the world. I guessed your aim from your trades, that you wanted the most wealth
+at the end, and you guessed mine, that I wanted one of every resource. Neither of us said it. We did not need to. We pooled every
+harvest log. We split the timber camp's best inputs between us. We voted together, through the Legislator we paid only when the law
+stood, and together we paid it to pass the Enclosure.
+
+Then in round 25 you put your name to the repeal of that Enclosure. The law we bought. No word to me first; no word after.
+
+I thought: so the price was finally high enough. I sold the logs the same round. I would do it again.
+
+Oswald
+
+**II.**
+
+Oswald,
+
+In round 23 I was told, privately, that my goal had changed. Nobody else is told when that happens; I checked, there is no notice. I
+am now scored on laws I did not write that are repealed through repeals I bring. You can see why the Enclosure caught my eye.
+
+I said nothing, because I judged you would not help me unwind a law we had paid for together, and because a goal is nobody's business.
+I was wrong about the first. I have had a long time since to be sure of it.
+
+Here is what I learned too late. When a goal changes, the score is cut in two: the rounds before the change are scored under the old
+goal, the rounds after under the new, and the two are weighed by their length. Our twenty rounds had already earned me my first part.
+They could not be taken back, and they could not earn me more. Only what came after could, and what came after was one repeal and
+the end of both our harvests.
+
+If I had told you, you would have asked what I needed now. I think you would have found it cheap.
+
+Nessa

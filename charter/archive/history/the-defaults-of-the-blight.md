@@ -1,23 +1,27 @@
 # The Defaults of the Blight
 
-Loans came early to one world through the Loan Registry: default meant seizure. A Legislator with idle timber lent it at 10% a round
-to four Workers, and borrowed stone from a Scientist at 6% to lend more. Two of the Workers borrowed again from each other to cover
-their timber repayments. By round 18 the world's debt was larger than its timber camp's harvest over five rounds, and it was spread
-across six agents.
+*Notes kept by the clerk of the credit records in the world of the Timber Vale (a middle era), on the loans of rounds 6 to 30.*
 
-In round 19 a blight struck the timber camp: yields at a fifth for ten rounds. The Workers' repayments fell due in rounds 20 and 21.
-Seizure took what timber they held, which was almost nothing; the rest was in default. The Legislator, who had counted on those
-repayments, defaulted to the Scientist in round 22, and the Scientist seized its stone. Each default was public in the credit
-records, so nobody would lend to any of them again. Within four rounds the four most active traders were in default, and the timber
-camp's best harvesters had nothing to harvest with.
+Round 6. The Loan Registry is in force. A default means seizure. Entered: a Legislator lends idle timber at 10% a round to four Workers.
 
-The Bailout Act passed in round 25. The reserve bought every defaulted loan at full value, interest included, and the lenders were
-made whole. Lending resumed at once, at 12%, to the same borrowers. When the blight ended, the borrowers owed the reserve and their
-new lenders together, and the reserve had spent most of its holdings.
+Round 9. Entered: the same Legislator borrows stone from a Scientist at 6%, and lends the proceeds on at 10%. The margin is good. The clerk notes it without comment.
 
-**Lesson.** Debt chains carry a shock in one camp to every agent. What happened: a blight at one camp produced four defaults in four
-rounds, because each lender had borrowed to lend. Why: seizure takes only the repayment item, so the chain broke wherever that item
-was scarce. The bailout repaid the lenders in full, which taught them to lend again at the same risk. A careful agent lends only out
-of its own stock, never out of borrowed stock. It checks the borrower's credit record and the camps behind its repayments, and it
-asks for repayment in a resource that does not come from a single camp. A careful legislature caps interest (Usury Law), and if it
-bails out lenders it pays them below face value.
+Round 13. Entered: two of the four Workers borrow from each other to meet their timber repayments.
+
+Round 18. The clerk adds up the book. The world's debts now exceed five rounds of the timber camp's whole harvest, and they are spread across six agents.
+
+Round 19. Blight at the timber camp. Yields at a fifth of normal, for ten rounds.
+
+Rounds 20 and 21. The Workers' repayments fall due. Seizure takes what timber they hold, which is almost none; seizure takes only the item the loan is repaid in, and they hold no timber. The rest is entered as default.
+
+Round 22. The Legislator, who counted on those repayments, defaults to the Scientist. The Scientist seizes its stone.
+
+Round 23. Every default stands in these records for all to read. Nobody will lend to any of the defaulters. Within four rounds of the blight, the four most active traders in the world are in default, and the timber camp's best harvesters have nothing to harvest with.
+
+Round 25. The Bailout Act passes. The reserve buys every defaulted loan at full value, interest included. Every lender is made whole.
+
+Round 26. Lending resumes at once, at 12%, to the same borrowers.
+
+Round 30. The blight lifts. The borrowers owe the reserve and their new lenders together. The reserve has spent most of what it held.
+
+*Clerk's note in the margin, round 30.* I have kept these books for thirty rounds, and I observe that the Scientist lost least: it lent stone it owned, and when it was not repaid it seized stone back. The lenders who lent what they had borrowed lost twice over, and were then paid in full, which is why they lend again. The Usury Law sat in the library all the while, and nobody proposed it.

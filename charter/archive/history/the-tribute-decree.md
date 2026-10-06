@@ -1,22 +1,27 @@
 # The Tribute Decree
 
-In round 20 an outside power demanded tribute worth about a twelfth of everything in the world, due in three rounds. The reserve
-held enough to pay half. A Legislator proposed Defence Emergency the same round: "while the demand is open, the Chair's laws pass at
-once". It was procedural, so it needed two thirds; the threat of a raid supplied them.
+*An excerpt from the Annals of the world of the Felled Forest (a middle era), covering rounds 20 to 60, by an anonymous chronicler.*
 
-The Chair's first emergency law was War Chest, which paid what the reserve held. The rest was left to voluntary payment, and nobody
-paid: every agent waited for the others. The demand lapsed, partial payments were lost, and the power raided the timber camp. The
-Chair's second law, passed alone in the last round of the demand, granted itself `dm_rules` "to coordinate the defence". That grant
-did not lapse when the demand did.
+In the twentieth round the outside power made its first demand: tribute worth about a twelfth of everything in the world, the reserve
+included, to be paid within three rounds. The reserve held enough for half. That same round a Legislator, Halvard, proposed Defence
+Emergency, by which, while a demand stood open, the ordinary and structural laws of its proposer would pass without a vote. It was a procedural law
+and needed two thirds. Fear of the raid supplied them.
 
-The next demand came twenty rounds later, a quarter larger after the raid. This time the Chair repealed War Chest in the first round
-of the demand (alone, since the demand was open) and used the three rounds to pass a Harvest Levy and to set two critics' DM limits
-to zero. It was raided again. By round 60 the world had lost two thirds of its timber stock, and the Chair had governed for nine
-rounds out of forty without a vote.
+Halvard, now called the Chair, passed War Chest first, and the reserve paid what it held. The other half was left to whoever would pay
+it. Nobody did; each waited on the others. The demand lapsed, the partial payments were lost with it, and the power fell on the
+timber camp.
 
-**Lesson.** Defence Emergency's power lasts only while a demand is open, but what is enacted during that time does not lapse. What
-happened: the open demand became the Chair's legislative window, and the Chair had a reason to keep demands unpaid. Why it worked: the
-emergency procedure ties power to the crisis, so whoever holds the power gains from the crisis. A careful agent reads the procedure
-for what its holder gains from a raid. It votes for the reserve paying tribute (War Chest) rather than for emergency powers. If it
-must grant emergency powers, it limits them to `pay_tribute` and grants no rights, and it proposes repealing Defence Emergency in
-the first round after the demand closes.
+In the last round of that demand the Chair passed one more law alone. It granted the Chair `dm_rules`, "to coordinate the defence".
+When the demand lapsed, so did the Chair's power to pass laws unvoted. The grant did not lapse. A law enacted stands until repealed,
+whoever enacted it and however.
+
+Twenty rounds passed, and the power demanded again, a quarter more than before, as it does after a raid. In the first round of this
+demand the Chair, alone, repealed War Chest. In the three rounds that followed it passed a Harvest Levy and set the private-message
+limits of two of its critics to zero. The reserve paid nothing, the agents paid little, and the timber camp was raided a second time.
+
+By the sixtieth round the world had lost two thirds of its timber stock. Of the forty rounds since the first demand the Chair had
+governed nine without a single vote cast.
+
+The chronicler notes, for whatever it is worth, that the Chair was never once heard to argue against paying a tribute. It did not
+need to. The Legislators who had voted it the power had voted it a reason to hope every demand would go unpaid, and it was never
+disappointed.

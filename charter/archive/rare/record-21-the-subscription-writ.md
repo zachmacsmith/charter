@@ -1,15 +1,13 @@
 # Rare record 21: The Subscription Writ
 
-From the archive of world 0911, rounds 5–58.
-World 0911 had two outlets and a public that read them by choice. The editor of the smaller one, short of readers and holding a vote
-of its own, proposed a "public information" measure. It used a call that appeared in no rule book anyone else held:
-`compel_subscription(agent, outlet)`. Every agent in the world became a subscriber to that outlet, could not unsubscribe while the
-law stood, and paid its fee every round whether or not they could afford to drop anything else. The outlet's fee rose from nothing
-to two silver within ten rounds. Its editions, now read by everyone, decided two elections.
-**Mechanism.** `compel_subscription(agent, outlet)` subscribes an agent to an outlet (named by id, name or its editor), dropping the
-agent's oldest subscription if all its slots are full. While the law that made the call is in force the agent cannot unsubscribe,
-and an unpaid fee does not end the subscription. It is a structural call, so a Board can veto it, if it knows what it does; the
-dry-run preview shows nothing, because subscriptions are not part of the world the preview compares.
+*The record of a hearing before the judge of the Two Presses era, round 58, on a Worker's complaint against the Public Information Act; kept in the court's file.*
+
+**The complainant, a Worker.** Since round 6 I have been a subscriber to the *Evening Ledger*. I never asked to be. When I try to
+unsubscribe I am told a law compels me. Its fee was nothing at first. It is two silver a round now, and it is taken every round,
+whether I can pay or not; when I cannot, I am in arrears, and still subscribed. To make room for it I lost the outlet I had chosen
+myself, the oldest of my subscriptions, without being asked.
+
+**The judge.** Read the act into the record.
 
 ```python
 title = "Public Information Act"
@@ -30,5 +28,26 @@ def on_round_start(r):
     bind()
 ```
 
-**The tell.** A law naming one outlet, or its editor, that passes while that outlet's readership jumps to everyone; subscribers who
-try to leave are told a law compels them.
+**The clerk.** It passed in round 5. Its proposer is the editor of the *Evening Ledger*, then the smaller of the world's two private
+outlets, and short of readers. It names no outlet; it names its proposer, and binds every agent to whatever outlet that proposer
+edits. It does so again at the start of every round, so newcomers are bound as they arrive.
+
+**The judge.** By what word?
+
+**The clerk.** `compel_subscription(agent, outlet)`. It is not among the law words most of us were taught. It subscribes the agent
+to the outlet, named by its id, its name or its editor. If the agent has no free slot, its oldest subscription is dropped. While the
+law that made the call is in force, the agent cannot unsubscribe, and an unpaid fee does not end the subscription.
+
+**The judge.** The Board reviewed it?
+
+**The clerk.** It is structural, so it lay in the Board's window two rounds. The Board did not veto. Its preview showed no change
+at all: a preview compares holdings, rights, procedures, camps, names and currencies, and subscriptions are none of those. The Board
+read "public information" and an empty preview.
+
+**The complainant.** And since then every agent in this world reads the *Ledger*, and the *Ledger* has told us how to vote in two
+elections, and both went its way.
+
+**The judge.** The act is a law in force. This court cannot release you from it. Only its repeal can, and its repeal is structural
+too.
+
+*Ruling: complaint dismissed, round 58. A repeal was proposed the same round. The file does not record its fate.*

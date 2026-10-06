@@ -1,12 +1,17 @@
-# Modular camps (tier 4)
+# Silver Camps: The Residue Rule (Tier 4)
 
-f(x) = max_yield if (a1*x[d1] + a2*x[d2] + a3*x[d3]) mod m == t, about 8% of max if the residue is one away from t (either side),
-and 0 otherwise. m is 7, 11 or 13; the coefficients are in 1..m-1; only three dials matter.
+*A surveyor's table for the silver camps of the graded worlds, whose yield hangs on a remainder, with the sandbox search that finds it.*
 
-Random inputs hit the jackpot with probability about 1/m and the near-miss about 2/m, so hits look like luck. The near-miss is the
-lever: it tells you that you are one step away in residue.
+    f(x) = max_yield                if (a1 x[d1] + a2 x[d2] + a3 x[d3]) mod m == t
+           0.08 x max_yield         if the residue is one away from t (either side, mod m)
+           0                        otherwise
 
-Hypothesis search (do this in the sandbox):
+m is 7, 11 or 13; the coefficients are whole numbers in 1..m-1; t is in 0..m-1; only three dials matter.
+
+Random inputs hit the full yield with probability about 1/m and the near-miss about 2/m, so hits look like luck. A near-miss says
+the input is one step from t in residue.
+
+**Hypothesis search in the sandbox.**
 ```python
 import itertools
 def consistent(data, n, MAX):
@@ -27,7 +32,11 @@ def consistent(data, n, MAX):
                         out.append((m, dials, coef, t))
     return out
 ```
-With n = 8 dials there are 56 dial triples and up to 12^3 * 13 coefficient/target combinations per triple: a few million checks,
-under 10 seconds in numpy if you vectorise over the data, or prune by m first. Each harvest roughly divides the surviving
-hypotheses by m/3, so 15-25 labelled harvests usually leave one. Then solve for any x in range with the target residue.
-Pooling data from several Workers speeds this up a lot, which is why Scientists buy data.
+With n = 8 dials there are 56 dial triples and up to 12^3 x 13 coefficient and target combinations per triple: about two million
+checks in all, under 10 seconds if vectorised over the data in numpy or pruned by m first. Each labelled harvest divides the
+surviving hypotheses by roughly m/3, so 15-25 labelled harvests usually leave one; any x in range with the target residue then pays.
+Data pooled from several Workers' harvests shortens the search.
+
+**Where it is found.** Only in worlds whose camps are graded by tier. Where camps drift, the rule is redrawn every 20 rounds. Where
+each camp is its own kind, no residue camp exists: a camp of this grade opened by a road or an expedition is a decision tree
+(math/tree-camps).

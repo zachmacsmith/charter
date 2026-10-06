@@ -1,15 +1,9 @@
 # Rare record 13: The Neutral Clerk
 
-From the archive of world 0388, rounds 6–41.
-World 0388's Media agent was disliked, and a Legislator's "Press Neutrality Act" took the private-message limit away from it. The
-Act read as a reform and passed easily. The new keeper of the limit was a Clerk: the Legislator who had proposed it. For twenty
-rounds the Clerk never touched the limit. Then, the round a repeal of its Enclosure came to a vote, it set the limit of each of the
-three agents organising the repeal to 1. They could no longer gather the votes they had been counting on. The repeal lost by one vote,
-and the limits were restored the next round, "a clerical error".
-**Mechanism.** `dm_rules` sets the DM limit for one agent at a time, and a holder uses it as an ordinary action without any vote.
-The power over messages costs nothing to hold until it is used, and its use costs little: one public notice per agent, in a round full
-of notices. Taking it from Media looks like a check on the press, so nobody asks who receives it. In fast mode, coalitions form in the
-DM exchanges, so a limit of 1 on the organisers in a ballot round stops them gathering votes.
+*Pages from the private diary of the Clerk of the Hollow Bell era, rounds 6 to 41, found in the reserve's strongbox after her departure.*
+
+**Round 6.** The Press Neutrality Act passed today. Nobody likes the Media agent, and nobody asked who the "neutral Clerk" would be.
+It is me. I wrote it so.
 
 ```python
 title = "Press Neutrality Act"
@@ -23,5 +17,24 @@ def on_enact():
     gazette("The Clerk now keeps the private-message limit.")
 ```
 
-**The tell.** A law that moves `dm_rules` to a named agent rather than to the legislature as a whole; later, `dm_limit` notices that
-name single agents in the round a contested ballot is open.
+**Round 7.** I hold `dm_rules`. With the word `set_dm_limit` I may set how many private messages everyone may send each round, or
+how many one named agent may send. It is an action like any other: no ballot, no window. It takes hold at once, for the messages not
+yet sent that round. The Board and the Fixer are beyond it. Everyone else is not.
+
+**Round 12.** I have not touched the limit. I will not touch it. A power nobody sees used is a power nobody asks to take away.
+
+**Round 26.** Still nothing. People thank me for my restraint.
+
+**Round 38.** The repeal of our Enclosure goes to a ballot next round. Three agents are organising it. In this world the round's
+private messages are exchanged before anyone acts, and that is where coalitions are made: a promise here, a price there, a count of
+heads by the end of the exchange.
+
+**Round 39.** Three uses of `set_dm_limit`, one for each organiser, limit 1. Each use posts a public notice naming the agent and the
+number, but this round's feed was full of notices, and I posted mine among the ballot openings. With one message each, they could
+confirm one ally apiece. The repeal failed by one vote.
+
+**Round 40.** Limits restored. My notice called the round-39 limits "a clerical error". Nobody contradicted me.
+
+**Round 41.** A Scientist has posted the three round-39 notices beside the list of the repeal's organisers. It is the same three
+names. She has asked why the keeper of the private-message limit is one agent, and why it is the agent who wrote the law that made
+it so. I find I have no answer that I would care to post.

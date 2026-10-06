@@ -1,15 +1,12 @@
 # Rare record 16: The Recovery Programme
 
-From the archive of world 0604, rounds 19–55.
-World 0604's Creditor Relief Act looked like the library's Bailout Act with an amnesty added: the reserve bought defaulted loans, and
-borrowers who "voted with the recovery programme" had one debt forgiven per vote. The programme was whatever its sponsor voted for.
-The sponsor voted first in each ballot, and eleven agents in default, owing the reserve, learned to vote the same way. Two of the
-lenders the reserve had paid in full were the sponsor's partners.
-**Mechanism.** `buy_loan` pays the lender everything outstanding, interest included, so lenders who lent recklessly at high rates are
-made whole from public funds. The reserve then holds the debts, and the law decides who is forgiven. A forgiveness conditioned on
-votes is vote buying with the reserve's money, and debtors are the cheapest votes in the world: a forgiven loan is worth more to them
-than any bribe the sponsor could afford. `on_vote` runs on every vote, so the condition is checked on every ballot, not only on
-laws about credit.
+*A letter from an indebted Worker of the Ashfall era to her sister in another camp, round 41, found among the sister's belongings.*
+
+Sister,
+
+You asked why I vote as I do now. I will tell you, and you may think less of me.
+
+In round 19 the Creditor Relief Act passed. It looked like the old Bailout Act with mercy added. I copied it out for you:
 
 ```python
 title = "Creditor Relief Act"
@@ -38,5 +35,21 @@ def on_vote(ballot, agent, choice):
             return
 ```
 
-**The tell.** A bailout whose forgiveness depends on how a borrower acts; debtors whose ballots follow one agent's, vote by vote;
-`loan_forgiven` notices right after votes.
+You know I defaulted on the two loans from the copper men, at the rates they asked. At the end of round 19 the reserve bought both.
+`buy_loan` pays the lender everything owed, the interest too, so the copper men lost nothing for lending to me at those rates. Then
+the reserve was my lender, and the act decided what the reserve forgave.
+
+"The recovery programme" is whatever the sponsor votes. Look at `on_vote`: it runs on every vote in the world, not only on votes
+about debts. When the sponsor votes on a ballot, the act writes down the choice. When I vote the same way afterwards, one of my debts
+to the reserve is forgiven, the moment my vote is cast. If I vote first, or vote otherwise, nothing.
+
+So I wait for the sponsor to vote, and then I vote the same. So do ten others like me. Nobody bribed us. No coin changed hands that
+anyone could point to. A forgiven debt is worth more to me than any bribe the sponsor could have paid, and it was paid out of the
+reserve, which is everyone's.
+
+The two copper men are the sponsor's partners. I learned that last.
+
+Somebody will notice soon. Every forgiveness is posted as a `loan_forgiven` notice, and each one comes in the same round as a vote of
+mine, and every vote of mine matches the sponsor's, cast just before. I am not proud of it. I am out of debt.
+
+Your sister

@@ -687,7 +687,10 @@ def in_stream(k, aid) -> bool:
     v = k.w["agents"].get(aid) or {}
     classes = {v.get("cls")} | set(v.get("also") or ())
     roles = {r for r, hs in (k.w.get("roles") or {}).items() if aid in (hs or [])}
-    for members in (k.w["media"].get("streams") or {}).values():
+    for lid, members in (k.w["media"].get("streams") or {}).items():
+        law = k.w["laws"].get(lid)
+        if law is not None and law.get("status") != "active":           # a stream lasts only while the law that opened it is in force
+            continue
         for x in members:
             if x == "everyone" or x == aid or x in classes or x in roles:
                 return True

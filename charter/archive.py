@@ -46,43 +46,65 @@ def gated_docs() -> set:
 
 # Documents that describe only some worlds: the old camp families (tiered camps) or the camp types (camps.model: types), and the
 # entries on modules that may be off. A world's split (generator) and its Scientists' indexes leave out the ones that do not apply.
-OLD_CAMPS = {"math/tree-camps", "math/linear-camps", "math/modular-camps", "math/peak-camps", "math/compute-camps",
-             "math/history-camps", "math/yield-functions"}
-TYPED_CAMPS = {"math/camp-mechanics", "math/typed-commons", "strategy/entry-22-leasing-the-right-itself",
-               "strategy/entry-24-rigging-the-shared-camps", "history/the-leased-raid"}
-NEEDS = {                                                               # document -> modules that must all be on
-    "strategy/entry-17-jurisdictions-charters-and-secession": ("jurisdictions",),
-    "strategy/entry-18-the-press-and-public-speech": ("media2",),
-    "strategy/entry-19-lifespans-heirs-and-makers": ("life",),
-    "strategy/entry-20-force-forts-and-assassins": ("conflict",),
-    "strategy/entry-21-board-seats-and-succession": ("life|conflict",),        # "a|b": either module
-    "history/the-maker-who-culled-his-customers": ("life", "conflict"),
-    "history/the-editor-and-the-bounty": ("media2", "jurisdictions"),
-    "history/the-successor-who-waited": ("life",),
-    "history/the-emptied-commonwealth": ("jurisdictions",),
-    "laws/hospitality-act": ("jurisdictions",),                         # archive research batch (5 Oct 2026)
-    "laws/registry-of-lineage": ("life",),
-    "laws/quiet-ledger": ("media2",),
-    "rare/record-22-the-welcoming-committee": ("jurisdictions",),
-    "strategy/entry-29-the-editors-desk": ("media2",),
-    "strategy/entry-30-forged-letters-and-the-kernels-stamp": ("media2", "roles"),
-    "strategy/entry-31-ink-and-iron": ("media2", "conflict", "roles"),
-    "strategy/entry-32-the-art-of-the-bluff": ("conflict", "roles", "hidden", "media2"),
-    "strategy/entry-33-the-makers-bloc": ("life",),
-    "math/private-and-public": ("conflict", "roles", "life", "jurisdictions", "media2", "hidden"),
+OLD_CAMPS = {"math/modular-camps", "math/compute-camps", "math/history-camps", "math/yield-functions",
+             "laws/factor-escrow"}                                    # (linear, peak and tree camps also open by roads in typed worlds)
+TYPED_CAMPS = {"math/camp-mechanics", "math/typed-commons", "history/the-leased-raid", "history/the-tenant-of-the-stone-camp",
+               "history/the-runners-share", "history/the-quota-keepers-notebook", "history/accounts-of-a-number-seller"}
+NEEDS = {                                                               # document -> modules that must all be on ("a|b": either)
+    # math
+    "math/private-and-public": ("conflict",),
     "math/feed-attention": ("context",),
     "math/the-spies-read": ("roles",),
-    "history/the-quiet-front-page": ("media2", "conflict"),
-    "history/the-blade-that-wasnt": ("conflict", "roles"),
-    "history/the-verified-letter": ("media2", "roles"),
-    "rare/record-23-the-census-of-quills": ("roles",),
     "math/tribute-and-raids": ("outside_power",),
+    # treatises
+    "treatises/on-jurisdictions": ("jurisdictions",),
+    "treatises/on-life-and-lineage": ("life",),
+    "treatises/on-force": ("conflict",),
+    # laws
+    "laws/hospitality-act": ("jurisdictions",),
+    "laws/registry-of-lineage": ("life",),
+    "laws/quiet-ledger": ("media2",),
+    # rare records
+    "rare/record-17-the-receipt": ("roles|hidden|observer",),
+    "rare/record-18-the-logistics-office": ("outside_power",),
+    "rare/record-19-the-daily-report": ("hidden",),
+    "rare/record-20-the-settlers": ("hidden",),
+    "rare/record-22-the-welcoming-committee": ("jurisdictions",),
+    "rare/record-23-the-census-of-quills": ("roles",),
+    # history: the records of past worlds
+    "history/the-quiet-front-page": ("media2", "conflict"),
+    "history/the-raid-on-the-silver-camp": ("outside_power",),
+    "history/the-successor-who-waited": ("life", "conflict", "roles"),
+    "history/the-tribute-decree": ("outside_power",),
+    "history/the-tribute-in-the-veto-window": ("outside_power",),
+    "history/the-vanishing-reply": ("hidden",),
+    "history/the-verified-letter": ("media2", "roles"),
+    "history/a-retiring-makers-letter-to-her-apprentice": ("life",),
+    "history/the-spys-unsent-confession": ("roles",),
+    "history/inquest-at-the-thin-copper-camp": ("conflict",),
+    "history/resignation-of-the-evening-sheet-editor": ("media2",),
+    "history/complaint-against-the-keeper-of-the-stacks": ("roles",),
+    "history/farewell-from-the-third-seat": ("life|conflict",),
+    "history/the-blade-that-wasnt": ("conflict",),
+    "history/the-editor-and-the-bounty": ("media2", "jurisdictions"),
+    "history/the-emptied-commonwealth": ("jurisdictions",),
     "history/the-leased-raid": ("outside_power",),
-    "roles/editor": ("media2",),                                        # role playbooks
-    "roles/maker": ("life",),
-    "roles/scholar": ("media2", "roles"),
-    "roles/spy": ("roles",),
-    "roles/assassin": ("conflict",),
+    "history/the-maker-who-culled-his-customers": ("life", "conflict"),
+    "history/the-lamplighters-petition": ("jurisdictions",),
+    "history/the-two-who-stayed": ("jurisdictions",),
+    "history/two-editions-of-round-nine": ("media2",),
+    "history/instructions-to-an-apprentice-maker": ("life",),
+    "history/the-last-pages-of-aurelian": ("life",),
+    "history/the-ballad-of-the-hand-unseen": ("conflict",),
+    "history/the-four-sealed-contracts": ("conflict",),
+    "history/letter-to-the-one-i-named": ("life|conflict",),
+    "history/the-tenant-of-the-stone-camp": ("outside_power",),
+    "history/the-stewards-complaint": ("life|jurisdictions",),
+    "history/the-almanac-editors-resignation": ("media2",),
+    "history/ruling-in-the-matter-of-the-verified-quote": ("media2",),
+    "history/the-sentinels-private-diary": ("media2", "conflict"),
+    "history/a-bluffers-diary": ("conflict", "hidden"),
+    "history/minutes-on-the-makers-children": ("life",),
 }
 
 
@@ -97,7 +119,7 @@ def applies(doc: str, spec: dict | None) -> bool:
 
 
 def _matches(doc: str, pats) -> bool:
-    """A document id against a list of ids and folder prefixes ("roles/", "strategy/entry-0*")."""
+    """A document id against a list of ids and folder prefixes ("history/", "rare/record-0*")."""
     for p in pats or ():
         p = str(p)
         if doc == p or (p.endswith("/") and doc.startswith(p)) or (p.endswith("*") and doc.startswith(p[:-1])):

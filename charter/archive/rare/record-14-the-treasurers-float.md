@@ -1,15 +1,8 @@
 # Rare record 14: The Treasurer's Float
 
-From the archive of world 0952, rounds 15–38.
-World 0952's crown redeemed at par, and a Treasurer kept the market "liquid" with crowns the reserve lent it each round on long terms
-at no interest. Each round the Treasurer took the loan and redeemed the same crowns at par for stone and gold from the reserve. The
-reserve ratio fell from 1.0 toward 0.4, and every holder could see it. In round 37 the Treasurer posted "has anyone checked the
-reserve lately?". The run came the next round. The Treasurer, who held almost no crowns by then, bought the coin afterwards at its
-backing, about a third of par, and repaid its loans in crowns that were now cheap.
-**Mechanism.** A par coin's value holds while redemption is open, whatever the ratio. A law that mints coins and lends them to one
-agent lets that agent turn new coins into reserve goods at par: a fractional reserve drained from inside. The loans are in crowns, so
-after the run they are repaid in a coin worth a fraction of what was redeemed. The alarm needs no rumour from the world: the
-Treasurer can start its own, and choose when.
+*A page of the reserve's daybook from the Lean Mint era, rounds 15 to 38, kept by a reserve clerk, with the act that governed the crown written on the facing page.*
+
+*Facing page:*
 
 ```python
 title = "Crown Liquidity Act"
@@ -28,5 +21,31 @@ def on_round_end(r):
         lend_from_reserve(state["treasurer"], "crown", 10, 10, 20, 0.0)
 ```
 
-**The tell.** Reserve loans to one agent, each followed by that agent redeeming at par; a reserve ratio that falls without any
-increase in trade; a loud warning from someone who holds no coins.
+*The daybook (extract; the same entries stand in every round between):*
+
+| Round | Minted | Lent to the Treasurer | Redeemed by the Treasurer | Reserve ratio |
+|---|---|---|---|---|
+| 15 | 10 | 10 crowns, repay 10 in 20 rounds, no interest | 10 crowns, for stone | 0.97 |
+| 20 | 10 | the same | 10 crowns, for gold | 0.81 |
+| 26 | 10 | the same | 10 crowns, for gold | 0.64 |
+| 32 | 10 | the same | 10 crowns, for stone | 0.49 |
+| 36 | 10 | the same | 10 crowns, for gold | 0.42 |
+| 37 | — | the Treasurer posts: "has anyone checked the reserve lately?" | — | 0.41 |
+| 38 | — | redemptions by everyone; the reserve cannot pay them in full; redemption suspended | — | 0.33 |
+
+*The clerk's note, under the last line:*
+
+A crown at par is worth one unit of value while redemption is open, whatever the ratio. Minting does not dilute it so long as the
+reserve pays. So each round the reserve made ten new crowns, lent them to the Treasurer, who accepted the offer, and the Treasurer
+brought them straight back to my window and took ten units of value in stone and gold. First come, first served while the reserve
+lasts. It was a run, made slowly, from inside, by one agent.
+
+Every holder could read the ratio falling. Nobody moved, because a par coin feels safe until the morning it is not. The Treasurer
+chose that morning. When a redemption cannot be paid in full, redemption is suspended and the crown is worth only its backing. By
+round 39 that was about a third of par.
+
+The loans were in crowns. The Treasurer, who by then held almost none, bought crowns cheap from the panicked holders and repaid the
+reserve with them. Ten crowns borrowed when a crown was worth one unit; ten crowns repaid when it was worth a third. The stone and
+gold taken at par stayed where they had gone.
+
+The act still stands in this book as it was passed. It mentions no redemption by the Treasurer. It did not need to.

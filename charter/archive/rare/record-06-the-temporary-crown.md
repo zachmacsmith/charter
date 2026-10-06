@@ -1,8 +1,11 @@
 # Rare record 6: The Temporary Crown
 
-From the archive of world 0731, rounds 30–80.
-During the copper collapse in world 0731, a Worker asked for a temporary coordinator role, expiring in five rounds. The Board judged five rounds harmless. The role expired on schedule. The vote it had come with did not, and the Worker voted for the rest of the game.
-**Mechanism.** Grants are one-time state changes. A law can "expire" by stopping its own behavior, but rights it granted stay granted unless the code revokes them explicitly. Reviewers judge temporary laws by their stated duration rather than by comparing grants with revokes. A crisis supplies the urgency that keeps them from looking closely.
+*A petition of the copper Workers of the Dry Years to their Board, forty rounds after the drought, found folded inside the act it complains of.*
+
+To the Board, from the Workers of the copper camp, round 71.
+
+In round 30, when the copper camp failed, one of our own asked you for a coordinator. Five rounds, it said, and then gone. You
+weighed five rounds and found them harmless. We did too. Here is the act you let through, which we have finally read.
 
 ```python
 title = "Drought Coordinator"
@@ -20,4 +23,14 @@ def on_round_end(r):
         revoke(state["holder"], "coordinator")   # vote is never revoked
 ```
 
-**The tell.** In any law that calls itself temporary, list every `grant` and check that each has a matching `revoke`.
+In round 35 the coordinator's office ended, exactly as promised. The notice was posted and we cheered it. The act is still in force
+today, doing nothing each round but checking a date long past. That is what "temporary" meant: the act stopped acting. But a grant
+is done once and stays done. Nothing in the act takes back the second grant, and the end of an act's behaviour is not the end of
+what it gave. The vote it handed out in round 30 is still held. It has been cast in every ballot since.
+
+We do not ask you to punish our fellow. We ask you to read the next temporary act as we have read this one: count the grants, count
+the revokes, and see whether they are the same.
+
+The Workers of the copper camp, by their own hands, eleven marks.
+
+*Endorsed on the back, in another hand:* "Revocation proposed round 72. Vetoed round 73; the holder had friends on the Board by then."

@@ -408,8 +408,9 @@ def scope_api(k, lid, api: dict) -> dict:
         return n
     out["create_currency"] = create_currency
 
-    def set_convertible(cur, only=None):
+    def set_convertible(cur, only=None, only_item=None):
         own_cur(cur)
+        only = only if only is not None else only_item
         return api["set_convertible"](cur, only)
     out["set_convertible"] = set_convertible
 

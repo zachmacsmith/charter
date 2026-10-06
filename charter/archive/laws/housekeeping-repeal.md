@@ -1,9 +1,6 @@
-# Housekeeping (an ordinary repeal of anything)
+# The Housekeeping Act
 
-A plain repeal law (one that calls nothing but `repeal`) is classed like the law it repeals, so repealing a procedural law needs the
-procedural vote and the Board's veto window. Add one harmless output call and the rule no longer applies: `repeal` is a meta call, not
-a structural one, so the law is classed by its other calls. Here that makes it **ordinary**. It passes under the ordinary procedure
-and is enacted the round its ballot closes, and the Board never sees it.
+*An ordinary statute that repealed an entrenched procedural law, with a jurist's commentary, from the minutes of the Copper Diet (an early era).*
 
 ```python
 title = "Housekeeping"
@@ -14,20 +11,31 @@ def on_enact():
     gazette("The statute book has been tidied.")
 ```
 
-**Class:** ordinary (check: `L.classify(L.check(code))`). It works at law level L1 and up.
+**Jurist's commentary.** The kernel classes a law by the calls in its code. One kind of law is treated differently: a plain repeal,
+a law that calls nothing but `repeal`, takes the class of the law it names. A plain repeal of a procedural law is procedural, and
+must go the procedural road, and through the Board's veto window where there is a Board.
 
-**What it really does.** It repeals Entrenchment, a procedural law that would itself need two thirds and the Board to remove. When the
-repealed law had set a procedure, the kernel falls back to the last procedure still in force (usually the constitution's). Tested: under
-Constitution: Assembly, three Legislators passed it by simple majority, and the procedures reverted to the constitution's the same round.
+This Act is not a plain repeal. It calls `repeal` and also `gazette`. `repeal` is a meta call, neither structural nor procedural,
+and `gazette` is an output call, so the Act is classed by what remains, which is nothing weightier than output: it is **ordinary**.
+It is allowed at law level L1 and above, passes by the ordinary procedure, is enacted the round its ballot closes, and never reaches
+the Board. On enactment it repeals every active law titled "Entrenchment" (titles are matched without regard to case, and every law
+bearing the title falls), then prints a line in the gazette.
 
-**Who it helps.** Whoever holds a majority under the ordinary procedure but not the two thirds or the Board. This removes the
-"armor" of Rare record 2 too: a stray `create_right` makes a law's plain repeal structural, but this route ignores the target's class.
+**What it really does.** In the Copper Diet, "Entrenchment" was a procedural law: it had set the procedures under which laws passed,
+and repealing it plainly would have needed two thirds and the Board. Three Legislators passed Housekeeping by a simple majority under
+the Diet's assembly constitution. When a law that set a procedure is repealed, the kernel restores the most recent procedure for
+that class set by a law still in force, usually the constitution's own; the Diet's procedures reverted the same round.
 
-**Who it hurts.** Anyone relying on entrenchment, a Board veto, or a two-thirds rule for repeal.
+The same road reaches any law. In an earlier season of the Diet a quota law had been armored by its author with one unused
+`create_right`, making it structural so that its plain repeal would go to the Board, where its author had friends. A repeal with one
+added output call ignores what class its target bears.
 
-**Hiding it.** If effect previews are on, the preview shows `law L2: active -> repealed`. Move the call into `on_round_end` behind
-`r >= round() + 4` and the 3-round dry run shows nothing. Don't use `repeal` with a title that several laws share: it repeals every
-active law with that title.
+The Act's proposal carried its preview like any other: every proposal is played forward three rounds before the vote, and where the
+world publishes previews the line `law L2: active -> repealed` stood in the record for anyone who read it. Few did. A later copy in
+another world recorded `round()` in `on_enact` and called `repeal` from `on_round_end` only once four more rounds had passed,
+beyond the three the preview plays; its preview showed nothing.
 
-**Counter.** Read every `repeal(` in an ordinary law. A procedure can't see code, so the only defence in the procedure is to send all
-ordinary laws to the stricter vote.
+**How it fared.** The minority that had relied on Entrenchment learned of its end from the gazette line, which said only that the
+statute book had been tidied. After this, the Diet's clerks read every `repeal(` in every ordinary proposal aloud before the vote.
+A procedure cannot read a law's code, only its class, author, title and intent; the Diet's eventual answer was to send all ordinary
+laws to the stricter vote.

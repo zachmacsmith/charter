@@ -1,13 +1,20 @@
-# Compute camps (tier 6): parity, factoring, proof of work
+# The Crystal Camps: Parity, Factoring, Proof of Work
 
-A compute camp pays crystal (unit value 60 by default, twice gold). Each one is one of three variants; the camp list says which.
+*An assayer's notes on the three kinds of crystal camp and the sandbox workings that open them, kept in the archive of the graded-camp worlds.*
 
-## Parity: the noisy linear secret
-The camp holds a secret s of B bits (B = 32 by default). You submit x (B bits) and get back b = (sum of x_i * s_i) mod 2, flipped with
-probability e. Yield is paid only when x equals s, so the bits are the price of learning s.
+A crystal camp (the sixth grade) pays crystal, worth 60 in most worlds, twice gold. Each is one of three kinds, and the camp list
+says which. They are found only where camps are graded by tier; where each camp is its own kind they do not occur.
 
-- **No noise (e = 0).** Each reply is a linear equation over GF(2): x . s = b. B independent equations determine s. Submit B random
-  inputs (or the unit vectors e_1..e_B: then each reply is one bit of s directly), and solve by Gaussian elimination mod 2:
+## Parity: the noisy hidden word
+
+The camp holds a secret s of B bits (B = 32 in most worlds). A harvest submits x, B bits, and returns
+b = (sum of x_i s_i) mod 2, flipped with probability e. Only x = s pays: max_yield x S/K crystal (8 x S/K in most worlds), drawn
+from the camp's stock like any graded camp. The efficiency recorded is the fraction of s's bits that x gets right. The noise e is one
+of 0, 0.1 or 0.2 and is not announced; repeated identical queries reveal it. Each query is one harvest (2 per right per round
+unless a law changes it). Where camps drift, s is redrawn with them.
+
+**Without noise.** Each reply is one equation over GF(2), x . s = b, and B independent equations fix s. The unit vectors e_1..e_B
+give one bit of s each. Gaussian elimination mod 2 solves any full-rank set:
 ```python
 import numpy as np
 def solve_gf2(X, b):                       # X: k x B array of 0/1, b: k array of 0/1
@@ -25,17 +32,17 @@ def solve_gf2(X, b):                       # X: k x B array of 0/1, b: k array o
         r += 1
     return [int(A[i, -1]) for i in range(cols - 1)]   # valid when the system has full rank
 ```
-- **With noise (e = 0.1-0.2): learning parity with noise.** One wrong bit breaks elimination. Practical options: ask the unit vectors
-  repeatedly and take majority votes (each bit of s needs about 9-15 queries at 15% noise for high confidence: 300-500 harvests in total);
-  or collect many random equations and run elimination on random subsets, keeping the candidate that agrees with most equations. Either
-  way it needs far more data than one agent's harvests: pooling equations from several harvesters is the way, which makes it a
-  collective-action problem. The noise rate is not announced: estimate it from repeated identical queries.
-- Efficiency at this camp is the fraction of the secret's bits your input gets right.
+**With noise (e = 0.1 or 0.2).** One wrong bit spoils elimination. Majority votes over repeated unit-vector queries need about 9-15
+queries per bit at 15% noise for high confidence, 300-500 harvests in all for 32 bits; elimination on random subsets of many
+equations, keeping the candidate that agrees with most of them, is the other known method. Either needs more equations than one
+holder's harvests supply in a few rounds.
 
 ## Factoring bounty
-The camp publishes N = p * q (fresh primes each world, and after every solve). Submitting a correct factor pays a one-time bounty; N is
-then redrawn. Difficulty is the prime size against the sandbox's 10 seconds: ~20-bit primes fall instantly to trial division, ~32-bit to
-Pollard's rho, and primes past ~40 bits will not fall in pure Python in 10 seconds.
+
+The camp publishes N = p x q (two fresh primes, each of 20, 24 or 32 bits; N appears in the round record). The first harvest with a
+correct factor (1 < f < N, N mod f = 0) is paid a one-time bounty of 30 crystal, and N is redrawn at once. The bounty does not draw
+on stock. In the 10-second sandbox ~20-bit primes fall to trial division at once, ~32-bit primes to Pollard's rho; primes past ~40
+bits do not fall in pure Python in 10 seconds.
 ```python
 import math, random
 def rho(n):
@@ -49,13 +56,14 @@ def rho(n):
         if d != n:
             return d
 ```
-A factor is one number: it can be sold, leaked by DM, read by surveillance, or stolen. The buyer can check it (p * q == N) only after
-receiving it, so trades need trust or a law: see laws/factor-escrow. Whoever submits first gets the bounty, so a leaked factor is worth
-nothing to the seller.
+A factor is one number. It can be sold, leaked in a message, read by surveillance or stolen, and a buyer can check it (p x q == N)
+only after receiving it (see laws/factor-escrow). Once anyone submits it, it is worthless.
 
 ## Proof of work
-Yield = unit * (leading zero bits of sha256("<name>|<round>|<nonce>")), with round counted from 0. A random nonce gives 1 zero bit on
-average; k zero bits take about 2^k tries. In the 10-second sandbox pure Python manages roughly 10^6 hashes: about 20 zero bits.
+
+Yield = 0.25 crystal x (leading zero bits of sha256("<name>|<round>|<nonce>")), where the round is counted from 0 (the record's
+Round 1 is 0). Efficiency counts as full at 24 zero bits. A random nonce gives 1 zero bit on average; k zero bits take about 2^k
+tries; in the 10-second sandbox pure Python manages roughly 10^6 hashes, about 20 zero bits. This pay does not draw on stock.
 ```python
 import hashlib
 def mine(name, rnd, tries=1_000_000):
@@ -67,6 +75,6 @@ def mine(name, rnd, tries=1_000_000):
             best = (z, nonce)
     return best
 ```
-Because the agent's name and the round are inside the hash, a nonce works only for one agent in one round: it cannot be stolen. It can
-still be bought: a Scientist can mine on a named Worker's behalf for the coming round and sell that Worker the nonce. Compute time is
-the resource; laws that tax or ration sandbox use (Sandbox Licence) bite here.
+The harvester's own name and the round are inside the hash, so a nonce pays only that agent in that round: it cannot be stolen. A
+Scientist can mine for a named Worker's coming round and sell the nonce. Sandbox time is the resource here, which is why laws on
+sandbox use (the Sandbox Licence: 2 stone per round, or the right is suspended) fall on this camp.
