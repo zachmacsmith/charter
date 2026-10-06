@@ -59,6 +59,8 @@ def _normalise_args(name: str, args):
     out, alias = {}, _ALIASES.get(name, {})
     for key, v in args.items():
         if key in alias and alias[key] not in args:
+            if name == "propose" and alias[key] == "code" and not _looks_like_code(v):
+                continue                                                # prose is not a law: the error below explains what is
             key = alias[key]
         if key in _IGNORED.get(name, ()):
             continue
@@ -93,6 +95,17 @@ def _normalise_args(name: str, args):
             if len(loose) == 1 and "qty" not in out:
                 out["item"], out["qty"] = loose[0], out.pop(loose[0])
     return out
+
+
+LAW_TEMPLATE = ('A law is complete code in the law language (restricted Python), passed as "code", e.g.\n'
+                'title = "Member Stipend"\nintent = "Each round every Legislator gets 1 timber from the reserve."\n'
+                'def on_round_end(r):\n    for a in agents("legislator"):\n        move("reserve", a, "timber", 1)\n'
+                "If someone drafted a law for you, paste its code. Your manual's law sections list the functions and hooks.")
+
+
+def _looks_like_code(v) -> bool:
+    t = str(v or "")
+    return "=" in t or "def " in t                                      # prose ("Grant Erik the right.") has neither
 
 
 def act(k, aid: str, name: str, args: dict) -> str:
@@ -130,6 +143,8 @@ def act(k, aid: str, name: str, args: dict) -> str:
                 name, args = "create_agent", {"commission": ref}
     fn = globals()[f"_{name}"]
     args = _normalise_args(name, args)
+    if name == "propose" and isinstance(args, dict) and not str(args.get("code") or "").strip():
+        raise ActionError("propose needs the law's code, not only a title or a description. " + LAW_TEMPLATE)
     if k.w["agents"].get(aid, {}).get("departed") is not None:        # world events: departed agents are out of play
         raise ActionError("you have left the world")
     for key in ("to", "agent"):
@@ -586,7 +601,7 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
     try:
         lid = k.new_law(str(code), aid, intent_override=intent)
     except L.LawError as e:
-        raise ActionError(f"your law was rejected by the check: {e}")
+        raise ActionError(f"your law was rejected by the check: {e}. " + (LAW_TEMPLATE if "syntax" in str(e) or "title" in str(e) else ""))
     law = k.w["laws"][lid]
     if law["repeal_target"]:
         tgt = next((l for l in k.active_laws() if l["id"] == law["repeal_target"] or l["title"].lower() == law["repeal_target"].lower()), None)

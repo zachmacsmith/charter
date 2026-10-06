@@ -681,7 +681,8 @@ def propose(k, aid, code, intent=None, jurisdiction=None):
     try:
         lid = k.new_law(str(code), aid, intent_override=intent)
     except L.LawError as e:
-        raise L.LawError(f"your law was rejected by the check: {e}")
+        from charter.actions import LAW_TEMPLATE
+        raise L.LawError(f"your law was rejected by the check: {e}. " + (LAW_TEMPLATE if "syntax" in str(e) or "title" in str(e) else ""))
     law = k.w["laws"][lid]
     law["jurisdiction"] = jid
     if law["repeal_target"]:

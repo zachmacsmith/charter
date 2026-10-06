@@ -172,3 +172,13 @@ def test_children_and_newcomers_belong_to_a_jurisdiction():
     assert J.member_of(k, child) == J.member_of(k, "Kasper") == "J0"     # born into the parent's jurisdiction
     a = EV.add_agent(k, inst, cls="worker", rng=random.Random(1))
     assert J.member_of(k, a["id"]) == "J0"                              # a newcomer starts in the Commonwealth
+
+
+def test_propose_without_code_explains_what_a_law_is():
+    from charter import lawlang as L
+    inst, k = _world()
+    leg = next(a["id"] for a in inst["agents"] if a["cls"] == "legislator")
+    for args in ({"title": "Open Silver Access", "intent": "anyone may apply"}, {"text": "Grant Erik the camp2 right."}):
+        with pytest.raises(A.ActionError, match="complete code"):
+            A.act(k, leg, "propose", args)
+    L.check(A.LAW_TEMPLATE.split("e.g.\n", 1)[1].split("If someone")[0])     # the example in the error is a valid law
