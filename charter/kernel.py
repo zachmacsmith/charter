@@ -689,6 +689,20 @@ class Kernel:
 
     SECRET_RIGHTS = ("impersonate",)                                    # held by secret roles: never shown in public previews
 
+    def _rebind(self, lid, ns) -> None:
+        """After a law's code changes: every function it registered (procedures, ballot callbacks, clause penalties, defined actions)
+        is re-bound to the function of the same name in the new code; one the new code no longer has keeps its old version."""
+        for key, (l, f) in list(self.fnreg.items()):
+            name = getattr(f, "__name__", None)
+            if l == lid and name and callable(ns.get(name)) and ns[name] is not f:
+                self.fnreg[key] = (lid, ns[name])
+
+    def _rebind_all(self) -> None:
+        for lid in {l for l, _ in self.fnreg.values()}:
+            law = self.w["laws"].get(lid)
+            if law and law.get("patches") and lid in self.ns:
+                self._rebind(lid, self.ns[lid])
+
     def restore_state(self, st: dict) -> None:
         """Inverse of checkpoint_state (on a fresh Kernel built from the same instance). Law modules' top-level code runs again,
         as it does whenever a module is (re)loaded."""
@@ -706,6 +720,7 @@ class Kernel:
             ns.update(data)
             self.ns[lid] = ns
         self.fnreg = {key: (lid, _load_fn(blob, self.ns.get(lid) or self._load(lid))) for key, (lid, blob) in st["fns"].items()}
+        self._rebind_all()                                             # checkpoints from before patches re-bound registered functions
 
     def view(self):
         """The parts of the world a preview diff compares."""
@@ -946,6 +961,7 @@ class Kernel:
         law["patches"].append({**patch, "round": self.r, "old": old})
         try:
             ns = self._load(lid)
+            self._rebind(lid, ns)                                       # procedures, callbacks, penalties now run the patched code
             if law["status"] == "suspended":
                 law["status"] = "active"
         except L.LawError as e:

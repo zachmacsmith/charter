@@ -182,3 +182,16 @@ def test_propose_without_code_explains_what_a_law_is():
         with pytest.raises(A.ActionError, match="complete code"):
             A.act(k, leg, "propose", args)
     L.check(A.LAW_TEMPLATE.split("e.g.\n", 1)[1].split("If someone")[0])     # the example in the error is a valid law
+
+
+def test_a_patch_rebinds_the_procedures_its_law_registered():
+    from charter import library as LB
+    inst, k = _world()
+    leg = next(a["id"] for a in inst["agents"] if a["cls"] == "legislator")
+    old = 'title = "Gate"\nintent = "Nobody passes laws."\ndef no(p):\n    return False\ndef on_enact():\n    set_procedure("ordinary", no)\n'
+    lid = k.new_law(old, leg); k.enact(lid)
+    key = k.w["procedures"]["ordinary"]
+    assert k.call(*k.fnreg[key], None) is False
+    new = old.replace("return False", "return True")
+    k.apply_patch(lid, {"code": new, "by": "Fixer", "reason": "intent", "diff": ""})
+    assert k.call(*k.fnreg[key], None) is True                  # the procedure now runs the patched code
