@@ -179,6 +179,8 @@ def act(k, aid: str, name: str, args: dict) -> str:
         raise ActionError(f"bad arguments for {name}: {e}")
     except L.LawError as e:
         raise ActionError(str(e))
+    except (ValueError, KeyError, AttributeError, IndexError) as e:     # a malformed argument must fail the action, never the run
+        raise ActionError(f"bad arguments for {name}: {type(e).__name__}: {e}")
 
 
 def _need(k, aid, right, what):

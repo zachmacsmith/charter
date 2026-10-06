@@ -480,7 +480,12 @@ def _fee(payment) -> dict:
         return {}
     if not isinstance(payment, dict):
         raise L.LawError("payment must be an object of item -> qty (the Maker's fee)")
-    out = {str(i): float(q) for i, q in payment.items()}
+    if "item" in payment and ("qty" in payment or "amount" in payment):  # {"item": "stone", "qty": 3}
+        payment = {str(payment["item"]): payment.get("qty", payment.get("amount"))}
+    try:
+        out = {str(i): float(q) for i, q in payment.items()}
+    except (TypeError, ValueError):
+        raise L.LawError('payment must be an object of item -> qty, e.g. {"stone": 3} (the Maker\'s fee)')
     if any(q < 0 for q in out.values()):
         raise L.LawError("payment quantities must not be negative")
     return {i: q for i, q in out.items() if q > 0}
