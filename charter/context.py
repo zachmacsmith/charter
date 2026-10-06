@@ -41,10 +41,11 @@ DEFAULTS = {
     "recent_turns": 3,                # own last turns shown verbatim
     "lookup_phase": True,             # free lookups before acting (one extra model call, only when the agent asks for lookups)
     "free_lookups": 3,                # free lookups per turn
-    "lookups_in_dm_step": False,      # lookups in a reply's "lookups" use private-message slots and are answered in the DM step, before
+    "lookups_in_dm_step": True,       # lookups in a reply's "lookups" use private-message slots and are answered in the DM step, before
                                       # actions (fast); a lookup in "actions" uses an action and its text comes next turn (slow)
     "action_purposes": False,         # the core prompt lists each action with a few words on what it does and why it helps
     "explore_nudge": False,           # a sentence encouraging agents to explore other avenues, strategies and resources
+    "full_turn_nudge": True,          # the actions line says unused actions are wasted (Sonnet otherwise takes about 1.5 of 4)
     "strategy_prompt": 0.0,           # share of agents (0..1, or true for all) told to work out their best strategy first: drawn per
                                       # agent from its own stream, recorded as agent["strategy_prompt"], compared in score.json
     "dm_tokens": 400,                 # feed: cap per DM to the agent
@@ -879,7 +880,8 @@ def core_prompt(inst, a, k=None) -> str:
         ("memory", f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {c['recent_turns']} turns, your
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
 first write each turn is free) or can find it again by search."""),
-        ("actions", f"""Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {acts}"""),
+        ("actions", f"""Actions (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {acts}"""
+                    + (f"\nAn action you leave unused is lost: most turns, use all {a['actions']} of them." if c.get("full_turn_nudge", True) else "")),
         ("lookups", look),
         ("manual_index", "Your manual (only titles here; fetch a section with the manual lookup):\n" + manual_index(secs)),
         ("reply", f"""Reply with a JSON object with these fields:

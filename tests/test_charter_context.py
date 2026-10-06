@@ -13,7 +13,7 @@ from charter import generator, runner
 from charter import spec as S
 from charter.kernel import Kernel
 
-BASE = ["shared_archive.enabled=false"]
+BASE = ["shared_archive.enabled=false", "context.lookups_in_dm_step=false"]   # these tests cover the free-lookup mode
 
 
 def world(sets=(), seed=1):
