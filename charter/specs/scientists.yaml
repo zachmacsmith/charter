@@ -1,0 +1,23 @@
+# The Scientists' archive, tested: run as a matched pair on one seed. The treatment world gives the Scientists the in-world archive
+# (sampled, with the clerk's manual always held); the control (--set archive_split.empty=true --set shared_archive.namespace=sci_control)
+# gives them only the README. Everything else, agents, goals, models, roles, camps and hidden powers, is identical (the archive
+# split has its own random stream). 24 agents (8 Opus, 16 Sonnet), 30 rounds, every module on.
+extends: [society]
+agents: {worker: 10, scientist: 6, legislator: 5, media: 0, board: 2, fixer: 1}
+rounds: 30
+models:
+  mix: balanced
+  balanced: [claude-opus-5-5, claude-sonnet-5-5, claude-sonnet-5-5]   # dealt round-robin: 8 Opus, 16 Sonnet
+context:
+  enabled: true
+  strategy_prompt: 1.0                 # everyone: work out your best strategy; Scientists hold the archive (ask, trade, pay)
+  action_purposes: true
+  explore_nudge: true
+  budgets: {core: 3500}
+media2: {enabled: true, submissions: true}
+life:
+  enabled: true
+  full_scale_rounds: 30
+  elapsed: [0, 5]                      # founders live most of the game; heirs matter in the last third
+roles: {enabled: true, reference_population: 24, counts: {spy: 1, assassin: 1, scholar: 1, maker: 2, media: 2}}
+shared_archive: {namespace: sci_archive}

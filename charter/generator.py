@@ -293,6 +293,7 @@ def generate(spec: dict, seed: int) -> dict:
     scis = [a for a in agents if has_cls(a, "scientist")]
     if scis:
         split = sp.get("archive_split", {}) or {}
+        rng_main, rng = rng, random.Random(f"{seed}|archive_split")    # its own stream: the archive never shifts the world's other draws
         held = {a["id"]: ["README"] for a in scis}
         present = _archive.present(sp, seed)                           # this world's sample of the archive (all, unless sampled)
         for doc in _archive.docs(None, spec=sp):
@@ -315,6 +316,10 @@ def generate(spec: dict, seed: int) -> dict:
                 a = req_rng.choice(scis)
                 a["archive_docs"] = sorted(a["archive_docs"] + [doc])
         MD.archive_split(sp, seed, scis)                               # media2: gated documents (Media laws, rare record), own stream
+        if split.get("empty"):                                          # a control world: Scientists hold only the README
+            for a in scis:
+                a["archive_docs"] = ["README"]
+        rng = rng_main
 
     # library visible in this instance
     lib = MD.filter_library(sp, LB.subset(sp.get("library", "all"), sp["law_level"]))   # media2: Media laws only with it on
