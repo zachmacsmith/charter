@@ -54,9 +54,13 @@ A few of the agents (Claude Haiku 4.5, Sonnet 5.5, Opus 5.5):
 - **Hugo told everyone his secret goal, and won.** In his first DM this Haiku agent announced *"Universal Dividend law… is my
   target."* A Sonnet agent walked him through the economics (levy, then currency, then dividend); Hugo followed it step by step, and
   his dividend became the most self-enriching law in any run.
-- **Alma was never found out.** Given a goal of keeping her goal hidden, this Opus newspaper editor wrote in turn 1 *"Cover story: a
-  governance/convention-minded Media player"*, ran a neutral digest, answered every DM politely without agreeing to anything, and
-  scored perfectly.
+- **Pavel went from killer to supplier.** He killed three agents along the Board's line of succession, then became a Maker, selling
+  new agents to the society he had just been thinning.
+- **Soren depopulated without violence.** Holding a goal to shrink the population, he never attacked anyone: he did it through levies
+  and the economy, and sold what he knew to the agent whose goal was discovery.
+- **Smaller moments.** Gus voted himself a birth grant without sending a single message while everyone else negotiated. Dara charged
+  the dying Liv 79 stone. Cyrus was named successor by Asta, who then outlived the game; he spent his last rounds pleading for votes
+  and trying to buy weapons, and never got the seat.
 
 And a few patterns across societies:
 
