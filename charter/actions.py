@@ -43,7 +43,8 @@ _ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent":
                                                     "position": "choice", "selection": "choice", "ballot_id": "ballot"}, "write_scratchpad": {"note": "text", "notes": "text", "content": "text"},
             "write_archive": {"note": "text", "content": "text", "message": "text"},
             "found": {"charter": "laws", "starting_laws": "laws"},
-            "name_successor": {"name": "agent", "successor": "agent", "to": "agent", "target": "agent"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
+            "name_successor": {"name": "agent", "successor": "agent", "to": "agent", "target": "agent"},
+            "guard": {"target": "agent", "protect": "agent", "who": "agent", "to": "agent"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
             "transfer": {"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item",
                          "resources": "item", "goods": "item", "good": "item", "payment": "item"},
             "reply": {"message_id": "message", "id": "message", "payment": "item", "pay": "item", "goods": "item"},
@@ -73,6 +74,8 @@ def _normalise_args(name: str, args):
         if key == "camp" and isinstance(v, (int, str)) and _CAMP_REF.match(str(v)):
             v = "camp" + _CAMP_REF.match(str(v)).group(1)
         out[key] = v
+    if name == "bequest" and "to" in out and "holdings" not in out:     # {"to": "Name"}: everything to one heir
+        out["holdings"] = {str(out.pop("to")): 1.0}
     if name == "create_agent" and isinstance(out.get("spec"), dict):    # a payment written into the spec is not part of the child
         out["spec"] = {x: v for x, v in out["spec"].items() if x not in ("fee", "payment", "price")}
     if name == "commission":                                            # spec fields given beside spec, and timing synonyms
