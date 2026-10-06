@@ -143,3 +143,18 @@ def test_seat_replaces_second_classes():
     inst, k = _world()
     MO.take_seat(k, "Zeno", "seat1", "Ole")
     assert "also" not in k.w["agents"]["Zeno"] and k.w["agents"]["Zeno"]["cls"] == "board"
+
+
+def test_a_child_is_born_with_the_strategy_prompt_on():
+    from charter import life as LF
+    inst, k = _world("context.strategy_prompt=1.0")
+    k._add("Kasper", "timber", 60)
+    k._add("Kasper", "gold", 20)
+    A.act(k, "Kasper", "commission", {"maker": "Hugo", "spec": {"cls": "worker"}})
+    k._add("Hugo", "timber", 30)
+    A.act(k, "Hugo", "create_agent", {"commission": "K1"})
+    before = len(k.w["agents"])
+    LF._births(k)                                                        # used to raise: the child's id was read before it existed
+    assert len(k.w["agents"]) == before + 1
+    child = inst["agents"][-1]
+    assert child.get("strategy_prompt") is True

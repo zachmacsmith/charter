@@ -349,6 +349,7 @@ def add_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None, child=N
     if child:                                                           # life: a made agent (life.py)
         a["goal"] = child["goal"](aid) if callable(child["goal"]) else child["goal"]
         a.update({x: child[x] for x in ("personality", "personality_text", "archetype", "archetype_text")})
+        a.update({x: child[x] for x in ("strategy_prompt", "profiles") if x in child})   # prompt composition carried to the child
         a.update(child.get("extra") or {})
     else:
         a["goal"] = draw_goals(k, inst, aid, cls, rights, rng)

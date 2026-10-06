@@ -846,8 +846,9 @@ def _birth(k, c) -> str | None:
     model = _pool(k)[sp["stats"]["tier"]]
     child = {"goal": goal_fn, "personality": traits, "personality_text": (atxt + " " + ptxt).strip(), "archetype": arch,
              "archetype_text": atxt, "model": model, "tier": sp["stats"]["tier"],
-             **({"profiles": _child_profiles(k, aid, sp["cls"])} if (k.spec.get("prompts") or {}).get("assign") else {}),
-             **({"strategy_prompt": random.Random(f"{k.inst['seed']}|strategy_prompt|{aid}").random() < share}
+             **({"profiles": _child_profiles(k, c["id"], sp["cls"])} if (k.spec.get("prompts") or {}).get("assign") else {}),
+             **({"strategy_prompt": random.Random(f"{k.inst['seed']}|strategy_prompt|{c['id']}").random() < share}   # keyed by the order:
+                # the child's own id does not exist until add_agent
                 if (share := __import__("charter.context", fromlist=["x"]).strategy_share(k.spec)) > 0 else {}),
              "actions": int(k.spec["actions_per_turn"]) + int(sp["stats"]["actions"]),
              "extra": {"persona": sp.get("persona") or "", "parent": parent, "maker": maker, "commission": c["id"],
