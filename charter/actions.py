@@ -37,7 +37,7 @@ class ActionError(Exception):
 
 
 _CAMP_REF = __import__("re").compile(r"^\s*(?:camp)?\s*(\d+)\s*$", __import__("re").I)
-_ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent": "to", "target": "to"}, "reply": {"message_id": "message", "id": "message"},
+_ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent": "to", "target": "to"},
             "post": {"message": "text"}, "fortify": {"amount": "qty", "stone": "qty", "quantity": "qty"},
             "forge": {"amount": "qty", "copper": "qty", "quantity": "qty"}, "vote": {"option": "choice", "vote": "choice", "answer": "choice", "value": "choice",
                                                     "position": "choice", "selection": "choice", "ballot_id": "ballot"}, "write_scratchpad": {"note": "text", "notes": "text", "content": "text"},
@@ -45,7 +45,9 @@ _ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent":
             "found": {"charter": "laws", "starting_laws": "laws"},
             "name_successor": {"name": "agent", "successor": "agent", "to": "agent", "target": "agent"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
             "transfer": {"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item",
-                         "resources": "item"}}
+                         "resources": "item", "goods": "item", "good": "item", "payment": "item"},
+            "reply": {"message_id": "message", "id": "message", "payment": "item", "pay": "item", "goods": "item"},
+            "write_edition": {"body": "text", "content": "text", "edition": "text"}}
 _IGNORED = {"propose": {"title", "name"}, "write_edition": {"title", "headline"}, "reply": {"to", "recipient"}}   # a reply goes to the sender
 
 
@@ -71,11 +73,17 @@ def _normalise_args(name: str, args):
         if key == "camp" and isinstance(v, (int, str)) and _CAMP_REF.match(str(v)):
             v = "camp" + _CAMP_REF.match(str(v)).group(1)
         out[key] = v
+    if name == "create_agent" and isinstance(out.get("spec"), dict):    # a payment written into the spec is not part of the child
+        out["spec"] = {x: v for x, v in out["spec"].items() if x not in ("fee", "payment", "price")}
     if name == "commission":                                            # spec fields given beside spec, and timing synonyms
         spec = dict(out.get("spec") or {}) if isinstance(out.get("spec") or {}, dict) else out.get("spec")
         if isinstance(spec, dict):
             for key in [x for x in out if x not in ("maker", "spec", "payment")]:
                 spec.setdefault(key, out.pop(key))
+            for syn in ("fee", "payment", "price"):                       # what the parent pays goes with the order, not the child
+                if syn in spec and "payment" not in out:
+                    out["payment"] = spec.pop(syn)
+                spec.pop(syn, None)
             for syn, real in (("role", "cls"), ("class", "cls")):
                 if syn in spec:
                     spec.setdefault(real, str(spec.pop(syn)).lower())

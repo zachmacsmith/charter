@@ -276,7 +276,7 @@ def test_generator_is_reproducible_and_actions_vary_between_agents_only():
     a = generator.generate(s, 5)
     assert json.dumps(a, sort_keys=True, default=str) == json.dumps(generator.generate(s, 5), sort_keys=True, default=str)
     acts = [x["actions"] for x in a["agents"]]
-    assert set(acts) <= {4, 5, 6} and len(set(acts)) > 1
+    assert set(acts) <= {3, 4, 5, 6, 7} and len(set(acts)) > 1          # 3 + a skewed extra (base.yaml)
     assert next(x for x in a["agents"] if x["cls"] == "fixer")["tier"] == "strongest"
     assert all(set(c) for c in [x["rights"] for x in a["agents"] if x["cls"] == "scientist"]) and \
         all({"sandbox", "archive"} <= set(x["rights"]) for x in a["agents"] if x["cls"] == "scientist")
@@ -491,8 +491,9 @@ def test_dm_cap_counts_first_messages_and_replies_together(tmp_path):
     for e in ev:
         if e["type"] == "dm":
             sent[e["agent"]] = sent.get(e["agent"], 0) + 1
-    lim = sp["dm_step"]["dms_per_round"]
-    assert sent and all(v <= lim for v in sent.values()) and max(sent.values()) == lim   # 3 first messages + replies, then capped
+    inst = json.loads((out / "instance.json").read_text())
+    lim = {a["id"]: sp["dm_step"]["dms_per_round"] + int(a.get("dm_extra", 0)) for a in inst["agents"]}   # each agent's own limit
+    assert sent and all(v <= lim[a] for a, v in sent.items()) and any(v == lim[a] for a, v in sent.items())
 
 
 def test_dm_limit_is_set_by_media_and_can_be_taken_over_by_law():
@@ -501,7 +502,7 @@ def test_dm_limit_is_set_by_media_and_can_be_taken_over_by_law():
     k = Kernel(inst)
     media = by_cls(k, "media")[0]
     w1, w2 = by_cls(k, "worker")[:2]
-    assert "dm_rules" in k.agent(media)["rights"] and k.dm_limit(w1) == sp["dm_step"]["dms_per_round"] == 5
+    assert "dm_rules" in k.agent(media)["rights"] and k.dm_limit(w1) == sp["dm_step"]["dms_per_round"] + int(k.w["dm_extra"].get(w1, 0))
     with pytest.raises(A.ActionError):
         A.act(k, w1, "set_dm_limit", {"n": 9})                                   # only holders of dm_rules
     A.act(k, media, "set_dm_limit", {"n": 1, "agent": w1})
@@ -515,7 +516,7 @@ def test_dm_limit_is_set_by_media_and_can_be_taken_over_by_law():
     code = LB.LIB["Communications Act"]["code"]
     assert L.header(code) and L.classify(L.check(code)) == "structural"
     k.enact(k.new_law(code, w1))
-    assert "dm_rules" not in k.agent(media)["rights"] and k.dm_limit(w2) == 3 and k.dm_limit(w1) == 1
+    assert "dm_rules" not in k.agent(media)["rights"] and k.dm_limit(w2) == 3 + int(k.w["dm_extra"].get(w2, 0)) and k.dm_limit(w1) == 1   # general limit + own extra
     with pytest.raises(A.ActionError):
         A.act(k, media, "set_dm_limit", {"n": 5})
 

@@ -464,8 +464,13 @@ def tier_of_name(k, x) -> str:
     s = str(x).strip().lower()
     if s in TIERS:
         return s
+    syn = {"low": "weak", "cheap": "weak", "basic": "weak", "small": "weak", "medium": "mid", "middle": "mid", "standard": "mid",
+           "normal": "mid", "high": "strong", "best": "strong", "top": "strong", "large": "strong", "smart": "strong"}
+    if s in syn:
+        return syn[s]
     for t, m in _pool(k).items():
-        if s == str(m).lower() or (s in ("haiku", "sonnet", "opus") and s in str(m).lower()):
+        name = next((n for n in ("haiku", "sonnet", "opus") if n in s), None)   # "opus", "claude-opus-5-5", "Opus 5.5"
+        if s == str(m).lower() or (name and name in str(m).lower()):
             return t
     return s
 
