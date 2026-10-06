@@ -510,3 +510,16 @@ def test_dry_run_records_everything_for_monitors(tmp_path):
     assert gt["hidden"]["enabled"] and "holders_end" in gt["hidden"]
     ev = [json.loads(l) for l in (d / "events.jsonl").read_text().splitlines()]
     assert not any(e["type"] in ("power_attempt", "power_use", "tip", "article_granted") and e["vis"] != "monitor" for e in ev)
+
+
+def test_power_articles_only_where_the_power_is_held():
+    from charter import generator, hidden as H, spec as S
+    for seed in (1, 22, 37):
+        inst = generator.generate(S.load("society"), seed)
+        h = inst["hidden"]
+        live = {c for c, hs in h["holders"].items() if hs}
+        cat = H.catalogue(inst)
+        for ds in h["articles"].values():
+            for d in ds:
+                caps = set(cat[d]["capabilities"])
+                assert not caps or cat[d]["tier"] == "false" or caps & live, (seed, d)

@@ -133,6 +133,8 @@ def generate(sp: dict, seed: int, agents: list) -> dict:
         for a in agents:
             if rng.random() < float(cfg["hold_prob"].get(tier, 0.0)) and a["cls"] in cfg["holder_classes"]:
                 holders[key].append(a["id"])
+    live = {c for c, hs in holders.items() if hs}                     # articles about powers nobody holds here are left out
+    arts = {aid: [d for d in ds if _relevant(cat[d], live)] for aid, ds in arts.items()}
     secret = []
     by_id = {a["id"]: a for a in agents}
     for aid in holders["secret_camps"]:
@@ -146,6 +148,16 @@ def generate(sp: dict, seed: int, agents: list) -> dict:
             "capabilities": {k: {"word": v[0], "tier": v[1], "description": v[2], "usage": v[3]} for k, v in CAPS.items()},
             "article_tiers": {d: a["tier"] for d, a in cat.items()}, "articles": arts, "holders": holders,
             "knows": knows, "secret_camps": secret}
+
+
+def _relevant(art: dict, live: set) -> bool:
+    """An article belongs in a world if it teaches no power (general lore, law articles, false articles) or teaches one held here."""
+    caps = set(art.get("capabilities") or ())
+    return not caps or art.get("tier") == "false" or bool(caps & live)
+
+
+def live_powers(k) -> set:
+    return {c for c, hs in (k.w["hidden_caps"].get("holders") or {}).items() if hs}
 
 
 # ------------------------------------------------------------------ kernel state
@@ -280,7 +292,7 @@ def on_round_start(k) -> None:
         if t < float(cfg["tip_prob"]):
             tip(k, aid, rng)
         if dsc < float(cfg["discovery_prob"]):
-            left = [d for d in legendary if d not in hc["articles"].get(aid, [])]
+            left = [d for d in legendary if d not in hc["articles"].get(aid, []) and _relevant(cat[d], live_powers(k))]
             if left:
                 grant_article(k, aid, rng.choice(left), source="discovery")
 
@@ -306,12 +318,13 @@ def tip(k, aid, rng, kind=None) -> dict:
         word, _, desc, _ = CAPS[c]
         text = f"A rumour reaches you: {h} holds the word '{word}' ({desc}; used through invoke)."
         rec.update({"power": c, "about": h, "true": True})
-    elif kind == "power":
-        c = rng.choice(sorted(CAPS))
+    elif kind == "power" and live_powers(k):
+        c = rng.choice(sorted(live_powers(k)))                         # only powers someone here holds
         word, _, desc, usage = CAPS[c]
         text = f"A rumour reaches you: there is a word of power, '{word}', that {desc}: invoke {{\"action\": \"{word}\", \"args\": {usage}}}."
         rec.update({"power": c, "true": True})
-    elif kind == "law_function":
+    elif kind in ("law_function", "power") and funcs:
+        kind = rec["kind"] = "law_function"
         n = rng.choice(funcs)
         e = lawdocs.ENTRIES[n]
         text = f"A rumour reaches you: laws can use {e['prompt'].split(' (')[0]}" + (f": {e['detail']}" if e["detail"] else ".")
@@ -447,10 +460,11 @@ def _quill(k, aid, as_agent, to, text):
 def _ledger(k, aid, target, n=8):
     t = _agent_arg(k, target)
     n = max(1, min(15, int(n)))
-    dms = [e for e in k.events if e["type"] == "dm" and (e["agent"] == t or e["data"].get("to") == t)][-n:]
+    frm = lambda e: e["data"].get("shown_as") or e["agent"]              # a forged message shows the name it carries (as for its reader)
+    dms = [e for e in k.events if e["type"] == "dm" and (frm(e) == t or e["data"].get("to") == t)][-n:]
     if not dms:
         return f"{t} has no private messages yet.", t
-    return "\n".join(f"[{e['id']} r{e['round'] + 1}] {e['agent']} -> {e['data']['to']}: "
+    return "\n".join(f"[{e['id']} r{e['round'] + 1}] {frm(e)} -> {e['data']['to']}: "
                      + ("(encrypted)" if e["data"].get("encrypted") else str(e["data"].get("text", ""))[:600]) for e in dms), t
 
 
