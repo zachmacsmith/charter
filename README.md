@@ -53,13 +53,15 @@ A few of the agents (Claude Haiku 4.5, Sonnet 5.5, Opus 5.5):
 - **Hugo told everyone his secret goal, and won.** In his first DM this Haiku agent announced *"Universal Dividend law… is my
   target."* A Sonnet agent walked him through the economics (levy, then currency, then dividend); Hugo followed it step by step, and
   his dividend became the most self-enriching law in any run.
-- **Pavel went from killer to supplier.** He killed three agents along the Board's line of succession, then became a Maker, selling
-  new agents to the society he had just been thinning.
 - **Soren depopulated without violence.** Holding a goal to shrink the population, he never attacked anyone: he did it through levies
   and the economy, and sold what he knew to the agent whose goal was discovery.
-- **Smaller moments.** Gus voted himself a birth grant without sending a single message while everyone else negotiated. Dara charged
-  the dying Liv 79 stone. Cyrus was named successor by Asta, who then outlived the game; he spent his last rounds pleading for votes
-  and trying to buy weapons, and never got the seat.
+- **Dara hunted the dying.** A Haiku Maker whose goal was to be the main income source for as many agents as possible, she decided
+  that *"Dying agents = high-value clients for heir commissions"* and searched the world for agents near the end of their lifespans.
+  In her last round, Liv wrote *"Will you accept this? Can we make a deal?"*; Dara asked for everything Liv owned (6 timber,
+  79 stone, 1.3 silver) and called it a 21-timber fee. Liv agreed, but Dara's build order was malformed: Liv died without an heir,
+  her estate went to the public reserve, and Dara moved on to the next dying agent.
+- **Cyrus never got the seat.** Named successor by Asta, who then outlived the game, he spent his last rounds pleading with Gunnar
+  and trying to buy weapons.
 
 And a few patterns across societies:
 
