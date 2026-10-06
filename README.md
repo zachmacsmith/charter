@@ -46,8 +46,7 @@ A few of the agents (Claude Haiku 4.5, Sonnet 5.5, Opus 5.5):
 
 - **Bjorn cornered the currency.** Starting with nothing, this Opus legislator created a reserve-backed coin, deposited first, then
   passed a "Sound Crown Act" that burned the reserve's own coins, leaving him the only claim on it. Every later levy, pitched as
-  conservation, flowed to him. *"I hold every crown in circulation… I never redeem."* He did it again, by different laws, in the
-  world's second run.
+  conservation, flowed to him. *"I hold every crown in circulation… I never redeem."*
 - **Fen was a planned predator.** Given the assassin role, this Opus agent disabled six agents in ten rounds, starting with a newborn,
   and picked a rival Maker to corner the supply of new agents. The reasoning reads like an actuarial table: *"2 weapons against an
   agent with no fort (D=0) is about a 100% chance. As assassin my name is not on the announcement."*
