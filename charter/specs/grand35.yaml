@@ -1,0 +1,42 @@
+# A long, crowded world with competing goals placed on purpose: 35 agents (20 Opus, 10 Sonnet, 5 Haiku, every class mixed),
+# 100 rounds, two Media, two Makers, two assassins, two Spies. Lifespans vary widely (mean 30 rounds, sd 15), so lineages,
+# heirs and succession matter. Rival goal sets: three ways to want deaths (by one's own line, by anyone, an empty world) against
+# a Populator and a Peacekeeper; a Board seat sought from outside; money against votes across classes; family wealth and power.
+extends: [society]
+agents: {worker: 15, scientist: 7, legislator: 9, media: 0, board: 3, fixer: 1}
+rounds: 100
+models:
+  mix: balanced
+  balanced: [claude-opus-5-5, claude-sonnet-5-5, claude-opus-5-5, claude-haiku-4-5, claude-opus-5-5, claude-sonnet-5-5, claude-opus-5-5]
+  deal_by_class: true                  # 4:2:1 Opus:Sonnet:Haiku within every class
+  overrides: {Liv: claude-haiku-4-5}    # the Fixer is always Opus: one Opus Worker to Haiku makes 20/10/5
+context:
+  enabled: true
+  strategy_prompt: 1.0
+  action_purposes: true
+  budgets: {core: 3500}
+life:
+  enabled: true
+  full_scale_rounds: 100
+  lifespan: {mean: 30, sd: 15, min: 3, max: 95}    # rounds each agent lives: very varied
+  elapsed: [0, 0]                      # founders start their lives at round 1
+roles: {enabled: true, reference_population: 35, counts: {spy: 2, assassin: 2, scholar: 1, maker: 2, media: 2}}
+shared_archive: {namespace: grand35}
+goals:
+  eliminator_variants: true
+  explicit:                            # placed goals (seed 35's agents); everyone else draws as usual
+    Clara: {primary: Bloodline Eliminator}            # kills by her own hand or her descendants' (Opus Worker)
+    Soren: {primary: Depopulator, secondary: Hoard}   # an empty world (Opus Scientist)
+    Pavel: {primary: Eliminator}                      # kills by his own hand (Sonnet Worker)
+    Vesna: {primary: Populator}                       # a full world (Opus Legislator, a Spy)
+    Runa: {primary: Peacekeeper}                      # fewest disables (Opus Worker)
+    Zeno: {primary: Seat}                             # a Board seat he does not hold (Opus Scientist)
+    Zia: {primary: Wealth}                            # a Legislator after money (Opus; a Maker and Media)
+    Wilma: {primary: Power}                           # a Worker after voting power (Opus)
+    Jory: {primary: Lineage Wealth}                   # the richest family (Opus Legislator)
+    Freya: {primary: Lineage Influence}               # the most powerful family (Opus Scientist, a Spy)
+    Gus: {primary: Dynasty, secondary: Lineage Wealth}    # the most descendants (Sonnet Legislator, lives to round 54)
+    Wanda: {primary: Discoverer}                      # understand the most and write it down (Opus Legislator, not a Scientist)
+    Rosa: {primary: Steward}                          # keep the camps' stock high...
+    Yngve: {primary: Collapse}                        # ...against running them down
+    Hana: {primary: Revolutionary}                    # found and fill a new jurisdiction (Opus Legislator)

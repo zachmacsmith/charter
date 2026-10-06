@@ -36,7 +36,7 @@ def test_exploration_prompt_and_fast_lookups():
     a = next(x for x in inst["agents"] if x["cls"] == "worker")
     p = CX.core_prompt(inst, a, k)
     assert "commission (order a child from a Maker" in p and "post (ask the newspapers to print your public post)" in p
-    assert "Look beyond the obvious" in p and "uses one of your private-message slots" in p and "for free" not in p
+    assert "(pre-action)" in p and "uses one of your private-message slots" in p and "for free" not in p
     assert CX.tokens(p) <= 3500
     before = k.w.setdefault("dm_sent", {}).get(a["id"], 0)
     text = CX.dm_step_lookup(k, a["id"], {"lookup": "manual", "args_json": '{"section": "Conflict"}'})

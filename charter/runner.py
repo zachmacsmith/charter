@@ -97,6 +97,14 @@ def _post_notices(k, notices, log=print) -> None:
             log(f"  notice posted: {str(t)[:80]}")
 
 
+def _as_item(q) -> dict | None:
+    """A pre-action ({"lookup": name, "args_json": ...}) in the shape of an action item ({"action": name, "args_json": ...})."""
+    if not isinstance(q, dict):
+        return None
+    name = q.get("action") or q.get("lookup") or q.get("name")
+    return {"action": str(name), "args_json": q.get("args_json", q.get("args", "{}"))} if name else None
+
+
 def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=()) -> Path:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -207,6 +215,9 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
             lq = {aid: [q for q in (decisions[aid][0].get("lookups") or []) if isinstance(q, dict)] if fast_lk else [] for aid in order}
             looked = {aid: [] for aid in order}
             outbox = {aid: [x for x in (decisions[aid][0].get("actions") or []) if A.is_dm_item(x)] for aid in order}
+            for aid in order:                                           # context: messages listed as pre-actions go out like any DM
+                outbox[aid] += [_as_item(q) for q in lq[aid] if _as_item(q) and A.is_dm_item(_as_item(q))]
+                lq[aid] = [q for q in lq[aid] if not (_as_item(q) and A.is_dm_item(_as_item(q)))]
             plan = {aid: [x for x in (decisions[aid][0].get("actions") or []) if not A.is_dm_item(x)] for aid in order}
             for wave in range(waves + 1):
                 got = []
@@ -258,6 +269,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                     last[aid] = {**o, "actions": plan[aid]}
                     if fast_lk:
                         lq[aid] = [q for q in (o.get("lookups") or []) if isinstance(q, dict)]
+                        outbox[aid] += [_as_item(q) for q in lq[aid] if _as_item(q) and A.is_dm_item(_as_item(q))]
+                        lq[aid] = [q for q in lq[aid] if not (_as_item(q) and A.is_dm_item(_as_item(q)))]
                 reason_f.flush()
 
         def prepare(aid):

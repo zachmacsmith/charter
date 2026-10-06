@@ -93,17 +93,17 @@ def sections(inst, k, aid) -> list:
                                          for r in rights) or "You hold no rights."))
     out.append(("Goals in this world", AG.goal_prior(sp.get("goals"))))
 
-    allowed = CX.allowed_actions(inst, a, rights)
+    allowed = CX.usable(k, aid, CX.allowed_actions(inst, a, rights), rights)
     edge, groups, kinds = CX.action_layout(allowed, rights)
     doc = lambda ns: "\n".join("- " + (AG.action_doc(n, inst, a) if n in AG.ACTION_DOC else f"{n}: {PU.purpose(n)}") for n in ns)
     if edge:
         out.append(("Actions: your edge", "Only your class or roles can do these.\n" + doc(edge)))
     for g, ns in groups:
         out.append((f"Actions: {g.lower()}", doc(ns)))
-    for kd, ns in kinds:
-        out.append((f"Actions: {kd}", doc(ns)))
+    for kd, phrase, ns in kinds:
+        out.append((f"Actions: {kd}", f"How to {phrase}:\n" + doc(ns)))
     out.append(("Actions: all", "Every action you can take, by kind (open a kind's section for the arguments):\n" + "\n".join(
-        f"- {t}: " + ", ".join(ns) for t, ns in ([("your edge", edge)] if edge else []) + [(g.lower(), ns) for g, ns in groups] + kinds)))
+        f"- {t}: " + ", ".join(ns) for t, ns in ([("your edge", edge)] if edge else []) + [(g.lower(), ns) for g, ns in groups] + [(kd, ns) for kd, _, ns in kinds])))
 
     if sp["channels"].get("dm", True):
         dmc = sp.get("dm_step") or {}

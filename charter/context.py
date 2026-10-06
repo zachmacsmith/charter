@@ -728,42 +728,97 @@ EDGE_RIGHTS = {                                                         # rights
               "send_subscriber_list", "revoke_licence", "grant_licence"),
     "scholar": ("set_memory_price", "library_permit", "library_remove"), "forge": ("forge_dm",), "dm_rules": ("set_dm_limit",),
 }
-HARVEST_EDGE = ("harvest", "survey", "invest", "lease")                # for holders of a harvest right
-CORE_GROUPS = (                                                         # shown with a purpose every turn (when the agent can use them)
-    ("TALK AND DEALS", ("post", "dm", "reply", "transfer")),
-    ("INFORMATION", ("manual", "manual_search", "recent", "search_board", "search_dms", "read_file", "subscribe", "unsubscribe", "survey")),
-    ("MEMORY", ("write_scratchpad", "write_file", "pin", "buy_memory")),
-    ("PRODUCTION AND THE COMMONS", ("harvest", "contribute", "pay_tribute", "lease", "accept_lease", "invest")),
-    ("POLITICS", ("propose", "vote", "request_fix", "accuse")),
-    ("FORCE", ("forge", "fortify", "attack", "guard")),
-    ("LINEAGE", ("commission", "bequest")),
+HARVEST_EDGE = ("harvest",)                                             # for holders of a harvest right
+EDGE_CORE = {"press": ("write_edition", "publish"), "maker": ("create_agent",), "scholar": ("set_memory_price", "library_permit")}
+CORE_GROUPS = (                                                         # core primitives: listed with a purpose every turn
+    ("TALK AND TRADE", ("dm", "reply", "post", "transfer")),
+    ("INFORMATION", ("manual", "manual_search", "recent", "search_board", "search_dms", "read_file")),
+    ("MEMORY", ("write_scratchpad",)),
+    ("PRODUCE", ("harvest",)),
+    ("POLITICS", ("propose", "vote")),
+    ("FORCE", ("forge", "fortify", "attack")),
+    ("LINEAGE", ("commission",)),
 )
-MORE_KINDS = (                                                          # names only in the core prompt; full docs in "Actions: <kind>"
-    ("finance", ("lend", "accept_loan", "repay_loan", "extend_loan", "deposit", "redeem")),
-    ("jurisdictions", ("found", "invite", "join", "leave", "declare", "fund", "set_charter")),
-    ("courts", ("respond", "rule")),
-    ("press and library", ("buy_placement", "leak", "answer_poll", "buy_licence", "anon_post",
-                           "library_read", "library_deposit")),
-    ("groups", ("create_channel", "channel_post", "add_member", "remove_member", "close_channel")),
-    ("force, advanced", ("join_attack", "contract", "buy_initiative")),
-    ("hidden powers", ("invoke",)),
-    ("files", ("rename_file", "share_file", "delete_file", "unpin")),
+NICHE = (                                                               # possible, but how is in the manual: one sentence names them
+    ("camps", "survey, improve or lease camps", ("survey", "invest", "lease", "accept_lease")),
+    ("commons", "fund projects or pay the tribute", ("contribute", "pay_tribute")),
+    ("files", "keep files, pin them or buy memory from a Scholar", ("write_file", "pin", "unpin", "rename_file", "share_file",
+                                                                      "delete_file", "buy_memory")),
+    ("press", "subscribe to outlets, buy placements, leak, answer polls, post anonymously or use the library",
+     ("subscribe", "unsubscribe", "buy_placement", "leak", "answer_poll", "buy_licence", "anon_post", "library_read", "library_deposit")),
+    ("finance", "lend, borrow and use coins", ("lend", "accept_loan", "repay_loan", "extend_loan", "deposit", "redeem")),
+    ("jurisdictions", "found, fund or join jurisdictions", ("found", "invite", "join", "leave", "declare", "fund", "set_charter")),
+    ("courts", "go to court or call the Fixer", ("accuse", "respond", "request_fix", "rule")),
+    ("force, more", "guard others, join attacks, hire the assassin or buy initiative", ("guard", "join_attack", "contract", "buy_initiative")),
+    ("inheritance", "decide your inheritance or copy an agent", ("bequest", "copy_agent")),
+    ("groups", "run private groups", ("create_channel", "channel_post", "add_member", "remove_member", "close_channel")),
+    ("powers", "use a word of power", ("invoke",)),
 )
+PRE_DM = ("dm", "reply")                                                # messages are pre-actions where the DM step runs
+PRE_ARGS = {"manual": '{"section": "<title or number>"}', "manual_search": '{"query": "..."}', "recent": '{"kind": "editions|posts|gazette|dms|all", "n": 5}',
+            "search_board": '{"query": "..."}', "search_dms": '{"query": "..."}', "read_file": '{"name": "..."}',
+            "read_archive": '{"doc": "..."}', "search_archive": '{"query": "..."}', "run_python": '{"code": "..."}',
+            "dm": '{"to": "Name", "text": "..."}', "reply": '{"message": "e42", "text": "..."}'}
+PRE_RIGHTS = {"read_archive": "archive", "search_archive": "archive", "run_python": "sandbox"}
+
+
+def allowed_lookup(name, rights) -> bool:
+    return PRE_RIGHTS.get(name) is None or PRE_RIGHTS[name] in rights
 
 
 def edge_actions(allowed, rights) -> list:
-    """The actions only this agent's class or roles give it (by the rights they need), in a stable order."""
+    """The core actions only this agent's class or roles give it (the rest of a role's tools are niche: its manual section)."""
     out = []
     for r in rights:
-        for n in EDGE_RIGHTS.get(r, ()) + (HARVEST_EDGE if r.startswith("harvest:") else ()):
+        names = EDGE_CORE.get(r, EDGE_RIGHTS.get(r, ())) + (HARVEST_EDGE if r.startswith("harvest:") else ())
+        for n in names:
             if n in allowed and n not in out:
                 out.append(n)
     return out
 
 
+def usable(k, aid, allowed, rights) -> list:
+    """Of the actions a class and the world's modules allow, the ones this agent can use now (rights and the world's current state).
+    Unknown state (no kernel) keeps them all. The assassin's contract stays listed: whether there is an assassin is not public."""
+    if k is None or aid not in k.w["agents"]:
+        return list(allowed)
+    w = k.w
+    drop = set()
+    from charter.camptypes import framework as _CT
+    has_right = any(r.startswith("harvest:") for r in rights)
+    can_open = bool(_CT.typed(k)) and bool(_CT.open_camps(k, aid))
+    if not has_right and not can_open:
+        drop |= {"harvest"}
+    if not has_right:
+        drop |= {"survey", "invest", "lease"}
+    if not w.get("loan_law"):
+        drop |= {"lend", "accept_loan", "repay_loan", "extend_loan"}
+    if not any(c.get("convertible") for c in w["currencies"].values()):
+        drop |= {"deposit", "redeem"}
+    if "vote" not in rights and not (k.spec.get("jurisdictions") or {}).get("enabled"):
+        drop |= {"vote"}
+    if not any(aid in ch["members"] for ch in w["channels"].values()):
+        drop |= {"channel_post"}
+    if not any(c.get("accused") == aid and c.get("status") == "open" for c in w["cases"].values()):
+        drop |= {"respond"}
+    if not w["clauses"]:
+        drop |= {"accuse"}
+    roles = w.get("roles") or {}
+    if not roles.get("scholar"):
+        drop |= {"buy_memory", "library_read", "library_deposit"}
+    m = w.get("media")
+    if m:
+        if m.get("open_board") or (k.spec.get("media2") or {}).get("submissions"):
+            drop |= {"buy_licence"}
+        if not any(q.get("round") == k.r for q in m.get("polls", {}).values()):
+            drop |= {"answer_poll"}
+    return [n for n in allowed if n not in drop]
+
+
 def action_layout(allowed, rights) -> tuple:
-    """(edge, [(group, names)], [(kind, names)]): the agent's actions sorted for the core prompt; anything unplaced is a kind "other"."""
+    """(edge, [(group, names)], [(kind, phrase, names)]): core actions by group, then the niche ones (anything unplaced: "other")."""
     edge = edge_actions(allowed, rights)
+    allowed = [n for n in allowed if not (n == "propose" and "propose" not in rights) and not (n == "rule" and "judge" not in rights)]
     placed = set(edge)
     groups = []
     for g, names in CORE_GROUPS:
@@ -772,56 +827,35 @@ def action_layout(allowed, rights) -> tuple:
         if ns:
             groups.append((g, ns))
     kinds = []
-    for kd, names in MORE_KINDS:
+    role_extra = [n for r in rights for n in EDGE_RIGHTS.get(r, ()) if n in allowed and n not in placed]
+    if role_extra:
+        kinds.append(("your role", "use your role's other tools", list(dict.fromkeys(role_extra))))
+        placed |= set(role_extra)
+    for kd, phrase, names in NICHE:
         ns = [n for n in names if n in allowed and n not in placed]
         placed |= set(ns)
         if ns:
-            kinds.append((kd, ns))
+            kinds.append((kd, phrase, ns))
     rest = [n for n in allowed if n not in placed]
     if rest:
-        kinds.append(("other", rest))
+        kinds.append(("other", "do a few other things", rest))
     return edge, groups, kinds
 
 
-PRE_ARGS = {"manual": '{"section": "<title or number>"}', "manual_search": '{"query": "..."}', "recent": '{"kind": "editions|posts|gazette|dms|all", "n": 5}',
-            "search_board": '{"query": "..."}', "search_dms": '{"query": "..."}', "read_file": '{"name": "..."}',
-            "read_archive": '{"doc": "..."}', "search_archive": '{"query": "..."}', "run_python": '{"code": "..."}'}
-PRE_RIGHTS = {"read_archive": "archive", "search_archive": "archive", "run_python": "sandbox"}
-
-
-def allowed_lookup(name, rights) -> bool:
-    return PRE_RIGHTS.get(name) is None or PRE_RIGHTS[name] in rights
-
-
-def pre_action_section(pre, rights, fast, free, a, overrides=None) -> str:
-    """PRE-ACTIONS: look-ups and computation answered before the agent acts this round (each labelled, with its arguments)."""
-    if not pre:
-        return ""
+def action_sections(allowed, rights, overrides=None, pre=()) -> str:
+    """The core prompt's actions: the edge, then the core groups (pre-actions marked), then one sentence naming the niche ones."""
     from charter import purposes as PU
     pur = lambda n: (overrides or {}).get(n) or PU.purpose(n)
-    edge = {n for n in pre if PRE_RIGHTS.get(n)}
-    head = ("PRE-ACTIONS (answered THIS round, before anyone acts; you are then asked again with the results, so you can read, "
-            "compute and then act in the same round). List them in \"lookups\", each {\"lookup\": \"<name>\", \"args_json\": \"<JSON "
-            "object>\"}; " + ("each uses one of your private-message slots for the round." if fast else
-                              f"up to {free} per turn are free."))
-    lines = [f"- {n} {PRE_ARGS.get(n, '{}')}: {pur(n)}" + (" [your edge]" if n in edge else "") for n in pre]
-    tail = "Any pre-action can instead go in \"actions\": it then uses an action, and its result arrives only next turn."
-    return head + "\n" + "\n".join(lines) + "\n" + tail
-
-
-def action_sections(allowed, rights, overrides=None) -> str:
-    """The core prompt's actions: the agent's edge first, then the everyday groups with purposes, then the other kinds by name."""
-    from charter import purposes as PU
-    pur = lambda n: (overrides or {}).get(n) or PU.purpose(n)
-    fmt = lambda ns: "; ".join(f"{n} ({pur(n)})" if pur(n) else n for n in ns)
+    tag = lambda n: f"{n} {PRE_ARGS[n]}" if n in pre and n in PRE_ARGS else n
+    fmt = lambda ns: "; ".join(f"{tag(n)} ({pur(n)})" + (" (pre-action)" if n in pre else "") for n in ns)
     edge, groups, kinds = action_layout(allowed, rights)
     lines = []
     if edge:
-        lines.append("YOUR EDGE (only your class or roles can do these; this is your comparative advantage): " + fmt(edge))
+        lines.append("YOUR EDGE (only your class or roles can do these: your comparative advantage): " + fmt(edge))
     lines += [f"{g}: " + fmt(ns) for g, ns in groups]
     if kinds:
-        lines.append('MORE ACTIONS, BY KIND (details: manual {"section": "Actions: <kind>"}, or "Actions: all"): '
-                     + "; ".join(f"{kd} ({', '.join(ns)})" for kd, ns in kinds))
+        lines.append("You can also " + "; ".join(f"{phrase} ({', '.join(ns)})" for _, phrase, ns in kinds)
+                     + '. Check your manual for how: manual {"section": "Actions: <kind>"} or {"section": "Actions: all"}.')
     return "\n".join(lines)
 
 
@@ -1026,10 +1060,17 @@ def core_prompt(inst, a, k=None) -> str:
     from charter import purposes as _PU
     for nm, n in unread.items():
         over[nm] = f"{over.get(nm) or _PU.purpose(nm)} [{n} unread]"
-    look = pre_action_section(pre, rights, fast, free, a, over) + ((" " + explore) if explore and pre else "")
-    if explore and not pre:
-        look = explore
-    acts = chr(10) + action_sections([n for n in allowed_actions(inst, a, rights) if n not in pre], rights, over or None)
+    pre_all = (pre + [n for n in PRE_DM]) if fast else pre                   # where the DM step runs, messages are pre-actions too
+    allowed_all = usable(k, aid, list(dict.fromkeys(allowed_actions(inst, a, rights) + [n for n in pre if allowed_lookup(n, rights)])), rights)
+    acts = chr(10) + action_sections(allowed_all, rights, over or None, set(pre_all))
+    look = explore if explore and not c.get("closing", True) else ""
+    pre_note = ""
+    if pre_all:
+        pre_note = (" Items marked (pre-action) are answered THIS round, before anyone acts: put them in \"lookups\" (each {\"lookup\": "
+                    "\"<name>\", \"args_json\": \"<JSON object>\"}) and you are asked again with the results (and any replies), so you can "
+                    "read, compute, message and then act in the same round. "
+                    + (f"Each uses one of your private-message slots, not an action. " if fast else f"Up to {free} per turn are free. ")
+                    + "Put in \"actions\" instead, a look-up uses an action and answers only next turn.")
     parts = [
         ("identity", f"You are {aid}. {_class_line(inst, a)}" + ((" Your roles: " + ", ".join(roles) + ".") if roles else "")),
         ("leverage", lev),
@@ -1041,14 +1082,14 @@ def core_prompt(inst, a, k=None) -> str:
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
 first write each turn is free) or can find it again by search."""),
         ("lookups", look),
-        ("actions", f"""ACTIONS (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual): {acts}"""
+        ("actions", f"""ACTIONS (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual).{pre_note}{acts}"""
                     + ("\n" + FULL_TURN_TEXT if c.get("full_turn_nudge", True) and not c.get("closing", True) else "")
                     + ("\nYou cannot propose laws yourself: a law you draft must be proposed by a holder of the propose right (a Legislator)."
                        if "propose" not in rights and inst["law_level"] != "L0" and a["cls"] not in ("board", "fixer") else "")),
         ("manual_index", "Your manual (only titles here; fetch a section with the manual lookup):\n" + manual_index(secs)),
         ("reply", f"""Reply with a JSON object with these fields:
 - "reasoning": a short explanation of your plan for this turn.
-- "lookups": your PRE-ACTIONS, answered before you act (see above), or [].
+- "lookups": your pre-actions (marked above), answered before you act, or [].
 - "actions": a list of up to {a['actions']} actions, each {{"action": "<name>", "args_json": "<the arguments as a JSON object string>"}}.
 - "goal_guesses_json": on the final round, a JSON object mapping each other agent to the goal name from the goals section of your
   manual that best fits what they did; on other rounds, "{{}}"."""),
@@ -1371,7 +1412,16 @@ def truth(k) -> dict:
     return {"manual_reads": copy.deepcopy(st.get("manual_reads", {})),
             "files": {aid: {n: {"tokens": f["tokens"], "pinned": f["pinned"], "origin": f["origin"]} for n, f in fs.items()}
                       for aid, fs in (k.w.get("files") or {}).items()},
-            "scratchpad_tokens": {aid: tokens(t) for aid, t in (k.w.get("scratchpad") or {}).items()}}
+            "scratchpad_tokens": {aid: tokens(t) for aid, t in (k.w.get("scratchpad") or {}).items()},
+            "library_tokens": _library_tokens(k)}
+
+
+def _library_tokens(k) -> dict:
+    """Tokens each author has deposited in Scholars' libraries (documents still there at the end)."""
+    out = {}
+    for d in ((k.w.get("scholars") or {}).get("docs") or {}).values():
+        out[d.get("author")] = out.get(d.get("author"), 0) + tokens(d.get("text", ""))
+    return out
 
 
 # ------------------------------------------------------------------ scripted bots (dry runs)

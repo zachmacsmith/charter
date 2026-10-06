@@ -117,7 +117,13 @@ def _scale(k) -> float:
 
 
 def _draw_lifespan(k, rng) -> int:
-    lo, hi = cfg(k.spec)["lifespan"]
+    """life.lifespan: [lo, hi] (uniform), or {mean, sd, min, max} (normal, clipped), scaled by the run's length."""
+    ls = cfg(k.spec)["lifespan"]
+    if isinstance(ls, dict):
+        x = rng.gauss(float(ls.get("mean", 30)), float(ls.get("sd", 10)))
+        x = min(float(ls.get("max", 1e9)), max(float(ls.get("min", 2)), x))
+        return max(2, round(x * _scale(k)))
+    lo, hi = ls
     return max(2, round(rng.uniform(float(lo), float(hi)) * _scale(k)))
 
 

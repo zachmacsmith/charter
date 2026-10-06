@@ -391,6 +391,9 @@ def generate(spec: dict, seed: int) -> dict:
             if sec and p2 > 0 and rng.random() < min(1.0, p3 / p2):      # tertiary_prob is the share of all agents with a third goal
                 ter = G.sample_goal(rng, w, exclude=(prim, sec))
                 tparams = G.sample_params(ter, rng, world, a["id"]) if ter else {}
+        if isinstance(explicit, dict) and explicit.get("secondary"):     # an explicit secondary goal (after the draws, so they stay put)
+            sec = explicit["secondary"]
+            sparams = dict(explicit.get("secondary_params") or G.sample_params(sec, random.Random(f"{seed}|explicit2|{a['id']}"), world, a["id"]))
         a["goal"] = {"primary": prim, "params": params, "secondary": sec, "secondary_params": sparams,
                      "tertiary": ter, "tertiary_params": tparams, "fixed": False,
                      "reachable": G.reachable(prim, params, sp["law_level"], a)}
