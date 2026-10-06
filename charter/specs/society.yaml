@@ -33,7 +33,7 @@ jurisdictions:
   enabled: true
   start: j0                           # everyone starts in the Commonwealth under the constitution; others can be founded in secret
   declare_cost: 90                    # value a new jurisdiction's treasury must hold before it can be declared (fund)
-media2: {enabled: true, start_subscribed: split}   # each founder reads one of the two outlets (disjoint halves); subscribe to switch
+media2: {enabled: true, start_subscribed: split, submissions: true}   # each founder reads one of the two outlets (disjoint halves); subscribe to switch
 roles: {enabled: true}                # Spy (a member, with the informational edge), assassin in about half of runs, Scholar, Maker, 2 Media
 observer:
   reads_per_round: 2

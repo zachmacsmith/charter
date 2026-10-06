@@ -53,7 +53,7 @@ def welfare(k) -> float:
 # Runtime-only settings that may be switched on part-way through a run (--live): they change how turns are played, not how the world
 # was generated, so a run with a checkpoint can still resume. The change is logged, announced to every agent, and kept in the state.
 LIVE_KEYS = {"media2.submissions", "context.lookups_in_dm_step", "context.action_purposes", "context.explore_nudge",
-             "context.budgets.core", "jurisdictions.declare_cost"}
+             "context.budgets.core", "jurisdictions.declare_cost", "media2.edition_tokens", "context.budgets.media"}
 
 
 def _apply_live(k, inst, live: dict, log=print, announce=True) -> None:
@@ -85,6 +85,12 @@ def _apply_live(k, inst, live: dict, log=print, announce=True) -> None:
                                           "submission, a post its author asked to have printed in the newspapers. Each editorial turn "
                                           "you see them all; nothing reaches the public unless an outlet prints it, and you decide what "
                                           "to print and how.")
+        if "media2.edition_tokens" in live:                              # the editors: room for more in each edition
+            from charter import media as MD
+            for o in MD.all_outlets(k):
+                if o.get("editor") and o.get("status", "open") == "open":
+                    k.notify(o["editor"], f"New rules for {o['name']}: each edition (each version) may now run to "
+                                          f"{int(live['media2.edition_tokens'])} tokens, room for more of what readers sent in.")
 
 
 def _post_notices(k, notices, log=print) -> None:

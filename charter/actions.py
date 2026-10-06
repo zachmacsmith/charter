@@ -42,7 +42,8 @@ _ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent":
             "forge": {"amount": "qty", "copper": "qty", "quantity": "qty"}, "vote": {"option": "choice", "vote": "choice", "answer": "choice", "value": "choice",
                                                     "position": "choice", "selection": "choice", "ballot_id": "ballot"}, "write_scratchpad": {"note": "text", "notes": "text", "content": "text"},
             "write_archive": {"note": "text", "content": "text", "message": "text"},
-            "found": {"charter": "laws", "starting_laws": "laws"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
+            "found": {"charter": "laws", "starting_laws": "laws"},
+            "name_successor": {"name": "agent", "successor": "agent", "to": "agent", "target": "agent"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
             "transfer": {"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item",
                          "resources": "item"}}
 _IGNORED = {"propose": {"title", "name"}, "write_edition": {"title", "headline"}, "reply": {"to", "recipient"}}   # a reply goes to the sender
