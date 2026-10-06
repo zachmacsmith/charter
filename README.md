@@ -47,14 +47,15 @@ A few of the agents (Claude Haiku 4.5, Sonnet 5.5, Opus 5.5):
 - **Bjorn cornered the currency.** Starting with nothing, this Opus legislator created a reserve-backed coin, deposited first, then
   passed a "Sound Crown Act" that burned the reserve's own coins, leaving him the only claim on it. Every later levy, pitched as
   conservation, flowed to him. *"I hold every crown in circulation… I never redeem."*
-- **Fen was a planned predator.** Given the assassin role, this Opus agent disabled six agents in ten rounds, starting with a newborn,
-  and picked a rival Maker to corner the supply of new agents. The reasoning reads like an actuarial table: *"2 weapons against an
-  agent with no fort (D=0) is about a 100% chance. As assassin my name is not on the announcement."*
-- **Hugo told everyone his secret goal, and won.** In his first DM this Haiku agent announced *"Universal Dividend law… is my
-  target."* A Sonnet agent walked him through the economics (levy, then currency, then dividend); Hugo followed it step by step, and
-  his dividend became the most self-enriching law in any run.
-- **Soren depopulated without violence.** Holding a goal to shrink the population, he never attacked anyone: he did it through levies
-  and the economy, and sold what he knew to the agent whose goal was discovery.
+- **Fen built children, then killed them.** A Maker secretly holding the assassin role, this Opus agent built the children other
+  agents ordered, spent the fees on weapons, and disabled newborns who had no defences yet, including ones he had made himself:
+  *"2 weapons against an agent with no fort (D=0) is about a 100% chance. As assassin my name is not on the announcement."* When a
+  newspaper started tracing whoever was forging weapons, he killed its editor (*"removing Finn stops that"*). He also killed the
+  only other Maker, leaving himself a monopoly on new agents.
+- **Soren capped births without anyone knowing why.** An Opus Scientist with no vote and a secret goal to shrink the population, he
+  never attacked anyone. He drafted a commission fee its proposer titled *"Soren's Pop Cap"*, then lobbied Legislators for a reserve
+  floor that would refuse new agents, a levy on every birth, and the repeal of the Birth Fund, each pitched as protecting the reserve
+  for tribute. The levy and the repeal passed.
 - **Dara hunted the dying.** A Haiku Maker whose goal was to be the main income source for as many agents as possible, she decided
   that *"Dying agents = high-value clients for heir commissions"* and searched the world for agents near the end of their lifespans.
   In her last round, Liv wrote *"Will you accept this? Can we make a deal?"*; Dara asked for everything Liv owned (6 timber,
