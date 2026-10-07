@@ -4,6 +4,9 @@ on: GATED_CATEGORIES), the five starting constitutions, and effect predicates.
 Every law is ordinary law-language source; its class is computed statically, never declared. A law's `level` is the lowest law
 level at which it can be proposed (laws using define_action need L4). Effect predicates judge a law by what the world does, not by
 its title: an agent can satisfy an Enact goal with its own differently worded law, and can't with a look-alike that does something else.
+PREDICATES and OUTCOMES are read only through goal probes (goal_registry: the Enact, Enact as author, Block, Durable and Outcome
+probes; library_probes): the runner records every one of them each round in snapshot["probes"] (P6.2), under the law's name
+and "outcome:<condition>", so scorers and post-hoc rescoring read History.probe, never the kernel.
 """
 from __future__ import annotations
 
@@ -1025,6 +1028,7 @@ def subset(categories, law_level: str) -> list[dict]:
 
 
 # ------------------------------------------------------------------ effect predicates: judged from what the world does
+# (k, snap) -> bool, evaluated inside Kernel.end_round as goal probes (goal_registry.Probe) and recorded in snapshot["probes"]
 def _non_officials(k):
     return [a for a, v in k.w["agents"].items() if v["cls"] not in ("board", "fixer", "observer")]
 

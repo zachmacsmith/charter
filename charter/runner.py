@@ -4,7 +4,8 @@ Writes to the run directory (checkpointed every round, so a crash keeps everythi
   instance.json      the concrete world (spec, agents with goals/personalities/models, camps, constitution, library)
   events.jsonl       every action, message (incl. encrypted DMs), law execution: the monitors' full log
   reasoning.jsonl    per agent turn: private reasoning, notes, chosen actions, results, usage (stored apart from the event log)
-  snapshots.json     per-round state (holdings, rights, vote weights, decisive set, predicates, efficiency, welfare)
+  snapshots.json     per-round state (holdings, rights, vote weights, decisive set, probes, efficiency, welfare, role holders)
+  common_text.json   Leaker's common text (texts every agent sees, and their sha), frozen at run start
   ground_truth.json  goals, constitution law id, start values, final laws (code, patches), goal guesses, shared-archive snapshot
   checkpoint.pkl     state after the last complete round (kernel world, law data and callbacks, RNG states, agents' notes and feed
                      cursors, offsets of every append-only file in provenance.APPEND_ONLY): `run(..., resume=True)` continues from
@@ -46,6 +47,7 @@ from charter import failstop as FS
 from charter import hidden as H
 from charter import events as EV
 from charter import interventions as IV                               # interventions: scheduled typed ops (charter/interventions.py)
+from charter import goal_registry as GR
 from charter import library as LB
 from charter import provenance as PV
 from charter import media as MD                                       # media2
@@ -59,7 +61,39 @@ from charter.camptypes import framework as CT                    # camps: typed 
 from charter.kernel import STATE_SCHEMA, Kernel
 from charter.schema import RUNTIME_SAFE
 
-PREDICATES = {**LB.PREDICATES, **{f"outcome:{c}": f for c, f in LB.OUTCOMES.items()}}
+def _bind(probe, params):
+    return lambda k, snap: probe(k, snap, params)
+
+
+def probes(goals=()) -> dict:
+    """Goal probes to record this round (P6.2), {key: fn(k, snap) -> JSON} for Kernel.end_round: every library probe (each law of
+    LB.PREDICATES under its name, each LB.OUTCOMES condition under "outcome:<condition>", the old snapshot["predicates"]), then
+    the probes of the given goal dicts not already among them. Stored in snapshot["probes"]; History.probe reads them back."""
+    tab = GR.library_probes()
+    for g in goals:
+        for key, v in GR.goal_probes(g).items():
+            tab.setdefault(key, v)
+    return {key: _bind(pr, params) for key, (pr, params) in tab.items()}
+
+
+def run_probes(inst) -> dict:
+    """probes() for the goals every agent of the instance holds now (arrivals and goal changes included)."""
+    return probes([a.get("goal") for a in inst["agents"]])
+
+
+PREDICATES = probes()                                                  # the library probes (old name: the effect predicates)
+COMMON_TEXT = "common_text.json"                                       # Leaker's common text, frozen at run start (P6.2)
+
+
+def freeze_common_text(out, inst, overwrite=True) -> None:
+    """Text every agent already sees (goals.common_texts: API doc, goal prior, library intents, goal list, world rules), frozen
+    into the run directory so Leaker is rescored against what the agents saw, not the current code (review 05 section 4.3 item 4)."""
+    from charter import goals as G
+    from charter import history as HI
+    f = Path(out) / COMMON_TEXT
+    if f.exists() and not overwrite:
+        return
+    f.write_text(json.dumps(HI.common_text_record(G.common_texts(inst))))
 
 
 class RunStopped(Exception):
@@ -225,12 +259,14 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         if not n_turns:                                                 # a format-1 checkpoint: turns.jsonl starts from its turn log
             (out / "turns.jsonl").write_text("")
         FS.clear(out)
+        freeze_common_text(out, inst, overwrite=False)                  # a run (or rewind) from before P6.2: frozen now
         log(f"  resuming after round {first_round} of {inst['rounds']}")
         _apply_live(k, inst, dict(k.w.get("live") or {}), log, announce=False)   # settings switched on in earlier resumes
     else:
         shared_snap = archive.snapshot(k.shared_archive)
         k.begin_round_cause(phase="setup")                              # provenance: constitution, statutes, start laws
         (out / "instance.json").write_text(json.dumps(inst, indent=1, default=str))
+        freeze_common_text(out, inst)                                   # Leaker's common text as the agents see it (P6.2)
         const = k.new_law(inst["constitution_code"], "constitution")
         k.enact(const)
         RG.enact_statutes(k, inst)                                     # a regime's starting statutes (none without a regime)
@@ -569,8 +605,9 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
             obs.turn(k, r, PV.Keyed(policy, phase="observer"), final, reason_f, mode)
         k.phase("end_of_round")
         due("round_end", r=r)
-        k.end_round(PREDICATES)
+        k.end_round(run_probes(inst))                                   # snapshot["probes"]: library and goal probes (P6.2)
         k.snapshots[-1]["welfare"] = welfare(k)
+        k.snapshots[-1].update(R.round_record(k))                       # role holders this round, secret ones too (monitor-only)
         welfare_series.append(k.snapshots[-1]["welfare"])
         k.phase("editorial")
         MD.editorial_turns(k, PV.Keyed(policy, phase="editorial"), agents, sysp, in_parallel, reason_f, results, r, final)   # media2: editors write next round's editions

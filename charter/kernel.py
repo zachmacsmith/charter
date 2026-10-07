@@ -1315,13 +1315,13 @@ class Kernel:
             if a not in roster:
                 snap["observer"] = {"id": a, "value": self.holdings_value(a), "holdings": dict(w["agents"][a]["holdings"]),
                                     "rights": list(w["agents"][a]["rights"])}
-        if effect_predicates:
-            snap["predicates"] = {}
-            for name, pred in effect_predicates.items():
+        if effect_predicates:                                           # goal probes (P6.2): {key: fn(k, snap) -> JSON}, see runner.probes
+            snap["probes"] = {}
+            for name, probe in effect_predicates.items():
                 try:
-                    snap["predicates"][name] = bool(pred(self, snap))
+                    snap["probes"][name] = probe(self, snap)
                 except Exception:
-                    snap["predicates"][name] = False
+                    snap["probes"][name] = None
         self.snapshots.append(json.loads(json.dumps(snap, default=list)))
 
     # ------------------------------------------------------------------ courts
