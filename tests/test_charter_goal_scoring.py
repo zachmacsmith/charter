@@ -114,3 +114,17 @@ def test_lineage_override_respects_goal_changes():
     assert _override(gt)["A"] == 0.0
     gt["snapshots"][2]["rights"]["D"] = ["vote"]                     # D holds vote at the end of the Office rounds
     assert _override(gt)["A"] == pytest.approx(0.5)                  # Office 1 through D, Lawmaker 0: weighted 3:3
+
+
+def test_lineage_override_covers_only_goals_about_own_holdings_or_offices():
+    """Agents are told only goals about their own holdings or offices count through living descendants. Lawmaker through a child's
+    laws, or Rival through a child's holdings, must not replace the agent's own score; Office through a child still does."""
+    gt = _life_gt({"A": _goal("Lawmaker"), "B": _goal("Office")}, laws={"L1": _law("L1", "D", 1)})
+    gt["life"]["parent"]["C"] = "B"
+    gt["life"]["born"]["C"] = 0
+    gt["snapshots"][-1]["rights"]["C"] = ["vote"]
+    got = _override(gt)
+    assert got["A"] == 0.0                                           # D wrote the law, not A
+    assert got["B"] == 1.0                                           # B's descendant C holds vote
+    gt2 = _life_gt({"A": _goal("Rival", params={"target": "B"})}, values={"A": 1.0, "B": 5.0, "D": 10.0})
+    assert _override(gt2)["A"] == pytest.approx(0.2)                 # A against B, not A's child D against B
