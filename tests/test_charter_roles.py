@@ -104,7 +104,7 @@ def test_explicit_roles_work_without_the_module():
 
 def test_flag_off_leaves_the_world_unchanged():
     a, b = _gen(3, AG28), _gen(3, AG28, "roles.enabled=false")
-    strip = lambda i: json.dumps({x: v for x, v in i.items() if x != "spec"}, sort_keys=True, default=str)
+    strip = lambda i: json.dumps({x: v for x, v in i.items() if x not in ("spec", "spec_source")}, sort_keys=True, default=str)
     assert "roles" not in a and "roles" not in b and strip(a) == strip(b)
     k = Kernel(a)
     assert "roles" not in k.w and R.holders(k, "spy") == [] and not R.has_role(k, "x", "spy")

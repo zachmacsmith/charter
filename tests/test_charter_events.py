@@ -56,6 +56,7 @@ def test_disabled_events_leave_the_world_unchanged():
     assert "world_events" not in a and "world_events" in b
     b.pop("world_events")
     a["spec"].pop("events", None), b["spec"].pop("events", None)
+    a["spec_source"].pop("events", None), b["spec_source"].pop("events", None)   # the spec as given differs the same way
     assert json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
 
 

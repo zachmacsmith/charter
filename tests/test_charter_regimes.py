@@ -262,6 +262,7 @@ def test_specs_without_a_regime_are_unchanged(rung):
     without = {k: v for k, v in with_key.items() if k != "regime"}       # what the spec was before regimes existed
     for seed in (1, 2):
         a, b = generator.generate(with_key, seed), generator.generate(without, seed)
+        assert a.pop("spec_source") == with_key and b.pop("spec_source") == without   # the spec as given (resume regenerates from it)
         assert json.dumps(a, default=str) == json.dumps(b, default=str)
         assert "regime" not in a and "regime" not in a["spec"]
         assert run_stem(rung, with_key, seed, True) == run_stem(rung, without, seed, True)
