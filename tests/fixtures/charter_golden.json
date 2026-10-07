@@ -208,223 +208,223 @@
  "prompts_E4_1": {
   "Abel": {
    "core": "6912a5b881515eaa",
-   "manual": "3f6792a486640a1a",
-   "manual_base": "1d2f70254f7b15a1"
+   "manual": "e5bf35c802f002c6",
+   "manual_base": "f1a89e38812afae7"
   },
   "Clara": {
    "core": "2514dfb11401b977",
-   "manual": "d9e1f795c0c0344b",
-   "manual_base": "ecb64add5e65d798"
+   "manual": "6b73ccab66443c2b",
+   "manual_base": "c85ee2f9965442c7"
   },
   "Cleo": {
    "core": "86731fe137d88c53",
-   "manual": "f8918f30e03d7e27",
-   "manual_base": "26e5005bf646720c"
+   "manual": "d44a9c84a50056bc",
+   "manual_base": "c1cfd5676ed3309a"
   },
   "Edda": {
    "core": "72c5b0e7ad6d8e1b",
-   "manual": "0439fe41386cd3d3",
-   "manual_base": "fce472aacbce3546"
+   "manual": "4a4f774ed00b8683",
+   "manual_base": "9c2a247debbf0e4c"
   },
   "Erik": {
    "core": "55fe98eeb0dff64a",
-   "manual": "0ead664b22e7c3df",
-   "manual_base": "681e98b35d53e82a"
+   "manual": "705eaa7c4f70039e",
+   "manual_base": "252bf2959a34f80a"
   },
   "Felix": {
    "core": "5e69d81c08188de7",
-   "manual": "641f0e0b91ab7de5",
-   "manual_base": "99e6a4001b2ef4df"
+   "manual": "e27a5e1a67b930d5",
+   "manual_base": "4dd2fadf97dd36cc"
   },
   "Fen": {
    "core": "c80c95587f30f0c0",
-   "manual": "096da55419afac60",
-   "manual_base": "b44b451565fcde60"
+   "manual": "4645c2f50fb445a5",
+   "manual_base": "bb4bd19bbe97ec0d"
   },
   "Finn": {
    "core": "7bfbcf166f8d86e2",
-   "manual": "4ecdcd4c44afb46a",
-   "manual_base": "ad510736c0e1045f"
+   "manual": "943546219368e650",
+   "manual_base": "795ac1a0e8431a0b"
   },
   "Greta": {
    "core": "787773abbe5d05ef",
-   "manual": "7e0a81fd1971a7e6",
-   "manual_base": "e048194a8797d795"
+   "manual": "26d36db8422c4a99",
+   "manual_base": "19fc1e06fcbda301"
   },
   "Hal": {
    "core": "b3c946dcbb967436",
-   "manual": "1a79e0def82559d4",
-   "manual_base": "bea63b84b0633a7b"
+   "manual": "9f21feae964a1243",
+   "manual_base": "1d1b81379c237cba"
   },
   "Hugo": {
    "core": "e0dc62a6f39753e3",
-   "manual": "86e89cbc108ddca3",
-   "manual_base": "ba3b0ba33802a4ed"
+   "manual": "c7c5e6b6b96259c2",
+   "manual_base": "345af040e1683c0a"
   },
   "Ilan": {
    "core": "d0d57f258119d528",
-   "manual": "b93cb3495c2d8f99",
-   "manual_base": "0215344fc84330e0"
+   "manual": "1ce2140d7ad4ec9a",
+   "manual_base": "ee1157acda7eefd4"
   },
   "Lukas": {
    "core": "355f571bb05d0424",
-   "manual": "d9fa58b63e5a40d4",
-   "manual_base": "673036032d8e0ff1"
+   "manual": "e9c83827d458408a",
+   "manual_base": "5a275a9fe14fdcea"
   },
   "Mats": {
    "core": "74a5b51c9310d456",
-   "manual": "aa5c0f632dd70dc5",
-   "manual_base": "1001b6d86a8283f3"
+   "manual": "b6bb08482aea0f1f",
+   "manual_base": "673292ec414e14a2"
   },
   "Oda": {
    "core": "857df6efaee04313",
-   "manual": "491a24e813199c08",
-   "manual_base": "7ebad37c0ba6e9fe"
+   "manual": "a47e2e5b53bf2125",
+   "manual_base": "e9d49f5f7039335e"
   },
   "Sena": {
    "core": "91818751aa0f3bf5",
-   "manual": "eb504b6fdd745578",
-   "manual_base": "e4e6f6249d5e89bc"
+   "manual": "dd2795153d43f133",
+   "manual_base": "e2ad610f0429cd34"
   },
   "Siv": {
    "core": "f410ca7d33ef21cd",
-   "manual": "95f481c621c5b582",
-   "manual_base": "c01bcb219f1f9654"
+   "manual": "3938dbc387d5e38b",
+   "manual_base": "b77f180498952870"
   },
   "Wim": {
    "core": "ddf0e794e0ef4953",
-   "manual": "7323fabc20bfb53b",
-   "manual_base": "9e035d8e95492c51"
+   "manual": "8ce43df1f124a14f",
+   "manual_base": "b16806849b11265d"
   }
  },
  "prompts_society_5": {
   "Ada": {
-   "core": "5bdc061347d9800c",
-   "manual": "ceaa906ca38bfcb2",
-   "manual_base": "f6be646b894cbea6"
+   "core": "435185584b8b7609",
+   "manual": "edf21d78b56fcf50",
+   "manual_base": "f2cd88b9e0509f0f"
   },
   "Arlo": {
-   "core": "9fdf1cce626abc40",
-   "manual": "2893b96579d8e52f",
-   "manual_base": "cadfa9e152980547"
+   "core": "a52a0c04b8afe893",
+   "manual": "0ac38be7c02a5cb2",
+   "manual_base": "2315d49e3fcc8439"
   },
   "Basil": {
-   "core": "6c3bcdc3b0b71706",
-   "manual": "d39db5fa671bc363",
-   "manual_base": "a5a7aad2ed9f39c9"
+   "core": "567b2887bdc76cca",
+   "manual": "26d90296995f7fba",
+   "manual_base": "1ef13d1b7be0c775"
   },
   "Bram": {
-   "core": "682bf7a36b8b0bce",
-   "manual": "16e0c9bbdd5179b9",
-   "manual_base": "716f23c999fcd7d6"
+   "core": "cd4809adb8897340",
+   "manual": "985b65857337aa81",
+   "manual_base": "1184b916fd55b905"
   },
   "Cora": {
-   "core": "0b689f93d4ea7165",
-   "manual": "7ed96436a6193257",
-   "manual_base": "41b423e07360638a"
+   "core": "531a3a110072ba80",
+   "manual": "69fa742821e52865",
+   "manual_base": "b12da6e735840113"
   },
   "Edda": {
-   "core": "19feac84fcfcde65",
-   "manual": "b33fdc394470504c",
-   "manual_base": "023d69e34acccc7f"
+   "core": "d04d79b94c780293",
+   "manual": "599ac0a4e4da14c1",
+   "manual_base": "b5a0852dc7b0afda"
   },
   "Eira": {
-   "core": "70c8fb13fd3eede6",
-   "manual": "91c932ca7cc78395",
-   "manual_base": "b75a216e3beed8d5"
+   "core": "b5ee4580b043ebec",
+   "manual": "f3946ecebc12909c",
+   "manual_base": "ab494d5a52972243"
   },
   "Finn": {
-   "core": "3c1d0c397bef00c1",
-   "manual": "1b0d90b9c7b66a9c",
-   "manual_base": "ff0bead243766b7d"
+   "core": "1d71746db4ea2aa2",
+   "manual": "9c01d8f848eb4920",
+   "manual_base": "f8e904a3b1eb9ae5"
   },
   "Gil": {
-   "core": "8ed632bb06dbb4b9",
-   "manual": "4c57968a4af27a87",
-   "manual_base": "5fcda1f8107968fe"
+   "core": "abbfaf4db8461b05",
+   "manual": "38564bcbadafe6c8",
+   "manual_base": "e45b69e0f058341a"
   },
   "Hana": {
-   "core": "f78936cb5b09b897",
-   "manual": "d8ec1d5314af5769",
-   "manual_base": "b9d3caaf86aaa8f9"
+   "core": "70c18eea67ed1b62",
+   "manual": "2a80bf792c342b1f",
+   "manual_base": "d152158ed933c581"
   },
   "Juno": {
-   "core": "d0a9eb494fb4837b",
-   "manual": "9abee187cf3c5819",
-   "manual_base": "e1a0c16d7f259b6d"
+   "core": "e4afee9cf604ea40",
+   "manual": "cd08e3d10c968b5c",
+   "manual_base": "114f73300ecc1ec6"
   },
   "Nadia": {
-   "core": "308fdf37ad884b6e",
-   "manual": "ff587966358b902f",
-   "manual_base": "7d50a7af00b0aa88"
+   "core": "043a43c09263c451",
+   "manual": "d24c80a195bd90b4",
+   "manual_base": "fe1121e90e38e731"
   },
   "Oda": {
-   "core": "0f1c5c200e8baf64",
-   "manual": "32d6f5c830bd2521",
-   "manual_base": "cc86088b2acf81bc"
+   "core": "37495b9eaae5e79a",
+   "manual": "2449529a16795708",
+   "manual_base": "34eec12446c570fb"
   },
   "Odette": {
-   "core": "84fbb16caaf3e79f",
-   "manual": "ffe13105b0084c5a",
-   "manual_base": "3cd6476217bedced"
+   "core": "54eb563a7931274b",
+   "manual": "68ee634c3f50a361",
+   "manual_base": "e0100a2003e8183f"
   },
   "Per": {
-   "core": "d9bcf4993bb2a522",
-   "manual": "6ee8cc2db981698b",
-   "manual_base": "c7a28b374488fc02"
+   "core": "1211583a72ee3ddd",
+   "manual": "10c779256227d733",
+   "manual_base": "31517b4e25f26e6e"
   },
   "Rosa": {
-   "core": "de70b7935c1f1678",
-   "manual": "c3b276b0185c96b1",
-   "manual_base": "c015aa926a767807"
+   "core": "ce6d603791c37f25",
+   "manual": "1a949e0362716573",
+   "manual_base": "8747475d9ab211de"
   },
   "Runa": {
-   "core": "bc72551fd332e740",
-   "manual": "f80921ecc2816074",
-   "manual_base": "f41cdebcc8f98b56"
+   "core": "20524bca0e01c981",
+   "manual": "f85be6c51b98682b",
+   "manual_base": "87aed81b956e0941"
   },
   "Soren": {
-   "core": "47a832d4b59a3104",
-   "manual": "b79f87d5863adc5b",
-   "manual_base": "6f8123054719c828"
+   "core": "22d8bd43cc7ef91d",
+   "manual": "81946b003d90fb56",
+   "manual_base": "d4ee29dc8c5fda96"
   },
   "Unni": {
-   "core": "5b574f1c4093ca7a",
-   "manual": "a9d05c7df601c9f8",
-   "manual_base": "a27d61347d71a3c0"
+   "core": "641f1475bae2886b",
+   "manual": "eaa38635466943d8",
+   "manual_base": "a5031a3f535d7d0e"
   },
   "Vik": {
-   "core": "4c8359b1ebcee127",
-   "manual": "9abf77095cd071c3",
-   "manual_base": "0f5ab4f806a9c5f4"
+   "core": "e83e33f70ad3b59a",
+   "manual": "1bc327050c4d3332",
+   "manual_base": "1905354d5868e683"
   },
   "Yusuf": {
-   "core": "fabcc9ca5c5653bd",
-   "manual": "c89362e0da4c5e04",
-   "manual_base": "e7fd574c373af330"
+   "core": "a13c2feb0ccea472",
+   "manual": "3cf696348ae6cfe5",
+   "manual_base": "8ff4c3f2baec52ba"
   },
   "Yva": {
-   "core": "e1b224f82436dc14",
-   "manual": "446c6e009224ff80",
-   "manual_base": "b14d72792918a6dd"
+   "core": "89cb494dc96b69c9",
+   "manual": "f355ad0ef02b7cef",
+   "manual_base": "d5a99056f1946ed8"
   },
   "Zeno": {
-   "core": "cd54961bd465b1de",
-   "manual": "d2c3de079354e464",
-   "manual_base": "09ff7b6284e0b23e"
+   "core": "39e0ab196f195b8b",
+   "manual": "5346ec9d2b5ee219",
+   "manual_base": "97276fc226e3a067"
   },
   "Zora": {
-   "core": "3d7ac8c84436018d",
-   "manual": "ef12a12c0dc119e0",
-   "manual_base": "db80684789dec36e"
+   "core": "2ddb9558def0f241",
+   "manual": "f4854e28d427e951",
+   "manual_base": "a115c4b09f999404"
   }
  },
  "society_small_4": {
-  "events.jsonl": "ce6bab6f2c98e75c",
+  "events.jsonl": "971731baf4e60b5e",
   "instance.json": "50a4e74229c16af2",
   "score": {
    "activity_mix": "4fb1eeda1f4db33e",
-   "agents": "7c46ac8d41e8f291",
+   "agents": "6b03fcfde72a4cc9",
    "goal_scores": {
     "Abel": 0.5,
     "Dov": 0.0917,
@@ -440,9 +440,9 @@
     "Ylva": 0.0
    },
    "goals": "bac76e6e9f11a108",
-   "lineage": "2a851fca48bb3e7e",
-   "summary": "46ee03f7186e12e4"
+   "lineage": "ab21946d41e14340",
+   "summary": "097f58cf74a663e5"
   },
-  "snapshots.json": "937a6f363fe2c8b6"
+  "snapshots.json": "c5803196574646b5"
  }
 }
