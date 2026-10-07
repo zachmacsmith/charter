@@ -25,6 +25,7 @@ Function row (LawFn):
   why            for scope "none", or parameters in AGENTISH that are not agents
   docs           which documentation mechanism documents it (all in charter/lawdocs.py unless noted; see DOCS)
   level          a law-level constraint beyond the class (define_action: "L4")
+  primitive      the primitive (charter/primitives.py) the function causes, for every function that writes (outputs: None)
 
 Hook row (Hook): name, signature, return semantics, module, the functions that dispatch it (file:qualname; `dispatch_sites()` finds
 their file:line in the source), whether it fires for changes a law causes, how jurisdictions route it, and its docs mechanism.
@@ -76,6 +77,7 @@ class LawFn:
     module: str = "kernel"      # the module whose law_api returns it
     docs: str = "lawdocs"       # a DOCS key
     level: str | None = None    # a law-level constraint beyond the class
+    primitive: str | None = None    # the primitive it causes (its compel face, charter/primitives.py), if it writes (P1.7)
 
     @property
     def cls(self) -> str:
@@ -136,41 +138,41 @@ LAWFNS = _fns(
         F("dm_limit", "read", ((0, "aid"),), scope="read"),
         F("loans", "read"),
         # moderation
-        F("hide_post", "sanctions", scope="custom", refused=False),     # scoped by the post's author
-        F("unhide_post", "output"),
+        F("hide_post", "sanctions", scope="custom", refused=False, primitive="hide_post"),     # scoped by the post's author
+        F("unhide_post", "output", primitive="hide_post"),
         # rights
-        F("create_right", "rights"),
-        F("grant", "rights", ((0, "aid"),), refused=False),
-        F("revoke", "rights", ((0, "aid"),), refused=False),
-        F("define_action", "rights", level="L4"),
+        F("create_right", "rights", primitive="create_right"),
+        F("grant", "rights", ((0, "aid"),), refused=False, primitive="grant_right"),
+        F("revoke", "rights", ((0, "aid"),), refused=False, primitive="revoke_right"),
+        F("define_action", "rights", level="L4", primitive="define_action"),
         # money
-        F("create_currency", "money"),
-        F("mint", "money", ((2, "to"),), scope="custom"),
-        F("burn", "money", ((2, "frm"),), scope="custom", refused=False),
-        F("move", "money", ((0, "src"), (1, "dst")), scope="custom", refused=False),    # either side may be a reserve
-        F("set_convertible", "money"),
-        F("enable_loans", "money", legacy_only=True),
-        F("forgive_loan", "money", legacy_only=True),
+        F("create_currency", "money", primitive="create_currency"),
+        F("mint", "money", ((2, "to"),), scope="custom", primitive="mint"),
+        F("burn", "money", ((2, "frm"),), scope="custom", refused=False, primitive="burn"),
+        F("move", "money", ((0, "src"), (1, "dst")), scope="custom", refused=False, primitive="move"),    # either side may be a reserve
+        F("set_convertible", "money", primitive="set_money_rule"),
+        F("enable_loans", "money", legacy_only=True, primitive="set_money_rule"),
+        F("forgive_loan", "money", legacy_only=True, primitive="settle_loan"),
         # camps
-        F("set_quota", "camps"),
-        F("set_harvest_limit", "camps"),
-        F("set_fee", "camps"),
+        F("set_quota", "camps", primitive="set_camp_rule"),
+        F("set_harvest_limit", "camps", primitive="set_camp_rule"),
+        F("set_fee", "camps", primitive="set_camp_rule"),
         # governance
-        F("set_procedure", "governance"),
-        F("open_ballot", "governance", ((1, "electorate"),), scope="custom", why="the electorate is filtered to members"),
+        F("set_procedure", "governance", primitive="set_procedure"),
+        F("open_ballot", "governance", ((1, "electorate"),), scope="custom", why="the electorate is filtered to members", primitive="open_ballot"),
         # output and names
         F("gazette", "output"),
         F("notify", "output", ((0, "a"),), scope="none", why="a message, binds nobody"),
-        F("rename", "names", ((0, "entity"),), scope="none", why="a display name, binds nobody"),
+        F("rename", "names", ((0, "entity"),), scope="none", why="a display name, binds nobody", primitive="rename"),
         F("name", "names", ((0, "entity"),), scope="read"),
-        F("title", "names", ((0, "aid"),)),
+        F("title", "names", ((0, "aid"),), primitive="set_title"),
         # sanctions
-        F("set_dm_limit", "sanctions", ((1, "agent"),), scope="custom", refused=False),   # None: every member
-        F("fine", "sanctions", ((0, "aid"),), scope="custom", refused=0.0),             # also pays into this jurisdiction's reserve
-        F("suspend", "sanctions", ((0, "aid"),), refused=False),
-        F("limit_actions", "sanctions", ((0, "aid"),), refused=False),
+        F("set_dm_limit", "sanctions", ((1, "agent"),), scope="custom", refused=False, primitive="set_dm_limit"),   # None: every member
+        F("fine", "sanctions", ((0, "aid"),), scope="custom", refused=0.0, primitive="move"),             # also pays into this jurisdiction's reserve
+        F("suspend", "sanctions", ((0, "aid"),), refused=False, primitive="suspend_right"),
+        F("limit_actions", "sanctions", ((0, "aid"),), refused=False, primitive="limit_actions"),
         F("censure", "sanctions", ((0, "aid"),)),
-        F("clause", "sanctions"),
+        F("clause", "sanctions", primitive="create_clause"),
         # text and meta
         F("contains", "text"),
         F("count", "text"),
@@ -180,13 +182,13 @@ LAWFNS = _fns(
     ),
     _module(
         "credit",
-        F("set_par", "money", legacy_only=True),
-        F("suspend_redemption", "money", legacy_only=True),
-        F("set_interest_cap", "money", legacy_only=True),
-        F("set_default_consequence", "money", legacy_only=True),
-        F("restructure_loan", "money", legacy_only=True),
-        F("lend_from_reserve", "money", ((0, "borrower"),), legacy_only=True),
-        F("buy_loan", "money", legacy_only=True),
+        F("set_par", "money", legacy_only=True, primitive="set_money_rule"),
+        F("suspend_redemption", "money", legacy_only=True, primitive="set_money_rule"),
+        F("set_interest_cap", "money", legacy_only=True, primitive="set_money_rule"),
+        F("set_default_consequence", "money", legacy_only=True, primitive="set_money_rule"),
+        F("restructure_loan", "money", legacy_only=True, primitive="loan_terms"),
+        F("lend_from_reserve", "money", ((0, "borrower"),), legacy_only=True, primitive="offer_loan"),
+        F("buy_loan", "money", legacy_only=True, primitive="loan_assign"),
         F("credit_record", "read", ((0, "a"),), scope="read"),
         F("reserve_ratio", "read"),
         F("redemption_open", "read"),
@@ -196,30 +198,30 @@ LAWFNS = _fns(
     ),
     _module(
         "hidden",                                                       # hidden powers
-        F("disclose_capability_use", "rights", legacy_only=True),
+        F("disclose_capability_use", "rights", legacy_only=True, primitive="set_power_rule"),
         F("capability_holders", "read"),
-        F("revoke_capability", "rights", ((0, "agent"),), refused=0),
+        F("revoke_capability", "rights", ((0, "agent"),), refused=0, primitive="revoke_right"),
     ),
     _module(
         "projects",                                                     # structural: new camps/rights, reserve outflows
-        F("start_project", "projects", legacy_only=True),
-        F("contribute_project", "projects", legacy_only=True),
-        F("set_refund", "projects", legacy_only=True),
+        F("start_project", "projects", legacy_only=True, primitive="start_project"),
+        F("contribute_project", "projects", legacy_only=True, primitive="contribute"),
+        F("set_refund", "projects", legacy_only=True, primitive="set_project_rule"),
         F("projects", "projects_read"),
     ),
     _module(
         "outside",                                                      # tribute to the outside power
-        F("pay_tribute", "projects", legacy_only=True),
+        F("pay_tribute", "projects", legacy_only=True, primitive="destroy"),
         F("tribute_status", "projects_read"),
     ),
     _module(
         "camptypes.leases",                                             # leasing harvest rights (ordinary, like set_fee)
-        F("set_lease_rules", "camps", docs="leases"),
+        F("set_lease_rules", "camps", docs="leases", primitive="set_lease_rules"),
         F("leases", "read", docs="leases"),
     ),
     _module(
         "mortality",                                                    # life: Board succession
-        F("set_succession_public", "rights", docs="requires"),
+        F("set_succession_public", "rights", docs="requires", primitive="set_succession_rule"),
     ),
     _module(
         "conflict",
@@ -229,34 +231,34 @@ LAWFNS = _fns(
         F("guards", "read", docs="conflict"),
         F("attacks", "read", docs="conflict"),
         F("disabled_agents", "read", docs="conflict"),
-        F("ban_forging", "sanctions", docs="conflict"),
-        F("oblige_guard", "sanctions", ((0, "guard"), (1, "agent")), refused=False, docs="conflict"),   # neither side may be an outsider
-        F("clear_obligations", "sanctions", docs="conflict"),
+        F("ban_forging", "sanctions", docs="conflict", primitive="set_arms_rule"),
+        F("oblige_guard", "sanctions", ((0, "guard"), (1, "agent")), refused=False, docs="conflict", primitive="guard_bind"),   # neither side may be an outsider
+        F("clear_obligations", "sanctions", docs="conflict", primitive="guard_release"),
     ),
     _module(
         "jurisdictions",
         F("jurisdiction", "read", docs="jurisdictions"),
         F("members", "read", docs="jurisdictions"),
-        F("admit", "rights", ((0, "agent"),), scope="none", why="admits a non-member by design", docs="jurisdictions"),
-        F("expel", "rights", ((0, "agent"),), scope="none", why="checks membership itself", docs="jurisdictions"),
+        F("admit", "rights", ((0, "agent"),), scope="none", why="admits a non-member by design", docs="jurisdictions", primitive="admit"),
+        F("expel", "rights", ((0, "agent"),), scope="none", why="checks membership itself", docs="jurisdictions", primitive="expel"),
         F("lawful_attack", "sanctions", ((0, "attacker"), (1, "target")), scope="none",
-          why="checks the attacker is a member itself; the target can be anyone", docs="jurisdictions"),
+          why="checks the attacker is a member itself; the target can be anyone", docs="jurisdictions", primitive="attack"),
     ),
     _module(
         "media",                                                        # media2: reads, official statistics, outlet rules, sanctions
         F("outlets", "read", docs="media2"),
         F("public_stats", "read", docs="media2"),
         F("submissions", "read", docs="media2"),
-        F("publish_stat", "output", docs="media2"),
+        F("publish_stat", "output", docs="media2", primitive="set_media_rule"),
         F("official_stream", "rights", ((0, "members"),), scope="none", why="names, classes or roles whose posts are streamed",
-          docs="media2"),
+          docs="media2", primitive="set_media_rule"),
         F("set_official_editor", "rights", ((0, "agent"),), scope="none", why="appoints the editor of this jurisdiction's own outlet",
           docs="media2"),
-        F("set_open_board", "rights", docs="media2"),
-        F("set_press_freedom", "rights", docs="media2"),
-        F("require_sponsor_label", "sanctions", docs="media2"),
-        F("suspend_outlet", "sanctions", scope="none", why="target is an outlet", docs="media2"),
-        F("compel_subscription", "sanctions", ((0, "agent"),), refused=False, why="target is an outlet", docs="media2"),
+        F("set_open_board", "rights", docs="media2", primitive="set_media_rule"),
+        F("set_press_freedom", "rights", docs="media2", primitive="set_media_rule"),
+        F("require_sponsor_label", "sanctions", docs="media2", primitive="set_media_rule"),
+        F("suspend_outlet", "sanctions", scope="none", why="target is an outlet", docs="media2", primitive="set_outlet_rule"),
+        F("compel_subscription", "sanctions", ((0, "agent"),), refused=False, why="target is an outlet", docs="media2", primitive="subscribe"),
     ),
     _module(
         "life",                                                         # who makes children and what is made
@@ -265,11 +267,13 @@ LAWFNS = _fns(
         F("births", "read", docs="life"),
         F("children_of", "read", ((0, "agent"),), scope="read", docs="life"),
         F("lifespan_left", "read", ((0, "agent"),), scope="read", docs="life"),
-        F("set_birth_rules", "rights", docs="life"),
-        F("publish_commissions", "output", docs="life"),
-        F("publish_births", "output", docs="life"),
+        F("set_birth_rules", "rights", docs="life", primitive="set_birth_rules"),
+        F("publish_commissions", "output", docs="life", primitive="set_birth_rules"),
+        F("publish_births", "output", docs="life", primitive="set_birth_rules"),
     ),
 )
+# P1.7: the primitive column of the two rows P1.4 edits (kept off their lines to avoid a merge conflict; fold in after the merge)
+LAWFNS.update({n: replace(LAWFNS[n], primitive=p) for n, p in (("repeal", "repeal"), ("set_official_editor", "appoint"))})
 
 
 @dataclass(frozen=True)
