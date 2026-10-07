@@ -57,7 +57,7 @@ def test_strategy_prompt_ab_assignment():
 def test_live_settings_switch_on_mid_run():
     import pytest
     from charter import runner
-    sp = S.load("opus20")
+    sp = S.apply_overrides(S.load("opus20"), ["media2.submissions=false"])   # opus20 inherits society's submissions; start without
     inst = generator.generate(sp, 1)
     k = Kernel(inst)
     who = next(a["id"] for a in inst["agents"] if a["cls"] == "worker")
