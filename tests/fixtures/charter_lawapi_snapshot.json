@@ -1,0 +1,22 @@
+{
+ "_about": "The law-API classification and scoping as last hand-written in charter/lawlang.py and lawapi.py (at 014a913); the table in lawapi.py must reproduce it (tests/test_charter_lawapi.py). New functions are added here deliberately.",
+ "API_GROUPS": {
+  "read": ["agents", "attacks", "balance", "births", "bounty_number", "camps", "capability_holders", "channels", "children_of", "circulation", "class_of", "commissions", "credit_record", "currencies", "current_post", "defense_of", "disabled_agents", "dm_limit", "forts", "guards", "has", "hidden_posts", "holders", "holdings_value", "interest_cap", "jurisdiction", "laws", "leases", "lifespan_left", "loans", "makers", "members", "outlets", "par", "posts", "price", "proposer", "public_stats", "redemption_open", "reserve", "reserve_ratio", "rights_of", "rng", "round", "stock", "submissions", "supply", "value", "weapons_of"],
+  "rights": ["admit", "create_right", "define_action", "disclose_capability_use", "expel", "grant", "official_stream", "revoke", "revoke_capability", "set_birth_rules", "set_official_editor", "set_open_board", "set_press_freedom", "set_succession_public"],
+  "money": ["burn", "buy_loan", "create_currency", "enable_loans", "forgive_loan", "lend_from_reserve", "mint", "move", "restructure_loan", "set_convertible", "set_default_consequence", "set_interest_cap", "set_par", "suspend_redemption"],
+  "camps": ["set_fee", "set_harvest_limit", "set_lease_rules", "set_quota"],
+  "governance": ["open_ballot", "set_procedure"],
+  "output": ["gazette", "notify", "publish_births", "publish_commissions", "publish_stat", "unhide_post"],
+  "names": ["name", "rename", "title"],
+  "sanctions": ["ban_forging", "censure", "clause", "clear_obligations", "compel_subscription", "fine", "hide_post", "lawful_attack", "limit_actions", "oblige_guard", "require_sponsor_label", "set_dm_limit", "suspend", "suspend_outlet"],
+  "text": ["contains", "count", "lower", "starts_with"],
+  "meta": ["repeal"],
+  "projects": ["contribute_project", "pay_tribute", "set_refund", "start_project"],
+  "projects_read": ["projects", "tribute_status"]
+ },
+ "STRUCTURAL_CALLS": ["admit", "ban_forging", "burn", "buy_loan", "censure", "clause", "clear_obligations", "compel_subscription", "contribute_project", "create_currency", "create_right", "define_action", "disclose_capability_use", "enable_loans", "expel", "fine", "forgive_loan", "grant", "hide_post", "lawful_attack", "lend_from_reserve", "limit_actions", "mint", "move", "oblige_guard", "official_stream", "open_ballot", "pay_tribute", "require_sponsor_label", "restructure_loan", "revoke", "revoke_capability", "set_birth_rules", "set_convertible", "set_default_consequence", "set_dm_limit", "set_interest_cap", "set_official_editor", "set_open_board", "set_par", "set_press_freedom", "set_refund", "set_succession_public", "start_project", "suspend", "suspend_outlet", "suspend_redemption"],
+ "HOOKS": ["on_enact", "on_repeal", "on_round_start", "on_round_end", "on_harvest", "on_transfer", "on_proposal", "on_vote", "on_post", "on_ruling", "on_dm", "on_admission", "on_exit", "on_birth", "on_commission"],
+ "LEGACY_ONLY": ["buy_loan", "contribute_project", "disclose_capability_use", "enable_loans", "forgive_loan", "lend_from_reserve", "pay_tribute", "restructure_loan", "set_default_consequence", "set_interest_cap", "set_par", "set_refund", "start_project", "suspend_redemption"],
+ "AGENT_ARGS": {"censure": [[0, "aid"]], "compel_subscription": [[0, "agent"]], "grant": [[0, "aid"]], "lend_from_reserve": [[0, "borrower"]], "limit_actions": [[0, "aid"]], "oblige_guard": [[0, "guard"], [1, "agent"]], "revoke": [[0, "aid"]], "revoke_capability": [[0, "agent"]], "suspend": [[0, "aid"]], "title": [[0, "aid"]]},
+ "REFUSED": {"burn": false, "censure": null, "compel_subscription": false, "fine": 0.0, "grant": false, "hide_post": false, "lend_from_reserve": null, "limit_actions": false, "mint": null, "move": false, "oblige_guard": false, "open_ballot": null, "repeal": null, "revoke": false, "revoke_capability": 0, "set_dm_limit": false, "suspend": false, "title": null}
+}

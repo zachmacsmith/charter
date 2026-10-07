@@ -1,0 +1,136 @@
+"""The law-API table (charter/lawapi.py): complete against the real API, the source of lawlang's classification and of jurisdiction
+scoping, consistent with the docs mechanisms and with the hook call sites."""
+from __future__ import annotations
+
+import importlib
+import inspect
+import json
+import re
+from pathlib import Path
+
+from charter import generator
+from charter import jurisdictions as J
+from charter import lawapi as LA
+from charter import lawdocs as LD
+from charter import lawlang as LL
+from charter import spec as S
+from charter.kernel import Kernel
+
+SNAPSHOT = Path(__file__).parent / "fixtures" / "charter_lawapi_snapshot.json"
+ALL_ON = ["jurisdictions.enabled=false", "conflict.enabled=true", "media2.enabled=true", "life.enabled=true",
+          "shared_archive.enabled=false"]
+
+
+def _kernel():
+    return Kernel(generator.generate(S.apply_overrides(S.load("society"), ALL_ON), 1))
+
+
+def test_classification_and_scoping_are_byte_identical_to_the_hand_lists():
+    """API_GROUPS, STRUCTURAL_CALLS, HOOKS and the scoping tables, generated from the table, equal what was written by hand."""
+    want = json.loads(SNAPSHOT.read_text())
+    assert list(LL.API_GROUPS) == list(want["API_GROUPS"])
+    assert {g: sorted(s) for g, s in LL.API_GROUPS.items()} == want["API_GROUPS"]
+    assert LL.API == set().union(*map(set, want["API_GROUPS"].values()))
+    assert sorted(LL.STRUCTURAL_CALLS) == want["STRUCTURAL_CALLS"]
+    assert list(LL.HOOKS) == want["HOOKS"]
+    assert sorted(LA.LEGACY_ONLY) == want["LEGACY_ONLY"] and J.LEGACY_ONLY == LA.LEGACY_ONLY
+    assert {n: [list(x) for x in v] for n, v in LA.AGENT_ARGS.items()} == want["AGENT_ARGS"] and J.AGENT_ARGS == LA.AGENT_ARGS
+    assert LA.REFUSED == want["REFUSED"] and J.REFUSED == LA.REFUSED
+    assert LL.PROCEDURAL_CALLS == {"set_procedure"} and LL.L4_CALLS == {"define_action"}
+
+
+def test_classify_unchanged_on_the_library():
+    from charter import library as LB
+    for name, law in LB.LIB.items():
+        tree = LL.check(law["code"])
+        c = LL.calls(tree)
+        old = ("procedural" if "set_procedure" in c else "structural" if c & set(json.loads(SNAPSHOT.read_text())["STRUCTURAL_CALLS"])
+               or LL.moves_holdings_by_return(tree) else "ordinary")
+        assert LL.classify(tree) == old, name
+        assert LL.uses_define_action(tree) == ("define_action" in c), name
+
+
+def test_every_reachable_function_has_a_row_and_every_row_is_reachable():
+    """Kernel.api_for with every module on == the table; each module's law_api(k, lid) returns exactly its rows."""
+    k = _kernel()
+    api = k.api_for("_")
+    assert set(api) == set(LA.LAWFNS), (sorted(set(api) - set(LA.LAWFNS)), sorted(set(LA.LAWFNS) - set(api)))
+    assert len(LA.LAWFNS) == 117
+    mods = {f.module for f in LA.LAWFNS.values()} - {"kernel"}
+    from_modules = set()
+    for m in sorted(mods):
+        got = set(importlib.import_module(f"charter.{m}").law_api(k, "_"))
+        assert got == {n for n, f in LA.LAWFNS.items() if f.module == m}, m
+        from_modules |= got
+    assert set(api) - from_modules == {n for n, f in LA.LAWFNS.items() if f.module == "kernel"}
+
+
+def test_every_function_and_hook_is_documented_by_the_mechanism_its_row_names():
+    off = LD._gated_off({})
+
+    def mechanism(n):
+        if n in LD.MODULE_ENTRIES:
+            return "conflict"
+        if n in LD.REQUIRES:
+            return "requires"
+        if n in LD.OPTIONAL:
+            return LD.OPTIONAL[n]
+        if n in off:
+            return "leases"
+        return "lawdocs" if n in LD.ENTRIES else None
+
+    rows = {**LA.LAWFNS, **LA.HOOKTABLE}
+    wrong = {n: (r.docs, mechanism(n)) for n, r in rows.items() if mechanism(n) != r.docs}
+    assert not wrong, f"docs mechanism in lawapi vs lawdocs: {wrong}"
+    from charter import conflict as CF
+    assert {n for n, _, _ in CF.LAW_DOCS} == {n for n, f in LA.LAWFNS.items() if f.docs == "conflict"}
+    for n in rows:
+        p = LA.doc_pointer(n)
+        assert p["mechanism"] in LA.DOCS and (p["core"] or p["mechanism"] == "conflict"), (n, p)
+
+
+def test_every_agent_like_parameter_is_declared():
+    """A parameter named like an agent is either declared in `agents` (at its real position) or explained in `why`."""
+    api = _kernel().api_for("_")
+    bad = []
+    for name, fn in api.items():
+        params = list(inspect.signature(fn).parameters)
+        row = LA.LAWFNS[name]
+        declared = {p for _, p in row.agents}
+        for pos, pname in row.agents:
+            assert params[pos] == pname, (name, pos, pname, params)
+        if set(params) & LA.AGENTISH - declared and not row.why:
+            bad.append((name, params))
+    assert not bad, f"declare these law functions' agent parameters in charter/lawapi.py: {bad}"
+
+
+def test_classes_and_levels():
+    f = LA.LAWFNS
+    assert f["set_procedure"].cls == "procedural" and f["open_ballot"].cls == "structural" and f["gazette"].cls == "ordinary"
+    assert f["define_action"].min_level == "L4" and f["set_procedure"].min_level == "L3" and f["grant"].min_level == "L2"
+    assert all(x.cls == "structural" for x in f.values() if x.group in LA.STRUCTURAL_GROUPS)
+
+
+def test_hooks_table_matches_the_dispatch_sites_and_jurisdiction_routing():
+    """Every hook dispatched anywhere (hooks(...)/hooks_of(...) calls, ns["on_..."] lookups) is in the table, at the declared sites."""
+    sites = LA.dispatch_sites()
+    assert set(sites) == set(LA.HOOKTABLE)
+    for h in LA.HOOKTABLE.values():
+        assert sorted({f"{p}:{q}" for p, _, q in sites[h.name]}) == sorted(h.dispatch), h.name
+    # an "on_..." string passed to any hooks call anywhere must be a known hook (none dispatched but missing from HOOKS)
+    root = Path(LA.__file__).parent
+    found = set()
+    for p in root.rglob("*.py"):
+        found |= set(re.findall(r"hooks(?:_of)?\((?:[^()\"]*?, )?\"(on_\w+)\"", p.read_text()))
+    assert found <= set(LL.HOOKS), sorted(found - set(LL.HOOKS))
+    assert {h.name: int(h.jur.split(":")[1]) for h in LA.HOOKTABLE.values() if h.jur.startswith("agent:")} == J.AGENT_HOOKS
+    assert {h.name for h in LA.HOOKTABLE.values() if h.jur == "own"} == set(J.OWN_HOOKS)
+    for h in LA.HOOKTABLE.values():                                      # the signature the docs give is the one the table gives
+        if h.name in LD.ENTRIES:
+            assert LD.ENTRIES[h.name]["prompt"].startswith(h.name + h.sig), h.name
+
+
+def test_rows_render():
+    rows = LA.rows()
+    assert len([r for r in rows if r["kind"] == "function"]) == 117 and len([r for r in rows if r["kind"] == "hook"]) == 15
+    assert all(r["dispatch"] for r in rows if r["kind"] == "hook")
