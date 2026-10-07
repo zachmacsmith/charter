@@ -8,6 +8,7 @@
   python -m charter view RUN_DIR [--open]                                       story.html: the run as a group chat, inboxes, laws and wealth
   python -m charter report RUN_DIR                                               (re)build overview.md, spec_outline.md, agents/*
   python -m charter sweep E3 --seeds 3 --vary constitution=assembly,oligarchy --vary models.mix=all_weak,strong_legislators [--dry]
+  python -m charter difftest --base main --head WORKTREE --presets E2,E4 --seeds 1,2 --rounds 3   where two revisions' scripted runs diverge
   python -m charter explore E3 --runs 8 --perturb "endowment_gini={uniform: [0.1, 0.7]}" --perturb "conditions.fixer={choice: [honest, hidden]}" [--dry]
 
 SPEC is a preset name (E0..E7, base, example_E3) or a path to a YAML spec. --set applies explicit choices (they win over draws).
@@ -329,6 +330,9 @@ def main(argv=None):
     p = sub.add_parser("report"); p.add_argument("run"); p.set_defaults(fn=lambda a: print(__import__("charter.report", fromlist=["build"]).build(a.run)))
     p = sub.add_parser("view"); p.add_argument("run"); p.add_argument("--out"); p.add_argument("--open", action="store_true")
     p.set_defaults(fn=cmd_view)
+    from charter import difftest
+    p = sub.add_parser("difftest", help="compare scripted runs on two code revisions (charter/difftest.py)")
+    difftest.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(difftest.cmd(a)))
     a = ap.parse_args(argv)
     a.fn(a)
 
