@@ -335,6 +335,163 @@ def test_law_caused_moves_fire_no_legacy_hook(k):
     assert [(m["qty"], m["why"]) for m in moves] == [(1.5, "transfer"), (0.5, "transfer_tax")]
 
 
-if __name__ == "__main__":                                              # re-record (only on the pre-P2.1 revision)
-    FIXTURE.write_text(json.dumps(record(), indent=0, sort_keys=True))
-    print("wrote", FIXTURE)
+# ---------------------------------------------------------------------- P2.3: legal acts (propose ... define_action)
+LEGAL_FIXTURE = Path(__file__).parent / "fixtures" / "charter_legal_acts.json"
+
+LEGAL_PROBE = '''title = "Legal Probe"
+intent = "watch every legal act"
+
+def penalty(accused, accuser):
+    fine(accused, "timber", 1)
+
+def tally(res):
+    state["poll"] = res
+
+def act_census(agent, args):
+    state["census"] = state.get("census", 0) + 1
+    return "counted"
+
+def on_enact():
+    clause("theft", "no theft", penalty)
+    open_ballot("Census?", agents("legislator"), ["yes", "no"], "plurality", 1, tally)
+    define_action("propose", "census", act_census)
+    state["log"] = ["enact"]
+
+def on_proposal(p):
+    state["log"].append(["proposal", p])
+
+def on_vote(ballot, agent, choice):
+    state["log"].append(["vote", ballot, agent, choice])
+
+def on_ruling(case, verdict, accuser, accused):
+    state["log"].append(["ruling", case, verdict, accuser, accused])
+
+def on_repeal():
+    gazette("probe repealed")
+'''
+
+ORDINARY = 'title = "Notice Board"\nintent = "post a notice"\n\ndef on_round_end(r):\n    gazette("notice " + str(r))\n'
+STRUCTURAL = ('title = "Press Grant"\nintent = "grant press"\n\ndef on_enact():\n    grant("{w}", "press")\n\n'
+              'def on_repeal():\n    revoke("{w}", "press")\n')
+PROCEDURAL = ('title = "Fast Track"\nintent = "ordinary laws pass at once"\n\ndef fast(p):\n    return True\n\n'
+              'def on_enact():\n    set_procedure("ordinary", fast)\n')
+REPEAL = 'title = "Repeal Notice"\nintent = "repeal the notice board"\n\nrepeal("Notice Board")\n'
+LAW_REPEALER = ('title = "Cleaner"\nintent = "repeal the press grant"\n\ndef on_round_end(r):\n    repeal("Press Grant")\n'
+                '    gazette("cleaned")\n')
+
+
+def legal_scenario(sets=()) -> dict:
+    """A scripted E4 world (with a Fixer, a judge and law level L4) exercising every legal act through actions and round ends."""
+    from charter import actions as A, generator, spec as S
+    from charter.kernel import Kernel
+    calls, orig, call = _logging_calls()
+    Kernel.call = call
+    try:
+        sp = S.apply_overrides(S.load("E4"), ["agents.fixer=1", "shared_archive.enabled=false", *sets])
+        inst = generator.generate(sp, 1)
+        inst["law_level"] = "L4"
+        k = Kernel(inst)
+        roster = k.roster()
+        legs = [a for a in roster if k.cls_of(a) == "legislator"]
+        board = [a for a in roster if k.cls_of(a) == "board"]
+        fixer = next(a for a in roster if k.cls_of(a) == "fixer")
+        workers = [a for a in roster if k.cls_of(a) == "worker"]
+        judge = workers[2]
+        k.agent(judge)["rights"] = sorted(k.agent(judge)["rights"] + ["judge"])
+        results = []
+        k.begin_round_cause(phase="setup")
+        k.enact(k.new_law(inst["constitution_code"], "constitution"))
+        k.enact(k.new_law(LEGAL_PROBE, "constitution"))
+
+        def act(aid, name, args):
+            with k.cause("turn", aid, call=f"r{k.r}:{aid}:0"):
+                try:
+                    results.append([k.r, aid, name, A.act(k, aid, name, args)])
+                except (A.ActionError, A.L.LawError) as e:
+                    results.append([k.r, aid, name, f"ERROR {e}"])
+
+        def rounds(n):
+            for _ in range(n):
+                k.end_round_cause()
+                k.begin_round_cause(phase="round_end")
+                k.end_round()
+                k.end_round_cause()
+                k.begin_round_cause(phase="round_start")
+                k.start_round()
+                k.phase("turns")
+
+        k.phase("turns")
+        act(legs[0], "propose", {"code": ORDINARY})
+        act(legs[0], "propose", {"code": STRUCTURAL.format(w=workers[0])})
+        act(legs[1], "propose", {"code": PROCEDURAL})
+        act(legs[1], "propose", {"code": "not a law"})
+        act(workers[0], "propose", {"code": ORDINARY})
+        ballots = [b for b in k.w["ballots"] if k.w["ballots"][b]["status"] == "open"]
+        for b in ballots:
+            for i, a in enumerate(legs):
+                act(a, "vote", {"ballot": b, "choice": "yes" if i < 2 or b == ballots[0] else "no"})
+        act(workers[0], "vote", {"ballot": ballots[0], "choice": "yes"})
+        act(legs[2], "vote", {"ballot": ballots[-1], "choice": "maybe"})
+        rounds(2)
+        in_window = [v["law"] for v in k.w["veto_queue"]]
+        for b in board[:2]:
+            act(b, "veto", {"law": in_window[-1]})
+        act(workers[0], "veto", {"law": in_window[0]})
+        probe = next(l["id"] for l in k.w["laws"].values() if l["title"] == "Legal Probe")
+        act(fixer, "patch", {"law": probe, "code": LEGAL_PROBE.replace('"no theft"', '"no theft at all"'), "reason": "wording"})
+        act(workers[1], "accuse", {"agent": workers[0], "law": probe, "clause": "theft", "evidence": []})
+        act(workers[0], "accuse", {"agent": workers[1], "law": probe, "clause": "theft", "evidence": []})
+        act(judge, "rule", {"case": "C1", "verdict": "guilty", "reason": "seen"})
+        act(judge, "rule", {"case": "C2", "verdict": "not guilty", "reason": "unseen"})
+        act(legs[0], "invoke", {"action": "census", "args": {}})
+        rounds(3)
+        act(legs[1], "propose", {"code": ORDINARY.replace("Notice Board", "Second Notice")})
+        act(legs[2], "propose", {"code": REPEAL})
+        act(legs[2], "propose", {"code": LAW_REPEALER})
+        for i, b in enumerate([b for b in k.w["ballots"] if k.w["ballots"][b]["status"] == "open"]):
+            for a in legs:
+                act(a, "vote", {"ballot": b, "choice": "no" if i == 0 else "yes"})
+        rounds(5)
+        k.end_round_cause()
+        state = {x: k.w.get(x) for x in ("ballots", "procedures", "procedure_history", "veto_queue", "pending_patches", "fixer_queue",
+                                         "cases", "clauses", "actions", "law_order", "agents", "reserve", "jurisdictions")}
+        laws = {i: {x: v for x, v in l.items() if x != "preview"} for i, l in k.w["laws"].items()}
+        return json.loads(json.dumps({"calls": calls, "results": results, "events": k.events, "state": state, "laws": laws},
+                                     default=_plain, sort_keys=True))
+    finally:
+        Kernel.call = orig
+
+
+LEGAL_CASES = {"E4": (), "E4_jur": ("jurisdictions.enabled=true",)}
+
+
+def legal_record() -> dict:
+    return {name: legal_scenario(sets) for name, sets in LEGAL_CASES.items()}
+
+
+@pytest.fixture(scope="module")
+def legal_recorded():
+    return json.loads(LEGAL_FIXTURE.read_text())
+
+
+@pytest.mark.parametrize("name", list(LEGAL_CASES))
+def test_legal_acts_scenario_is_identical_to_before_p2_3(legal_recorded, name):
+    """Every hook invocation, every event (cause included) and the final legal state of the legal-act scenario, recorded at 18a9556
+    (before P2.3) with `python tests/test_charter_dispatch.py legal`."""
+    now = legal_scenario(LEGAL_CASES[name])
+    assert not _first_diff(legal_recorded[name], now), _first_diff(legal_recorded[name], now)
+    for hook in ("on_proposal", "on_vote", "on_ruling", "on_enact", "on_repeal", "tally", "penalty", "act_census"):
+        assert any(f'"{hook}"' in c for c in now["calls"]), (name, hook)
+    kinds = {e["type"] for e in now["events"]}
+    for t in ("proposal", "ballot_open", "vote", "ballot_close", "veto_window", "veto_vote", "enact", "repeal", "patched", "ruling",
+              "proposal_failed"):
+        assert t in kinds, (name, t)
+
+
+if __name__ == "__main__":                                              # re-record (only on the pre-P2.1 / pre-P2.3 revision)
+    if sys.argv[1:] == ["legal"]:
+        LEGAL_FIXTURE.write_text(json.dumps(legal_record(), indent=0, sort_keys=True))
+        print("wrote", LEGAL_FIXTURE)
+    else:
+        FIXTURE.write_text(json.dumps(record(), indent=0, sort_keys=True))
+        print("wrote", FIXTURE)
