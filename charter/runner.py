@@ -596,16 +596,7 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
           "guesses": guesses, "laws": laws, "welfare": welfare_series, "unit": k.w["unit"],
           "camp_resource": {c: v["resource"] for c, v in k.w["camps"].items()}, "shared_archive_at_start": shared_snap,
           "cases": k.w["cases"], "currencies": k.w["currencies"], "names": k.w["names"]}
-    gt["hidden"] = H.truth(k)                                           # powers, codex holdings, forgeries at the end (monitor-only)
-    gt.update(EV.truth(k, inst))                                        # world events: schedule, truth, goal boundaries, arrivals
-    if CX.enabled(inst):                                                # context: manual sections read, files at the end
-        gt["context"] = CX.truth(k)
-    if "roles" in k.w:
-        gt["roles"] = R.truth(k)                                        # roles: holders at the end, passes (monitor-only)
-    gt.update(CT.truth(k))                                              # camps: typed camps' hidden rules and stats ({} under legacy)
-    from charter import life as LF, mortality as MO                     # life: deaths, seats, lineage, commissions (monitor-only)
-    gt.update(MO.truth(k))
-    gt.update(LF.truth(k))
-    gt.update(CF.truth(k))                                              # conflict: true attackers, disguises, contracts ({} when off)
-    gt.update(MD.truth(k))                                              # media2: outlets, subscriptions, placements, libraries ({} off)
+    from charter import features as FT                                  # hidden, events, context, roles, camps, mortality, life,
+    for part in FT.merge("truth", {}, k, inst):                         # conflict, media2 (monitor-only; features.TAILS order)
+        gt.update(part)
     (out / "ground_truth.json").write_text(json.dumps(gt, indent=1, default=list))

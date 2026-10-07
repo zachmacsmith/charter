@@ -33,6 +33,7 @@ import random
 import re
 import zlib
 
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry: board, recent, feed priorities
 
 DEFAULTS = {
@@ -97,7 +98,7 @@ def _spec(x) -> dict:
 
 def enabled(x) -> bool:
     """x: a kernel, an instance or a spec (None: off)."""
-    return x is not None and bool((_spec(x).get("context") or {}).get("enabled"))
+    return FT.on("context", x)
 
 
 def cfg(x) -> dict:
@@ -1301,7 +1302,11 @@ def record_turn(k, aid, acts: list, results: list) -> None:
     st["fetched"].pop(aid, None)
 
 
-def truth(k) -> dict:
+def truth(k, inst=None) -> dict:
+    return {"context": _truth(k)} if enabled(k) else {}               # ground_truth.json["context"] (only when on)
+
+
+def _truth(k) -> dict:
     """For ground_truth.json: which manual sections each agent read (and how often), and every agent's files at the end."""
     st = _st(k)
     return {"manual_reads": copy.deepcopy(st.get("manual_reads", {})),

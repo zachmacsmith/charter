@@ -55,6 +55,7 @@ import json
 import random
 import re
 
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawapi as LA
 from charter import lawlang as L
@@ -84,11 +85,11 @@ def cfg_of(spec: dict) -> dict:
 
 
 def enabled_spec(spec: dict) -> bool:
-    return bool(((spec or {}).get(KEY) or {}).get("enabled"))
+    return FT.on("jurisdictions", spec or {})
 
 
 def enabled(k) -> bool:
-    return "jur" in k.w
+    return FT.on("jurisdictions", k)
 
 
 def cfg(k) -> dict:
@@ -1030,7 +1031,7 @@ def assign_arrival(k, aid):
 _JOIN_WHY = {"arrival": " on arriving", "declaration": " as it was declared", "admitted": " (admitted)"}
 
 
-def render_event(e, tag) -> str | None:
+def render_event(k, e, tag, viewer=None) -> str | None:
     """Public joins, leaves, admissions and declarations (the hidden stages are told by notify or the action's result)."""
     d, t, who = e["data"], e["type"], e["agent"]
     jid = d.get("jurisdiction")

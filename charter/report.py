@@ -217,7 +217,7 @@ def overview(d, inst, ev, rs, snaps, gt, score, status=None):
             elif t in ("power_use", "tip", "article_granted", "forgery_truth", "forged_dm", "history_forged", "spawn_request"):   # hidden.py
                 line = f"- [hidden] {t.replace('_', ' ')} {who or ''}: {_cut(json.dumps(x), 200)}"
             elif t in P.EVENT_TYPES or t in O.EVENT_TYPES:                 # projects and tribute (public events)
-                line = "- " + ((P.render_event(e, "") if t in P.EVENT_TYPES else O.render_event(e, "")) or t).strip()
+                line = "- " + ((P.render_event(None, e, "") if t in P.EVENT_TYPES else O.render_event(None, e, "")) or t).strip()
             elif t in ("world_event_truth", "goal_change", "arrival", "departure"):
                 from charter import events as _events
                 line = _events.overview_line(e)

@@ -17,6 +17,7 @@ State: k.w["scholars"] = {"prices": {scholar: {"file"|"pin": {item, qty}}}, "sol
 """
 from __future__ import annotations
 
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import roles as RO
 
 
@@ -31,7 +32,7 @@ def _err(msg):
 
 
 def enabled(k) -> bool:
-    return "scholars" in k.w
+    return FT.on("scholars", k)
 
 
 def install(k) -> None:

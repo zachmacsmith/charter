@@ -120,21 +120,13 @@ def resolve(handler: str) -> Callable:
 # ---------------------------------------------------------------------- requirements
 def _mod(inst, key) -> bool:
     sp = inst["spec"]
-    if key == "typed":
-        return (sp.get("camps") or {}).get("model") == "types"
-    if key == "leases":
-        from charter.camptypes import leases as LS
-        return LS.enabled_spec(sp)
     if key == "dm":
         return sp["channels"].get("dm", True)
     if key == "shared_archive":
         return (sp.get("shared_archive") or {}).get("enabled", True)
-    if key == "projects":
-        return (sp.get("projects") or {"enabled": True}).get("enabled", True)
-    if key == "mortality":
-        from charter import mortality as MO
-        return MO.active(sp)
-    return bool((sp.get(key) or {}).get("enabled"))
+    from charter import features as FT                                 # "mod:<key>": a feature name or its spec key
+    name = {"typed": "camps", "media2": "media", "outside_power": "outside"}.get(key, key)
+    return FT.on(name, sp) if name in FT.REG else bool((sp.get(key) or {}).get("enabled"))
 
 
 def _classes(a) -> set:

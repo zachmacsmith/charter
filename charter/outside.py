@@ -204,7 +204,7 @@ def state_lines(k, aid) -> list[str]:
             f"Paid so far: {who}. Unpaid by the deadline means a raid on a camp (pay_tribute {{\"item\", \"qty\"}})."]
 
 
-def render_event(e, tag) -> str | None:
+def render_event(k, e, tag, viewer=None) -> str | None:
     d, t, who = e["data"], e["type"], e["agent"]
     if t == "tribute_demand":
         dem = d["demand"]

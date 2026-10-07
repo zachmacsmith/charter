@@ -51,6 +51,7 @@ import re
 from pathlib import Path
 
 from charter import goal_registry as GR
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import rights as RT
 
 ROLES = ("spy", "assassin", "scholar", "maker", "media")
@@ -82,8 +83,7 @@ def cfg(sp: dict) -> dict:
 
 def active_spec(sp: dict) -> bool:
     """Roles are in play: the module is on, or roles are assigned explicitly."""
-    c = cfg(sp)
-    return bool(c["enabled"] or c.get("explicit"))
+    return FT.on("roles", sp or {})
 
 
 def observer_mode(sp: dict) -> str:
@@ -432,12 +432,12 @@ def scripted(k, aid, out: dict) -> dict:
     return {**out, "next_reads": reads, "assessments": ass}
 
 
-def truth(k) -> dict | None:
+def truth(k, inst=None) -> dict:
     if "roles" not in k.w:
-        return None
+        return {}
     st = k.w.get("roles_state") or {}
-    return {"holders": copy.deepcopy(k.w["roles"]), "passed": list(st.get("passed", [])),
-            "evidence_readable": {a: len(v) for a, v in (st.get("seen") or {}).items()}}
+    return {"roles": {"holders": copy.deepcopy(k.w["roles"]), "passed": list(st.get("passed", [])),
+            "evidence_readable": {a: len(v) for a, v in (st.get("seen") or {}).items()}}}
 
 
 # ====================================================================== metrics (scorer)

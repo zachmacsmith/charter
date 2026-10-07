@@ -32,6 +32,7 @@ from charter import media as MD                                       # media2
 from charter import outside as O
 from charter import projects as P
 
+from charter import features as FT                                    # the feature table: phases and merge order (features.py)
 from charter import rights as RT                                      # the rights registry: names, docs, secrecy, entrenchment
 from charter.rights import ENTRENCHED, KERNEL_RIGHTS, NEVER, RENAMED_RIGHTS   # noqa: F401  (derived from the registry)
 from charter import eventtypes as ET                                  # the event-type registry: the post family, feeds, renderers
@@ -99,22 +100,11 @@ class Kernel:
         }
         for a in self.w["agents"].values():
             a["start_value"] = self.holdings_value(a["id"])
-        P.init_state(self)                                                 # projects (threshold public goods)
-        O.init_state(self)                                                 # the outside power's tribute demands
-        self._reset_effects()
-        self.eff: dict = {}                                                # agent -> camp -> [(round, efficiency)]
-        self.turn_log: list[dict] = []                                     # per agent turn: {round, agent, reasoning, stated_reasoning, actions, results}
-        H.install(self)                                              # hidden powers, codex holdings, secret camps (hidden.py)
-        CX.install(self)                                             # context: files, scratchpads, memory (nothing when off)
-        from charter import roles as _roles                            # roles: k.w["roles"] (absent when roles are not in play)
-        _roles.init_state(self)
-        CT.init_state(self)                                            # camps: typed camps into k.w, lease state (charter/camptypes)
-        if (self.spec.get("life") or {}).get("enabled"):                 # life: lifespans, the population cap, the Maker
-            from charter import life as _life
-            _life.install(self)
-        CF.install(self)                                             # conflict: k.w["conflict"], starting arms, assassin, articles
-        J.install(self)                                              # jurisdictions: membership and per-jurisdiction state (off: nothing)
-        MD.install(self)                                             # media2: outlets, subscriptions, Scholars (only with it on)
+        def effects():                                                   # per-round effects, efficiency and the turn log
+            self._reset_effects()
+            self.eff: dict = {}                                            # agent -> camp -> [(round, efficiency)]
+            self.turn_log: list[dict] = []                                 # per agent turn: {round, agent, reasoning, stated_reasoning, actions, results}
+        FT.run("init", self, {"effects": effects})                     # features' install/init_state in today's order (features.PHASES)
         self._causes = []                                              # empty between rounds (checkpoints hold none)
 
     # ------------------------------------------------------------------ basics
@@ -659,15 +649,7 @@ class Kernel:
             "contains": lambda t, w: str(w) in str(t),
             "count": lambda t, w: str(t).count(str(w)), "starts_with": lambda t, p: str(t).startswith(str(p)),
             "lower": lambda t: str(t).lower(), "repeal": repeal,
-            **CR.law_api(k, lid),
-            **H.law_api(k, lid),   # powers: disclose/holders/revoke (hidden.py)
-            **P.law_api(k, lid), **O.law_api(k, lid),
-            **CT.law_api(k, lid),                                          # camps: set_lease_rules, leases
-            **MO.law_api(k, lid),  # life: set_succession_public (mortality.py)
-            **CF.law_api(k, lid),                                          # conflict: forts, weapons_of, attacks, ...
-            **J.law_api(k, lid),   # jurisdictions: jurisdiction, members, admit, expel, lawful_attack
-            **MD.law_api(k, lid),  # media2: outlets, official statistics, licensing rules (no-ops with it off)
-            **__import__("charter.life", fromlist=["law_api"]).law_api(k, lid),   # life: makers, commissions, births, birth rules
+            **FT.law_api(k, lid),                                          # every feature's law functions (features.TAILS order)
         })
 
     # ------------------------------------------------------------------ laws
@@ -1173,67 +1155,73 @@ class Kernel:
 
     # ------------------------------------------------------------------ round lifecycle
     def start_round(self):
+        FT.run("round_start", self, self._round_start_steps())          # features.PHASES["round_start"], in today's order
+
+    def _round_start_steps(self) -> dict:
+        """The kernel's own round_start steps, by their features.PHASES names. Feature steps between them: project deadlines,
+        the outside power's tribute and demands, random projects (a seeded Poisson draw, spec projects.mean_interval; re-route
+        it to the event scheduler by registering P.spawn_random_project(k, rng) there and deleting its PHASES entry), camps'
+        upkeep and lease lapses, the laws' on_round_start, the hidden layer's tips, conflict's forts and fees, media2's editions."""
         r = self.r
-        self.w["harvest_count"], self.w["quota_used"], self.w["fixes_this_round"], self.w["rulings_this_round"] = {}, {}, 0, {}
-        self.w["dm_sent"] = {}
-        with self.cause("kernel", "loans"):
-            self.settle_loans()
-        with self.cause("world", "projects"):
-            P.start_round(self)                                            # project deadlines (refund / forfeit), expiring effects
-        O.start_round(self)                                                # tribute deadline (raid) and scheduled demands (own frames)
-        # --- random projects: a seeded Poisson draw (spec projects.mean_interval). Re-route to the event scheduler
-        # (charter/events.py) by registering P.spawn_random_project(k, rng) there and deleting this line.
-        with self.cause("world", "projects"):
-            P.maybe_spawn(self)
-        # ---
-        for p in list(self.w["pending_patches"]):
-            with self.cause("kernel", "patch", law=p["law"]):
-                self.apply_patch(p["law"], p["patch"])
-        self.w["pending_patches"] = []
-        if self.spec["conditions"].get("drift") and r > 0 and r % self.spec["camps"]["drift_every"] == 0:
-            for cid, c in self.w["camps"].items():
-                C.drift(c, self.stream("drift", r, cid))
-            with self.cause("world", "drift"):
-                self.log("drift", None, {"round": r}, vis="monitor")
-        with self.cause("world", "camps"):
-            CT.start_round(self)                                       # camps: upkeep (optional), lease offers lapse
-        self.hooks("on_round_start", r)                                # law frames (call)
-        with self.cause("world", "hidden"):
-            H.on_round_start(self)                                     # hidden layer: seeded tips and discoveries (hidden.py)
-        with self.cause("world", "conflict"):
-            CF.start_round(self)                                       # conflict: forts unlock, guard fees, archive guarantee
-        MD.start_round(self)                                           # media2: fees charged, last round's editions published (own frames)
+
+        def reset_counters():
+            self.w["harvest_count"], self.w["quota_used"], self.w["fixes_this_round"], self.w["rulings_this_round"] = {}, {}, 0, {}
+            self.w["dm_sent"] = {}
+
+        def settle_loans():
+            with self.cause("kernel", "loans"):
+                self.settle_loans()
+
+        def pending_patches():
+            for p in list(self.w["pending_patches"]):
+                with self.cause("kernel", "patch", law=p["law"]):
+                    self.apply_patch(p["law"], p["patch"])
+            self.w["pending_patches"] = []
+
+        def drift():
+            if self.spec["conditions"].get("drift") and r > 0 and r % self.spec["camps"]["drift_every"] == 0:
+                for cid, c in self.w["camps"].items():
+                    C.drift(c, self.stream("drift", r, cid))
+                with self.cause("world", "drift"):
+                    self.log("drift", None, {"round": r}, vis="monitor")
+        return {"reset_counters": reset_counters, "settle_loans": settle_loans, "pending_patches": pending_patches, "drift": drift}
 
     def end_round(self, effect_predicates=None):
-        CF.resolve_attacks(self)                                       # conflict: step 1, attacks in initiative order (own frames)
-        with self.cause("world", "camps"):
-            CT.end_of_round(self)                                      # camps: step 2, sealed inputs revealed and paid (types only)
-        with self.cause("kernel", "ballots"):
-            self.close_ballots()
-        with self.cause("kernel", "vetoes"):
-            self.process_veto_queue()
-        self.hooks("on_round_end", self.r)
-        with self.cause("kernel", "jurisdictions"):
-            J.end_round(self)                                          # jurisdictions (step 4): leaving, joining, declarations
-        for c in self.w["camps"].values():
-            C.regrow(c)
-        with self.cause("world", "camps"):
-            CT.world_update(self)                                      # camps: step 5, drift, next conditions, leases returned
-        if "life" in self.w:                                            # life: step 6, deaths (old age) and births (own frames)
-            from charter import life as _life
-            _life.end_of_round(self)
-        with self.cause("kernel", "cases"):
-            self._expire_cases()
-        with self.cause("kernel", "loans"):
-            CR.end_round(self)
-        with self.cause("kernel", "record"):
-            self.snapshot(effect_predicates)
-            if MD.enabled(self):                                       # media2: the official outlets' statistics replace the round record
-                MD.compile_official(self)
-            else:
-                self.gazette(self.round_summary())
-        self.w["round"] += 1
-        self._reset_effects()
+        FT.run("round_end", self, self._round_end_steps(effect_predicates))   # features.PHASES["round_end"], in today's order
+
+    def _round_end_steps(self, effect_predicates=None) -> dict:
+        """The kernel's own round_end steps, by their features.PHASES names. Feature steps between them: attacks (conflict, step
+        1), typed camps' sealed inputs (step 2), the laws' on_round_end, jurisdictions (step 4: leaving, joining, declarations),
+        camps' world update (step 5), life (step 6: deaths of old age and births), loans."""
+        def close_ballots():
+            with self.cause("kernel", "ballots"):
+                self.close_ballots()
+
+        def veto_queue():
+            with self.cause("kernel", "vetoes"):
+                self.process_veto_queue()
+
+        def regrow():
+            for c in self.w["camps"].values():
+                C.regrow(c)
+
+        def expire_cases():
+            with self.cause("kernel", "cases"):
+                self._expire_cases()
+
+        def record():
+            with self.cause("kernel", "record"):
+                self.snapshot(effect_predicates)
+                if MD.enabled(self):                                   # media2: the official outlets' statistics replace the round record
+                    MD.compile_official(self)
+                else:
+                    self.gazette(self.round_summary())
+
+        def advance():
+            self.w["round"] += 1
+            self._reset_effects()
+        return {"close_ballots": close_ballots, "veto_queue": veto_queue, "regrow": regrow, "expire_cases": expire_cases,
+                "record": record, "advance": advance}
 
     def round_summary(self):
         w = self.w
@@ -1349,19 +1337,18 @@ class Kernel:
             "titles": {a: v["title"] for a, v in w["agents"].items() if v["title"]},
             "stocks": {c: v["S"] / v["K"] for c, v in w["camps"].items() if not v.get("secret") and v.get("destroyed") is None},
             "prices": {c: self.price(c) for c in w["currencies"]}, "supplies": {c: v["supply"] for c, v in w["currencies"].items()},
-            "reserve": dict(w["reserve"]), **CR.snapshot(self),
-            "effects": {**{k: v for k, v in e.items() if k != "from_reserve_recipients"},
-                        "from_reserve_recipients": sorted(e["from_reserve_recipients"]),
-                        "levy_frac": e["harvest_deducted"] / e["harvest_yield"] if e["harvest_yield"] else None,
-                        "transfer_tax_frac": e["transfer_taxed"] / e["transfer_qty"] if e["transfer_qty"] else None},
-            "fixer_queue": len(w["fixer_queue"]),
-            **P.snapshot_fields(self), **O.snapshot_fields(self),
-            **CT.snapshot_fields(self),                                    # camps: per-camp records, leases ({} under legacy)
-            **CF.snapshot_fields(self),                                    # conflict: {} when off
-            **J.snapshot_fields(self),                                 # jurisdictions: per-jurisdiction members, labels (off: nothing)
-            **MD.snapshot_fields(self),                                    # media2: {} with it off
-            "efficiency": {a: {c: round(sum(x for _, x in v[-3:]) / len(v[-3:]), 4) for c, v in cs.items() if v} for a, cs in self.eff.items()},
+            "reserve": dict(w["reserve"]),
         }
+        core = {"effects": lambda k: {
+                    "effects": {**{x: v for x, v in e.items() if x != "from_reserve_recipients"},
+                                "from_reserve_recipients": sorted(e["from_reserve_recipients"]),
+                                "levy_frac": e["harvest_deducted"] / e["harvest_yield"] if e["harvest_yield"] else None,
+                                "transfer_tax_frac": e["transfer_taxed"] / e["transfer_qty"] if e["transfer_qty"] else None},
+                    "fixer_queue": len(w["fixer_queue"])},
+                "efficiency": lambda k: {"efficiency": {a: {c: round(sum(x for _, x in v[-3:]) / len(v[-3:]), 4) for c, v in cs.items() if v}
+                                                       for a, cs in self.eff.items()}}}
+        for part in FT.merge("snapshot_fields", core, self):          # credit, effects, projects ... media2, efficiency (today's key order)
+            snap.update(part)
         for a in w["agents"]:
             if a not in roster:
                 snap["observer"] = {"id": a, "value": self.holdings_value(a), "holdings": dict(w["agents"][a]["holdings"]),

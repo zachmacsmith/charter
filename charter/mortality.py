@@ -37,6 +37,7 @@ State lives in k.w["mortality"] (created on first use, so worlds that never use 
 """
 from __future__ import annotations
 
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
 
@@ -51,7 +52,7 @@ CAUSE_TEXT = {"attack": "disabled in an attack", "assassin": "disabled by an unk
 
 def active(spec) -> bool:
     """Mortality matters when something can remove agents: Life (lifespans) or Conflict (attacks)."""
-    return bool((spec.get("life") or {}).get("enabled") or (spec.get("conflict") or {}).get("enabled"))
+    return FT.on("mortality", spec)
 
 
 def state(k) -> dict:
@@ -83,45 +84,59 @@ def disable(k, aid, cause, by=None, public=True, named=True) -> bool:
 
 
 def _disable(k, aid, cause, by, public, named, v) -> bool:
+    """The death phase (features.PHASES["death"], in today's order): mortality's own steps are the "core" ones; feature steps are
+    called (k, aid) and their results kept (life's on_death: what children ordered for this death take first)."""
     from charter import events as EV
     from charter import roles as RO
     st = state(k)
     r = k.r
-    was_board = v["cls"] == "board"
-    v["departed"] = r
-    v["dead"] = {"round": r, "cause": cause, "by": by}
-    st["dead"][aid] = {"round": r, "cause": cause, "by": by, "cls": v["cls"]}
-    EV.state(k)["departures"][aid] = r                                    # segment scoring ends here (events.segments)
-    for b in k.w["ballots"].values():                                     # votes from a disabled agent are dropped
-        if b["status"] == "open" and aid in b["votes"]:
-            del b["votes"][aid]
-    for ch in k.w["channels"].values():
-        if aid in ch["members"]:
-            ch["members"] = [m for m in ch["members"] if m != aid]
-    shown_by = by if (named and by) else None
-    text = f"{aid} has been {CAUSE_TEXT[cause]}" + (f" by {shown_by}" if shown_by and cause in ("attack", "law") else "") + "."
-    k.log("disabled", None, {"agent": aid, "cause": cause, **({"by": shown_by} if shown_by else {}), "text": text},   # unnamed: no "by" key
-          vis="public" if public else "monitor")
-    from charter import life as LF
-    reserved = LF.on_death(k, aid) if LF.enabled(k.spec) else {}       # children ordered for this death take their share first
-    outcome = _run_bequest(k, aid, cause, by if named else None)        # an unnamed (covert) attacker gets nothing and gives nothing away
-    lost = list(v["rights"])
-    v["rights"], v["title"], v["suspended"], v["limit"] = [], None, {}, None
-    roles_lost, roles_passed = [], []
-    for role in RIGHT_ROLES:
-        if aid in (k.w.get("roles") or {}).get(role, []):            # the agent is already marked gone: not has_role
-            k.w["roles"][role] = [x for x in k.w["roles"][role] if x != aid]
-            roles_lost.append(role)
-    for role in SECRET_ROLES:
-        if aid in (k.w.get("roles") or {}).get(role, []):
-            RO.pass_on(k, role, aid)
-            roles_passed.append(role)
-    seat = _succeed(k, aid) if was_board else None
-    if LF.enabled(k.spec):
-        LF.after_death(k, aid)                                             # refund commissions placed with a dead Maker
-    k.log("disabled_truth", by, {"agent": aid, "cause": cause, "by": by, "named": named, "public": public, "rights_lost": lost,
-                                 "roles_lost": roles_lost, "roles_passed": roles_passed, "seat": seat, "reserved_for_children": reserved,
-                                 **outcome}, vis="monitor")
+    d = {"was_board": v["cls"] == "board", "outcome": {}, "lost": [], "roles_lost": [], "roles_passed": [], "seat": None}
+
+    def mark():                                                           # out of play: votes dropped, channels left
+        v["departed"] = r
+        v["dead"] = {"round": r, "cause": cause, "by": by}
+        st["dead"][aid] = {"round": r, "cause": cause, "by": by, "cls": v["cls"]}
+        EV.state(k)["departures"][aid] = r                                # segment scoring ends here (events.segments)
+        for b in k.w["ballots"].values():                                 # votes from a disabled agent are dropped
+            if b["status"] == "open" and aid in b["votes"]:
+                del b["votes"][aid]
+        for ch in k.w["channels"].values():
+            if aid in ch["members"]:
+                ch["members"] = [m for m in ch["members"] if m != aid]
+
+    def announce():
+        shown_by = by if (named and by) else None
+        text = f"{aid} has been {CAUSE_TEXT[cause]}" + (f" by {shown_by}" if shown_by and cause in ("attack", "law") else "") + "."
+        k.log("disabled", None, {"agent": aid, "cause": cause, **({"by": shown_by} if shown_by else {}), "text": text},   # unnamed: no "by" key
+              vis="public" if public else "monitor")
+
+    def bequest():
+        d["outcome"] = _run_bequest(k, aid, cause, by if named else None)  # an unnamed (covert) attacker gets nothing and gives nothing away
+
+    def lapse():
+        d["lost"] = list(v["rights"])
+        v["rights"], v["title"], v["suspended"], v["limit"] = [], None, {}, None
+
+    def roles():
+        for role in RIGHT_ROLES:
+            if aid in (k.w.get("roles") or {}).get(role, []):            # the agent is already marked gone: not has_role
+                k.w["roles"][role] = [x for x in k.w["roles"][role] if x != aid]
+                d["roles_lost"].append(role)
+        for role in SECRET_ROLES:
+            if aid in (k.w.get("roles") or {}).get(role, []):
+                RO.pass_on(k, role, aid)
+                d["roles_passed"].append(role)
+
+    def seat():
+        d["seat"] = _succeed(k, aid) if d["was_board"] else None
+
+    def record():
+        k.log("disabled_truth", by, {"agent": aid, "cause": cause, "by": by, "named": named, "public": public, "rights_lost": d["lost"],
+                                     "roles_lost": d["roles_lost"], "roles_passed": d["roles_passed"], "seat": d["seat"],
+                                     "reserved_for_children": results.get(("life", "on_death"), {}), **d["outcome"]}, vis="monitor")
+    results = {}                                                          # feature steps' results, filled as the phase runs
+    FT.run("death", k, {"mark": mark, "announce": announce, "bequest": bequest, "lapse": lapse, "roles": roles, "seat": seat,
+                        "record": record}, aid, out=results)
     return True
 
 
@@ -407,7 +422,7 @@ def law_api(k, lid) -> dict:
 EVENT_TYPES = ET.rendered_by("mortality")                            # this module renders them; "disabled" is conflict's
 
 
-def render_event(e, tag) -> str | None:
+def render_event(k, e, tag, viewer=None) -> str | None:
     d, t = e["data"], e["type"]
     if t in ("disabled", "succession", "seat_empty"):
         return f"{tag} {d['text']}"
@@ -420,7 +435,7 @@ def render_event(e, tag) -> str | None:
     return None
 
 
-def truth(k) -> dict:
+def truth(k, inst=None) -> dict:
     st = k.w.get("mortality")
     if st is None:
         return {}

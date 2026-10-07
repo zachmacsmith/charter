@@ -31,6 +31,7 @@ from __future__ import annotations
 import copy
 import random
 
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import camps as C
 from charter import resources as RS
@@ -61,15 +62,15 @@ EVENT_TYPES = ET.rendered_by("camptypes") + LS.EVENT_TYPES           # this modu
 
 # ------------------------------------------------------------------ switches and config
 def typed_spec(spec: dict) -> bool:
-    return (spec.get("camps") or {}).get("model", "legacy") == "types"
+    return FT.on("camps", spec)
 
 
 def typed_inst(inst: dict) -> bool:
-    return typed_spec(inst["spec"])
+    return FT.on("camps", inst)
 
 
 def typed(k) -> bool:
-    return typed_spec(k.spec)
+    return FT.on("camps", k)
 
 
 def config(spec: dict) -> dict:
@@ -562,7 +563,7 @@ def state_lines(k, aid) -> list:
     return out + LS.state_lines(k, aid)
 
 
-def render_event(e, tag) -> str | None:
+def render_event(k, e, tag, viewer=None) -> str | None:
     if e["type"] in LS.EVENT_TYPES:
         return LS.render(e, tag)
     if e["type"] == "camp_void":
@@ -591,7 +592,7 @@ def snapshot_fields(k) -> dict:
     return out
 
 
-def truth(k) -> dict:
+def truth(k, inst=None) -> dict:
     if not typed(k):
         return {}
     camps = {}
