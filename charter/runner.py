@@ -130,6 +130,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
              checkpoint_version=ck.get("version") if resuming else None, instance_source=instance_source)   # before --live edits inst["spec"]
     if resuming:
         k.restore_state(ck["kernel"])
+        k.begin_round_cause(phase="setup")                              # provenance: --live and --notice before the round resumes
         rs = ck["runner"]
         notes, cursors, results, guesses = rs["notes"], rs["cursors"], rs["results"], rs["guesses"]
         welfare_series, start_values, shared_snap, const = rs["welfare_series"], rs["start_values"], rs["shared_snap"], rs["const"]
@@ -147,6 +148,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         _post_notices(k, notices, log)
     else:
         shared_snap = archive.snapshot(k.shared_archive)
+        k.begin_round_cause(phase="setup")                              # provenance: constitution, statutes, start laws
         (out / "instance.json").write_text(json.dumps(inst, indent=1, default=str))
         const = k.new_law(inst["constitution_code"], "constitution")
         k.enact(const)
@@ -187,6 +189,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                 f.flush()
         return PV.offsets(out)                                          # every append-only file, observer.jsonl of a member Spy too
 
+    k.end_round_cause()                                                 # provenance: the cause stack is empty between rounds
     if not resuming:                                                    # checkpoint "round 0" (before round 1): a stop in round 1 resumes
         for e in k.events[n_ev:]:
             ev_f.write(json.dumps(e, default=list) + "\n")
@@ -209,6 +212,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
             raise RunStopped(msg)
 
     for r in range(first_round, inst["rounds"]):
+        k.begin_round_cause(r, "round_start")                          # provenance: round and phase frames (kernel.cause)
         k.start_round()
         EV.round_start(k, inst, ev_rs)                                  # world events, goal changes, arrivals and departures
         CF.sync_runner(k, agents)                                       # conflict: disabled agents leave the turn order
@@ -216,6 +220,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         k.rng.shuffle(order)
         order = H.apply_order(k, order)                                 # places set with a hidden power (hidden.py)
         k.log("round_start", None, {"round": r, "order": order}, vis="public")
+        k.phase("turns")
         play = CF.begin_order(k, order)                                 # conflict: true order (initiative); `order` stays the published one
         final = r == inst["rounds"] - 1
         mode = inst["spec"].get("turns", "sequential")
@@ -261,7 +266,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                             pre[aid].append(f"{item.get('action', 'dm')}: ERROR {e}")
                     outbox[aid] = []
                     for q in (lq[aid] if wave < waves else []):             # context: fast lookups, answered before actions
-                        looked[aid].append(CX.dm_step_lookup(k, aid, q))
+                        with k.cause("action", "lookup", agent=aid):     # provenance: a lookup answered in the DM step
+                            looked[aid].append(CX.dm_step_lookup(k, aid, q))
                         if aid not in got:
                             got.append(aid)
                     lq[aid] = []
@@ -413,6 +419,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                 decisions = [got[aid][1] if aid in got else d for aid, d in zip(order, decisions)]
             pre, last = {aid: [] for aid in order}, {}
             if dm_step:
+                k.phase("dm_step")
                 xo = order + ([obs.id] if oprep else [])                  # the observer joins the exchange (delivered last in each wave)
                 if oprep:
                     pre[obs.id] = []
@@ -420,10 +427,12 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                             dict(zip(xo, preps + ([oprep] if oprep else []))), dict(zip(xo, decisions + ([odec] if odec else []))), pre, last, final)
             if oprep:                                                     # its posts/transfers run now, before everyone's actions
                 obs.step_finish(k, r, oprep, odec, pre.pop(obs.id), last.pop(obs.id, None), reason_f, mode)
+            k.phase("turns")
             for pos, (aid, pr, dec) in enumerate(CF.in_order(play, order, zip(order, preps, decisions)), 1):   # conflict: true order
                 if CF.skip_turn(k, aid) or k.w["agents"][aid].get("departed") is not None:   # conflict, life: removed earlier this round
                     continue
-                execute(pos, aid, pr, dec, pre[aid], last.get(aid))
+                with k.cause("turn", aid, call=(dec[2] or {}).get("call")):
+                    execute(pos, aid, pr, dec, pre[aid], last.get(aid))
         else:
             for pos, aid in enumerate(play, 1):                         # conflict: the true order (== order unless initiative was bought)
                 if CF.skip_turn(k, aid) or k.w["agents"][aid].get("departed") is not None:   # conflict, life: removed earlier this round
@@ -434,13 +443,18 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                 stop_if_failing(r, tally)                               # mid-round: the round is abandoned, nothing kept
                 if cx and (got := cx_lookups([(aid, pr, dec)])):       # context: lookup phase, then the action call
                     pr, dec = got[aid]
-                execute(pos, aid, pr, dec)
+                with k.cause("turn", aid, call=(dec[2] or {}).get("call")):
+                    execute(pos, aid, pr, dec)
+        k.phase("observer")
         if obs:                                                         # the secret observer reads and acts after everyone
             obs.turn(k, r, policy, final, reason_f, mode)
+        k.phase("end_of_round")
         k.end_round(PREDICATES)
         k.snapshots[-1]["welfare"] = welfare(k)
         welfare_series.append(k.snapshots[-1]["welfare"])
+        k.phase("editorial")
         MD.editorial_turns(k, policy, agents, sysp, in_parallel, reason_f, results, r, final)   # media2: editors write next round's editions
+        k.end_round_cause()
         for e in k.events[n_ev:]:
             ev_f.write(json.dumps(e, default=list) + "\n")
         n_ev = len(k.events)

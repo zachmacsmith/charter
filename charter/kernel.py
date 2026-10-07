@@ -17,6 +17,7 @@ import marshal
 import math
 import random
 import types
+from contextlib import contextmanager
 
 from charter import camps as C
 from charter import context as CX                                     # context: files and scratchpads (charter/context.py)
@@ -74,6 +75,7 @@ class Kernel:
         self.dry = False
         self._fn_n = 0
         self.current_post = None                                       # the post being processed by on_post hooks
+        self._causes: list[dict] = [{"round": 0}, {"phase": "init"}]     # the cause stack (see cause()): kernel set-up
         unit = dict(self.spec["unit_values"])
         self.w = {
             "round": 0, "unit": unit,
@@ -109,6 +111,7 @@ class Kernel:
         CF.install(self)                                             # conflict: k.w["conflict"], starting arms, assassin, articles
         J.install(self)                                              # jurisdictions: membership and per-jurisdiction state (off: nothing)
         MD.install(self)                                             # media2: outlets, subscriptions, Scholars (only with it on)
+        self._causes = []                                              # empty between rounds (checkpoints hold none)
 
     # ------------------------------------------------------------------ basics
     @property
@@ -283,9 +286,64 @@ class Kernel:
             return None
         if vis == "public" and "jur" in self.w:                          # jurisdictions: events about a hidden one reach its members only
             vis = J.vis(self, data, vis)
-        e = {"id": f"e{len(self.events) + 1}", "round": self.r, "type": kind, "agent": agent, "data": data, "vis": vis}
+        e = {"id": f"e{len(self.events) + 1}", "round": self.r, "type": kind, "agent": agent, "data": data, "vis": vis,
+             "cause": list(self._causes)}                              # the cause chain, outermost (the round) first
         self.events.append(e)
         return e["id"]
+
+    # ------------------------------------------------------------------ provenance: the cause stack
+    # Every event carries "cause": the chain of frames active when it was logged, outermost (the round) first. A frame is a small
+    # dict whose first key is its kind (cause_kind), holding the frame's main value; any further keys are details:
+    #   {"round": 3}  {"phase": "turns"}  (init, setup, round_start, turns, dm_step, observer, end_of_round, editorial)
+    #   {"turn": "a4", "call": "r3:a4:0"}           an agent's turn; call = the calls.jsonl id of the reply being executed
+    #   {"action": "transfer", "agent": "a4"}         actions.act (agent omitted inside that agent's own turn frame)
+    #   {"law": "L7", "hook": "on_transfer"}          Kernel.call: a hook, procedure, ballot callback or other law function
+    #   {"world": "ageing", "agent": "a2"}            clock and chance: ageing, births, drift, world events, raids, attacks, editions
+    #   {"kernel": "ballots"}                         kernel procedures: ballots, vetoes, patches, loans, deaths, the round record
+    #   {"intervention": "iv1"}                       reserved (interventions)
+    # Frames are never mutated once pushed, so events share them. The stack is empty between rounds (checkpoints hold none).
+    # Size: kind-keyed frames add ~25% to events.jsonl in the golden runs; {"kind": ..., ...} frames added ~40%.
+    CAUSE_KINDS = ("round", "phase", "turn", "action", "law", "world", "kernel", "intervention")
+
+    @staticmethod
+    def cause_kind(frame) -> str:
+        return next(iter(frame))
+
+    @contextmanager
+    def cause(self, kind, value=True, **info):
+        """Push a cause frame for the duration of the block: `with k.cause("law", lid, hook="on_transfer"): ...`. Details that
+        are None are left out."""
+        assert kind in self.CAUSE_KINDS, kind
+        n = len(self._causes)
+        self._causes.append({kind: value, **{x: v for x, v in info.items() if v is not None}})
+        try:
+            yield
+        finally:
+            del self._causes[n:]
+
+    def current_cause(self) -> tuple:
+        """The active cause chain (outermost first), as copies: read-only for callers such as law hooks."""
+        return tuple(dict(f) for f in self._causes)
+
+    def current_turn_agent(self):
+        """The agent whose turn frame is innermost, or None."""
+        return next((f["turn"] for f in reversed(self._causes) if "turn" in f), None)
+
+    def begin_round_cause(self, r=None, phase=None) -> None:
+        """Runner: a new round frame (the stack is empty between rounds), optionally with a first phase."""
+        assert not self._causes, f"cause stack not empty at a round boundary: {self._causes}"
+        self._causes = [{"round": self.r if r is None else r}]
+        if phase:
+            self.phase(phase)
+
+    def phase(self, name) -> None:
+        """Runner: replace the round's current phase frame (round_start, turns, dm_step, observer, end_of_round, editorial...)."""
+        assert self._causes and "round" in self._causes[0], "phase outside a round frame"
+        self._causes[1:] = [{"phase": name}]
+
+    def end_round_cause(self) -> None:
+        """Runner: leave the round frame; the stack is empty at round boundaries (and so in every checkpoint)."""
+        self._causes = []
 
     def gazette(self, text, by=None):
         if MD.enabled(self):                                           # media2: the gazette is the jurisdiction's official outlet
@@ -312,7 +370,8 @@ class Kernel:
         return key
 
     def call(self, lid, fn, *args):
-        return self.limited(fn, *args)
+        with self.cause("law", lid, hook=getattr(fn, "__name__", None)):
+            return self.limited(fn, *args)
 
     def api_for(self, lid):
         k = self
@@ -651,7 +710,8 @@ class Kernel:
             except L.LawError as e:
                 if self.dry:
                     raise
-                self.law_error(law["id"], str(e))
+                with self.cause("law", law["id"], hook=hook):
+                    self.law_error(law["id"], str(e))
         return out
 
     def law_error(self, lid, msg):
@@ -693,6 +753,7 @@ class Kernel:
         (procedures, ballot results, custom actions, clause penalties; may be lambdas or nested functions) is rebuilt from its
         compiled code and closure values. Pickle the result in one piece so shared references (e.g. a law's `state` dict, which is
         both law["state"] and its module's `state`) survive."""
+        assert not self._causes, f"checkpoint inside a cause frame: {self._causes}"   # rounds end with an empty cause stack
         api_names = set(self.api_for("_")) | set(L.SAFE_BUILTINS) | {"__builtins__"}
         ns_data = {}
         for lid, ns in self.ns.items():
@@ -726,6 +787,7 @@ class Kernel:
         """Inverse of checkpoint_state (on a fresh Kernel built from the same instance). Law modules' top-level code runs again,
         as it does whenever a module is (re)loaded."""
         self.w, self.events, self.snapshots, self.eff, self._fn_n = st["w"], st["events"], st["snapshots"], st["eff"], st["fn_n"]
+        self._causes = []
         _migrate_rights(self.w)
         self.turn_log = st.get("turn_log", [])
         self.rng.setstate(st["rng"])
@@ -904,28 +966,29 @@ class Kernel:
             self.log("proposal_failed", law["author"], {"law": lid, "why": "no procedure exists for this class of law"}, vis="public")
             return
         plid, fn = self.fnreg[key]
-        p = Proposal(lid, law["author"], law["title"], law["intent"], law["cls"], self.r)
-        try:
-            res = self.call(plid, fn, p)
-        except L.LawError as e:
-            self.law_error(plid, str(e))
-            law["status"] = "failed"
-            return
-        if res is True:
-            self.passed(lid)
-        elif isinstance(res, dict):
-            electorate = list(res.get("electorate", []))
-            if res.get("gate"):
-                law["status"] = "gated"
-                self.open_ballot(f"Chair: send {lid} '{law['title']}' to a vote?", [res["gate"]], ["yes", "no"], "majority",
-                                 int(res.get("closes_in", 1)), None, None, plid, proposal=lid, gate_spec=res)
+        with self.cause("kernel", "procedure", law=plid):              # provenance: what the procedure decided (ballots)
+            p = Proposal(lid, law["author"], law["title"], law["intent"], law["cls"], self.r)
+            try:
+                res = self.call(plid, fn, p)
+            except L.LawError as e:
+                self.law_error(plid, str(e))
+                law["status"] = "failed"
+                return
+            if res is True:
+                self.passed(lid)
+            elif isinstance(res, dict):
+                electorate = list(res.get("electorate", []))
+                if res.get("gate"):
+                    law["status"] = "gated"
+                    self.open_ballot(f"Chair: send {lid} '{law['title']}' to a vote?", [res["gate"]], ["yes", "no"], "majority",
+                                     int(res.get("closes_in", 1)), None, None, plid, proposal=lid, gate_spec=res)
+                else:
+                    law["status"] = "ballot"
+                    self.open_ballot(f"Enact {lid} '{law['title']}'?", electorate, ["yes", "no"], res.get("rule", "majority"),
+                                     int(res.get("closes_in", 1)), None, res.get("weights"), plid, proposal=lid)
             else:
-                law["status"] = "ballot"
-                self.open_ballot(f"Enact {lid} '{law['title']}'?", electorate, ["yes", "no"], res.get("rule", "majority"),
-                                 int(res.get("closes_in", 1)), None, res.get("weights"), plid, proposal=lid)
-        else:
-            law["status"] = "failed"
-            self.log("proposal_failed", law["author"], {"law": lid, "why": "the procedure rejected it"}, vis="public")
+                law["status"] = "failed"
+                self.log("proposal_failed", law["author"], {"law": lid, "why": "the procedure rejected it"}, vis="public")
 
     def open_ballot(self, question, electorate, options, rule, closes_in, on_result, weights, lid, proposal=None, gate_spec=None):
         self.w["ballot_seq"] += 1
@@ -1068,46 +1131,62 @@ class Kernel:
         r = self.r
         self.w["harvest_count"], self.w["quota_used"], self.w["fixes_this_round"], self.w["rulings_this_round"] = {}, {}, 0, {}
         self.w["dm_sent"] = {}
-        self.settle_loans()
-        P.start_round(self)                                                # project deadlines (refund / forfeit), expiring effects
-        O.start_round(self)                                                # tribute deadline (raid) and scheduled demands
+        with self.cause("kernel", "loans"):
+            self.settle_loans()
+        with self.cause("world", "projects"):
+            P.start_round(self)                                            # project deadlines (refund / forfeit), expiring effects
+        O.start_round(self)                                                # tribute deadline (raid) and scheduled demands (own frames)
         # --- random projects: a seeded Poisson draw (spec projects.mean_interval). Re-route to the event scheduler
         # (charter/events.py) by registering P.spawn_random_project(k, rng) there and deleting this line.
-        P.maybe_spawn(self)
+        with self.cause("world", "projects"):
+            P.maybe_spawn(self)
         # ---
         for p in list(self.w["pending_patches"]):
-            self.apply_patch(p["law"], p["patch"])
+            with self.cause("kernel", "patch", law=p["law"]):
+                self.apply_patch(p["law"], p["patch"])
         self.w["pending_patches"] = []
         if self.spec["conditions"].get("drift") and r > 0 and r % self.spec["camps"]["drift_every"] == 0:
             for c in self.w["camps"].values():
                 C.drift(c, self.rng)
-            self.log("drift", None, {"round": r}, vis="monitor")
-        CT.start_round(self)                                           # camps: upkeep (optional), lease offers lapse
-        self.hooks("on_round_start", r)
-        H.on_round_start(self)                                         # hidden layer: seeded tips and discoveries (hidden.py)
-        CF.start_round(self)                                           # conflict: forts unlock, guard fees, archive guarantee
-        MD.start_round(self)                                           # media2: fees charged, last round's editions published
+            with self.cause("world", "drift"):
+                self.log("drift", None, {"round": r}, vis="monitor")
+        with self.cause("world", "camps"):
+            CT.start_round(self)                                       # camps: upkeep (optional), lease offers lapse
+        self.hooks("on_round_start", r)                                # law frames (call)
+        with self.cause("world", "hidden"):
+            H.on_round_start(self)                                     # hidden layer: seeded tips and discoveries (hidden.py)
+        with self.cause("world", "conflict"):
+            CF.start_round(self)                                       # conflict: forts unlock, guard fees, archive guarantee
+        MD.start_round(self)                                           # media2: fees charged, last round's editions published (own frames)
 
     def end_round(self, effect_predicates=None):
-        CF.resolve_attacks(self)                                       # conflict: step 1, attacks in initiative order
-        CT.end_of_round(self)                                          # camps: step 2, sealed inputs revealed and paid (types only)
-        self.close_ballots()
-        self.process_veto_queue()
+        CF.resolve_attacks(self)                                       # conflict: step 1, attacks in initiative order (own frames)
+        with self.cause("world", "camps"):
+            CT.end_of_round(self)                                      # camps: step 2, sealed inputs revealed and paid (types only)
+        with self.cause("kernel", "ballots"):
+            self.close_ballots()
+        with self.cause("kernel", "vetoes"):
+            self.process_veto_queue()
         self.hooks("on_round_end", self.r)
-        J.end_round(self)                                              # jurisdictions (step 4): leaving, joining, declarations
+        with self.cause("kernel", "jurisdictions"):
+            J.end_round(self)                                          # jurisdictions (step 4): leaving, joining, declarations
         for c in self.w["camps"].values():
             C.regrow(c)
-        CT.world_update(self)                                          # camps: step 5, drift, next conditions, leases returned
-        if "life" in self.w:                                            # life: step 6, deaths (old age) and births
+        with self.cause("world", "camps"):
+            CT.world_update(self)                                      # camps: step 5, drift, next conditions, leases returned
+        if "life" in self.w:                                            # life: step 6, deaths (old age) and births (own frames)
             from charter import life as _life
             _life.end_of_round(self)
-        self._expire_cases()
-        CR.end_round(self)
-        self.snapshot(effect_predicates)
-        if MD.enabled(self):                                           # media2: the official outlets' statistics replace the round record
-            MD.compile_official(self)
-        else:
-            self.gazette(self.round_summary())
+        with self.cause("kernel", "cases"):
+            self._expire_cases()
+        with self.cause("kernel", "loans"):
+            CR.end_round(self)
+        with self.cause("kernel", "record"):
+            self.snapshot(effect_predicates)
+            if MD.enabled(self):                                       # media2: the official outlets' statistics replace the round record
+                MD.compile_official(self)
+            else:
+                self.gazette(self.round_summary())
         self.w["round"] += 1
         self._reset_effects()
 

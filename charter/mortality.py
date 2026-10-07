@@ -77,6 +77,11 @@ def disable(k, aid, cause, by=None, public=True, named=True) -> bool:
         return False
     if cause not in CAUSES:
         raise ValueError(f"cause must be one of {CAUSES}, not {cause!r}")
+    with k.cause("kernel", "death", agent=aid):                      # provenance: bequests, succession, roles passed on
+        return _disable(k, aid, cause, by, public, named, v)
+
+
+def _disable(k, aid, cause, by, public, named, v) -> bool:
     from charter import events as EV
     from charter import roles as RO
     st = state(k)
