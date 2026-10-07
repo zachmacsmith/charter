@@ -240,7 +240,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         EV.round_start(k, inst, ev_rs)                                  # world events, goal changes, arrivals and departures
         CF.sync_runner(k, agents)                                       # conflict: disabled agents leave the turn order
         order = list(agents)
-        k.rng.shuffle(order)
+        k.stream("order", r).shuffle(order)                            # rng_version 2: its own stream per round
         order = H.apply_order(k, order)                                 # places set with a hidden power (hidden.py)
         k.log("round_start", None, {"round": r, "order": order}, vis="public")
         k.phase("turns")

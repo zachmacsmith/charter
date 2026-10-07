@@ -41,6 +41,7 @@ CASES = {
     "E4_observer_hidden_4": ("E4", 5, ["rounds=4", "turns=simultaneous", "observer.enabled=true", "events.enabled=true",
                                        "outside_power.enabled=true", "outside_power.every=2"]),
     "society_small_4": ("society", 5, SOCIETY_SMALL),
+    "E2_rng2_drift_5": ("E2", 3, ["rounds=5", "rng_version=2", "conditions.drift=true", "camps.drift_every=2"]),   # P5.3 streams
 }
 
 PROMPT_CASES = {                                       # (preset, seed): system prompt and manual of every agent, with a kernel

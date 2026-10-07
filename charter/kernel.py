@@ -65,6 +65,8 @@ class Kernel:
         self.spec = instance["spec"]
         self.rng = random.Random(instance["seed"] * 7919 + 17)
         self.law_rng = random.Random(instance["seed"] * 104729 + 3)
+        self.rng_version = int(self.spec.get("rng_version") or 1)      # 2: named streams per purpose (stream(), _law_stream())
+        self._law_rngs: dict = {}                                      # rng_version 2: (law id, round) -> its stream this round
         self.sandbox = sandbox or (lambda agent, code: "(the sandbox is disabled in this run)")
         from charter import archive as _archive
         self.shared_archive = _archive.shared_dir(instance["spec"])
@@ -119,6 +121,36 @@ class Kernel:
     @property
     def r(self) -> int:
         return self.w["round"]
+
+    def stream(self, purpose: str, *parts) -> random.Random:
+        """The random stream for one purpose. rng_version 1: the one shared kernel stream (`self.rng`), as always. rng_version 2:
+        a fresh stream derived from (seed, purpose, *parts), e.g. ("order", round) or ("harvest", round, agent, camp, n), so an
+        extra or missing draw for one purpose never shifts another's. Derived streams are stateless: checkpoints need nothing."""
+        if self.rng_version < 2:
+            return self.rng
+        return random.Random("|".join(str(x) for x in (self.inst["seed"], purpose, *parts)))
+
+    def _law_stream(self, lid) -> random.Random:
+        """rng_version 2: a law's rng() stream for this round (per law id and round; earlier rounds' streams are dropped)."""
+        key = (lid, self.r)
+        if key not in self._law_rngs:
+            self._law_rngs = {kk: g for kk, g in self._law_rngs.items() if kk[1] == self.r}
+            self._law_rngs[key] = random.Random(f"{self.inst['seed']}|law|{lid}|{self.r}")
+        return self._law_rngs[key]
+
+    def _law_rng_state(self):
+        if self.rng_version < 2:
+            return self.law_rng.getstate()
+        return {key: g.getstate() for key, g in self._law_rngs.items()}
+
+    def _set_law_rng_state(self, st) -> None:
+        if self.rng_version < 2:
+            self.law_rng.setstate(st)
+            return
+        self._law_rngs = {}
+        for key, state in st.items():
+            g = self._law_rngs[tuple(key)] = random.Random()
+            g.setstate(state)
 
     def agent(self, aid):
         if aid not in self.w["agents"]:
@@ -610,7 +642,7 @@ class Kernel:
             "camps": lambda: [c for c in k.w["camps"] if not k.w["camps"][c].get("secret")], "class_of": lambda a: CIStr(k.cls_of(a)), "holdings_value": k.holdings_value,
             "currencies": lambda: list(k.w["currencies"]),
             "rights_of": k.law_rights_of,
-            "rng": k.law_rng.random,
+            "rng": k.law_rng.random if k.rng_version < 2 else (lambda: k._law_stream(lid).random()),
             "bounty_number": lambda c: camp_of(c)["fn"].get("N") if camp_of(c).get("compute") == "factoring" else None,
             "channels": lambda: {n: {"owner": c["owner"], "members": list(c["members"]), "open": c["open"]} for n, c in k.w["channels"].items()},
             "posts": posts, "current_post": lambda: k.current_post, "hidden_posts": lambda: list(k.w["hidden"]),
@@ -738,7 +770,7 @@ class Kernel:
 
     def _snapshot(self):
         return (copy.deepcopy(self.w), dict(self.fnreg), dict(self.ns),
-                {lid: copy.deepcopy(l["state"]) for lid, l in self.w["laws"].items()}, self.rng.getstate(), self.law_rng.getstate(),
+                {lid: copy.deepcopy(l["state"]) for lid, l in self.w["laws"].items()}, self.rng.getstate(), self._law_rng_state(),
                 copy.deepcopy(self.eff), self._module_data())
 
     def _restore(self, snap):
@@ -752,7 +784,7 @@ class Kernel:
                 self.w["laws"][lid]["state"] = states.get(lid, {})
                 ns["state"] = self.w["laws"][lid]["state"]
         self.rng.setstate(rs)
-        self.law_rng.setstate(ls)
+        self._set_law_rng_state(ls)
 
     # ------------------------------------------------------------------ checkpoint (resume after a crash or a quota stop)
     def checkpoint_state(self) -> dict:
@@ -772,8 +804,11 @@ class Kernel:
                 keep[name] = v
             ns_data[lid] = keep
         fns = {key: (lid, _dump_fn(fn, self.ns.get(lid, {}))) for key, (lid, fn) in self.fnreg.items()}
-        return {"w": self.w, "events": self.events, "snapshots": self.snapshots, "eff": self.eff, "fn_n": self._fn_n, "turn_log": self.turn_log,
-                "rng": self.rng.getstate(), "law_rng": self.law_rng.getstate(), "ns_data": ns_data, "fns": fns}
+        st = {"w": self.w, "events": self.events, "snapshots": self.snapshots, "eff": self.eff, "fn_n": self._fn_n, "turn_log": self.turn_log,
+              "rng": self.rng.getstate(), "law_rng": self.law_rng.getstate(), "ns_data": ns_data, "fns": fns}
+        if self.rng_version >= 2:
+            st["law_rngs"] = self._law_rng_state()                     # rng_version 2: per-law streams of the current round
+        return st
 
     SECRET_RIGHTS = RT.SECRET_RIGHTS                                    # held by secret roles: never shown in public previews
 
@@ -800,6 +835,8 @@ class Kernel:
         self.turn_log = st.get("turn_log", [])
         self.rng.setstate(st["rng"])
         self.law_rng.setstate(st["law_rng"])
+        if "law_rngs" in st:
+            self._set_law_rng_state(st["law_rngs"])
         self.ns = {}
         for lid, data in st["ns_data"].items():
             law = self.w["laws"][lid]
@@ -1154,8 +1191,8 @@ class Kernel:
                 self.apply_patch(p["law"], p["patch"])
         self.w["pending_patches"] = []
         if self.spec["conditions"].get("drift") and r > 0 and r % self.spec["camps"]["drift_every"] == 0:
-            for c in self.w["camps"].values():
-                C.drift(c, self.rng)
+            for cid, c in self.w["camps"].items():
+                C.drift(c, self.stream("drift", r, cid))
             with self.cause("world", "drift"):
                 self.log("drift", None, {"round": r}, vis="monitor")
         with self.cause("world", "camps"):

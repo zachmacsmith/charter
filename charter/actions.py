@@ -222,13 +222,14 @@ def _harvest(k, aid, camp, x=None, **extra):
     k.w["harvest_count"][key] = k.w["harvest_count"].get(key, 0) + 1
     k.w["quota_used"][cr["qkey"]] = k.w["quota_used"].get(cr["qkey"], 0) + 1
     info = {}
+    hrng = k.stream("harvest", k.r, aid, camp, k.w["harvest_count"][key])   # rng_version 2: per round, agent, camp and harvest n
     if c.get("compute"):
-        y, eff, noise, info = C.harvest_compute(c, x, k.rng, aid, k.r)
+        y, eff, noise, info = C.harvest_compute(c, x, hrng, aid, k.r)
         if info.get("factored"):
             k.log("factored", aid, {"camp": camp, "N": info["factored"], "new_N": info["new_N"]}, vis="public")
             k.gazette(f"{aid} factored the number at {camp}. The new number is N = {info['new_N']}.")
     else:
-        y, eff, noise = C.harvest(c, x, k.rng)
+        y, eff, noise = C.harvest(c, x, hrng)
         y = P.granary_cap(k, c, y)                                     # a funded granary keeps seed stock out of reach
     ded = 0.0
     for _, out in k.hooks("on_harvest", aid, camp, list(x), y):

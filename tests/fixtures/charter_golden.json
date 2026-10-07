@@ -1,4 +1,28 @@
 {
+ "E2_rng2_drift_5": {
+  "events.jsonl": "0421a67ee62680a5",
+  "instance.json": "67356310be9654e3",
+  "score": {
+   "activity_mix": "24e8ec5c4e3f5d79",
+   "agents": "a68c3aae9d70881a",
+   "goal_scores": {
+    "Bruna": 0.3,
+    "Iris": 0.4495,
+    "Maya": 0.4228,
+    "Oda": 0.3309,
+    "Petra": 0.1246,
+    "Rakel": 0.4703,
+    "Siv": 0.3352,
+    "Valter": 0.3,
+    "Wanda": 0.0,
+    "Yuri": 0.0642
+   },
+   "goals": "6672a38c47e2dbc4",
+   "lineage": "74234e98afe7498f",
+   "summary": "475dfc19c5ef6f84"
+  },
+  "snapshots.json": "0c9db9c51e1c3d39"
+ },
  "E2_seq_6": {
   "events.jsonl": "b22cb7f96088261d",
   "instance.json": "bd828d4abf4f7fc2",
