@@ -277,6 +277,65 @@ def test_j1_law_cannot_repeal_or_touch_j0():
         law(k, code("Raid", f'def on_enact():\n    move("reserve:J0", "{a}", "timber", 1)'), jid)
 
 
+def _refused(k):
+    return {(e["data"]["fn"], e["data"]["agent"]) for e in k.events if e["type"] == "jur_out_of_scope"}
+
+
+def test_oblige_guard_reaches_only_members():
+    inst, k = world(extra=("conflict.enabled=true",))
+    a, b, x, y = citizens(k)[:4]
+    jid = declared(k, a, b)
+    law(k, code("Levy of guards", f'def on_enact():\n    oblige_guard("{x}", "{y}")\n    oblige_guard("{a}", "{x}")\n'
+                                  f'    oblige_guard("{x}", "{a}")\n    oblige_guard("{a}", "{b}")'), jid)
+    pairs = [p for ps in k.w["conflict"]["obligations"].values() for p in ps]
+    assert pairs == [[a, b]]                                           # outsiders neither guard nor are guarded
+    assert {("oblige_guard", x)} <= _refused(k)
+
+
+def test_compel_subscription_reaches_only_members():
+    inst, k = world(extra=("media2.enabled=true",))
+    editor = k.w["media"]["outlets"]["O1"]["editor"]
+    a, x = [c for c in citizens(k) if c != editor][:2]
+    jid = declared(k, a)
+    law(k, code("Read the paper", f'def on_enact():\n    compel_subscription("{x}", "O1")\n    compel_subscription("{a}", "O1")'), jid)
+    assert "O1" in k.w["media"]["subs"].get(a, []) and a in k.w["media"]["compelled"]
+    assert x not in k.w["media"]["compelled"]
+    assert ("compel_subscription", x) in _refused(k)
+
+
+def test_lend_from_reserve_reaches_only_members():
+    inst, k = world()
+    a, x = citizens(k)[:2]
+    declared(k, a)                                                     # a leaves J0 for J1
+    k.w["reserve"]["timber"] = 50.0
+    law(k, code("Credit", f'def on_enact():\n    enable_loans(True)\n    lend_from_reserve("{a}", "timber", 5)\n'
+                          f'    lend_from_reserve("{x}", "timber", 5)'))
+    borrowers = [ln["borrower"] for ln in k.w["loans"].values()]
+    assert borrowers == [x]                                            # J0's reserve does not lend to J1's members
+    assert ("lend_from_reserve", a) in _refused(k)
+
+
+def test_scoping_is_generated_from_the_law_api_metadata():
+    """Every law function with a parameter that can name an agent is declared in lawapi, at the positions its signature has."""
+    import inspect
+    from charter import lawapi as LA
+    from charter import lawlang as LL
+    inst = generator.generate(S.apply_overrides(make_spec(), ["jurisdictions.enabled=false", "conflict.enabled=true",
+                                                              "media2.enabled=true", "life.enabled=true"]), 1)
+    api = Kernel(inst).api_for("_")
+    assert set(api) == LL.API and set(LA.LAWFNS) <= LL.API
+    undeclared = []
+    for name, fn in api.items():
+        params = list(inspect.signature(fn).parameters)
+        if set(params) & LA.AGENTISH and name not in LA.LAWFNS:
+            undeclared.append((name, params))
+        for pos, pname in LA.LAWFNS.get(name, LA.LawFn(name)).agents:
+            assert params[pos] == pname, (name, pos, pname, params)
+    assert not undeclared, f"declare these law functions' agent parameters in charter/lawapi.py: {undeclared}"
+    assert J.AGENT_ARGS == LA.AGENT_ARGS and {"oblige_guard", "compel_subscription", "lend_from_reserve"} <= set(J.AGENT_ARGS)
+    assert all(f.why for f in LA.LAWFNS.values() if f.scope == "none")
+
+
 def test_judges_and_cases_stay_in_their_jurisdiction():
     inst, k = world()
     a, b, x = citizens(k)[:3]

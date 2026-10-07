@@ -11,8 +11,9 @@ Membership
 
 Where the law reaches (enforced in the law API, `scope_api`)
   Functions that act on an agent (grant, revoke, fine, suspend, limit_actions, censure, title, move, mint to, burn from,
-  revoke_capability, set_dm_limit for one agent, hide_post of a member's post) silently do nothing for an agent the law does not
-  bind (a monitor-only `jur_out_of_scope` event records the attempt). Hooks that concern one agent (on_harvest and on_transfer
+  revoke_capability, oblige_guard, compel_subscription, lend_from_reserve, set_dm_limit for one agent, hide_post of a member's post;
+  declared in charter/lawapi.py) silently do nothing for an agent the law does not bind (a monitor-only `jur_out_of_scope` event
+  records the attempt). Hooks that concern one agent (on_harvest and on_transfer
   deductions, on_post, on_dm) run only for laws that bind that agent; on_vote and on_ruling only for the ballot's / case's
   jurisdiction. Reads (agents, holders, laws, currencies, reserve, balance("reserve")) see only the law's own jurisdiction.
 
@@ -54,6 +55,7 @@ import json
 import random
 import re
 
+from charter import lawapi as LA
 from charter import lawlang as L
 
 KEY = "jurisdictions"
@@ -74,13 +76,11 @@ ACTION_DOC = {
 }
 AGENT_HOOKS = {"on_harvest": 0, "on_transfer": 0, "on_post": 0, "on_dm": 0}        # hook -> index of the agent it concerns
 OWN_HOOKS = ("on_exit", "on_admission", "on_birth")                                 # run only for one jurisdiction's laws
-LEGACY_ONLY = {"enable_loans", "forgive_loan", "set_par", "suspend_redemption", "set_interest_cap", "set_default_consequence",
-               "restructure_loan", "lend_from_reserve", "buy_loan", "start_project", "contribute_project", "set_refund",
-               "pay_tribute", "disclose_capability_use"}
-AGENT_ARGS = {"grant": ((0, "aid"),), "revoke": ((0, "aid"),), "fine": ((0, "aid"),), "suspend": ((0, "aid"),),
-              "limit_actions": ((0, "aid"),), "censure": ((0, "aid"),), "title": ((0, "aid"),), "revoke_capability": ((0, "agent"),)}
-REFUSED = {"grant": False, "revoke": False, "fine": 0.0, "suspend": False, "limit_actions": False, "censure": None, "title": None,
-           "revoke_capability": 0, "move": False, "mint": None, "burn": False, "set_dm_limit": False, "hide_post": False}
+# Generated from the law-API metadata (charter/lawapi.py): which functions act on agents, what an out-of-scope call returns, and
+# which work only in J0. Declare a new agent-taking law function there, not here.
+LEGACY_ONLY = LA.LEGACY_ONLY
+AGENT_ARGS = LA.AGENT_ARGS
+REFUSED = LA.REFUSED
 OBLIGATION = re.compile(r"\b(must|required|requires|owe|owed|owes|obliged|obligated|bound|binding|comply|complying|obey|tax|taxes|"
                         r"taxed|fee|fees|levy|fine|fined|penalt\w*|liable|due|mandatory|illegal|forbidden|prohibited)\b", re.I)
 
