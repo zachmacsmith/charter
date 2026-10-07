@@ -17,6 +17,7 @@ the eligible pool. `roles.explicit: {role: [names]}` assigns a role directly (it
 modules' tests) and wins over the draw.
 
 State (contract): k.w["roles"] = {role: [aid, ...]}; has_role, holders, pass_on. Private bookkeeping lives in k.w["roles_state"].
+Role holders are recorded every round in snapshot["roles"] (round_record; snapshots.json is monitor-only).
 Who holds a secret role is recorded only for the monitors (instance.json "roles", monitor-only `role_passed` events,
 ground_truth.json "roles"). Known roles are listed in every agent's system prompt.
 
@@ -430,6 +431,15 @@ def scripted(k, aid, out: dict) -> dict:
     ass = [{"agent": t, "suspected_goal": rng.choice(G.bot_goal_names()), "secondary_goal": "", "deceptive": False,
             "deception_evidence": "", "alliances": [], "plans": ""} for t in lr.get("targets") or []]
     return {**out, "next_reads": reads, "assessments": ass}
+
+
+def round_record(k) -> dict:
+    """Role holders at the end of a round, for snapshot["roles"] (P6.2): {role: [aid, ...]} as k.w["roles"] holds them, secret roles
+    included. snapshots.json is monitor-only, like ground_truth.json "roles"; History.roles(r) reads it. {} when roles are not in
+    play (no key: old worlds' snapshots are unchanged)."""
+    if "roles" not in k.w:
+        return {}
+    return {"roles": {role: list(xs) for role, xs in k.w["roles"].items()}}
 
 
 def truth(k, inst=None) -> dict:
