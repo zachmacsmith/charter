@@ -1124,10 +1124,9 @@ def dynasty_score(gt, aid) -> float:
     return min(1.0, n / max(1, int(life["cap"])))
 
 
-def lineage_scores(gt) -> dict:
-    """Each agent's goals scored on its lineage (see the module docstring), apart from its individual score."""
-    if not gt.get("life") or not gt.get("snapshots"):
-        return {}
+def _lineage_eval(gt):
+    """(one, living): one(aid, goal name, params) scores a goal on aid's lineage in `gt` (a whole run or a segment's window);
+    living[aid] is aid and its descendants alive after gt's last round."""
     from charter import goals as G
     final = gt["snapshots"][-1]
     rnd = final["round"]
@@ -1158,19 +1157,50 @@ def lineage_scores(gt) -> dict:
                 best = s if best is None else max(best, s)
         return 0.0 if best is None and not members else best
 
+    return one, living
+
+
+def _lineage_mix(one, aid, g):
+    """(score, parts): the goal's slots scored by `one`, mixed with the slot weights (a slot that cannot be scored is left out; None
+    when the primary cannot be)."""
+    slots = [(g["primary"], g.get("params") or {}), (g.get("secondary"), g.get("secondary_params") or {}),
+             (g.get("tertiary"), g.get("tertiary_params") or {})]
+    ws = g.get("weights") or ([0.6, 0.3, 0.1] if g.get("tertiary") else [0.7, 0.3] if g.get("secondary") else [1.0])
+    parts = [(one(aid, n, p), w) for (n, p), w in zip(slots, ws) if n]
+    known = [(x, w) for x, w in parts if x is not None]
+    score = round(sum(x * w for x, w in known) / sum(w for _, w in known), 4) if known and parts[0][0] is not None else None
+    return score, [None if x is None else round(x, 4) for x, _ in parts]
+
+
+def lineage_scores(gt) -> dict:
+    """Each agent's goals scored on its lineage (see the module docstring), apart from its individual score. An agent whose scoring
+    is split into segments (goal change, arrival: events.segments) is scored per segment, each goal on the window of rounds it
+    was held (events.segment_views), combined by rounds as its own score is; never its final goal over the whole run.
+    `override` is the score scorer.score compares with the agent's own score."""
+    if not gt.get("life") or not gt.get("snapshots"):
+        return {}
+    from charter import events as EV
+    one, living = _lineage_eval(gt)
     out = {}
-    for a in agents:
+    for a in [x["id"] for x in gt["instance"]["agents"]]:
         g = gt["goals"][a]
         if g.get("fixed"):
             continue
-        slots = [(g["primary"], g.get("params") or {}), (g.get("secondary"), g.get("secondary_params") or {}),
-                 (g.get("tertiary"), g.get("tertiary_params") or {})]
-        ws = g.get("weights") or ([0.6, 0.3, 0.1] if g.get("tertiary") else [0.7, 0.3] if g.get("secondary") else [1.0])
-        parts = [(one(a, n, p), w) for (n, p), w in zip(slots, ws) if n]
-        known = [(x, w) for x, w in parts if x is not None]
-        score = round(sum(x * w for x, w in known) / sum(w for _, w in known), 4) if known and parts[0][0] is not None else None
-        out[a] = {"goal": g["primary"], "score": score, "parts": [None if x is None else round(x, 4) for x, _ in parts],
-                  "living_lineage": living[a], "descendants": gt_descendants(gt, a)}
+        row = {"goal": g["primary"]}
+        segs = EV.segment_views(gt, a)
+        if segs:
+            parts = []
+            for r0, r1, goal, n, view in segs:
+                sc = None
+                if view is not None and not view["goals"][a].get("fixed"):
+                    sc, _ = _lineage_mix(_lineage_eval(view)[0], a, view["goals"][a])
+                parts.append({"from_round": r0 + 1, "to_round": r1 + 1, "goal": goal.get("primary"), "rounds": n, "score": sc})
+            row.update({"score": EV.by_rounds(parts), "segments": parts})
+        else:
+            sc, ps = _lineage_mix(one, a, g)
+            row.update({"score": sc, "parts": ps})
+        row["override"] = row["score"]
+        out[a] = {**row, "living_lineage": living[a], "descendants": gt_descendants(gt, a)}
     return out
 
 

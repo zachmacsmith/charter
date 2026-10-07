@@ -78,3 +78,39 @@ def test_segment_view_hides_the_future_and_end_of_run_guesses():
     w = EV.window(gt, 3, 5)
     assert w["laws"]["L1"]["enacted_round"] == 4 and w["cases"]["C1"]["verdict"] == "guilty" and "B" in w["mortality"]["dead"]
     assert w["guesses"] == gt["guesses"]
+
+
+# ------------------------------------------------------------------ 2-3. the lineage override (scorer.score with Life on)
+def _life_gt(goals, boundaries=(), laws=None, values=None):
+    gt = _gt(goals=goals, boundaries=boundaries, laws=laws)
+    for s in gt["snapshots"]:
+        s["values"].update(values or {})
+    gt["life"] = {"parent": {"D": "A"}, "born": {"D": 0}, "cap": 6, "births": [], "population": []}
+    gt["mortality"] = {"dead": {}, "seat_history": []}
+    return gt
+
+
+def _override(gt):
+    """scorer.score's rule with Life on: the agent's own score, or its lineage's override score when that is higher."""
+    from charter import life as LF
+    goals = scorer.goal_scores(gt)
+    for aid, v in LF.lineage_scores(gt).items():
+        if v["override"] is not None and (goals[aid]["score"] is None or v["override"] > goals[aid]["score"]):
+            goals[aid]["score"] = v["override"]
+    return {a: g["score"] for a, g in goals.items()}
+
+
+def test_lineage_override_respects_goal_changes():
+    """A held Office (rounds 0-2) then Lawmaker (rounds 3-5, no law enacted in them): its own score is 0. The lineage score used to
+    take the final goal (Lawmaker) over the whole run, where A wrote the only law (round 1), and replaced the 0 with 1."""
+    from charter import life as LF
+    b = {"agent": "A", "round": 3, "old": _goal("Office"), "new": _goal("Lawmaker")}
+    gt = _life_gt({"A": _goal("Lawmaker")}, boundaries=[b], laws={"L1": _law("L1", "A", 1)})
+    lin = LF.lineage_scores(gt)["A"]
+    assert scorer.goal_scores(gt)["A"]["score"] == 0.0
+    assert lin["score"] == 0.0 and [s["goal"] for s in lin["segments"]] == ["Office", "Lawmaker"]
+    assert _override(gt)["A"] == 0.0
+    gt["snapshots"][-1]["rights"]["D"] = ["vote"]                    # D holds vote only after the Office rounds: no credit
+    assert _override(gt)["A"] == 0.0
+    gt["snapshots"][2]["rights"]["D"] = ["vote"]                     # D holds vote at the end of the Office rounds
+    assert _override(gt)["A"] == pytest.approx(0.5)                  # Office 1 through D, Lawmaker 0: weighted 3:3

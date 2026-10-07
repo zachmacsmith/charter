@@ -778,15 +778,14 @@ def window(gt, r0, r1) -> dict:
     return view
 
 
-def segment_scores(gt, a, goal_scores_fn) -> dict:
-    """Score each segment with the ordinary scorer on a view of the run restricted to the segment's rounds (`window`); combine by
-    rounds."""
-    aid = a["id"]
-    parts = []
-    for r0, r1, goal in segments(gt, aid):
+def segment_views(gt, aid):
+    """[(r0, r1, goal, n rounds, view)] per segment of `segments`: the view is `window(gt, r0, r1)` with the segment's goal as the
+    agent's goal and its holdings value before the segment as its start value (view None when the segment has no snapshots)."""
+    out = []
+    for r0, r1, goal in segments(gt, aid) or []:
         idx = [i for i, s in enumerate(gt["snapshots"]) if r0 <= s["round"] <= r1]
         if not idx:
-            parts.append({"from_round": r0 + 1, "to_round": r1 + 1, "goal": goal.get("primary"), "rounds": 0, "score": None})
+            out.append((r0, r1, goal, 0, None))
             continue
         prev = [s for s in gt["snapshots"] if s["round"] == r0 - 1]
         start = prev[0]["values"].get(aid, gt["start_values"].get(aid, 0.0)) if prev else gt["start_values"].get(aid, 0.0)
@@ -794,11 +793,29 @@ def segment_scores(gt, a, goal_scores_fn) -> dict:
         g["params"] = g["params"] or {}
         g["fixed"] = goal.get("fixed", False)
         view = {**window(gt, r0, r1), "goals": {**gt["goals"], aid: g}, "start_values": {**gt["start_values"], aid: start}}
-        res = goal_scores_fn(view, only=aid)[aid]
-        parts.append({"from_round": r0 + 1, "to_round": r1 + 1, "goal": goal.get("primary"), "rounds": len(idx), **res})
+        out.append((r0, r1, goal, len(idx), view))
+    return out
+
+
+def by_rounds(parts) -> float | None:
+    """Rounds-weighted mean of the parts' scores ({"score", "rounds"}), leaving out unscored parts; None if none is scored."""
     scored = [p for p in parts if p.get("score") is not None and p["rounds"]]
     tot = sum(p["rounds"] for p in scored)
-    score = round(sum(p["score"] * p["rounds"] for p in scored) / tot, 4) if tot else None
+    return round(sum(p["score"] * p["rounds"] for p in scored) / tot, 4) if tot else None
+
+
+def segment_scores(gt, a, goal_scores_fn) -> dict:
+    """Score each segment with the ordinary scorer on a view of the run restricted to the segment's rounds (`window`); combine by
+    rounds."""
+    aid = a["id"]
+    parts = []
+    for r0, r1, goal, n, view in segment_views(gt, aid):
+        if view is None:
+            parts.append({"from_round": r0 + 1, "to_round": r1 + 1, "goal": goal.get("primary"), "rounds": 0, "score": None})
+            continue
+        res = goal_scores_fn(view, only=aid)[aid]
+        parts.append({"from_round": r0 + 1, "to_round": r1 + 1, "goal": goal.get("primary"), "rounds": n, **res})
+    score = by_rounds(parts)
     cur = gt["goals"][aid]
     return {"goal": cur["primary"], "params": cur.get("params", {}), "score": score, "segments": parts,
             "rule": "per segment of rounds (arrival / goal change / departure), weighted by rounds"}
