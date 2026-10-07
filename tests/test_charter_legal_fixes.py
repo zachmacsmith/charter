@@ -83,3 +83,24 @@ def test_no_library_law_or_regime_calls_repeal_so_no_class_changes():
         assert "repeal" not in L.calls(L.check(law["code"])), name
     for name, src in {**LB.CONSTITUTIONS, **RG.CONSTITUTIONS}.items():
         assert "repeal" not in L.calls(L.check(src)), name
+
+
+# ------------------------------------------------------------------ D-3: set_official_editor appoints only members
+def test_a_jurisdictions_law_cannot_appoint_a_non_member_as_its_editor():
+    from test_charter_jurisdictions import citizens, declared, world
+    _, k = world(extra=("media2.enabled=true",))
+    cs = citizens(k)
+    jid = declared(k, cs[0], cs[1])
+    outsider = next(a for a in cs if a not in (cs[0], cs[1]))
+
+    def appoint(agent):
+        lid = k.new_law(code("Editor " + agent, f'def on_enact():\n    state["r"] = set_official_editor("{agent}", "{jid}")'), cs[0])
+        k.w["laws"][lid]["jurisdiction"] = jid
+        k.enact(lid)
+        return k.w["laws"][lid]["state"]["r"]
+
+    assert appoint(outsider) is False
+    assert k.w["media"]["official"][jid]["editor"] is None
+    assert any(e["type"] == "jur_out_of_scope" and e["data"].get("fn") == "set_official_editor" for e in k.events)
+    assert appoint(cs[1]) is True and k.w["media"]["official"][jid]["editor"] == cs[1]
+    assert LA.AGENT_ARGS["set_official_editor"] == ((0, "agent"),) and LA.REFUSED["set_official_editor"] is False

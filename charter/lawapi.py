@@ -251,8 +251,7 @@ LAWFNS = _fns(
         F("publish_stat", "output", docs="media2"),
         F("official_stream", "rights", ((0, "members"),), scope="none", why="names, classes or roles whose posts are streamed",
           docs="media2"),
-        F("set_official_editor", "rights", ((0, "agent"),), scope="none", why="appoints the editor of this jurisdiction's own outlet",
-          docs="media2"),
+        F("set_official_editor", "rights", ((0, "agent"),), refused=False, docs="media2"),   # only a member (D-3); None removes
         F("set_open_board", "rights", docs="media2"),
         F("set_press_freedom", "rights", docs="media2"),
         F("require_sponsor_label", "sanctions", docs="media2"),
