@@ -224,7 +224,6 @@ def role_text(k_or_inst, role: str) -> str:
         o = (sp.get("observer") or {})
         n, h = int(o.get("reads_per_round", 3)), max(1, int(o.get("history_rounds", 1)))
         rr = bool(o.get("reads_reasoning", True))
-        cost = ", ".join(f"{float(q):g} {i}" for i, q in (o.get("forge_cost") or {"copper": 1}).items())
         from charter import agents as AG
         return (f"You secretly hold the Spy role. Nobody is told who holds it. Each round your turn shows you, in a private section "
                 f"\"What you saw\", the recent transcripts of {n} agents of your choice over the latest {h} completed round(s): "
@@ -232,7 +231,7 @@ def role_text(k_or_inst, role: str) -> str:
                 "messages they received. Choose whom to read next with an extra field in your reply, \"next_reads\": a list of up to "
                 f"{n} agent names (unused places are filled at random). You may also add \"assessments\": a list of objects with "
                 "\"agent\", \"suspected_goal\", \"secondary_goal\", \"deceptive\", \"deception_evidence\", \"alliances\", \"plans\" "
-                "(a private record; optional). You can forge private messages: " + AG.ACTION_DOC["forge_dm"].replace("1 copper", cost)
+                "(a private record; optional). You can forge private messages: " + AG.action_doc("forge_dm", inst, {"id": None, "rights": []})
                 + ". The events you read (messages sent, private messages received) are yours to cite as evidence in court (accuse, "
                 "respond), although you were not party to them. Using what you read gives you away only if you reveal it.")
     if role == "assassin":

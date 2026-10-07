@@ -1069,10 +1069,10 @@ def prompt_section(inst, a) -> str:
 
 
 ACTION_DOC = {
-    "subscribe": 'subscribe {"outlet": "O1"}: read an outlet\'s editions (at most 3; its fee is charged each round)',
+    "subscribe": 'subscribe {"outlet": "O1"}: read an outlet\'s editions (at most $max_subscriptions; its fee is charged each round)',
     "unsubscribe": 'unsubscribe {"outlet": "O1"}: stop reading an outlet',
     "set_subscription_fee": 'set_subscription_fee {"item": "timber", "qty": 1}: editors; your outlet\'s fee per round (qty 0: free)',
-    "write_edition": 'write_edition {"text": "...", "audience": null}: editors; your next edition (up to 600 tokens), published at the start of next round; "audience": ["Name", ...] writes a version only those readers get',
+    "write_edition": 'write_edition {"text": "...", "audience": null}: editors; your next edition (up to $edition_tokens tokens), published at the start of next round; "audience": ["Name", ...] writes a version only those readers get',
     "buy_placement": 'buy_placement {"outlet": "O1", "text": "...", "item": "silver", "qty": 1}: offer to pay an outlet to run your text in its next edition (paid only if it runs)',
     "run_placement": 'run_placement {"placement": "PL1", "sponsored": true}: editors; run a placement offer (you are paid), labelled sponsored or not',
     "leak": 'leak {"outlet": "O1", "message": "e42"}: send an outlet a private message you sent or received; its editor sees it verified by the kernel',
@@ -1082,9 +1082,9 @@ ACTION_DOC = {
     "revoke_licence": 'revoke_licence {"agent": "Name"}: editors; withdraw your outlet\'s licence for that agent to post on the public board (they are told)',
     "grant_licence": 'grant_licence {"agent": "Name", "item": null, "qty": 0}: editors; restore a licence, or offer it for a fee',
     "buy_licence": 'buy_licence {"outlet": "O1"}: pay an outlet\'s licence offer to you and post again',
-    "annotate": 'annotate {"post": "e12", "text": "..."}: editors; up to 60 tokens of commentary on a public post, shown as [Outlet: text] (5 per round)',
+    "annotate": 'annotate {"post": "e12", "text": "..."}: editors; up to $annotation_tokens tokens of commentary on a public post, shown as [Outlet: text] ($annotations_per_round per round)',
     "set_memory_price": 'set_memory_price {"kind": "file"|"pin", "item": "silver", "qty": 1}: Scholars; your price per file or pin slot',
-    "buy_memory": 'buy_memory {"scholar": "Name", "kind": "file"|"pin", "n": 1}: buy extra 1,000-token files (file space) or pin slots from a Scholar',
+    "buy_memory": 'buy_memory {"scholar": "Name", "kind": "file"|"pin", "n": 1}: buy extra $scholar_file_tokens-token files (file space) or pin slots from a Scholar',
     "library_deposit": 'library_deposit {"scholar": "Name", "title": "...", "text": "..."}: deposit a document under your name in a Scholar\'s library (it cannot be edited)',
     "library_read": 'library_read {"scholar": "Name", "doc": null}: a Scholar\'s catalogue (doc null) or a document you may read',
     "library_permit": 'library_permit {"doc": "D1", "agent": "Name"|"all", "allow": true}: Scholars; who may read a document in your library',

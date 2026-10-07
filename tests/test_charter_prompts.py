@@ -201,3 +201,81 @@ def test_camp_line_names_harvest_inputs():
     k = Kernel(inst)
     p = CX.core_prompt(inst, inst["agents"][0], k)
     assert "each harvest uses 1 copper" in p
+
+
+# ------------------------------------------------------------------ the manual states the mechanics the agent runs under
+def _manual(inst, k, aid) -> dict:
+    return dict(CX.build_manual(inst, k, aid))
+
+
+def _doc_line(manual: dict, action: str) -> str:
+    return next((l for x in manual.values() for l in x.splitlines() if l.startswith(f"- {action} {{")), "")
+
+
+def test_manual_agrees_with_the_core_prompt_on_turn_mechanics(world):
+    """society: lookups are answered in the DM step, memory_turns is drawn per agent, posts are submissions to the newspapers."""
+    from charter import facts as FX
+    inst, k = world
+    assert FX.lookup_mode(inst) == "dm_step"
+    hits = CX.cfg(inst)["search_hits"]
+    for a in inst["agents"]:
+        aid, p, m = a["id"], CX.core_prompt(inst, a, k), _manual(inst, k, a["id"])
+        turn = m["How your turn works"]
+        mem = CX.memory_turns(k, aid)
+        assert f"your own last {mem} turns" in p and f"your own last {mem} turns" in turn, aid
+        assert f"your scratchpad ({CX.scratchpad_size(k, aid)} tokens" in turn, aid
+        assert "private-message slots" in turn and "this round" in turn, aid                 # the DM-step lookup mechanism
+        assert '"actions" empty' not in turn and "free lookups" not in turn, aid             # not the lookup-phase one
+        assert f"{hits} best matches" in turn, aid
+        text = "\n".join(m.values())
+        assert "each read or search uses an action" not in text, aid
+        for act in ("read_archive", "run_python", "manual"):
+            line = _doc_line(m, act)
+            if line:
+                assert "this round" in line, (aid, line)                                       # answered the same round as a pre-action
+        post = _doc_line(m, "post")
+        assert "newspapers" in post and "public board" not in post, (aid, post)             # as the core prompt says (submissions)
+        assert "ask the newspapers to print your public post" in p, aid
+
+
+SPEC_FACTS = ["conflict.attack_cost=7", "conflict.fort_unlock_rounds=8", "veto_window=5", "credit.offer_lapse=6",
+              "observer.forge_cost={copper: 3}", "context.search_hits=13", "media2.max_subscriptions=4", "media2.edition_tokens=777",
+              "media2.annotations_per_round=9", "media2.annotation_tokens=55"]
+
+
+def test_prose_follows_the_spec():
+    """Unusual spec values reach the core prompt, the manual and the Spy's prompt; the defaults do not appear in their place."""
+    from charter import roles as RO
+    sp = S.apply_overrides(S.load("society"), SPEC_FACTS)
+    inst = generator.generate(sp, 5)
+    k = Kernel(inst)
+    agents = inst["agents"][:6] + [a for a in inst["agents"] if a["cls"] in ("board", "scientist")][:3]
+    agents += [a for a in inst["agents"] if MD.edits(k, a["id"])][:1]
+    core = "\n".join(CX.core_prompt(inst, a, k) for a in agents)
+    manual = "\n".join(x for a in agents for x in _manual(inst, k, a["id"]).values())
+    text = core + "\n" + manual
+    for new in ("uses 7 actions", "after 8 rounds", "5-round window", "13 best matches", "at most 4;", "up to 777 tokens",
+                "(9 per round)", "up to 55 tokens"):
+        assert new in manual, new
+    for stale in ("uses 2 actions", "after 2 rounds (it keeps", "2-round window", "10 best matches", "at most 3;", "up to 600 tokens",
+                  "(5 per round)", "up to 60 tokens"):
+        assert stale not in text, stale
+    for a in agents:                                                     # loans (lawdocs' codex text on enable_loans aside)
+        credit = _manual(inst, k, a["id"]).get("Credit and loans", "")
+        assert "lapses after 2 rounds" not in credit and "lapses after 2 rounds" not in _doc_line(_manual(inst, k, a["id"]), "lend")
+    from charter import agents as AG
+    assert "lapses after 6 rounds" in AG.action_doc("lend", inst, agents[0])
+    spy = RO.role_text(inst, "spy")
+    assert "costs 3 copper" in spy and "1 copper" not in spy
+
+
+def test_observer_prompt_states_one_forge_price():
+    from charter import observer as OBS
+    sp = S.apply_overrides(S.load("E3"), ["observer.enabled=true", "observer.forge_cost={copper: 3}", "veto_window=5",
+                                          "shared_archive.namespace=pytest"])
+    inst = generator.generate(sp, 1)
+    p = OBS.system_prompt(inst)
+    assert "forge_dm, 3 copper each" in p and "costs 3 copper" in p
+    assert "1 copper" not in p and "2-round window" not in p
+    if any(a["cls"] == "board" for a in inst["agents"]):
+        assert "5-round window" in p

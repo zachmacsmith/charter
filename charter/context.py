@@ -486,8 +486,40 @@ def _module_sections(inst, k, aid) -> list:
     return out
 
 
+def _manual_key(inst, k, aid) -> tuple:
+    """What a cached manual is valid for: the round, the event count (nearly every change to the world logs an event), and the
+    world and agent state that can change without one (the spec, the agent's record, its rights, roles, codex articles and powers it
+    holds, its files and pins, file space, private-message limit and scratchpad size)."""
+    w = k.w
+    hc = w.get("hidden_caps") or {}
+    files = (w.get("files") or {}).get(aid) or {}
+    mine = aid in w["agents"]
+    rec = next((x for x in inst["agents"] if x["id"] == aid), None)
+    return (id(inst), k.r, len(k.events), k.dm_limit(aid) if mine else None, json.dumps([
+        inst["spec"], len(inst["agents"]), rec,                         # live settings and spec edits; the agent's own record
+        sorted(w["agents"][aid]["rights"]) if mine else None, w.get("roles"), (hc.get("knows") or {}).get(aid),
+        (hc.get("articles") or {}).get(aid), sorted((n, bool(f.get("pinned"))) for n, f in files.items()),
+        (w.get("pin_slots") or {}).get(aid), (w.get("file_space") or {}).get(aid),
+        ((w.get("context") or {}).get("scratchpad_size") or {}).get(aid), w.get("live")], sort_keys=True, default=str))
+
+
 def build_manual(inst, k, aid) -> list:
-    """This agent's manual: [(title, text)], deterministic, each section at most a lookup's budget."""
+    """This agent's manual: [(title, text)], deterministic, each section at most a lookup's budget. With a kernel it is cached per
+    agent (on the kernel, not in k.w, so checkpoints are unchanged) until the round, the event count or the agent's own state changes
+    (_manual_key): a turn builds it several times (core prompt, unread counts, manual changes, record_turn)."""
+    if k is None:
+        return _build_manual(inst, k, aid)
+    key = _manual_key(inst, k, aid)
+    cache = k.__dict__.setdefault("_manual_cache", {})
+    hit = cache.get(aid)
+    if hit is not None and hit[0] == key:
+        return list(hit[1])
+    secs = _build_manual(inst, k, aid)
+    cache[aid] = (key, tuple(secs))
+    return list(secs)
+
+
+def _build_manual(inst, k, aid) -> list:
     from charter import composition as CP
     secs = []
     for fn in MANUAL_SECTIONS:
@@ -845,6 +877,8 @@ def overview(inst) -> str:
     sp = inst["spec"]
     on = lambda m: bool((sp.get(m) or {}).get("enabled"))
     from charter.camptypes import framework as _CTF
+    from charter import facts as _FX
+    has = lambda cls: any(x["cls"] == cls for x in inst["agents"])
     _short = {t: v.replace("open to all but the Board and Fixer", _CTF.open_text(inst["spec"])) for t, v in CAMP_SHORT.items()}
     camps = "; ".join(f"{c['id']} {c['resource']}" + (f" ({_short.get(c.get('type'), 'dials and a hidden rule')}; {harvest_args(c)})"
                                                       if c.get("type") else f" (tier {c.get('tier')}: dials and a hidden rule)")
@@ -854,8 +888,9 @@ def overview(inst) -> str:
              "everyone. [manual: World rules]",
              "Money: barter until a law creates a currency; a backed coin is worth its reserve per coin; unbacked coins are worth 0 at the end. "
              "[manual: World rules]",
-             f"Laws: restricted Python ({inst['law_level']}); the constitution ({inst['constitution']}) decides how laws pass; a Board of three "
-             "can veto structural and procedural laws; a Fixer patches broken ones. [manual: Law language, Law library]",
+             "; ".join([f"Laws: restricted Python ({inst['law_level']})", f"the constitution ({inst['constitution']}) decides how laws pass"]
+                       + ([f"a Board of {_FX.facts(inst)['board_size']} can veto structural and procedural laws"] if has("board") else [])
+                       + (["a Fixer patches broken ones"] if has("fixer") else [])) + ". [manual: Law language, Law library]",
              ("Turns: everyone decides at once, then actions run in a shown order. " if sp.get("turns") == "simultaneous" else
               "Turns: agents act one at a time in a shown order. ")
              + "Talk: post (public), dm (private, a few per round, delivered first and answerable within the round). [manual: Private messages]"]
@@ -896,8 +931,10 @@ def core_prompt(inst, a, k=None) -> str:
     models = ("\nOther agents' models: " + ", ".join(f"{x['id']}={x['model']}" for x in inst["agents"] if x["id"] != aid)) \
         if inst["conditions"].get("model_identity_visible") else ""
     roles = own_roles(k, aid)
+    from charter import facts as FX
+    f = FX.facts(inst, a, k)                                            # the same facts as the manual (lookup mode, memory, ...)
     free = int(c["free_lookups"]) if c["lookup_phase"] and not c["lookups_in_dm_step"] else 0
-    fast = bool(c["lookups_in_dm_step"]) and inst["spec"].get("turns") == "simultaneous"
+    fast = f["lookup_mode"] == "dm_step"                                # where the runner really answers lookups in the DM step
     allowed = allowed_actions(inst, a, rights, k)
     from charter import action_registry as AR
     pre = [n for n in allowed if AR.REG[n].pre and not AR.REG[n].msg] if (fast or free) else []
@@ -912,8 +949,7 @@ def core_prompt(inst, a, k=None) -> str:
     from charter import roles as _RO, hidden as _H
     secret = "\n".join(x.strip() for x in (_RO.prompt_section(inst, a), _H.prompt_section(inst, a)) if x and x.strip())
     lev = leverage_line(inst, a, roles)
-    over = dict({"post": "ask the newspapers to print your public post", "anon_post": "ask them to print one without your name"}
-                if (inst["spec"].get("media2") or {}).get("submissions") else {})
+    over = FX.purpose_overrides(f)                                      # e.g. post under media2.submissions (as in the manual)
     unread = unread_counts(k, a)                                        # what the agent has not read yet, shown every turn
     for nm, n in unread.items():
         over[nm] = f"{over.get(nm) or AR.purpose(nm)} [{n} unread]"
@@ -934,7 +970,7 @@ def core_prompt(inst, a, k=None) -> str:
         ("goal", f"Your private goal: {goal}"),
         ("strategy", STRATEGY_TEXT if a.get("strategy_prompt") else ""),
         ("temperament", (("Your temperament: " + a["personality_text"]) if a.get("personality_text") else "") + models),
-        ("memory", f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {a.get('memory_turns') or c['recent_turns']} turns, your
+        ("memory", f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {f['memory_turns']} turns, your
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
 first write each turn is free) or can find it again by search."""),
         ("lookups", look),
