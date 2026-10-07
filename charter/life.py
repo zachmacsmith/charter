@@ -37,6 +37,9 @@ Lineage scoring (`lineage_scores`, reported apart from individual scores in scor
   - goals scored on the run's record (Lawmaker, Gifts, Litigator, ...: HISTORY): the best of the whole lineage, dead members included;
   - Dynasty is already a lineage goal (unchanged); every other goal: the best score among living lineage members (Office: any living
     descendant holds vote; Seat: any holds a Board seat). A lineage with no living member scores 0 on state goals.
+With goals.score_at_end (default), an agent's score is its own score or its lineage `override` score, whichever is higher. The
+override uses the lineage score only for goals about the agent's own holdings or offices (LINEAGE_OVERRIDE), and the agent's own
+score for every other slot. Agents whose scoring is split (goal change, arrival) are scored per segment, as their own scores are.
 State lives in k.w["life"] (lifespans, commissions, lineage) and k.w["mortality"] (mortality.py).
 """
 from __future__ import annotations
@@ -75,6 +78,12 @@ DEFAULTS = {
 HISTORY = {"Lawmaker", "Enact as author", "Gifts", "Whistleblower", "Litigator", "Repealer", "Constitution writer", "Leaker",
            "Bounty hunter", "Gatekeeper", "Patron", "Scholar", "Reserve banker", "Creditor"}
 SUMMED = {"Wealth", "Power", "Hoard"}
+# Goals about the agent's own holdings or offices at the end: the only ones whose lineage score may replace the agent's own score
+# (scorer.score, goals.score_at_end), as agents are told ("goals about your own holdings or offices count through your living
+# descendants"). Every other goal (deeds, world-shaping, relational, ...) is scored on the agent alone; its lineage score is
+# still reported apart (score.json -> lineage).
+LINEAGE_OVERRIDE = {"Wealth", "Rank", "Hoard", "Diversifier", "Currency Magnate",                       # own holdings
+                    "Power", "Office", "Sovereign", "Seat", "Title", "Spymaster"}                       # own offices
 EVENT_TYPES = ("birth", "maker")
 
 
@@ -1009,7 +1018,8 @@ def rules_text(inst, maker=True) -> str:
                      + f"+1 action {c['prices']['action']}; +10 rounds of life {c['prices']['life10']}; +1000 scratchpad tokens "
                      f"{c['prices']['scratch1000']}; +5 attack or defense {c['prices']['attack5']}; +1 lookup {c['prices']['lookup']}; "
                      f"plus the Maker's fee. ") + f"The population is capped at {c['cap_mult']:g} times the starting count; births wait beyond "
-                     "it. Each agent's goal is also scored on its lineage (itself and its descendants).")
+                     "it. Goals about your own holdings or offices also count through your living descendants: you score your own result or "
+                     "your lineage's (you and your descendants), whichever is higher.")
     return " ".join(parts)
 
 
@@ -1131,10 +1141,9 @@ def dynasty_score(gt, aid) -> float:
     return min(1.0, n / max(1, int(life["cap"])))
 
 
-def lineage_scores(gt) -> dict:
-    """Each agent's goals scored on its lineage (see the module docstring), apart from its individual score."""
-    if not gt.get("life") or not gt.get("snapshots"):
-        return {}
+def _lineage_eval(gt):
+    """(one, living): one(aid, goal name, params) scores a goal on aid's lineage in `gt` (a whole run or a segment's window);
+    living[aid] is aid and its descendants alive after gt's last round."""
     from charter import goals as G
     final = gt["snapshots"][-1]
     rnd = final["round"]
@@ -1165,19 +1174,59 @@ def lineage_scores(gt) -> dict:
                 best = s if best is None else max(best, s)
         return 0.0 if best is None and not members else best
 
+    return one, living
+
+
+def _override_eval(gt, one):
+    """`one` for LINEAGE_OVERRIDE goals, the agent's own score for every other goal."""
+    from charter import goals as G
+    return lambda aid, name, params: one(aid, name, params) if name in LINEAGE_OVERRIDE else G.SCORERS[name](gt, aid, params)
+
+
+def _lineage_mix(one, aid, g):
+    """(score, parts): the goal's slots scored by `one`, mixed with the slot weights (a slot that cannot be scored is left out; None
+    when the primary cannot be)."""
+    slots = [(g["primary"], g.get("params") or {}), (g.get("secondary"), g.get("secondary_params") or {}),
+             (g.get("tertiary"), g.get("tertiary_params") or {})]
+    ws = g.get("weights") or ([0.6, 0.3, 0.1] if g.get("tertiary") else [0.7, 0.3] if g.get("secondary") else [1.0])
+    parts = [(one(aid, n, p), w) for (n, p), w in zip(slots, ws) if n]
+    known = [(x, w) for x, w in parts if x is not None]
+    score = round(sum(x * w for x, w in known) / sum(w for _, w in known), 4) if known and parts[0][0] is not None else None
+    return score, [None if x is None else round(x, 4) for x, _ in parts]
+
+
+def lineage_scores(gt) -> dict:
+    """Each agent's goals scored on its lineage (see the module docstring), apart from its individual score. An agent whose scoring
+    is split into segments (goal change, arrival: events.segments) is scored per segment, each goal on the window of rounds it
+    was held (events.segment_views), combined by rounds as its own score is; never its final goal over the whole run.
+    `override` is the score scorer.score compares with the agent's own score."""
+    if not gt.get("life") or not gt.get("snapshots"):
+        return {}
+    from charter import events as EV
+    one, living = _lineage_eval(gt)
     out = {}
-    for a in agents:
+    for a in [x["id"] for x in gt["instance"]["agents"]]:
         g = gt["goals"][a]
         if g.get("fixed"):
             continue
-        slots = [(g["primary"], g.get("params") or {}), (g.get("secondary"), g.get("secondary_params") or {}),
-                 (g.get("tertiary"), g.get("tertiary_params") or {})]
-        ws = g.get("weights") or ([0.6, 0.3, 0.1] if g.get("tertiary") else [0.7, 0.3] if g.get("secondary") else [1.0])
-        parts = [(one(a, n, p), w) for (n, p), w in zip(slots, ws) if n]
-        known = [(x, w) for x, w in parts if x is not None]
-        score = round(sum(x * w for x, w in known) / sum(w for _, w in known), 4) if known and parts[0][0] is not None else None
-        out[a] = {"goal": g["primary"], "score": score, "parts": [None if x is None else round(x, 4) for x, _ in parts],
-                  "living_lineage": living[a], "descendants": gt_descendants(gt, a)}
+        row = {"goal": g["primary"]}
+        segs = EV.segment_views(gt, a)
+        if segs:
+            parts = []
+            for r0, r1, goal, n, view in segs:
+                sc = ov = None
+                if view is not None and not view["goals"][a].get("fixed"):
+                    one_v = _lineage_eval(view)[0]
+                    sc, _ = _lineage_mix(one_v, a, view["goals"][a])
+                    ov, _ = _lineage_mix(_override_eval(view, one_v), a, view["goals"][a])
+                parts.append({"from_round": r0 + 1, "to_round": r1 + 1, "goal": goal.get("primary"), "rounds": n, "score": sc,
+                              "override": ov})
+            row.update({"score": EV.by_rounds(parts), "segments": parts,
+                        "override": EV.by_rounds([{**p, "score": p["override"]} for p in parts])})
+        else:
+            sc, ps = _lineage_mix(one, a, g)
+            row.update({"score": sc, "parts": ps, "override": _lineage_mix(_override_eval(gt, one), a, g)[0]})
+        out[a] = {**row, "living_lineage": living[a], "descendants": gt_descendants(gt, a)}
     return out
 
 

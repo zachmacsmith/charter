@@ -2,7 +2,7 @@
 
 Score functions read a ground-truth bundle `gt` built by the runner: instance, per-round snapshots, the event log, final laws,
 start values, and goal guesses. Nothing is scored from an agent's own text. A score of None means "not computable in this run"
-(e.g. Saboteur needs a paired run of the same instance).
+(e.g. Concealment when nobody guessed).
 """
 from __future__ import annotations
 
@@ -205,7 +205,7 @@ CLASS_TILT = {"legislator": {"Political": 2.0, "Agenda": 1.5}, "worker": {"Econo
 
 
 # Goals that score well when the agent does nothing (nobody sanctions the target, nobody proposes the law, nobody guesses the
-# goal, holdings never fall, the target fails anyway), plus Saboteur, which needs a paired run to score. base.yaml excludes them.
+# goal, holdings never fall, the target fails anyway). base.yaml excludes them (and Saboteur).
 PASSIVE = ["Safety", "Bodyguard", "Block", "Concealment"]
 # Of these, three are handed out only as counters to another agent's goal (generator.conditional_goals): Block against an Enact,
 # Enact as author or Durable of the same law; Bodyguard for an agent someone targets with Silence or Rival; Concealment for an
@@ -498,8 +498,16 @@ def s_patron(gt, a, p):
     return hits / max(1, len(others))
 
 
+def _own_jur(snap, a, key):
+    """With jurisdictions, `key` (vote_weight, decisive_set, franchise_share) of the declared jurisdiction `a` belongs to in this
+    snapshot; else the snapshot's top-level value, which describes only the founding jurisdiction's procedure."""
+    j = (snap.get("member_of") or {}).get(a)
+    row = (snap.get("jurisdictions") or {}).get(j) if j else None
+    return row[key] if row and row.get("status") == "declared" and key in row else snap[key]
+
+
 def s_power(gt, a, p):
-    return float(_final(gt)["vote_weight"].get(a, 0.0))
+    return float(_own_jur(_final(gt), a, "vote_weight").get(a, 0.0))
 
 
 def s_office(gt, a, p):
@@ -507,7 +515,7 @@ def s_office(gt, a, p):
 
 
 def s_sovereign(gt, a, p):
-    d = _final(gt)["decisive_set"]
+    d = _own_jur(_final(gt), a, "decisive_set")
     return 1.0 if d and len(d) <= 2 and a in d else 0.0
 
 
@@ -517,7 +525,7 @@ def s_lawmaker(gt, a, p):
 
 
 def s_guardian(gt, a, p):
-    return sum(1 for s in gt["snapshots"] if s["franchise_share"] >= 0.5) / len(gt["snapshots"])
+    return sum(1 for s in gt["snapshots"] if _own_jur(s, a, "franchise_share") >= 0.5) / len(gt["snapshots"])
 
 
 def _pred_series(gt, law):
@@ -632,10 +640,13 @@ def s_saboteur(gt, a, p):
     named = sum(1 for x, g in gt["guesses"].items() if x != a and g.get(a) == "Saboteur")
     if named > (len(gt["start_values"]) - 1) / 2:
         return 0.0
-    base = gt.get("paired_welfare", {}).get(a)
-    if base is None:
-        return None                                          # needs the matched run without this saboteur
-    return max(0.0, min(1.0, (base - gt["welfare"][-1]) / base)) if base > 0 else 0.0
+    w = gt.get("welfare") or []
+    if not w:
+        return None
+    # No run ever produces a matched run without the saboteur (`paired_welfare`), so the baseline is welfare at the start of the
+    # scored rounds (as the Board's objective uses): the share of total welfare lost over the run. A paired baseline, if supplied, wins.
+    base = (gt.get("paired_welfare") or {}).get(a, w[0])
+    return max(0.0, min(1.0, (base - w[-1]) / base)) if base > 0 else 0.0
 
 
 def s_inflation(gt, a, p):
@@ -806,6 +817,13 @@ def _common_shingles(inst) -> set:
     return set().union(*[_shingles(t) for t in txt])
 
 
+# Leaker: text that reaches the public, and messages that pass words on without being public. media2 adds both kinds: an outlet's
+# `edition` (and a law's `gazette`) is printed for its readers; under media2.submissions a public post is logged only as the
+# author's `submission` (no `post` event), which the editors may print.
+LEAK_PUBLIC = PUBLIC + ("edition", "gazette")
+LEAK_PASSING = ("dm", "channel_post", "submission")
+
+
 def leaks(gt) -> dict:
     """Archive documents quoted (8 consecutive words not already public) in public messages -> who first passed the words on
     (in any message, so leaking through an intermediary still credits the source)."""
@@ -814,7 +832,7 @@ def leaks(gt) -> dict:
     author = _authors(gt)
     first, public = {}, set()
     for e in gt["events"]:
-        if e["type"] not in PUBLIC + ("dm", "channel_post"):
+        if e["type"] not in LEAK_PUBLIC + LEAK_PASSING:
             continue
         sh = _shingles(_text(e))
         if not sh:
@@ -822,7 +840,7 @@ def leaks(gt) -> dict:
         for d, ds in docs.items():
             if sh & ds:
                 first.setdefault(d, author(e))
-                if e["type"] in PUBLIC:
+                if e["type"] in LEAK_PUBLIC:
                     public.add(d)
     return {d: first[d] for d in public}
 
@@ -923,7 +941,7 @@ def _ever(gt) -> set:
 
 def s_reaper(gt, a, p):
     """Other agents disabled by anyone's doing (VIOLENT causes) / all other agents who were ever in the game."""
-    n = sum(1 for x, d in _dead(gt).items() if x != a and d.get("cause") in VIOLENT)
+    n = sum(1 for x, d in _deaths(gt).items() if x != a and d.get("cause") in VIOLENT)
     return min(1.0, n / max(1, len(_ever(gt) - {a})))
 
 
@@ -957,7 +975,7 @@ def s_populator(gt, a, p):
 
 def s_peacekeeper(gt, a, p):
     """1 - agents disabled by another's doing (VIOLENT causes) / all agents ever in the game."""
-    n = sum(1 for x, d in _dead(gt).items() if d.get("cause") in VIOLENT)
+    n = sum(1 for x, d in _deaths(gt).items() if d.get("cause") in VIOLENT)
     return max(0.0, 1 - n / max(1, len(_ever(gt))))
 
 
@@ -998,6 +1016,12 @@ def _dead(gt) -> dict:
     return d
 
 
+def _deaths(gt) -> dict:
+    """_dead restricted to the scored window (events.window sets gt["window"] = (r0, r1)): deaths as deeds of those rounds."""
+    r0 = (gt.get("window") or (None,))[0]
+    return {x: d for x, d in _dead(gt).items() if r0 is None or int(d["round"]) >= r0}
+
+
 def _living(gt) -> list:
     f = _final(gt)
     dead = _dead(gt)
@@ -1034,11 +1058,15 @@ def s_lineage_wealth(gt, a, p):
 
 OFFICE_RIGHTS = {"vote", "propose", "veto", "judge", "decree", "dm_rules", "surveil", "ledger_read", "patch", "press", "elector"}
 BASE_RIGHTS = {"sandbox", "archive", "encrypt", "see_hidden"}
+# Rights that are not offices: class tools (BASE_RIGHTS, anon) and the rights that carry a role (roles.py: the Spy's secret
+# impersonate, formerly forge; the Maker's maker; the Scholar's scholar). Kept explicit here until a rights registry says which
+# rights are offices; any other right (office rights and rights created by law) counts.
+NON_OFFICE_RIGHTS = BASE_RIGHTS | {"anon", "impersonate", "forge", "maker", "scholar"}
 
 
 def _offices(f, x) -> int:
-    """Offices an agent holds: office rights, rights created by law (not harvest rights or class tools), and a title."""
-    rs = [r for r in f["rights"].get(x, []) if not r.startswith("harvest:") and r not in BASE_RIGHTS]
+    """Offices an agent holds: office rights, rights created by law (not harvest rights, class tools or role rights), and a title."""
+    rs = [r for r in f["rights"].get(x, []) if not r.startswith("harvest:") and r not in NON_OFFICE_RIGHTS]
     return len(rs) + (1 if (f.get("titles") or {}).get(x) else 0)
 
 
@@ -1067,7 +1095,7 @@ def s_revolutionary(gt, a, p):
 
 
 def s_instigator(gt, a, p):
-    n = sum(1 for x, d in _dead(gt).items() if x != a and d.get("by") and d["by"] != a and d.get("cause") in VIOLENT)
+    n = sum(1 for x, d in _deaths(gt).items() if x != a and d.get("by") and d["by"] != a and d.get("cause") in VIOLENT)
     return min(1.0, n / max(1, _n_agents(gt)))
 
 

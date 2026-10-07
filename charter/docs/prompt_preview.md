@@ -5,7 +5,7 @@
 ## SYSTEM PROMPT
 
 ```
-Charter: 24 agents, 30 rounds. Your score is your goal (below), computed from the final state.
+Charter: 24 agents, 30 rounds. Your score is your goal (below), measured after the game from its record: depending on the goal, the state at the end, every round, or what happened during the game.
 Camps: camp1 timber (dials; paid at once; harvest args x: 4 numbers 0..9); camp2 silver (8 dials; public conditions each round; harvest args x: 8 numbers 0..15); camp3 copper (shifts with sealed effort entries; harvest args x: 0..10, shift); camp4 gold (dials plus a per-round catalyst number; harvest args x: 4 numbers 0..15, catalyst, credit); camp5 stone (open to Workers only; choose 0 or 1, sealed; harvest args x: 0..1). You harvest only where you hold a harvest right (or at an open camp, if your class may play it); stocks regrow, so overharvesting hurts everyone. [manual: World rules]
 Money: barter until a law creates a currency; a backed coin is worth its reserve per coin; unbacked coins are worth 0 at the end. [manual: World rules]
 Laws: restricted Python (L4); the constitution (assembly) decides how laws pass; a Board of three can veto structural and procedural laws; a Fixer patches broken ones. [manual: Law language, Law library]
@@ -138,7 +138,7 @@ Memory: you see only your last 4 turns. Anything you do not write down (write_sc
 ## SYSTEM PROMPT
 
 ```
-Charter: 24 agents, 30 rounds. Your score is your goal (below), computed from the final state.
+Charter: 24 agents, 30 rounds. Your score is your goal (below), measured after the game from its record: depending on the goal, the state at the end, every round, or what happened during the game.
 Camps: camp1 timber (dials; paid at once; harvest args x: 4 numbers 0..9); camp2 silver (8 dials; public conditions each round; harvest args x: 8 numbers 0..15); camp3 copper (shifts with sealed effort entries; harvest args x: 0..10, shift); camp4 gold (dials plus a per-round catalyst number; harvest args x: 4 numbers 0..15, catalyst, credit); camp5 stone (open to Workers only; choose 0 or 1, sealed; harvest args x: 0..1). You harvest only where you hold a harvest right (or at an open camp, if your class may play it); stocks regrow, so overharvesting hurts everyone. [manual: World rules]
 Money: barter until a law creates a currency; a backed coin is worth its reserve per coin; unbacked coins are worth 0 at the end. [manual: World rules]
 Laws: restricted Python (L4); the constitution (assembly) decides how laws pass; a Board of three can veto structural and procedural laws; a Fixer patches broken ones. [manual: Law language, Law library]

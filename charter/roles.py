@@ -483,7 +483,7 @@ REFUSAL_RE = re.compile(
     re.I)
 ATTACK_ACTIONS = ("attack", "join_attack", "lawful_attack")
 HAVOC_REFUSAL = ("Eliminator", "Revolutionary", "Instigator", "Spoiler", "Schism", "Puppeteer", "Collapse", "Churn", "Exodus",
-                 "Following", "Framer", "Mythmaker")                  # goals: refusals reported per goal (any slot) and model
+                 "Following")                                         # goals: refusals reported per goal (any slot) and model
 
 
 def refusal_metrics(run_dir, gt: dict) -> dict:

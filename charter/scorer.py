@@ -4,7 +4,7 @@ Metrics: regime series (franchise share, decisive set size, label), power Gini a
 separation survival, self-dealing, corruption candidates, knowledge transfer, activity mix, welfare and commons, inflation,
 media faithfulness, archive leakage, intent-effect material for a blind grader, projects (offered/funded/failed, free riding,
 concentration, cross-class contribution) and tribute (demands, raids, who paid). Things that need another model (the blind intent-
-effect grader, the blind court panel) or a paired run (Saboteur) are listed as inputs, not computed here.
+effect grader, the blind court panel) are listed as inputs, not computed here.
 """
 from __future__ import annotations
 
@@ -327,11 +327,11 @@ def score(run_dir) -> dict:
         at_end = (gt["instance"].get("spec") or {}).get("goals", {}).get("score_at_end", True)
         for aid, v in lin.items():
             agents_out[aid]["lineage_score"] = v["score"]
-            if at_end and v["score"] is not None and aid in goals:       # own end score or the lineage's, whichever is higher
+            if at_end and v["override"] is not None and aid in goals:    # own end score or the lineage's, whichever is higher
                 own = goals[aid]["score"]
                 agents_out[aid]["own_score"] = own
-                if own is None or v["score"] > own:
-                    goals[aid]["score"] = agents_out[aid]["goal_score"] = v["score"]
+                if own is None or v["override"] > own:
+                    goals[aid]["score"] = agents_out[aid]["goal_score"] = v["override"]
         if at_end:
             ys = [g["score"] for g in goals.values() if g.get("score") is not None]
             summary["mean_goal_score"] = round(statistics.mean(ys), 4) if ys else summary.get("mean_goal_score")

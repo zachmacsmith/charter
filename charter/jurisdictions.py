@@ -1203,6 +1203,18 @@ def franchise_share(k, jid) -> float:
     return len([a for a in mem if a in voters]) / max(1, len(mem))
 
 
+def vote_weights(k, jid) -> dict:
+    """Kernel.vote_weights for one jurisdiction: each member's share of ballot weight under its ordinary procedure (goals: Power)."""
+    mem = members(k, jid)
+    res = _procedure_spec(k, jid, "ordinary", mem[0]) if mem else None
+    if not isinstance(res, dict):
+        return {}
+    el = [x for x in res.get("electorate", []) if x in mem]
+    wts = {x: float((res.get("weights") or {}).get(x, 1.0)) for x in el}
+    tot = sum(wts.values()) or 1.0
+    return {x: v / tot for x, v in wts.items()}
+
+
 def snapshot_fields(k) -> dict:
     if not enabled(k):
         return {}
@@ -1215,7 +1227,7 @@ def snapshot_fields(k) -> dict:
             mem = members(k, jid)
             s = {"decisive_set": decisive_set(k, jid), "franchise_share": franchise_share(k, jid)}
             res = reserve_of(k, jid)
-            row.update({"members": mem, **s, "label": scorer.regime(s, len(mem)),
+            row.update({"members": mem, **s, "vote_weight": vote_weights(k, jid), "label": scorer.regime(s, len(mem)),
                         "reserve_value": round(sum(k.w["unit"].get(i, 0) * q for i, q in res.items()), 4)})
         else:
             row["members"] = list(j["hidden_members"])
