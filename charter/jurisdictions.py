@@ -30,7 +30,7 @@ Separate institutions (state under k.w["jurisdictions"][jid])
   The Fixer serves every jurisdiction. The Board reviews the founding jurisdiction's laws only (`board_scope: founding`; also
   `all` or `none`); in a state-of-nature start the first jurisdiction declared is the founding one.
 
-Joining and leaving: actions found, invite, join, leave, declare (see ACTION_DOC). Joining a declared jurisdiction runs its laws'
+Joining and leaving: actions found, invite, join, leave, declare (their rows in action_registry.py). Joining a declared jurisdiction runs its laws'
   on_admission(agent) hooks (any False refuses, any True admits); with no answer the default `admission` rule applies (ballot: the
   members vote, majority of those voting, closes at the end of the round; open; closed). Leaving takes effect at the end of the
   round after the jurisdiction's on_exit(agent) hooks run (laws can tax or seize). Its police can still attack leavers.
@@ -67,15 +67,6 @@ DEFAULTS = {"enabled": False, "start": "j0", "board_scope": "founding", "admissi
             "declare_min_members": 1,   # members (founder and pledges) needed to declare
             "max_charter": 5}           # starting laws a founder may set (found {"laws": [...]}, set_charter)
 ACTIONS = ("found", "invite", "join", "leave", "declare", "fund", "set_charter")
-ACTION_DOC = {
-    "found": 'found {"name": "...", "laws": ["<law code>", ...]}: secretly found a new jurisdiction; only members you invite will know it exists. "laws" (optional) is its charter: starting laws enacted, without a vote, when it is declared. Laws passed there meanwhile have no effect until it is declared',
-    "fund": 'fund {"jurisdiction": "J2", "item": "timber", "qty": 10}: put goods into a jurisdiction\'s treasury (a hidden one you belong to must hold enough before it can be declared); refunded in proportion if it dissolves before declaring',
-    "set_charter": 'set_charter {"jurisdiction": "J2", "laws": ["<law code>", ...]}: founder only, before it is declared: replace its charter (the starting laws enacted at declaration)',
-    "invite": 'invite {"jurisdiction": "J2", "agent": "Name"}: offer an agent a place in a hidden jurisdiction you belong to (they are told it exists; nobody else is). They become a member only if they pledge (join)',
-    "join": 'join {"jurisdiction": "J1"}: a declared jurisdiction: ask to move there publicly; its admission law decides (by default its members vote this round) and you leave your old one at the end of the round. A hidden one you were invited to: pledge to it; you become a secret member, can see and vote on its draft laws, and move into it when it is declared',
-    "leave": 'leave {"jurisdiction": null}: leave your declared jurisdiction at the end of the round (its laws may tax or seize from you as you go), or a hidden one at once',
-    "declare": 'declare {"jurisdiction": "J2"}: make a hidden jurisdiction public (its founder, or any member once the founder is gone): at the end of the round its laws take effect and its members leave their old jurisdiction',
-}
 AGENT_HOOKS = {"on_harvest": 0, "on_transfer": 0, "on_post": 0, "on_dm": 0}        # hook -> index of the agent it concerns
 OWN_HOOKS = ("on_exit", "on_admission", "on_birth")                                 # run only for one jurisdiction's laws
 # Generated from the law-API metadata (charter/lawapi.py): which functions act on agents, what an out-of-scope call returns, and

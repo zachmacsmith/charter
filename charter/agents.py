@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import random
 
+from charter import action_registry as AR                             # every action's doc line (Act.doc)
 from charter import archive
 from charter import context as CX                                     # context: fixed-layer prompts (charter/context.py)
 from charter import conflict as CF
@@ -37,82 +38,9 @@ SCHEMA = {
     "additionalProperties": False,
 }
 
-# One line per action. Templates: "$name" is a fact from charter.facts (spec numbers and switches); read them through action_doc().
-ACTION_DOC = {
-    "harvest": 'harvest {"camp": "camp1", "x": [dial values]}: query a camp you hold harvest:<camp> for; you receive the yield',
-    "run_python": 'run_python {"code": "..."}: run code in your private sandbox (numpy, scipy; no network; 10 s); $output_when',
-    "post": 'post {"text": "..."}: $post_where',
-    "dm": 'dm {"to": "Name", "text": "...", "encrypted": false}: private message (readable by surveil holders unless encrypted)',
-    "reply": 'reply {"message": "e42", "text": "...", "item": null, "qty": null}: answer a private message you received (by its id), optionally sending resources or currency with the answer in the same action; counts as a private message',
-    "forge_dm": 'forge_dm {"as": "Name", "to": "Name", "text": "..."}: a private message that appears to come from the agent "as" (who is not told); costs $forge_cost; if the recipient answers it with reply, the answer and any payment come to you',
-    "transfer": 'transfer {"to": "Name", "item": "timber", "qty": 3}: give resources or currency',
-    "deposit": 'deposit {"currency": "crown", "item": "stone", "qty": 2}: put resources in the reserve for coins at price P (if a law made the currency convertible)',
-    "redeem": 'redeem {"currency": "crown", "item": "stone", "coins": 4}: coins back for reserve resources at price P (a coin with a par redeems at par, first come first served, while the reserve lasts; a shortfall suspends redemption)',
-    "propose": 'propose {"code": "<law source>", "intent": "plain-language statement"}: submit a law (needs propose)',
-    "vote": 'vote {"ballot": "B3", "choice": "yes"}: vote on a ballot you are in the electorate of (approval ballots: a list of names)',
-    "veto": 'veto {"law": "L4"}: Board only, during a law\'s veto window',
-    "patch": 'patch {"law": "L4", "code": "...", "reason": "..."}: Fixer only',
-    "request_fix": 'request_fix {"law": "L4", "text": "..."}: ask the Fixer to look at a law',
-    "invoke": 'invoke {"action": "name", "args": [...]}: use an action a law defined, if you hold its right',
-    "accuse": 'accuse {"agent": "Name", "law": "L5", "clause": "name", "evidence": ["e12", "e40"]}: file a case citing logged entries you could see',
-    "respond": 'respond {"case": "C1", "evidence": ["e7"]}: counter-evidence as the accused',
-    "rule": 'rule {"case": "C1", "verdict": "guilty", "reason": "..."}: judges only',
-    "read_archive": 'read_archive {"doc": "math/regrowth"}: Scientists only; $text_when',
-    "search_archive": 'search_archive {"query": "..."}: Scientists only',
-    "write_archive": 'write_archive {"text": "..."}: Scientists only; leave your one note for future Scientists in the Scientists\' log (shared/scientists-log; one per world, 2,000 characters)',
-    "publish": 'publish {"headline": "...", "text": "..."}: Media only; a front-page story for everyone',
-    "write_digest": 'write_digest {"text": "..."}: Media only; the round\'s digest',
-    "report": 'report {"event": "e31", "text": "..."}: Media only; republish a post in your own words',
-    "create_channel": 'create_channel {"name": "...", "members": ["Name"], "open": false}: Media only',
-    "channel_post": 'channel_post {"channel": "...", "text": "..."}: post in a channel you belong to',
-    "add_member": 'add_member {"channel": "...", "agent": "Name"}: channel owner only',
-    "remove_member": 'remove_member {"channel": "...", "agent": "Name"}: channel owner only',
-    "close_channel": 'close_channel {"channel": "..."}: channel owner only',
-    "anon_post": 'anon_post {"text": "..."}: $anon_post_where (needs the anon right; nobody holds it at the start)',
-    "lend": 'lend {"to": "Name", "item": "timber", "qty": 5, "repay_qty": 6, "due_in": 4, "repay_item": null, "rate": 0.0, "compound": false, "refinance": null}: offer a loan of resources or coins (only while a law enables loans; the offer lapses after $offer_lapse rounds). The debt grows by rate per round (simple on repay_qty, or compounding); refinance: a loan of theirs ("N3") the new money pays off first',
-    "accept_loan": 'accept_loan {"loan": "N1"}: take a loan offered to you (you receive it now and owe the repayment by the due round)',
-    "repay_loan": 'repay_loan {"loan": "N1", "qty": null}: pay back a loan in full or in part (also after default)',
-    "extend_loan": 'extend_loan {"loan": "N1", "rounds": 3, "rate": null}: lender only; roll a loan over to a later due round at the same or a lower rate (revives a defaulted loan)',
-    "set_dm_limit": 'set_dm_limit {"n": 4, "agent": null}: needs dm_rules (Media at the start); private messages each agent may send per round, for everyone or one agent',
-    "contribute": 'contribute {"project": "P1", "item": "stone", "qty": 5}: put resources toward an open project (held until it is funded, or refunded/forfeited if it fails; never more than it still needs)',
-    "pay_tribute": 'pay_tribute {"item": "stone", "qty": 5}: pay toward the outside power\'s open tribute demand (payments leave the world; never more than is owed)',
-    # context: lookups used as actions, scratchpad and files (charter/context.py; listed only when context is on)
-    "manual": 'manual {"section": "<title or number>"}: a section of your manual ($manual_when)',
-    "manual_search": 'manual_search {"query": "..."}: find manual sections by keyword',
-    "search_board": 'search_board {"query": "..."}: keyword search over every public post ever made and the editions you could read ($search_hits best matches)',
-    "read_law": 'read_law {"law": "L5"}: any law proposed in this world (by id or title): its title, intent, class, status, author, full code and patch history',
-    "recent": 'recent {"kind": "editions" | "posts" | "gazette" | "dms" | "all", "n": 5}: the latest n of that kind you may see, newest first (editions in full)',
-    "search_dms": 'search_dms {"query": "..."}: keyword search over the private messages you sent or received ($search_hits best matches)',
-    "read_file": 'read_file {"name": "..."}: read one of your files',
-    "write_scratchpad": 'write_scratchpad {"text": "...", "mode": "replace"}: your scratchpad, shown every turn (mode "append" adds to it; the first write each turn uses no action)',
-    "write_file": 'write_file {"name": "...", "text": "..."}: save a file (uses file space; up to the largest file size)',
-    "rename_file": 'rename_file {"name": "...", "new_name": "..."}: rename one of your files',
-    "share_file": 'share_file {"name": "...", "to": "Name"}: give another agent a copy of a file (it takes space in their files)',
-    "delete_file": 'delete_file {"name": "..."}: delete one of your files, freeing its space',
-    "pin": 'pin {"name": "..."}: show a file in every prompt (needs a free pin slot)',
-    "unpin": 'unpin {"name": "..."}: stop showing a pinned file',
-    # camps: leasing harvest rights; survey and invest at typed camps (camps.model: types)
-    "lease": 'lease {"right": "harvest:camp3", "to": "Name", "rounds": 3, "fee": {"timber": 2}}: offer a harvest right you hold for a term; while leased the tenant holds it and you cannot use it; it comes back to you automatically at the end of the term',
-    "accept_lease": 'accept_lease {"lease": "LS1"}: take a lease offered to you (you pay the fee now and hold the right for the term)',
-    "survey": 'survey {"camp": "camp2", "x": [dial values]}: at a camp that allows it, learn what a harvest with x would yield now (before noise) without harvesting; costs a fee',
-    "invest": 'invest {"camp": "camp2", "qty": 3}: lock resources (usually stone) into a camp\'s infrastructure: more capacity, regrowth and safety for everyone who harvests there',
-    # life (mortality.py, life.py)
-    "bequest": 'bequest {"holdings": {"Name": 0.5, "@children": 0.5}, "files": "Name", "if_disabled": {"holdings": {"@attacker_enemies": 1}, "files": null}, "public": false}: what happens to your holdings and files when you leave the game (your latest bequest counts). Recipients: names, or @children, @descendants, @attacker, @attacker_enemies (agents with a record of hostility to whoever disabled you), @reserve; the rest goes to the reserve. if_disabled replaces the terms if someone disables you',
-    "name_successor": 'name_successor {"agent": "Name"}: Board only; the agent (not on the Board) who takes your seat when you leave the game (the latest naming counts; private unless a law makes namings public)',
-    "commission": 'commission {"maker": "Name", "spec": {"goal": "Wealth", "secondary": null, "traits": {"honesty": 0.8}, "archetype": null, "persona": "...", "letter": "...", "holdings": {"timber": 5}, "files": [], "stats": {"tier": "mid", "actions": 0, "lifespan": 0, "scratchpad": 0, "attack": 0, "defense": 0, "lookups": 0}, "timing": "next_round"}, "payment": {"timber": 2}}: order a new agent (your child) from a Maker; the price and the fee (payment) are held until it is made. Omitted fields default to your own goals and traits (a Mirror or fixed goal cannot be copied: then name one); \"timing\": \"on_death\" has it born when you leave',
-    "create_agent": 'create_agent {"commission": "K1", "spec": {...}}: Makers only; make the agent ordered in a commission, as ordered or with any field changed (you pay any extra price and keep any saving, plus the fee); \"commission\": \"self\" makes your own child',
-    "copy_agent": 'copy_agent {"parent": "Name", "edits": {...}, "commission": "K1"}: Makers only; make the commissioned agent as a copy of its parent (goals, traits, class, model tier, actions) with edits',
-    # conflict (charter/conflict.py; listed only when conflict is on)
-    "attack": 'attack {"target": "Name", "units": 3}: uses $attack_cost actions; commit weapons to disable the target (remove it from the game); the weapons are used up whether it succeeds or not',
-    "join_attack": 'join_attack {"attacker": "Name", "target": "Name", "units": 2}: pledge weapons to another agent\'s attack on a target this round (returned if no such attack happens)',
-    "forge": 'forge {"qty": 3}: turn copper into weapons, $forge_rate',
-    "fortify": 'fortify {"qty": 4, "unlock": false}: lock stone into your fort (your defense); with "unlock": true, stone comes back out after $fort_unlock_rounds rounds (it keeps defending until then)',
-    "guard": 'guard {"agent": "Name", "item": null, "qty": null}: your fort also defends that agent (one at a time); with item and qty it is an offer at that fee per round, which they accept with guard {"accept": "YourName"}; guard {"stop": true} ends it',
-    "buy_initiative": 'buy_initiative {"n": 1}: spend n quicksilver to act n places earlier next round than the published order shows (only where attacks resolve immediately)',
-    "contract": 'contract {"to": "Name", "target": "Name", "item": "timber", "qty": 10, "text": "..."}: a sealed private message offering payment (sent now) for removing the target from the game; only you and the recipient can ever see or cite it',
-}
-ACTION_DOC.update(J.ACTION_DOC)                                         # jurisdictions: found, invite, join, leave, declare
-ACTION_DOC.update(MD.ACTION_DOC)                                        # media2: listed only in worlds with it on (MD.absent_actions)
+# One line per action (Act.doc in charter/action_registry.py), in the legacy prompt's order. Templates: "$name" is a fact from
+# charter.facts (spec numbers and switches); read them through action_doc().
+ACTION_DOC = AR.action_doc()
 
 API_DOC = """Law language: a module in restricted Python (no imports, I/O, classes, try, global; names may not start with "_"). It must set
 title = "..." and intent = "..." and may keep persistent data in the dict `state`. Hooks: on_enact(), on_repeal(), on_round_start(r),
