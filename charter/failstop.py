@@ -2,9 +2,9 @@
 
 The runner counts every model call of the round, first decisions and fast mode's DM-step reply calls alike. Once the failed
 calls reach `llm.fail_stop_fraction` (default 0.5) of max(planned decisions, calls so far), the round is abandoned:
-  - nothing of it is kept: events.jsonl and reasoning.jsonl are cut back to their size at the last checkpoint (the end of the
+  - nothing of it is kept: events.jsonl, reasoning.jsonl, observer.jsonl and calls.jsonl are cut back to their size at the last checkpoint (the end of the
     previous round, or the start of the game), snapshots.json and ground_truth.json are only ever written at the end of a round,
-    and the readable reports are rebuilt from the cut files;
+    and the readable reports are rebuilt from the cut files; the abandoned model calls are moved to abandoned_calls.jsonl;
   - STOPPED.md in the run directory records the round, the counts and sample errors;
   - the runner raises RunStopped, so `python -m charter resume <dir>` (or the same command again) replays the round.
 Side effects outside the run directory cannot be undone: a Scientist's write_archive in the abandoned round stays in the shared archive.
@@ -49,11 +49,10 @@ def abandon(out: Path, ckpt_path: Path, r: int, tally: Tally, rounds: int, mode:
         last = ck["round"]
         sizes = ck["files"]
     else:
-        sizes = {"events.jsonl": 0, "reasoning.jsonl": 0}
-    for name, size in sizes.items():
-        if (out / name).exists():
-            with open(out / name, "r+b") as f:
-                f.truncate(size)
+        from charter.provenance import APPEND_ONLY
+        sizes = {n: 0 for n in APPEND_ONLY}
+    from charter.provenance import truncate                        # every append-only file; the cut calls go to abandoned_calls.jsonl
+    truncate(out, sizes, why=f"round {r + 1} abandoned (fail-stop)")
     kept = "the start of the game" if last is None or last < 0 else f"the end of round {last + 1}"
     msg = (f"round {r + 1}: {tally.failed} of {tally.calls} model calls failed (stop at {tally.frac:.0%} of the round's calls); "
            f"the round was abandoned and the run kept as of {kept}. Resume to replay round {r + 1}.")
@@ -70,7 +69,8 @@ def abandon(out: Path, ckpt_path: Path, r: int, tally: Tally, rounds: int, mode:
         f"- When: {time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"- Round {r + 1} of {rounds} ({mode} turns) was abandoned: {tally.failed} of {tally.calls} model calls failed "
         f"(threshold {tally.frac:.0%} of max({tally.planned} planned decisions, calls made); DM-step reply calls count too).",
-        f"- Nothing of round {r + 1} is kept: events.jsonl and reasoning.jsonl were cut back to the checkpoint, which holds the state as of {kept}.",
+        f"- Nothing of round {r + 1} is kept: the logs (events, reasoning, observer, calls) were cut back to the checkpoint, which holds the "
+        f"state as of {kept}; the round's model calls are kept in abandoned_calls.jsonl.",
         f"- Continue with `python -m charter resume {out}` (or the same run command) once the cause is fixed.", "",
         "## Sample errors", ""] + samples) + "\n")
     try:

@@ -7,7 +7,10 @@ Writes to the run directory (checkpointed every round, so a crash keeps everythi
   snapshots.json     per-round state (holdings, rights, vote weights, decisive set, predicates, efficiency, welfare)
   ground_truth.json  goals, constitution law id, start values, final laws (code, patches), goal guesses, shared-archive snapshot
   checkpoint.pkl     full state after the last complete round (kernel, law data and callbacks, agents' notes and feed cursors,
-                     log offsets): `run(..., resume=True)` continues from it, trimming anything logged after it
+                     offsets of every append-only file in provenance.APPEND_ONLY): `run(..., resume=True)` continues from it,
+                     trimming anything logged after it
+  run.json           provenance (code, repository state, python, backend, dry flag, spec sha) and one segment per start/resume
+  calls.jsonl        every model call: raw replies, retries, errors, latency, system prompt hash -> prompts/system/<sha>.txt
 
 A round in which `llm.fail_stop_fraction` (default half) of the model calls fail (e.g. a usage limit) is abandoned: nothing of it
 is kept (logs cut back to the last checkpoint, see failstop.py), STOPPED.md says why, and the run stops with RunStopped, so resuming
@@ -30,6 +33,7 @@ from charter import failstop as FS
 from charter import hidden as H
 from charter import events as EV
 from charter import library as LB
+from charter import provenance as PV
 from charter import media as MD                                       # media2
 from charter import observer as OBS
 from charter import regimes as RG
@@ -37,7 +41,7 @@ from charter import report
 from charter import roles as R                                         # roles: the Spy's reading in member mode
 from charter import resources as RS                              # camps: optional upkeep
 from charter.camptypes import framework as CT                    # camps: typed camps' ground truth
-from charter.kernel import Kernel
+from charter.kernel import STATE_SCHEMA, Kernel
 
 PREDICATES = {**LB.PREDICATES, **{f"outcome:{c}": f for c, f in LB.OUTCOMES.items()}}
 
@@ -111,14 +115,18 @@ def _as_item(q) -> dict | None:
     return {"action": str(name), "args_json": q.get("args_json", q.get("args", "{}"))} if name else None
 
 
-def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=()) -> Path:
+def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=(), dry=None) -> Path:
+    """dry: recorded in run.json (None: inferred from the policy, scripted = dry)."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     k = Kernel(inst, sandbox)
     agents = {a["id"]: a for a in inst["agents"]}
     ckpt_path = out / "checkpoint.pkl"
-    if resume and ckpt_path.exists():
-        ck = pickle.loads(ckpt_path.read_bytes())
+    resuming = resume and ckpt_path.exists()
+    ck = pickle.loads(ckpt_path.read_bytes()) if resuming else None
+    PV.begin(out, inst, policy, "resume" if resuming else "start", ck["round"] + 1 if resuming else 0, dry=dry,
+             checkpoint_version=ck.get("version") if resuming else None)   # before --live edits inst["spec"]
+    if resuming:
         k.restore_state(ck["kernel"])
         rs = ck["runner"]
         notes, cursors, results, guesses = rs["notes"], rs["cursors"], rs["results"], rs["guesses"]
@@ -126,9 +134,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         if rs.get("policy_rng") is not None and hasattr(policy, "rng"):
             policy.rng.setstate(rs["policy_rng"])
         first_round = ck["round"] + 1
-        for name, size in ck["files"].items():                        # drop whatever was logged after the checkpoint
-            with open(out / name, "r+b") as f:
-                f.truncate(size)
+        PV.truncate(out, ck["files"], why=f"cut on resume from the checkpoint after round {first_round}")   # drop whatever was logged after the checkpoint
         reason_f, ev_f = open(out / "reasoning.jsonl", "a"), open(out / "events.jsonl", "a")
         n_ev = len(k.events)
         FS.clear(out)
@@ -153,7 +159,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         reason_f, ev_f = open(out / "reasoning.jsonl", "w"), open(out / "events.jsonl", "w")
         n_ev = 0
         first_round = 0
-    obs = OBS.start(inst, out, k, ck["runner"].get("observer") if resume and ckpt_path.exists() else None)   # secret observer or None
+    obs = OBS.start(inst, out, k, ck["runner"].get("observer") if resuming else None)   # secret observer or None
+    policy = PV.Recorder(policy, out, append=resuming)                 # calls.jsonl and prompts/system/<sha>.txt
     EV.restore(k, inst, agents)                                         # world events: re-add arrivals, goal changes, departures
     sysp = {aid: AG.system_prompt(inst, a) for aid, a in agents.items()}
     (out / "prompts").mkdir(exist_ok=True)
@@ -172,14 +179,19 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                 "const": const, "policy_rng": policy.rng.getstate() if hasattr(policy, "rng") else None,
                 "observer": obs.state() if obs else None}
 
-    if not ckpt_path.exists() or not resume:                           # checkpoint "round 0" (before round 1): a stop in round 1 resumes
+    def offsets():
+        for f in (ev_f, reason_f, obs.f if obs else None, policy):
+            if f is not None:
+                f.flush()
+        return PV.offsets(out)                                          # every append-only file, observer.jsonl of a member Spy too
+
+    if not resuming:                                                    # checkpoint "round 0" (before round 1): a stop in round 1 resumes
         for e in k.events[n_ev:]:
             ev_f.write(json.dumps(e, default=list) + "\n")
         n_ev = len(k.events)
         (out / "snapshots.json").write_text(json.dumps(k.snapshots, default=list))
         _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=False)
-        _checkpoint(ckpt_path, -1, k, runner_state(), {"events.jsonl": _size(ev_f), "reasoning.jsonl": _size(reason_f),
-                                                        **({"observer.jsonl": _size(obs.f)} if obs else {})})
+        _checkpoint(ckpt_path, -1, k, runner_state(), offsets())
     fail_frac = FS.fraction(inst["spec"]["llm"])
 
     def stop_if_failing(r, tally):
@@ -187,7 +199,12 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         if tally.reached():
             reason_f.close()
             ev_f.close()
-            raise RunStopped(FS.abandon(out, ckpt_path, r, tally, inst["rounds"], inst["spec"].get("turns", "sequential")))
+            policy.close()
+            if obs:
+                obs.f.flush()
+            msg = FS.abandon(out, ckpt_path, r, tally, inst["rounds"], inst["spec"].get("turns", "sequential"))
+            PV.end(out, "stopped", r - 1)
+            raise RunStopped(msg)
 
     for r in range(first_round, inst["rounds"]):
         k.start_round()
@@ -429,28 +446,24 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         (out / "snapshots.json").write_text(json.dumps(k.snapshots, default=list))
         _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=False)
         reason_f.flush()
-        _checkpoint(ckpt_path, r, k, runner_state(),
-                    {"events.jsonl": _size(ev_f), "reasoning.jsonl": _size(reason_f), **({"observer.jsonl": _size(obs.f)} if obs else {})})
+        _checkpoint(ckpt_path, r, k, runner_state(), offsets())
         _live(out, f"round {r + 1} of {inst['rounds']} complete", full=True)
         log(f"  round {r + 1}/{inst['rounds']} done ({time.time() - t0:.0f}s): laws {len(k.active_laws())}, "
             f"currencies {list(k.w['currencies'])}, decisive set {len(k.snapshots[-1]['decisive_set'])}")
     reason_f.close()
     ev_f.close()
+    policy.close()
     if obs:
         obs.close()
     _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=True)
+    PV.end(out, "complete", inst["rounds"] - 1)
     return out
-
-
-def _size(f) -> int:
-    f.flush()
-    return os.fstat(f.fileno()).st_size
 
 
 def _checkpoint(path, r, k, runner_state, files):
     """Write checkpoint.pkl atomically (a crash while writing keeps the previous one)."""
     tmp = path.with_suffix(".tmp")
-    tmp.write_bytes(pickle.dumps({"version": 1, "round": r, "kernel": k.checkpoint_state(), "runner": runner_state, "files": files}))
+    tmp.write_bytes(pickle.dumps({"version": STATE_SCHEMA, "round": r, "kernel": k.checkpoint_state(), "runner": runner_state, "files": files}))
     os.replace(tmp, path)
 
 

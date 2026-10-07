@@ -22,6 +22,10 @@ from charter import observer as OBS
 from charter import outside as O
 from charter import projects as P
 
+# Version of the scoring rules (goal scores and metrics). Bump it whenever a score of the same run would come out different, so
+# score.json files and run.json segments say which rules produced them.
+SCORING_VERSION = 1
+
 CATEGORIES = {                                                         # activity category of every agent action (activity_mix)
     "productive": {"harvest", "run_python", "read_archive", "search_archive", "write_archive", "survey", "invest",   # camps
                    "create_agent", "copy_agent"},                                         # life

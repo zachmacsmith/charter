@@ -16,6 +16,10 @@ from __future__ import annotations
 import ast
 import sys
 
+# Version of the law API (API_GROUPS, hooks, their signatures and semantics) seen by law code. Bump it when an existing call or hook
+# changes meaning or is removed (adding a call does not break old laws); run.json records it per run segment.
+LAW_API_VERSION = 1
+
 API_GROUPS = {
     "read": {"agents", "holders", "has", "balance", "reserve", "price", "stock", "round", "laws", "proposer", "value", "supply",
              "camps", "class_of", "holdings_value", "currencies", "rights_of", "rng", "bounty_number",
