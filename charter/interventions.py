@@ -376,7 +376,7 @@ def _repeal_law(k, inst, rs, law):
         raise InterventionError(f"no law in force: {law}")
 
 
-@op("amend_law", args={"law": "str", "code": "str", "reason": "str?"}, primitive="patch")
+@op("amend_law", args={"law": "str", "code": "str", "reason": "str?"}, primitive="amend")
 def _amend_law(k, inst, rs, law, code, reason="intervention"):
     """Replace a law's code, as a Fixer patch does."""
     if law not in k.w["laws"]:

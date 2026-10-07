@@ -311,8 +311,8 @@ def _hooks(*hooks: Hook) -> dict:
 HOOKTABLE = _hooks(
     Hook("on_enact", "()", "ignored", ("dispatch.py:do_enact",), None, note="also in every dry-run preview"),
     Hook("on_repeal", "()", "ignored", ("dispatch.py:do_repeal",), True, note="a law's repeal(target) runs it too"),
-    Hook("on_round_start", "(r)", "ignored", ("kernel.py:Kernel.start_round", "kernel.py:Kernel.dry_run"), None),
-    Hook("on_round_end", "(r)", "ignored", ("kernel.py:Kernel.end_round", "kernel.py:Kernel.dry_run"), None),
+    Hook("on_round_start", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run"), None),   # the round_start phase
+    Hook("on_round_end", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run"), None),       # the round_end phase
     Hook("on_harvest", "(agent, camp, x, y)", "deduct",
          ("dispatch.py:legacy_hooks", "camptypes/framework.py:pay_yield", "kernel.py:Kernel.probe"), False, jur="agent:0",
          note="agents' harvests only (laws cannot harvest); Kernel.probe calls it in previews"),
@@ -389,6 +389,15 @@ def dispatch_sites() -> dict:
                 self.generic_visit(n)
 
         V().visit(ast.parse(p.read_text()))
+        if rel == "features.py":                                       # phase steps ("law", hook) run k.hooks(fn, ...) in features.run
+            from charter import features as FT
+            src = p.read_text().splitlines()
+            line = next((i + 1 for i, l in enumerate(src) if "k.hooks(fn" in l), None)
+            for steps in FT.PHASES.values():
+                for owner, h in steps:
+                    if owner == "law" and line:
+                        if h in HOOKTABLE:
+                            out.setdefault(h, []).append((rel, line, "run"))
     return out
 
 
