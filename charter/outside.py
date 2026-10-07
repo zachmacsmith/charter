@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import random
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
 
-EVENT_TYPES = ("tribute_demand", "tribute_payment", "tribute_met", "raid")
+EVENT_TYPES = ET.rendered_by("outside")                              # this module renders them (agents.render_event)
 DEFAULTS = {"enabled": False, "every": 20, "deadline_in": 3, "demand": {"value_frac": 0.08, "items": None},
             "escalation": {"after_raid": 1.25, "after_paid": 1.1}, "raid": {"target": "random", "stock_loss": 0.5, "seize_frac": 0.25}}
 

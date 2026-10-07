@@ -29,14 +29,14 @@ from __future__ import annotations
 import math
 import random
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import camps as C
 from charter import lawlang as L
 from charter import spec as S
 
 KINDS = ("granary", "upgrade", "road", "discovery")
 OFFICIALS = ("board", "fixer")
-EVENT_TYPES = ("project_open", "project_contribution", "project_funded", "project_failed", "project_expired", "camp_created",
-               "project_refund_rule")
+EVENT_TYPES = ET.rendered_by("projects")                             # this module renders them (agents.render_event)
 DEFAULTS = {
     "enabled": True, "mean_interval": 12, "max_open": 3, "kinds": {"granary": 3, "upgrade": 3, "road": 2, "discovery": 2},
     "threshold_frac": [0.06, 0.14], "specific_prob": 0.3, "deadline_in": [4, 8], "refund_prob": 0.5, "public_contributions": True,

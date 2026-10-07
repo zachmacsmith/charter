@@ -30,6 +30,7 @@ from pathlib import Path
 
 import yaml
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawdocs
 
 CODEX = Path(__file__).parent / "archive" / "codex"
@@ -52,9 +53,9 @@ CAPS = {
 NAMES = {v[0]: k for k, v in CAPS.items()}
 FALSE_NAMES = {"ashen_registry"}
 FALSE_FUNCTIONS = {"reveal_all_powers", "unhide_all"}
-FORGEABLE = ("post", "anon_post", "story", "report", "digest", "gazette")
-VEILABLE = ("post", "anon_post", "story", "report", "digest")
-EVENT_TYPES = ("history", "power_used", "powers_disclosure")
+FORGEABLE = ET.names("forge")                                         # public posts and the gazette
+VEILABLE = ET.names("veil")                                           # public posts (not the gazette, not channel posts)
+EVENT_TYPES = ET.rendered_by("hidden")                                # this module renders them (agents.render_event)
 DEFAULTS = {"enabled": False, "start_prob": {"common": 0.30, "uncommon": 0.10, "rare": 0.03, "legendary": 0.0, "false": 0.05},
             "non_scientist_scale": 0.1, "hold_prob": {"common": 0.04, "uncommon": 0.02, "rare": 0.01, "legendary": 0.005},
             "holder_classes": list(HOLDER_CLASSES), "uses_per_round": 2, "tip_prob": 0.01,

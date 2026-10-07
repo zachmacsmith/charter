@@ -50,6 +50,7 @@ import json
 import math
 import random
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
 from charter import mortality as MO
 
@@ -84,7 +85,7 @@ SUMMED = {"Wealth", "Power", "Hoard"}
 # still reported apart (score.json -> lineage).
 LINEAGE_OVERRIDE = {"Wealth", "Rank", "Hoard", "Diversifier", "Currency Magnate",                       # own holdings
                     "Power", "Office", "Sovereign", "Seat", "Title", "Spymaster"}                       # own offices
-EVENT_TYPES = ("birth", "maker")
+EVENT_TYPES = ET.rendered_by("life")                                 # this module renders them (agents.render_event)
 
 
 def cfg(spec) -> dict:
@@ -1054,6 +1055,10 @@ def absent_actions(inst, a) -> set:
 
 
 def render_event(e, tag) -> str | None:
+    if e["type"] == "birth_rules":
+        d = e["data"]
+        rules = ", ".join(f"{x.replace('_', ' ')} {y}" for x, y in (d.get("rules") or {}).items() if y)
+        return f"{tag} law {d.get('law', '')}: " + (f"birth rules now: {rules}" if rules else "its birth rules are lifted")
     if e["type"] in EVENT_TYPES:
         return f"{tag} {e['data']['text']}"
     return None

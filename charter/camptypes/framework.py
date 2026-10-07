@@ -31,6 +31,7 @@ from __future__ import annotations
 import copy
 import random
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import camps as C
 from charter import resources as RS
 from charter import spec as S
@@ -55,7 +56,7 @@ ROLE_MODIFIERS = {
 NO_CAMPS = ("board", "fixer", "observer")                        # never harvest, at open camps either
 HOLDER_FILL = ("scientist", "legislator", "media")                # who tops up a camp needing more right holders than there are Workers
 HARVEST_LISTENERS: list = []                                       # fn(k, aid, camp_id, yield) after every typed harvest (e.g. accidents)
-EVENT_TYPES = ("camp_submit", "camp_round", "camp_input", "camp_invest", "camp_survey", "camp_void") + LS.EVENT_TYPES
+EVENT_TYPES = ET.rendered_by("camptypes") + LS.EVENT_TYPES           # this module renders them (camp_void: as nothing)
 
 
 # ------------------------------------------------------------------ switches and config

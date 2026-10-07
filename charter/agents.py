@@ -439,6 +439,10 @@ def render_event(k, e, viewer=None) -> str | None:
     if t == "harvest":
         return f"{tag} your harvest at {d['camp']} with x={d['x']}: yield {d['yield']:.3g}" + (f" ({d['deducted']:.3g} deducted)" if d["deducted"] else "") + \
             (f". {d['note']}" if d.get("note") else "")                 # camps-b: typed camps' private results (readings, pairings)
+    if t == "factored":
+        return f"{tag} {who} factored the number at {d['camp']} (N = {d['N']}); the new number is N = {d['new_N']}"
+    if t == "treasury_coins":
+        return f"{tag} the first {d['currency']} coins: {d['coins']:.4g} issued to its reserve as treasury coins for the backing it already held"
     if t == "sandbox":
         return f"{tag} your sandbox output:\n{d['output'][:2500]}"
     if t in ("archive_read", "archive_search"):
@@ -455,6 +459,8 @@ def render_event(k, e, viewer=None) -> str | None:
         return f"{tag} {who} voted {d['choice']} on {d['ballot']}"
     if t in ("enact", "repeal", "vetoed", "veto_window", "proposal_failed", "law_error", "patched", "patch_submitted", "patch_failed", "request_fix"):
         return f"{tag} {t}: " + json.dumps({x: y for x, y in d.items() if x != 'diff'} | ({"diff": d['diff'][:1500]} if 'diff' in d else {}))
+    if t == "procedure_restored":
+        return f"{tag} the {d['cls']} procedure set by law {d['law']} applies again, after the repeal of {d['after_repeal_of']}"
     if t == "veto_vote":
         return f"{tag} {who} voted to veto {d['law']}"
     if t == "world_event":                                              # world events (charter/events.py), phrased in-world
@@ -486,6 +492,8 @@ def render_event(k, e, viewer=None) -> str | None:
         return O.render_event(e, tag)
     if t in CT.EVENT_TYPES:                                             # camps: typed-camp results, leases
         return CT.render_event(e, tag)
+    if t in J.EVENT_TYPES:                                              # jurisdictions: public joins, leaves, declarations
+        return J.render_event(e, tag)
     from charter import life as LF, mortality as MO                    # life: disables, successions, births, the Maker
     if t in MO.EVENT_TYPES:
         return MO.render_event(e, tag)
@@ -502,7 +510,7 @@ def feed(k, aid: str, since: int, max_items: int = 80) -> tuple[str, int]:
             continue
         if digest_only and e["type"] == "post" and e["agent"] != aid:
             continue
-        if e["agent"] == aid and e["type"] in ("post", "vote", "transfer", "dm", "proposal", "story", "digest", "report", "channel_post"):
+        if e["agent"] == aid and e["type"] in CX.OWN_RESULTS:
             continue                                            # your own actions are summarised in "Results of your last turn"
         s = render_event(k, e, aid)
         if s:

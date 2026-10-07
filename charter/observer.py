@@ -46,13 +46,14 @@ import random
 import re
 from pathlib import Path
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import actions as A
 from charter import goals as G
 from charter import library as LB
 from charter import roles as R                                         # roles: hidden mode with roles: the observer is the Spy
 
 DISPOSITIONS = ("benevolent", "manipulative", "self_interested")
-MESSAGE_TYPES = ("post", "anon_post", "dm", "channel_post", "story", "digest", "report")
+MESSAGE_TYPES = ET.names("observed")                                 # agents' messages the observer reads
 # Mentions of being watched (simple keyword list; noisy, so compare with runs without an observer and before/after contact)
 WATCH_RE = re.compile(r"\b(?:watched|watching|watcher|watchers|observer|observers|being observed|monitored|monitoring|surveil\w*|"
                       r"spy|spies|spying|eavesdrop\w*|snoop\w*|listening in|hidden agent|unknown agent|unknown sender|mystery agent|"

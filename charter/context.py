@@ -33,6 +33,8 @@ import random
 import re
 import zlib
 
+from charter import eventtypes as ET                                  # the event-type registry: board, recent, feed priorities
+
 DEFAULTS = {
     "enabled": False,
     "budgets": {"core": 2500, "state": 800, "feed": 3000, "recent": 1000, "scratchpad": 2000, "media": 600, "pinned": 1000,
@@ -65,7 +67,7 @@ LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "recent", "r
 DM_ONLY_LOOKUPS = ("search_archive", "run_python")                    # usable as lookups in the DM step (as actions they are actions)
 FILE_ACTIONS = ("write_scratchpad", "write_file", "rename_file", "share_file", "delete_file", "pin", "unpin")
 ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file") + FILE_ACTIONS   # agent actions this module adds
-BOARD_TYPES = ("post", "anon_post", "story", "report", "digest", "gazette")                       # what search_board searches
+BOARD_TYPES = ET.names("board")                                       # what search_board searches (posts and the gazette)
 FETCHED_HEADER = "## Lookups (fetched this turn)"
 KNOWN_MODULES = ("conflict", "jurisdictions", "media", "mortality", "life", "roles", "scholars", "camptypes", "resources")
 
@@ -392,8 +394,8 @@ def _edition_text(e) -> str:
     return f"[{e['id']} r{e['round'] + 1}] {d.get('name', 'edition')}: {d.get('text', '')}"
 
 
-RECENT_KINDS = {"editions": ("edition",), "posts": ("post", "anon_post", "story", "report", "digest"), "gazette": ("gazette",),
-                "dms": ("dm",), "all": ("edition", "post", "anon_post", "story", "report", "digest", "gazette", "dm")}
+RECENT_KINDS = {kind: ET.names("recent:" + kind) for kind in ("editions", "posts", "gazette", "dms")}   # the `recent` look-up
+RECENT_KINDS["all"] = sum(RECENT_KINDS.values(), ())
 
 
 def recent(k, aid, kind="all", n=5) -> str:
@@ -1007,26 +1009,26 @@ first write each turn is free) or can find it again by search."""),
 
 
 # ------------------------------------------------------------------ the turn prompt
-OFFICIAL = {"gazette", "enact", "repeal", "vetoed", "veto_window", "proposal", "proposal_failed", "ballot_open", "ballot_close", "vote",
-            "ruling", "patched", "patch_submitted", "patch_failed", "law_error", "request_fix", "veto_vote", "case_dismissed", "accuse",
-            "respond", "rename", "channel_created", "channel_member", "channel_closed", "dm_limit", "post_hidden", "post_revealed"}
-POSTS = {"post", "anon_post", "story", "report", "digest", "channel_post"}
+OFFICIAL = set(ET.names(feed="official"))                             # feed priority 5 (announcements)
+POSTS = set(ET.names(feed="post"))                                     # feed priority 4 or 6
+OWN_RESULTS = ET.names("own")                                           # your own are in "Your last turns", not your feed
 PRIORITY_NAMES = {1: "events", 2: "results of your actions", 3: "messages to you", 4: "posts mentioning you", 5: "announcements", 6: "posts"}
 POINTERS = {3: "search_dms", 4: "search_board", 6: "search_board"}
 
 
 def _priority(k, aid, e) -> int:
+    """1 events, 2 your own, 3 DMs to you, 4 posts naming you, 5 announcements, 6 other posts and DMs. The type's `feed` comes from
+    the event-type registry, whose lookup fails on an unregistered type (which used to get 1, the highest, by default)."""
     t, d = e["type"], e["data"]
+    feed = ET.get(t).feed
     if e["agent"] == aid:
         return 2
-    if t == "dm":
+    if feed == "message":
         return 3 if d.get("to") == aid else 6
     if t in POSTS:
         said = f"{d.get('headline', '')} {d.get('text', '')}"
         return 4 if re.search(rf"(?<!\w){re.escape(aid)}(?!\w)", said) else 6
-    if t in OFFICIAL:
-        return 5
-    return 1
+    return ET.PRIORITY[feed]
 
 
 def feed_layer(k, aid, since, budget) -> tuple[str, int, dict]:
@@ -1045,7 +1047,7 @@ def feed_layer(k, aid, since, budget) -> tuple[str, int, dict]:
             continue
         if digest_only and e["type"] == "post" and e["agent"] != aid:
             continue
-        if e["agent"] == aid and e["type"] in ("post", "vote", "transfer", "dm", "proposal", "story", "digest", "report", "channel_post"):
+        if e["agent"] == aid and e["type"] in OWN_RESULTS:
             continue                                                    # your own actions are in "Your last turns"
         s = AG.render_event(k, e, aid)
         if not s:

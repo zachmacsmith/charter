@@ -41,6 +41,7 @@ import copy
 import random
 import re
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import context as CTX
 from charter import jurisdictions as J
 from charter import roles as RO
@@ -92,12 +93,9 @@ READER_ACTIONS = ("subscribe", "unsubscribe", "buy_placement", "leak", "answer_p
 SCHOLAR_ACTIONS = ("set_memory_price", "library_permit", "library_remove")
 LIBRARY_ACTIONS = ("buy_memory", "library_deposit", "library_read")
 ACTIONS = EDITOR_ACTIONS + READER_ACTIONS + SCHOLAR_ACTIONS + LIBRARY_ACTIONS
-QUOTABLE = ("post", "anon_post", "dm", "story", "report", "digest", "channel_post", "gazette")
+QUOTABLE = ET.names("quote")                                           # posts, DMs, channel posts and the gazette
 QUOTE_RE = re.compile(r'(["“])([^"“”\n]{12,600})(["”])')
-EVENT_TYPES = ("edition", "annotation", "licence_revoked", "licence_granted", "licence_offer", "licence_bought", "subscribe",
-               "unsubscribe", "subscription_lapsed", "outlet_fee", "placement_offer", "placement_run", "leak", "poll", "poll_answer",
-               "subscriber_list_sent", "outlet_suspended", "official_editor", "media_rule", "outlet_opened", "outlet_closed",
-               "memory_price", "memory_sale", "library_deposit", "library_permit", "library_removed")
+EVENT_TYPES = ET.rendered_by("media")                                # this module renders them (agents.render_event)
 
 
 def config(spec: dict) -> dict:
@@ -1158,6 +1156,9 @@ def render_event(k, e, tag, viewer=None) -> str | None:
         return f"{tag} outlet {d['name']} ({d['outlet']}) {'opened' if t == 'outlet_opened' else 'closed'}"
     if t == "official_editor":
         return f"{tag} law {d.get('law', '')}: the official outlet of {d['jurisdiction']} is edited by {d['agent'] or 'nobody'}"
+    if t == "official_stream":
+        return (f"{tag} law {d.get('law', '')}: " + (f"the public posts of {', '.join(d['members'])} now go out verbatim"
+                                                      if d.get("members") else "its official stream is closed"))
     if t in ("media_rule", "outlet_suspended"):
         return f"{tag} {t.replace('_', ' ')}: " + ", ".join(f"{x}={y}" for x, y in d.items())
     return f"{tag} {t.replace('_', ' ')} {who or ''}: " + ", ".join(f"{x}={y}" for x, y in d.items() if x not in ("shown",))[:400]
