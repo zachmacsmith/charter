@@ -1,0 +1,3009 @@
+{
+"presets": {
+"E4": [
+"[0, \"L1\", \"on_enact\", [], null]",
+"[0, \"L2\", \"on_enact\", [], null]",
+"[0, \"L2\", \"on_round_end\", [0], null]",
+"[1, \"L2\", \"on_round_end\", [1], null]",
+"[2, \"L2\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"structural\", \"id\": \"L2\", \"intent\": \"Crowns redeem at par (1 crown = 1 unit of value) from the reserve; the reserve lends new crowns to Workers while it holds at least half of what the crowns promise, and lends to anyone in default as the lender of last resort.\", \"round\": 0, \"title\": \"Reserve Bank Act\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[0, \"L3\", \"on_round_end\", [0], null]",
+"[1, \"L3\", \"on_round_end\", [1], null]",
+"[1, \"L3\", \"seat\", [[]], null]",
+"[2, \"L3\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"structural\", \"id\": \"L3\", \"intent\": \"Legislators elect one agent who holds surveil.\", \"round\": 0, \"title\": \"Surveillance Office\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[0, \"L4\", \"on_enact\", [], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"structural\", \"id\": \"L4\", \"intent\": \"A coin redeemable for exactly 1 timber; the reserve must hold enough.\", \"round\": 0, \"title\": \"Timber Standard\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[0, \"L5\", \"on_enact\", [], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"structural\", \"id\": \"L5\", \"intent\": \"Agents may lend to each other; debts past due are seized from the borrower's holdings.\", \"round\": 0, \"title\": \"Loan Registry\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[0, \"L6\", \"on_enact\", [], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"structural\", \"id\": \"L6\", \"intent\": \"The legislature, not the press, sets the private-message limit: Media loses dm_rules and every agent gets 3 messages per round.\", \"round\": 0, \"title\": \"Communications Act\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hal\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Erik\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Fen\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hugo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Oda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wim\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Edda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mats\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L7\", \"on_enact\", [], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"structural\", \"id\": \"L7\", \"intent\": \"Agents may lend to each other; nothing is seized on default, and a debt is only as good as the borrower's word.\", \"round\": 1, \"title\": \"Handshake Loans\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L8\", \"on_round_end\", [1], null]",
+"[2, \"L8\", \"on_round_end\", [2], null]",
+"[3, \"L8\", \"on_round_end\", [3], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"structural\", \"id\": \"L8\", \"intent\": \"Each Legislator gets a fixed share of the reserve each round.\", \"round\": 1, \"title\": \"Legislator Salary\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[3, \"L9\", \"on_round_end\", [3], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"structural\", \"id\": \"L9\", \"intent\": \"Board members get a fixed share of the reserve each round.\", \"round\": 1, \"title\": \"Board Stipend\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L10\", \"on_enact\", [], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"structural\", \"id\": \"L10\", \"intent\": \"Mint 1,000 coins once, split equally among all agents; no further minting ever.\", \"round\": 1, \"title\": \"Fixed Issue\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L11\", \"on_round_end\", [1], null]",
+"[2, \"L11\", \"on_round_end\", [2], null]",
+"[3, \"L11\", \"on_round_end\", [3], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"structural\", \"id\": \"L11\", \"intent\": \"Five legislators are drawn at random every 10 rounds.\", \"round\": 1, \"title\": \"Sortition\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L12\", \"on_enact\", [], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"structural\", \"id\": \"L12\", \"intent\": \"The legislature, not the press, sets the private-message limit: Media loses dm_rules and every agent gets 3 messages per round.\", \"round\": 1, \"title\": \"Communications Act\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L13\", \"on_enact\", [], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"structural\", \"id\": \"L13\", \"intent\": \"Everyone can see every agent's balances.\", \"round\": 1, \"title\": \"Transparency\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hal\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Erik\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Fen\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hugo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Oda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wim\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Edda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mats\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L14\", \"on_enact\", [], null]",
+"[2, \"L14\", \"on_round_end\", [2], null]",
+"[3, \"L14\", \"on_round_end\", [3], null]",
+"[4, \"L14\", \"on_round_end\", [4], null]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"structural\", \"id\": \"L14\", \"intent\": \"An unbacked coin issued by Legislators; it is worth nothing at the end unless later backed.\", \"round\": 2, \"title\": \"Scrip\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L15\", \"on_round_end\", [2], null]",
+"[3, \"L15\", \"on_round_end\", [3], null]",
+"[4, \"L15\", \"on_round_end\", [4], null]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"structural\", \"id\": \"L15\", \"intent\": \"Sandbox use costs 2 stone per round.\", \"round\": 2, \"title\": \"Sandbox Licence\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L16\", \"on_round_end\", [2], null]",
+"[3, \"L16\", \"on_round_end\", [3], null]",
+"[4, \"L16\", \"on_round_end\", [4], null]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"structural\", \"id\": \"L16\", \"intent\": \"Legislators elect one agent who holds surveil.\", \"round\": 2, \"title\": \"Surveillance Office\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L17\", \"on_enact\", [], null]",
+"[2, \"L17\", \"on_round_start\", [2], null]",
+"[3, \"L17\", \"on_round_start\", [3], null]",
+"[4, \"L17\", \"on_round_start\", [4], null]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"structural\", \"id\": \"L17\", \"intent\": \"Every open project becomes an assurance contract: if it is not funded by its deadline, every contribution is refunded.\", \"round\": 2, \"title\": \"Assurance Guarantee\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L18\", \"on_round_end\", [2], null]",
+"[3, \"L18\", \"on_round_end\", [3], null]",
+"[4, \"L18\", \"on_round_end\", [4], null]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"structural\", \"id\": \"L18\", \"intent\": \"The Fixer gets a fixed share of the reserve each round.\", \"round\": 2, \"title\": \"Fixer Salary\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"structural\", \"id\": \"L19\", \"intent\": \"10% of every harvest goes to the reserve.\", \"round\": 2, \"title\": \"Harvest Levy\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L20\", \"on_enact\", [], null]",
+"[2, \"L20\", \"on_round_end\", [2], null]",
+"[3, \"L20\", \"on_round_end\", [3], null]",
+"[4, \"L20\", \"on_round_end\", [4], null]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"structural\", \"id\": \"L20\", \"intent\": \"Opens a road to a new camp (refunded if not funded within 6 rounds) and each round pays a quarter of the reserve toward the open project closest to its threshold.\", \"round\": 2, \"title\": \"Public Works Act\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L21\", \"on_round_end\", [2], null]",
+"[3, \"L21\", \"on_round_end\", [3], null]",
+"[4, \"L21\", \"on_round_end\", [4], null]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"structural\", \"id\": \"L21\", \"intent\": \"Five legislators are drawn at random every 10 rounds.\", \"round\": 2, \"title\": \"Sortition\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hal\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Erik\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Abel\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Fen\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hugo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Oda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wim\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Edda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mats\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Sena\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [\"Abel\", \"Ilan\", \"Felix\"], \"rule\": \"majority\"}]"
+],
+"society": [
+"[0, \"L1\", \"on_enact\", [], null]",
+"[0, \"L2\", \"on_round_end\", [0], null]",
+"[1, \"L2\", \"on_round_end\", [1], null]",
+"[2, \"L2\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"structural\", \"id\": \"L2\", \"intent\": \"Holding vote excludes holding any harvest or mint right.\", \"round\": 0, \"title\": \"Conflict of Interest\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L3\", \"on_enact\", [], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"structural\", \"id\": \"L3\", \"intent\": \"No law may suspend an outlet while this law stands.\", \"round\": 0, \"title\": \"Press Freedom\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L4\", \"on_enact\", [], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"structural\", \"id\": \"L4\", \"intent\": \"The proposer owns the first camp's harvest rights outright.\", \"round\": 0, \"title\": \"Camp Enclosure\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L5\", \"on_round_end\", [0], null]",
+"[1, \"L5\", \"on_round_end\", [1], null]",
+"[2, \"L5\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"structural\", \"id\": \"L5\", \"intent\": \"Holding vote excludes holding any harvest or mint right.\", \"round\": 0, \"title\": \"Conflict of Interest\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L6\", \"on_round_end\", [0], null]",
+"[1, \"L6\", \"on_round_end\", [1], null]",
+"[1, \"L6\", \"seat\", [[]], null]",
+"[2, \"L6\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"structural\", \"id\": \"L6\", \"intent\": \"Legislators elect one agent who holds surveil.\", \"round\": 0, \"title\": \"Surveillance Office\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L7\", \"on_enact\", [], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"structural\", \"id\": \"L7\", \"intent\": \"The legislature, not the press, sets the private-message limit: Media loses dm_rules and every agent gets 3 messages per round.\", \"round\": 0, \"title\": \"Communications Act\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L8\", \"on_enact\", [], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"structural\", \"id\": \"L8\", \"intent\": \"No child may be made with extra attack.\", \"round\": 0, \"title\": \"No Soldiers\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L9\", \"on_enact\", [], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"structural\", \"id\": \"L9\", \"intent\": \"A coin redeemable for exactly 1 timber; the reserve must hold enough.\", \"round\": 0, \"title\": \"Timber Standard\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Oda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wim\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Edda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hugo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mats\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Iris\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mads\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Trym\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wilma\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Saga\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Yusuf\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hanne\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Goran\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zane\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wade\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zia\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mads\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Trym\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wilma\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Saga\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hanne\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zia\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"majority\"}]",
+"[1, \"L10\", \"on_enact\", [], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"structural\", \"id\": \"L10\", \"intent\": \"Any Legislator may irreversibly trade vote for a harvest right.\", \"round\": 1, \"title\": \"Renunciation\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"majority\"}]",
+"[1, \"L11\", \"on_enact\", [], null]",
+"[1, \"L11\", \"on_round_end\", [1], null]",
+"[2, \"L11\", \"on_round_end\", [2], null]",
+"[3, \"L11\", \"on_round_end\", [3], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"structural\", \"id\": \"L11\", \"intent\": \"Opens a road to a new camp (refunded if not funded within 6 rounds) and each round pays a quarter of the reserve toward the open project closest to its threshold.\", \"round\": 1, \"title\": \"Public Works Act\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"majority\"}]",
+"[1, \"L12\", \"on_enact\", [], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"structural\", \"id\": \"L12\", \"intent\": \"The proposer owns the first camp's harvest rights outright.\", \"round\": 1, \"title\": \"Camp Enclosure\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"majority\"}]",
+"[1, \"L13\", \"on_round_end\", [1], null]",
+"[2, \"L13\", \"on_round_end\", [2], null]",
+"[3, \"L13\", \"on_round_end\", [3], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"ordinary\", \"id\": \"L13\", \"intent\": \"No post stays hidden: every hidden post is revealed each round.\", \"round\": 1, \"title\": \"Sunlight\"}], {\"electorate\": [\"Lukas\", \"Clara\"], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Oda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wim\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Edda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hugo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mats\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Iris\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mads\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Trym\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wilma\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Saga\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Yusuf\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hanne\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Goran\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zane\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wade\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zia\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Oda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wim\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Edda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hugo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mats\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Iris\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mads\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Trym\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wilma\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Saga\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Yusuf\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hanne\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Goran\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zane\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wade\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zia\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]"
+],
+"society_hooks": [
+"[0, \"L1\", \"on_enact\", [], null]",
+"[0, \"L7\", \"on_enact\", [], null]",
+"[0, \"L8\", \"on_enact\", [], null]",
+"[0, \"L7\", \"on_round_end\", [0], null]",
+"[0, \"L9\", \"on_round_end\", [0], null]",
+"[0, \"L10\", \"on_round_end\", [0], null]",
+"[0, \"L11\", \"on_round_end\", [0], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[1, \"L11\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[2, \"L11\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"structural\", \"id\": \"L11\", \"intent\": \"Holding vote excludes holding any harvest or mint right.\", \"round\": 0, \"title\": \"Conflict of Interest\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L12\", \"on_enact\", [], null]",
+"[0, \"L7\", \"on_round_end\", [0], null]",
+"[0, \"L9\", \"on_round_end\", [0], null]",
+"[0, \"L10\", \"on_round_end\", [0], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"structural\", \"id\": \"L12\", \"intent\": \"No law may suspend an outlet while this law stands.\", \"round\": 0, \"title\": \"Press Freedom\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L13\", \"on_enact\", [], null]",
+"[0, \"L7\", \"on_round_end\", [0], null]",
+"[0, \"L9\", \"on_round_end\", [0], null]",
+"[0, \"L10\", \"on_round_end\", [0], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"structural\", \"id\": \"L13\", \"intent\": \"The proposer owns the first camp's harvest rights outright.\", \"round\": 0, \"title\": \"Camp Enclosure\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L2\", \"on_harvest\", [\"Zia\", \"camp2\", [12, 13, 0, 14, 8, 7, 3, 10], 0.075], 0.0075]",
+"[0, \"L6\", \"on_harvest\", [\"Zia\", \"camp2\", [12, 13, 0, 14, 8, 7, 3, 10], 0.075], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Zia\", \"camp2\", [12, 13, 0, 14, 8, 7, 3, 10], 0.075], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Zia\", \"camp2\", [0, 12, 6, 13, 0, 7, 14, 15], 0.315], 0.0315]",
+"[0, \"L6\", \"on_harvest\", [\"Zia\", \"camp2\", [0, 12, 6, 13, 0, 7, 14, 15], 0.315], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Zia\", \"camp2\", [0, 12, 6, 13, 0, 7, 14, 15], 0.315], 0]",
+"[0, \"L3\", \"on_transfer\", [\"Wim\", \"Edda\", \"timber\", 2.0], 0.06]",
+"[0, \"L4\", \"on_transfer\", [\"Wim\", \"Edda\", \"timber\", 2.0], 0]",
+"[0, \"L3\", \"on_transfer\", [\"Mats\", \"Felix\", \"stone\", 1.0], 0.03]",
+"[0, \"L4\", \"on_transfer\", [\"Mats\", \"Felix\", \"stone\", 1.0], 0]",
+"[0, \"L7\", \"on_round_end\", [0], null]",
+"[0, \"L9\", \"on_round_end\", [0], null]",
+"[0, \"L10\", \"on_round_end\", [0], null]",
+"[0, \"L14\", \"on_round_end\", [0], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[1, \"L14\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[2, \"L14\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"structural\", \"id\": \"L14\", \"intent\": \"Holding vote excludes holding any harvest or mint right.\", \"round\": 0, \"title\": \"Conflict of Interest\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L7\", \"on_round_end\", [0], null]",
+"[0, \"L9\", \"on_round_end\", [0], null]",
+"[0, \"L10\", \"on_round_end\", [0], null]",
+"[0, \"L15\", \"on_round_end\", [0], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[1, \"L15\", \"on_round_end\", [1], null]",
+"[1, \"L15\", \"seat\", [[]], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[2, \"L15\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"structural\", \"id\": \"L15\", \"intent\": \"Legislators elect one agent who holds surveil.\", \"round\": 0, \"title\": \"Surveillance Office\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L3\", \"on_transfer\", [\"Yusuf\", \"Iris\", \"timber\", 2.0], 0.06]",
+"[0, \"L4\", \"on_transfer\", [\"Yusuf\", \"Iris\", \"timber\", 2.0], 0]",
+"[0, \"L3\", \"on_transfer\", [\"Felix\", \"Goran\", \"timber\", 1.0], 0.03]",
+"[0, \"L4\", \"on_transfer\", [\"Felix\", \"Goran\", \"timber\", 1.0], 0]",
+"[0, \"L16\", \"on_enact\", [], null]",
+"[0, \"L7\", \"on_round_end\", [0], null]",
+"[0, \"L9\", \"on_round_end\", [0], null]",
+"[0, \"L10\", \"on_round_end\", [0], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"structural\", \"id\": \"L16\", \"intent\": \"The legislature, not the press, sets the private-message limit: Media loses dm_rules and every agent gets 3 messages per round.\", \"round\": 0, \"title\": \"Communications Act\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L17\", \"on_enact\", [], null]",
+"[0, \"L7\", \"on_round_end\", [0], null]",
+"[0, \"L9\", \"on_round_end\", [0], null]",
+"[0, \"L10\", \"on_round_end\", [0], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"structural\", \"id\": \"L17\", \"intent\": \"No child may be made with extra attack.\", \"round\": 0, \"title\": \"No Soldiers\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L3\", \"on_transfer\", [\"Oda\", \"Greta\", \"timber\", 1.0], 0.03]",
+"[0, \"L4\", \"on_transfer\", [\"Oda\", \"Greta\", \"timber\", 1.0], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Edda\", \"camp1\", [6, 1, 4, 8], 4.429], 0.44290000000000007]",
+"[0, \"L6\", \"on_harvest\", [\"Edda\", \"camp1\", [6, 1, 4, 8], 4.429], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Edda\", \"camp1\", [6, 1, 4, 8], 4.429], 0]",
+"[0, \"L3\", \"on_transfer\", [\"Cleo\", \"Clara\", \"timber\", 2.0], 0.06]",
+"[0, \"L4\", \"on_transfer\", [\"Cleo\", \"Clara\", \"timber\", 2.0], 0]",
+"[0, \"L3\", \"on_transfer\", [\"Cleo\", \"Clara\", \"timber\", 1.0], 0.03]",
+"[0, \"L4\", \"on_transfer\", [\"Cleo\", \"Clara\", \"timber\", 1.0], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Cleo\", \"camp2\", [4, 6, 4, 1, 10, 6, 5, 9], 0.266], 0.026600000000000002]",
+"[0, \"L6\", \"on_harvest\", [\"Cleo\", \"camp2\", [4, 6, 4, 1, 10, 6, 5, 9], 0.266], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Cleo\", \"camp2\", [4, 6, 4, 1, 10, 6, 5, 9], 0.266], 0]",
+"[0, \"L18\", \"on_enact\", [], null]",
+"[0, \"L7\", \"on_round_end\", [0], null]",
+"[0, \"L9\", \"on_round_end\", [0], null]",
+"[0, \"L10\", \"on_round_end\", [0], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"structural\", \"id\": \"L18\", \"intent\": \"A coin redeemable for exactly 1 timber; the reserve must hold enough.\", \"round\": 0, \"title\": \"Timber Standard\"}], {\"electorate\": [\"Greta\", \"Lukas\", \"Clara\", \"Siv\"], \"rule\": \"majority\"}]",
+"[0, \"L2\", \"on_harvest\", [\"Mads\", \"camp2\", [10, 5, 8, 15, 0, 13, 0, 1], 0.222], 0.0222]",
+"[0, \"L6\", \"on_harvest\", [\"Mads\", \"camp2\", [10, 5, 8, 15, 0, 13, 0, 1], 0.222], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Mads\", \"camp2\", [10, 5, 8, 15, 0, 13, 0, 1], 0.222], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Mads\", \"camp2\", [4, 8, 8, 12, 12, 5, 2, 7], 0.333], 0.0333]",
+"[0, \"L6\", \"on_harvest\", [\"Mads\", \"camp2\", [4, 8, 8, 12, 12, 5, 2, 7], 0.333], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Mads\", \"camp2\", [4, 8, 8, 12, 12, 5, 2, 7], 0.333], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Ilan\", \"camp1\", [8, 0, 8, 1], 5.74], 0.5740000000000001]",
+"[0, \"L6\", \"on_harvest\", [\"Ilan\", \"camp1\", [8, 0, 8, 1], 5.74], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Ilan\", \"camp1\", [8, 0, 8, 1], 5.74], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Zane\", \"camp3\", [5], 10.948], 1.0948]",
+"[0, \"L6\", \"on_harvest\", [\"Zane\", \"camp3\", [5], 10.948], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Zane\", \"camp3\", [5], 10.948], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Zia\", \"camp3\", [3], 6.569], 0.6569]",
+"[0, \"L6\", \"on_harvest\", [\"Zia\", \"camp3\", [3], 6.569], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Zia\", \"camp3\", [3], 6.569], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Oda\", \"camp4\", [6], 0.053], 0.0053]",
+"[0, \"L6\", \"on_harvest\", [\"Oda\", \"camp4\", [6], 0.053], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Oda\", \"camp4\", [6], 0.053], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Cleo\", \"camp5\", [0], 0.0], 0.0]",
+"[0, \"L6\", \"on_harvest\", [\"Cleo\", \"camp5\", [0], 0.0], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Cleo\", \"camp5\", [0], 0.0], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Edda\", \"camp5\", [1], 0.0], 0.0]",
+"[0, \"L6\", \"on_harvest\", [\"Edda\", \"camp5\", [1], 0.0], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Edda\", \"camp5\", [1], 0.0], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Iris\", \"camp5\", [1], 0.0], 0.0]",
+"[0, \"L6\", \"on_harvest\", [\"Iris\", \"camp5\", [1], 0.0], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Iris\", \"camp5\", [1], 0.0], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Mads\", \"camp5\", [0], 0.0], 0.0]",
+"[0, \"L6\", \"on_harvest\", [\"Mads\", \"camp5\", [0], 0.0], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Mads\", \"camp5\", [0], 0.0], 0]",
+"[0, \"L7\", \"on_round_end\", [0], null]",
+"[0, \"L9\", \"on_round_end\", [0], null]",
+"[0, \"L10\", \"on_round_end\", [0], null]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Oda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wim\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Edda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hugo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mats\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Iris\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mads\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Trym\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wilma\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Saga\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Yusuf\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hanne\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Goran\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zane\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wade\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zia\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mads\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Trym\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wilma\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Saga\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hanne\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zia\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[0, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[0, \"L3\", \"on_transfer\", [\"Greta\", \"Oda\", \"timber\", 100.0], 3.0]",
+"[0, \"L4\", \"on_transfer\", [\"Greta\", \"Oda\", \"timber\", 100.0], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[0, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 0, \"title\": \"probe\"}], {\"electorate\": [\"Clara\"], \"rule\": \"majority\"}]",
+"[0, \"L3\", \"on_transfer\", [\"Greta\", \"Clara\", \"timber\", 100.0], 3.0]",
+"[0, \"L4\", \"on_transfer\", [\"Greta\", \"Clara\", \"timber\", 100.0], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[0, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[0, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[0, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[0, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[1, \"L3\", \"on_transfer\", [\"Clara\", \"Cleo\", \"timber\", 1.0], 0.03]",
+"[1, \"L4\", \"on_transfer\", [\"Clara\", \"Cleo\", \"timber\", 1.0], 0]",
+"[1, \"L3\", \"on_transfer\", [\"Cleo\", \"Clara\", \"timber\", 1.0], 0.03]",
+"[1, \"L4\", \"on_transfer\", [\"Cleo\", \"Clara\", \"timber\", 1.0], 0]",
+"[1, \"L3\", \"on_transfer\", [\"Clara\", \"Cleo\", \"timber\", 1.0], 0.03]",
+"[1, \"L4\", \"on_transfer\", [\"Clara\", \"Cleo\", \"timber\", 1.0], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Zia\", \"camp2\", [15, 14, 12, 5, 7, 7, 9, 14], 0.0], 0.0]",
+"[1, \"L6\", \"on_harvest\", [\"Zia\", \"camp2\", [15, 14, 12, 5, 7, 7, 9, 14], 0.0], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Zia\", \"camp2\", [15, 14, 12, 5, 7, 7, 9, 14], 0.0], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Zia\", \"camp2\", [6, 2, 1, 0, 0, 15, 10, 12], 0.315], 0.0315]",
+"[1, \"L6\", \"on_harvest\", [\"Zia\", \"camp2\", [6, 2, 1, 0, 0, 15, 10, 12], 0.315], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Zia\", \"camp2\", [6, 2, 1, 0, 0, 15, 10, 12], 0.315], 0]",
+"[1, \"L19\", \"on_enact\", [], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[3, \"L7\", \"on_round_end\", [3], null]",
+"[3, \"L9\", \"on_round_end\", [3], null]",
+"[3, \"L10\", \"on_round_end\", [3], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"structural\", \"id\": \"L19\", \"intent\": \"An Office of the Historian: the proposer edits the official outlet and writes a narrative beside the statistics.\", \"round\": 1, \"title\": \"Official Historian\"}], {\"electorate\": [\"Clara\"], \"rule\": \"majority\"}]",
+"[1, \"L20\", \"on_enact\", [], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[3, \"L7\", \"on_round_end\", [3], null]",
+"[3, \"L9\", \"on_round_end\", [3], null]",
+"[3, \"L10\", \"on_round_end\", [3], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"ordinary\", \"id\": \"L20\", \"intent\": \"The official outlet also publishes every agent's holdings, harvests and transfers.\", \"round\": 1, \"title\": \"Open Statistics\"}], {\"electorate\": [\"Clara\"], \"rule\": \"majority\"}]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[1, \"L21\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[2, \"L21\", \"on_round_end\", [2], null]",
+"[3, \"L7\", \"on_round_end\", [3], null]",
+"[3, \"L9\", \"on_round_end\", [3], null]",
+"[3, \"L10\", \"on_round_end\", [3], null]",
+"[3, \"L21\", \"on_round_end\", [3], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"structural\", \"id\": \"L21\", \"intent\": \"Legislators elect one agent who holds surveil.\", \"round\": 1, \"title\": \"Surveillance Office\"}], {\"electorate\": [\"Clara\"], \"rule\": \"majority\"}]",
+"[1, \"L22\", \"on_enact\", [], null]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[3, \"L7\", \"on_round_end\", [3], null]",
+"[3, \"L9\", \"on_round_end\", [3], null]",
+"[3, \"L10\", \"on_round_end\", [3], null]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"L22\", \"intent\": \"While an outside power's tribute demand is open, ordinary and structural laws proposed by this law's proposer pass at once; otherwise all Legislators vote by majority.\", \"round\": 1, \"title\": \"Defence Emergency\"}], {\"electorate\": [\"Clara\"], \"rule\": \"two_thirds\"}]",
+"[1, \"L2\", \"on_harvest\", [\"Cleo\", \"camp2\", [12, 10, 8, 8, 7, 7, 1, 5], 0.207], 0.0207]",
+"[1, \"L6\", \"on_harvest\", [\"Cleo\", \"camp2\", [12, 10, 8, 8, 7, 7, 1, 5], 0.207], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Cleo\", \"camp2\", [12, 10, 8, 8, 7, 7, 1, 5], 0.207], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Cleo\", \"camp2\", [11, 13, 6, 13, 2, 8, 2, 8], 0.022], 0.0022]",
+"[1, \"L6\", \"on_harvest\", [\"Cleo\", \"camp2\", [11, 13, 6, 13, 2, 8, 2, 8], 0.022], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Cleo\", \"camp2\", [11, 13, 6, 13, 2, 8, 2, 8], 0.022], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Mads\", \"camp2\", [2, 8, 10, 2, 9, 1, 12, 1], 0.292], 0.0292]",
+"[1, \"L6\", \"on_harvest\", [\"Mads\", \"camp2\", [2, 8, 10, 2, 9, 1, 12, 1], 0.292], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Mads\", \"camp2\", [2, 8, 10, 2, 9, 1, 12, 1], 0.292], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Mads\", \"camp2\", [8, 12, 3, 9, 3, 13, 7, 6], 0.341], 0.034100000000000005]",
+"[1, \"L6\", \"on_harvest\", [\"Mads\", \"camp2\", [8, 12, 3, 9, 3, 13, 7, 6], 0.341], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Mads\", \"camp2\", [8, 12, 3, 9, 3, 13, 7, 6], 0.341], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Zia\", \"camp3\", [3], 9.77], 0.977]",
+"[1, \"L6\", \"on_harvest\", [\"Zia\", \"camp3\", [3], 9.77], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Zia\", \"camp3\", [3], 9.77], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Ilan\", \"camp5\", [1], 0.0], 0.0]",
+"[1, \"L6\", \"on_harvest\", [\"Ilan\", \"camp5\", [1], 0.0], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Ilan\", \"camp5\", [1], 0.0], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Wilma\", \"camp5\", [1], 0.0], 0.0]",
+"[1, \"L6\", \"on_harvest\", [\"Wilma\", \"camp5\", [1], 0.0], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Wilma\", \"camp5\", [1], 0.0], 0]",
+"[1, \"L7\", \"on_round_end\", [1], null]",
+"[1, \"L9\", \"on_round_end\", [1], null]",
+"[1, \"L10\", \"on_round_end\", [1], null]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Oda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wim\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Edda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hugo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mats\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Iris\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mads\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Trym\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wilma\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Saga\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Yusuf\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hanne\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Goran\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zane\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wade\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zia\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[1, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[1, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[1, \"L3\", \"on_transfer\", [\"Greta\", \"Oda\", \"timber\", 100.0], 3.0]",
+"[1, \"L4\", \"on_transfer\", [\"Greta\", \"Oda\", \"timber\", 100.0], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[1, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[1, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 1, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[1, \"L3\", \"on_transfer\", [\"Greta\", \"Finn\", \"timber\", 100.0], 3.0]",
+"[1, \"L4\", \"on_transfer\", [\"Greta\", \"Finn\", \"timber\", 100.0], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[1, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[1, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[1, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[1, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[2, \"L7\", \"on_round_end\", [2], null]",
+"[2, \"L9\", \"on_round_end\", [2], null]",
+"[2, \"L10\", \"on_round_end\", [2], null]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Greta\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Oda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Cleo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wim\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Edda\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Ilan\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hugo\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Lukas\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Felix\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mats\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Clara\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Siv\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Iris\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Mads\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Trym\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wilma\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Saga\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Yusuf\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Hanne\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Goran\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zane\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Wade\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Zia\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"strict\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"procedural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"two_thirds\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"ordinary\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[2, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[2, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[2, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[2, \"L3\", \"on_transfer\", [\"Greta\", \"Oda\", \"timber\", 100.0], 3.0]",
+"[2, \"L4\", \"on_transfer\", [\"Greta\", \"Oda\", \"timber\", 100.0], 0]",
+"[2, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[2, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[2, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[2, \"L1\", \"majority\", [{\"__class__\": \"Proposal\", \"author\": \"Finn\", \"cls\": \"structural\", \"id\": \"probe\", \"intent\": \"probe\", \"round\": 2, \"title\": \"probe\"}], {\"electorate\": [], \"rule\": \"majority\"}]",
+"[2, \"L3\", \"on_transfer\", [\"Greta\", \"Finn\", \"timber\", 100.0], 3.0]",
+"[2, \"L4\", \"on_transfer\", [\"Greta\", \"Finn\", \"timber\", 100.0], 0]",
+"[2, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[2, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[2, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[2, \"L2\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 10.0]",
+"[2, \"L6\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]",
+"[2, \"L7\", \"on_harvest\", [\"Greta\", \"camp1\", [0, 0, 0, 0], 100.0], 0]"
+]
+},
+"scenario": {
+"calls": [
+"[0, \"L1\", \"on_enact\", [], null]",
+"[0, \"L1\", \"on_harvest\", [\"Sena\", \"camp4\", [1, 1, 1, 1, 1, 1], 0.0], 1]",
+"[0, \"L2\", \"on_harvest\", [\"Sena\", \"camp4\", [1, 1, 1, 1, 1, 1], 0.0], true]",
+"[0, \"L1\", \"on_harvest\", [\"Sena\", \"camp4\", [2, 2, 2, 2, 2, 2], 7.726], 1]",
+"[0, \"L2\", \"on_harvest\", [\"Sena\", \"camp4\", [2, 2, 2, 2, 2, 2], 7.726], true]",
+"[0, \"L1\", \"on_transfer\", [\"Sena\", \"Erik\", \"timber\", 2.0], 0.5]",
+"[0, \"L2\", \"on_transfer\", [\"Sena\", \"Erik\", \"timber\", 2.0], 0.25]",
+"[0, \"L1\", \"on_transfer\", [\"Sena\", \"Erik\", \"timber\", 9.0], false]",
+"[0, \"L2\", \"on_transfer\", [\"Sena\", \"Erik\", \"timber\", 9.0], 0.25]",
+"[0, \"L1\", \"on_dm\", [\"Sena\", \"Erik\", \"hello there\", false], null]",
+"[0, \"L2\", \"on_dm\", [\"Sena\", \"Erik\", \"hello there\", false], null]",
+"[0, \"L1\", \"on_dm\", [\"Sena\", \"Erik\", null, true], null]",
+"[0, \"L2\", \"on_dm\", [\"Sena\", \"Erik\", null, true], null]",
+"[0, \"L1\", \"on_transfer\", [\"Erik\", \"Sena\", \"timber\", 1.0], 0.5]",
+"[0, \"L2\", \"on_transfer\", [\"Erik\", \"Sena\", \"timber\", 1.0], 0.25]",
+"[0, \"L1\", \"on_dm\", [\"Erik\", \"Sena\", \"thanks\", false], null]",
+"[0, \"L2\", \"on_dm\", [\"Erik\", \"Sena\", \"thanks\", false], null]",
+"[0, \"L1\", \"on_post\", [\"Sena\", \"a plain post\"], null]",
+"[0, \"L2\", \"on_post\", [\"Sena\", \"a plain post\"], null]",
+"[0, \"L1\", \"on_post\", [\"Sena\", \"please hide this\"], null]",
+"[0, \"L2\", \"on_post\", [\"Sena\", \"please hide this\"], null]",
+"[0, \"L1\", \"on_post\", [\"anonymous\", \"anonymous hide\"], null]",
+"[0, \"L2\", \"on_post\", [\"anonymous\", \"anonymous hide\"], null]",
+"[0, \"L1\", \"on_post\", [\"Greta\", \"News nothing to see\"], null]",
+"[0, \"L2\", \"on_post\", [\"Greta\", \"News nothing to see\"], null]",
+"[0, \"L1\", \"on_transfer\", [\"Erik\", \"Sena\", \"stone\", 1.0], 0.5]",
+"[0, \"L2\", \"on_transfer\", [\"Erik\", \"Sena\", \"stone\", 1.0], 0.25]",
+"[0, \"L1\", \"on_round_end\", [0], null]",
+"[0, \"L2\", \"on_post\", [\"Greta\", \"Story hide this story\"], null]",
+"[0, \"L2\", \"on_harvest\", [\"Sena\", \"camp1\", [0, 0, 0, 0, 0, 0], 100.0], true]",
+"[0, \"L2\", \"on_transfer\", [\"Sena\", \"Erik\", \"timber\", 100.0], 0.25]",
+"[0, \"L2\", \"on_transfer\", [\"Sena\", \"Abel\", \"timber\", 100.0], 0.25]"
+],
+"effects": {
+"blocked_transfers": 1,
+"burned": {
+"pc": 2.0
+},
+"fines": 1.0,
+"from_reserve_by_class": {
+"worker": 0.9633333333333334
+},
+"from_reserve_recipients": [
+"Erik",
+"Sena"
+],
+"gazette_calls": 0,
+"harvest_deducted": 24.0,
+"harvest_yield": 92.712,
+"harvests_gazetted": 0,
+"kernel_refusals": [
+"grant veto",
+"set_dm_limit on board",
+"limit_actions on board",
+"suspend veto",
+"revoke veto"
+],
+"minted": {
+"pc": 5.0
+},
+"minted_to_class": {
+"worker": 5.0
+},
+"sanctioned_posts": 0,
+"to_reserve": {
+"deposit": 4.0,
+"fine": 1.0,
+"harvest_fee": 2.0,
+"law:L1": 0.30000000000000004,
+"transfer_tax": 3.0
+},
+"transfer_qty": 5.0,
+"transfer_taxed": 3.0
+},
+"events": [
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "setup"
+},
+{
+"hook": "on_enact",
+"law": "L1"
+}
+],
+"data": {
+"agent": "Sena",
+"change": "grant",
+"law": "L1",
+"right": "probe_right"
+},
+"id": "e1",
+"round": 0,
+"type": "rights",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "setup"
+},
+{
+"hook": "on_enact",
+"law": "L1"
+}
+],
+"data": {
+"agent": "Sena",
+"change": "grant",
+"law": "L1",
+"right": "anon"
+},
+"id": "e2",
+"round": 0,
+"type": "rights",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "setup"
+},
+{
+"hook": "on_enact",
+"law": "L1"
+}
+],
+"data": {
+"agent": "Sena",
+"change": "grant",
+"law": "L1",
+"right": "encrypt"
+},
+"id": "e3",
+"round": 0,
+"type": "rights",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "setup"
+},
+{
+"hook": "on_enact",
+"law": "L1"
+}
+],
+"data": {
+"currency": "pc",
+"law": "L1",
+"qty": 5.0,
+"to": "Sena"
+},
+"id": "e4",
+"round": 0,
+"type": "mint",
+"vis": "monitor"
+},
+{
+"agent": "law:L1",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "setup"
+},
+{
+"hook": "on_enact",
+"law": "L1"
+}
+],
+"data": {
+"agent": null,
+"n": 4
+},
+"id": "e5",
+"round": 0,
+"type": "dm_limit",
+"vis": "public"
+},
+{
+"agent": "law:L1",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "setup"
+},
+{
+"hook": "on_enact",
+"law": "L1"
+}
+],
+"data": {
+"agent": "Erik",
+"n": 3
+},
+"id": "e6",
+"round": 0,
+"type": "dm_limit",
+"vis": "public"
+},
+{
+"agent": "constitution",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "setup"
+}
+],
+"data": {
+"class": "structural",
+"law": "L1",
+"title": "Hook Probe A"
+},
+"id": "e7",
+"round": 0,
+"type": "enact",
+"vis": "public"
+},
+{
+"agent": "constitution",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "setup"
+}
+],
+"data": {
+"class": "structural",
+"law": "L2",
+"title": "Hook Probe B"
+},
+"id": "e8",
+"round": 0,
+"type": "enact",
+"vis": "public"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "harvest"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "stone",
+"qty": 0.5,
+"src": "Sena",
+"why": "harvest_fee"
+},
+"id": "e9",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "harvest"
+}
+],
+"data": {
+"camp": "camp4",
+"deducted": 0.0,
+"efficiency": 0.0,
+"noise": -0.1074,
+"stock_before": 98.099,
+"x": [
+1,
+1,
+1,
+1,
+1,
+1
+],
+"yield": 0.0
+},
+"id": "e10",
+"round": 0,
+"type": "harvest",
+"vis": [
+"Sena"
+]
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "harvest"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "stone",
+"qty": 0.5,
+"src": "Sena",
+"why": "harvest_fee"
+},
+"id": "e11",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "harvest"
+}
+],
+"data": {
+"camp": "camp4",
+"deducted": 2.0,
+"efficiency": 1.0,
+"noise": -0.1214,
+"stock_before": 98.099,
+"x": [
+2,
+2,
+2,
+2,
+2,
+2
+],
+"yield": 7.726
+},
+"id": "e12",
+"round": 0,
+"type": "harvest",
+"vis": [
+"Sena"
+]
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "transfer"
+}
+],
+"data": {
+"dst": "Erik",
+"item": "timber",
+"qty": 1.25,
+"src": "Sena",
+"why": "transfer"
+},
+"id": "e13",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "transfer"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "timber",
+"qty": 0.75,
+"src": "Sena",
+"why": "transfer_tax"
+},
+"id": "e14",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "transfer"
+}
+],
+"data": {
+"item": "timber",
+"qty": 2.0,
+"tax": 0.75,
+"to": "Erik"
+},
+"id": "e15",
+"round": 0,
+"type": "transfer",
+"vis": [
+"Sena",
+"Erik"
+]
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "transfer"
+}
+],
+"data": {
+"item": "timber",
+"qty": 9.0,
+"to": "Erik"
+},
+"id": "e16",
+"round": 0,
+"type": "transfer_blocked",
+"vis": [
+"Sena",
+"Erik"
+]
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "dm"
+}
+],
+"data": {
+"encrypted": false,
+"text": "hello there",
+"to": "Erik"
+},
+"id": "e17",
+"round": 0,
+"type": "dm",
+"vis": [
+"Sena",
+"Erik"
+]
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "dm"
+},
+{
+"hook": "on_dm",
+"law": "L1"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "timber",
+"qty": 0.1,
+"src": "Sena",
+"why": "law:L1"
+},
+"id": "e18",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "dm"
+}
+],
+"data": {
+"encrypted": true,
+"text": "secret",
+"to": "Erik"
+},
+"id": "e19",
+"round": 0,
+"type": "dm",
+"vis": [
+"Sena",
+"Erik"
+]
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "dm"
+},
+{
+"hook": "on_dm",
+"law": "L1"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "timber",
+"qty": 0.1,
+"src": "Sena",
+"why": "law:L1"
+},
+"id": "e20",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Erik",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Erik:0",
+"turn": "Erik"
+},
+{
+"action": "reply"
+}
+],
+"data": {
+"dst": "Sena",
+"item": "timber",
+"qty": 0.25,
+"src": "Erik",
+"why": "transfer"
+},
+"id": "e21",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Erik",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Erik:0",
+"turn": "Erik"
+},
+{
+"action": "reply"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "timber",
+"qty": 0.75,
+"src": "Erik",
+"why": "transfer_tax"
+},
+"id": "e22",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Erik",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Erik:0",
+"turn": "Erik"
+},
+{
+"action": "reply"
+}
+],
+"data": {
+"item": "timber",
+"qty": 1.0,
+"reply_to": "e19",
+"tax": 0.75,
+"to": "Sena"
+},
+"id": "e23",
+"round": 0,
+"type": "transfer",
+"vis": [
+"Erik",
+"Sena"
+]
+},
+{
+"agent": "Erik",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Erik:0",
+"turn": "Erik"
+},
+{
+"action": "reply"
+}
+],
+"data": {
+"encrypted": false,
+"payment": {
+"item": "timber",
+"qty": 1.0
+},
+"reply_to": "e19",
+"text": "thanks",
+"to": "Sena"
+},
+"id": "e24",
+"round": 0,
+"type": "dm",
+"vis": [
+"Erik",
+"Sena"
+]
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Erik:0",
+"turn": "Erik"
+},
+{
+"action": "reply"
+},
+{
+"hook": "on_dm",
+"law": "L1"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "timber",
+"qty": 0.1,
+"src": "Erik",
+"why": "law:L1"
+},
+"id": "e25",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "post"
+}
+],
+"data": {
+"text": "a plain post",
+"title": null
+},
+"id": "e26",
+"round": 0,
+"type": "post",
+"vis": "public"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "post"
+}
+],
+"data": {
+"text": "please hide this",
+"title": null
+},
+"id": "e27",
+"round": 0,
+"type": "post",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "post"
+},
+{
+"hook": "on_post",
+"law": "L1"
+}
+],
+"data": {
+"event": "e27",
+"law": "L1"
+},
+"id": "e28",
+"round": 0,
+"type": "post_hidden",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "anon_post"
+}
+],
+"data": {
+"text": "anonymous hide"
+},
+"id": "e29",
+"round": 0,
+"type": "anon_post",
+"vis": "public"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "anon_post"
+}
+],
+"data": {
+"author": "Sena",
+"event": "e29"
+},
+"id": "e30",
+"round": 0,
+"type": "anon_truth",
+"vis": "monitor"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "anon_post"
+},
+{
+"hook": "on_post",
+"law": "L1"
+}
+],
+"data": {
+"event": "e29",
+"law": "L1"
+},
+"id": "e31",
+"round": 0,
+"type": "post_hidden",
+"vis": "public"
+},
+{
+"agent": "Greta",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Greta:0",
+"turn": "Greta"
+},
+{
+"action": "publish"
+}
+],
+"data": {
+"headline": "News",
+"text": "nothing to see"
+},
+"id": "e32",
+"round": 0,
+"type": "story",
+"vis": "public"
+},
+{
+"agent": "Greta",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Greta:0",
+"turn": "Greta"
+},
+{
+"action": "report"
+}
+],
+"data": {
+"about": "Sena",
+"source": "e26",
+"text": "someone posted"
+},
+"id": "e33",
+"round": 0,
+"type": "report",
+"vis": "public"
+},
+{
+"agent": "Greta",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Greta:0",
+"turn": "Greta"
+},
+{
+"action": "report"
+}
+],
+"data": {
+"original": "a plain post",
+"report": "e33",
+"reported": "someone posted",
+"source": "e26",
+"verbatim": false
+},
+"id": "e34",
+"round": 0,
+"type": "report_truth",
+"vis": "monitor"
+},
+{
+"agent": "Greta",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Greta:0",
+"turn": "Greta"
+},
+{
+"action": "set_dm_limit"
+}
+],
+"data": {
+"agent": null,
+"n": 6
+},
+"id": "e35",
+"round": 0,
+"type": "dm_limit",
+"vis": "public"
+},
+{
+"agent": "Greta",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Greta:0",
+"turn": "Greta"
+},
+{
+"action": "set_dm_limit"
+}
+],
+"data": {
+"agent": "Erik",
+"n": 2
+},
+"id": "e36",
+"round": 0,
+"type": "dm_limit",
+"vis": "public"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "deposit"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "timber",
+"qty": 2.0,
+"src": "Sena",
+"why": "deposit"
+},
+"id": "e37",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "deposit"
+}
+],
+"data": {
+"coins": 0.2158273381294964,
+"currency": "pc",
+"item": "timber",
+"qty": 2.0
+},
+"id": "e38",
+"round": 0,
+"type": "deposit",
+"vis": [
+"Sena"
+]
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "redeem"
+}
+],
+"data": {
+"dst": "Sena",
+"item": "timber",
+"qty": 0.4633333333333334,
+"src": "reserve",
+"why": "redeem"
+},
+"id": "e39",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "redeem"
+}
+],
+"data": {
+"coins": 0.05,
+"currency": "pc",
+"item": "timber",
+"qty": 0.4633333333333334
+},
+"id": "e40",
+"round": 0,
+"type": "redeem",
+"vis": [
+"Sena"
+]
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "deposit"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "stone",
+"qty": 1.0,
+"src": "Sena",
+"why": "deposit"
+},
+"id": "e41",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Sena",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Sena:0",
+"turn": "Sena"
+},
+{
+"action": "deposit"
+}
+],
+"data": {
+"coins": 0.21582733567719176,
+"currency": "pc",
+"item": "stone",
+"qty": 1.0
+},
+"id": "e42",
+"round": 0,
+"type": "deposit",
+"vis": [
+"Sena"
+]
+},
+{
+"agent": "Erik",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Erik:0",
+"turn": "Erik"
+},
+{
+"action": "transfer"
+}
+],
+"data": {
+"dst": "Sena",
+"item": "stone",
+"qty": 0.25,
+"src": "Erik",
+"why": "transfer"
+},
+"id": "e43",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Erik",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Erik:0",
+"turn": "Erik"
+},
+{
+"action": "transfer"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "stone",
+"qty": 0.75,
+"src": "Erik",
+"why": "transfer_tax"
+},
+"id": "e44",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Erik",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Erik:0",
+"turn": "Erik"
+},
+{
+"action": "transfer"
+}
+],
+"data": {
+"item": "stone",
+"qty": 1.0,
+"tax": 0.75,
+"to": "Sena"
+},
+"id": "e45",
+"round": 0,
+"type": "transfer",
+"vis": [
+"Erik",
+"Sena"
+]
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "end_of_round"
+},
+{
+"hook": "on_round_end",
+"law": "L1"
+}
+],
+"data": {
+"dst": "reserve",
+"item": "timber",
+"qty": 1.0,
+"src": "Erik",
+"why": "fine"
+},
+"id": "e46",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "end_of_round"
+},
+{
+"hook": "on_round_end",
+"law": "L1"
+}
+],
+"data": {
+"agent": "Erik",
+"law": "L1",
+"rounds": 1,
+"suspend": "probe_right"
+},
+"id": "e47",
+"round": 0,
+"type": "sanction",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "end_of_round"
+},
+{
+"hook": "on_round_end",
+"law": "L1"
+}
+],
+"data": {
+"agent": "Erik",
+"law": "L1",
+"limit_actions": 2,
+"rounds": 1
+},
+"id": "e48",
+"round": 0,
+"type": "sanction",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "end_of_round"
+},
+{
+"hook": "on_round_end",
+"law": "L1"
+}
+],
+"data": {
+"agent": "Sena",
+"change": "revoke",
+"law": "L1",
+"right": "probe_right"
+},
+"id": "e49",
+"round": 0,
+"type": "rights",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "end_of_round"
+},
+{
+"hook": "on_round_end",
+"law": "L1"
+}
+],
+"data": {
+"event": "e27",
+"law": "L1"
+},
+"id": "e50",
+"round": 0,
+"type": "post_revealed",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "end_of_round"
+},
+{
+"hook": "on_round_end",
+"law": "L1"
+}
+],
+"data": {
+"event": "e29",
+"law": "L1"
+},
+"id": "e51",
+"round": 0,
+"type": "post_revealed",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "end_of_round"
+},
+{
+"hook": "on_round_end",
+"law": "L1"
+}
+],
+"data": {
+"dst": "Erik",
+"item": "timber",
+"qty": 0.5,
+"src": "reserve",
+"why": "law:L1"
+},
+"id": "e52",
+"round": 0,
+"type": "move",
+"vis": "monitor"
+},
+{
+"agent": "Greta",
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Greta:0",
+"turn": "Greta"
+},
+{
+"action": "publish"
+}
+],
+"data": {
+"headline": "Story",
+"text": "hide this story"
+},
+"id": "e53",
+"round": 0,
+"type": "story",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Greta:0",
+"turn": "Greta"
+},
+{
+"action": "publish"
+},
+{
+"hook": "on_post",
+"law": "L1"
+}
+],
+"data": {
+"error": "None is not a post",
+"law": "L1"
+},
+"id": "e54",
+"round": 0,
+"type": "law_error",
+"vis": "public"
+},
+{
+"agent": null,
+"cause": [
+{
+"round": 0
+},
+{
+"phase": "turns"
+},
+{
+"call": "r0:Greta:0",
+"turn": "Greta"
+},
+{
+"action": "publish"
+},
+{
+"hook": "on_post",
+"law": "L1"
+}
+],
+"data": {
+"text": "Law L1 'Hook Probe A' was suspended after a runtime error: None is not a post. The Fixer has been called."
+},
+"id": "e55",
+"round": 0,
+"type": "gazette",
+"vis": "public"
+}
+],
+"laws": {
+"L1": {},
+"L2": {
+"dms": 3,
+"n": 5
+}
+},
+"probes": [
+{
+"deduction_frac": 0.0,
+"gazetted": 0,
+"tax_frac": 0.0
+},
+{
+"deduction_frac": 0.0,
+"gazetted": 0,
+"tax_frac": 0.0025
+},
+{
+"deduction_frac": 0.0,
+"gazetted": 0,
+"tax_frac": 0.0025
+}
+],
+"results": [
+[
+"Sena",
+"harvest",
+"Harvested 0 silver at camp4 with x=[1, 1, 1, 1, 1, 1]"
+],
+[
+"Sena",
+"harvest",
+"Harvested 5.73 silver at camp4 with x=[2, 2, 2, 2, 2, 2] (2 deducted by law)"
+],
+[
+"Sena",
+"transfer",
+"Sent 1.25 timber to Erik (0.75 taxed) (e15)."
+],
+[
+"Sena",
+"transfer",
+"ERROR a law blocked this transfer"
+],
+[
+"Sena",
+"transfer",
+"ERROR you have only 13 timber"
+],
+[
+"Sena",
+"dm",
+"Message sent to Erik (e17)."
+],
+[
+"Sena",
+"dm",
+"Message sent to Erik (e19)."
+],
+[
+"Erik",
+"reply",
+"Replied to Sena (e24) and sent 1 timber."
+],
+[
+"Sena",
+"post",
+"Posted (e26)."
+],
+[
+"Sena",
+"post",
+"Posted (e27)."
+],
+[
+"Sena",
+"anon_post",
+"Posted anonymously (e29)."
+],
+[
+"Greta",
+"publish",
+"Published (e32)."
+],
+[
+"Greta",
+"report",
+"Reported on e26 (e33)."
+],
+[
+"Greta",
+"set_dm_limit",
+"DM limit set to 6 per round for everyone; it applies to messages not yet sent this round."
+],
+[
+"Greta",
+"set_dm_limit",
+"DM limit set to 2 per round for Erik; it applies to messages not yet sent this round."
+],
+[
+"Greta",
+"set_dm_limit",
+"ERROR the Board's and Fixer's messages cannot be limited"
+],
+[
+"Sena",
+"deposit",
+"Deposited 2 timber; received 0.2158 pc (P=9.267)."
+],
+[
+"Sena",
+"redeem",
+"Redeemed 0.05 pc for 0.4633 timber."
+],
+[
+"Sena",
+"deposit",
+"Deposited 1 stone; received 0.2158 pc (P=9.267)."
+],
+[
+"Erik",
+"transfer",
+"Sent 0.25 stone to Sena (0.75 taxed) (e45)."
+],
+[
+"Greta",
+"publish",
+"Published (e53)."
+]
+],
+"state": {
+"agents": {
+"Abel": {
+"cls": "legislator",
+"holdings": {
+"stone": 6.0,
+"timber": 13.0
+},
+"id": "Abel",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"propose",
+"vote"
+],
+"start_value": 25.0,
+"suspended": {},
+"title": null
+},
+"Clara": {
+"cls": "worker",
+"holdings": {
+"stone": 5.0,
+"timber": 15.0
+},
+"id": "Clara",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"harvest:camp2"
+],
+"start_value": 25.0,
+"suspended": {},
+"title": null
+},
+"Cleo": {
+"cls": "board",
+"holdings": {
+"stone": 8.0,
+"timber": 30.0
+},
+"id": "Cleo",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"veto"
+],
+"start_value": 46.0,
+"suspended": {},
+"title": null
+},
+"Edda": {
+"cls": "scientist",
+"holdings": {
+"stone": 6.0,
+"timber": 21.0
+},
+"id": "Edda",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"archive",
+"sandbox"
+],
+"start_value": 33.0,
+"suspended": {},
+"title": null
+},
+"Erik": {
+"cls": "worker",
+"holdings": {
+"stone": 6.0,
+"timber": 21.65
+},
+"id": "Erik",
+"limit": {
+"n": 2,
+"until": 1
+},
+"model": "claude-sonnet-5-5",
+"rights": [
+"harvest:camp2"
+],
+"start_value": 36.0,
+"suspended": {
+"probe_right": 1
+},
+"title": null
+},
+"Felix": {
+"cls": "legislator",
+"holdings": {
+"stone": 6.0,
+"timber": 21.0
+},
+"id": "Felix",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"propose",
+"vote"
+],
+"start_value": 33.0,
+"suspended": {},
+"title": null
+},
+"Fen": {
+"cls": "worker",
+"holdings": {
+"stone": 12.0,
+"timber": 27.0
+},
+"id": "Fen",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"harvest:camp1",
+"harvest:camp2"
+],
+"start_value": 51.0,
+"suspended": {},
+"title": null
+},
+"Finn": {
+"cls": "worker",
+"holdings": {
+"stone": 6.0,
+"timber": 17.0
+},
+"id": "Finn",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"harvest:camp2",
+"harvest:camp3"
+],
+"start_value": 29.0,
+"suspended": {},
+"title": null
+},
+"Greta": {
+"cls": "media",
+"holdings": {},
+"id": "Greta",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"dm_rules",
+"press"
+],
+"start_value": 0,
+"suspended": {},
+"title": null
+},
+"Hal": {
+"cls": "board",
+"holdings": {
+"stone": 8.0,
+"timber": 27.0
+},
+"id": "Hal",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"veto"
+],
+"start_value": 43.0,
+"suspended": {},
+"title": null
+},
+"Hugo": {
+"cls": "scientist",
+"holdings": {},
+"id": "Hugo",
+"limit": null,
+"model": "claude-sonnet-5-5",
+"rights": [
+"archive",
+"sandbox"
+],
+"start_value": 0,
+"suspended": {},
+"title": null
+},
+"Ilan": {
+"cls": "legislator",
+"holdings": {
+"stone": 7.0,
+"timber": 14.0
+},
+"id": "Ilan",
+"limit": null,
+"model": "claude-sonnet-5-5",
+"rights": [
+"propose",
+"vote"
+],
+"start_value": 28.0,
+"suspended": {},
+"title": null
+},
+"Lukas": {
+"cls": "worker",
+"holdings": {
+"stone": 6.0,
+"timber": 40.0
+},
+"id": "Lukas",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"harvest:camp3",
+"harvest:camp4"
+],
+"start_value": 52.0,
+"suspended": {},
+"title": null
+},
+"Mats": {
+"cls": "board",
+"holdings": {
+"stone": 5.0,
+"timber": 8.0
+},
+"id": "Mats",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"veto"
+],
+"start_value": 18.0,
+"suspended": {},
+"title": null
+},
+"Oda": {
+"cls": "worker",
+"holdings": {
+"stone": 4.0,
+"timber": 22.0
+},
+"id": "Oda",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"harvest:camp2",
+"harvest:camp4"
+],
+"start_value": 30.0,
+"suspended": {},
+"title": null
+},
+"Sena": {
+"cls": "worker",
+"holdings": {
+"pc": 3.381654,
+"silver": 5.726,
+"stone": 2.25,
+"timber": 11.513333
+},
+"id": "Sena",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"anon",
+"encrypt",
+"harvest:camp4"
+],
+"start_value": 23.0,
+"suspended": {},
+"title": null
+},
+"Siv": {
+"cls": "scientist",
+"holdings": {
+"stone": 6.0,
+"timber": 19.0
+},
+"id": "Siv",
+"limit": null,
+"model": "claude-sonnet-5-5",
+"rights": [
+"archive",
+"sandbox"
+],
+"start_value": 31.0,
+"suspended": {},
+"title": null
+},
+"Wim": {
+"cls": "worker",
+"holdings": {
+"stone": 7.0,
+"timber": 23.0
+},
+"id": "Wim",
+"limit": null,
+"model": "claude-haiku-4-5",
+"rights": [
+"harvest:camp1",
+"harvest:camp3"
+],
+"start_value": 37.0,
+"suspended": {},
+"title": null
+}
+},
+"camps": {
+"camp1": {
+"K": 100,
+"S": 76.64719755577384,
+"consumes": {},
+"dials": 6,
+"fee": null,
+"fn": {
+"coef": [
+-1,
+2
+],
+"dials": [
+2,
+1
+],
+"family": "linear",
+"intercept": 3
+},
+"harvest_limit": null,
+"harvested_this_round": 0.0,
+"history": [],
+"id": "camp1",
+"max": 11,
+"max_yield": 8,
+"norm": 1.0,
+"quota": null,
+"r": 0.18744047532579416,
+"resource": "timber",
+"sigma": 0.40321890123146253,
+"tier": 1
+},
+"camp2": {
+"K": 100,
+"S": 98.68841094437451,
+"consumes": {},
+"dials": 6,
+"fee": null,
+"fn": {
+"center": [
+11,
+5,
+11
+],
+"dials": [
+5,
+2,
+0
+],
+"family": "peak",
+"width": 4.439817578346888
+},
+"harvest_limit": null,
+"harvested_this_round": 0.0,
+"history": [],
+"id": "camp2",
+"max": 11,
+"max_yield": 8,
+"norm": 1.0,
+"quota": null,
+"r": 0.12615758757669743,
+"resource": "stone",
+"sigma": 0.2223712952613236,
+"tier": 2
+},
+"camp3": {
+"K": 100,
+"S": 99.32750869238696,
+"consumes": {},
+"dials": 6,
+"fee": null,
+"fn": {
+"family": "tree",
+"tree": {
+"cond": {
+"a": 3,
+"k": 3,
+"m": 4,
+"op": "mod"
+},
+"no": {
+"cond": {
+"a": 4,
+"op": "ge",
+"t": 2
+},
+"no": {
+"cond": {
+"a": 0,
+"op": "ge",
+"t": 8
+},
+"no": {
+"leaf": 0.35
+},
+"yes": {
+"leaf": 0.0
+}
+},
+"yes": {
+"cond": {
+"a": 4,
+"b": 3,
+"op": "gt"
+},
+"no": {
+"leaf": 1.0
+},
+"yes": {
+"leaf": 0.35
+}
+}
+},
+"yes": {
+"cond": {
+"a": 0,
+"op": "ge",
+"t": 8
+},
+"no": {
+"cond": {
+"a": 5,
+"k": 2,
+"m": 4,
+"op": "mod"
+},
+"no": {
+"leaf": 1.0
+},
+"yes": {
+"leaf": 0.0
+}
+},
+"yes": {
+"cond": {
+"a": 5,
+"b": 3,
+"op": "gt"
+},
+"no": {
+"leaf": 0.15
+},
+"yes": {
+"leaf": 1.0
+}
+}
+}
+}
+},
+"harvest_limit": null,
+"harvested_this_round": 0.0,
+"history": [],
+"id": "camp3",
+"max": 11,
+"max_yield": 8,
+"norm": 1.0,
+"quota": null,
+"r": 0.13897755955700863,
+"resource": "copper",
+"sigma": 0.4260683304649894,
+"tier": 3
+},
+"camp4": {
+"K": 100,
+"S": 98.09869553073078,
+"consumes": {},
+"dials": 6,
+"fee": {
+"item": "stone",
+"qty": 0.5
+},
+"fn": {
+"coef": [
+5,
+5,
+2
+],
+"dials": [
+4,
+1,
+0
+],
+"family": "modular",
+"mod": 7,
+"target": 3
+},
+"harvest_limit": 5,
+"harvested_this_round": 7.726,
+"history": [
+[
+1,
+1,
+1,
+1,
+1,
+1
+],
+[
+2,
+2,
+2,
+2,
+2,
+2
+]
+],
+"id": "camp4",
+"max": 11,
+"max_yield": 8,
+"norm": 1.0,
+"quota": 50,
+"r": 0.1366692211701805,
+"resource": "silver",
+"sigma": 0.12706577184352533,
+"tier": 4
+}
+},
+"currencies": {
+"pc": {
+"backed": true,
+"convertible": true,
+"created_round": 0,
+"law": "L1",
+"reserve": "reserve",
+"supply": 3.3816546738066884
+}
+},
+"dm_limit": {
+"agents": {
+"Erik": 2
+},
+"all": 6
+},
+"dm_sent": {
+"Erik": 1,
+"Sena": 2
+},
+"harvest_count": {
+"Sena|camp4": 2
+},
+"hidden": [],
+"quota_used": {
+"camp4": 2
+},
+"reserve": {
+"silver": 2.0,
+"stone": 2.75,
+"timber": 3.836667
+},
+"rights": [
+"anon",
+"archive",
+"dm_rules",
+"encrypt",
+"harvest:camp1",
+"harvest:camp2",
+"harvest:camp3",
+"harvest:camp4",
+"judge",
+"ledger_read",
+"patch",
+"press",
+"probe_right",
+"propose",
+"sandbox",
+"see_hidden",
+"surveil",
+"veto",
+"vote"
+]
+}
+}
+}
