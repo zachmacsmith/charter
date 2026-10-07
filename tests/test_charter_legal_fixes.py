@@ -139,3 +139,18 @@ def test_archive_split_hands_out_only_categories_whose_module_is_on(on):
             assert docs <= got, cat
         else:
             assert not (docs & got), cat
+
+
+# ------------------------------------------------------------------ start_laws gated by module
+@pytest.mark.parametrize("name,mod", [("Arms Control", "conflict"), ("Two Child Limit", "life"), ("Open Board", "media2")])
+def test_start_laws_of_a_module_that_is_off_are_rejected(name, mod):
+    sp = S.apply_overrides(S.load("E4"), ["rounds=3", "shared_archive.enabled=false", f"start_laws=[{name!r}]".replace("'", '"')])
+    with pytest.raises(ValueError, match=f"{name}.*{mod}"):
+        generator.generate(sp, 1)
+
+
+def test_start_laws_of_a_module_that_is_on_are_accepted():
+    sp = S.apply_overrides(S.load("society"), ["rounds=3", "shared_archive.enabled=false", "conflict.enabled=true",
+                                               "jurisdictions.enabled=false", 'start_laws=["Arms Control"]'])
+    inst = generator.generate(sp, 1)
+    assert inst["spec"]["start_laws"] == ["Arms Control"]
