@@ -18,7 +18,6 @@ import random
 import types
 from contextlib import contextmanager
 
-from charter import camps as C
 from charter import context as CX                                     # context: files and scratchpads (charter/context.py)
 from charter import conflict as CF                                  # conflict: attacks, forts, assassin (off by default)
 from charter import credit as CR
@@ -1157,9 +1156,9 @@ class Kernel:
 
         def drift():
             if self.spec["conditions"].get("drift") and r > 0 and r % self.spec["camps"]["drift_every"] == 0:
-                for cid, c in self.w["camps"].items():
-                    C.drift(c, self.stream("drift", r, cid))
-                with self.cause("world", "drift"):
+                with self.cause("world", "drift", root=True):         # P2.4c: drift is a world primitive (no law may stop it)
+                    for cid in list(self.w["camps"]):
+                        self.apply("drift", camp=cid)
                     self.log("drift", None, {"round": r}, vis="monitor")
         return {"reset_counters": reset_counters, "settle_loans": settle_loans, "pending_patches": pending_patches, "drift": drift}
 
@@ -1179,8 +1178,9 @@ class Kernel:
                 self.process_veto_queue()
 
         def regrow():
-            for c in self.w["camps"].values():
-                C.regrow(c)
+            with self.cause("world", "regrow", root=True):           # P2.4c: regrowth is a world primitive (unblockable)
+                for cid in list(self.w["camps"]):
+                    self.apply("regrow", camp=cid)
 
         def expire_cases():
             with self.cause("kernel", "cases"):

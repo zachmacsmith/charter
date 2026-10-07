@@ -251,9 +251,8 @@ def settle(k):
             b = ln["borrower"]
             if k.cls_of(b) not in ("board", "fixer"):
                 c = cfg(k)
-                k.agent(b)["limit"] = {"n": int(c["sanction_actions"]), "until": k.r + int(c["sanction_rounds"])}
-                k.log("sanction", None, {"agent": b, "limit_actions": int(c["sanction_actions"]), "rounds": int(c["sanction_rounds"]),
-                                         "law": (st(k)["consequence"] or {}).get("law"), "why": f"default on {ln['id']}"}, vis="public")
+                k.apply("limit_actions", agent=b, n=int(c["sanction_actions"]), rounds=int(c["sanction_rounds"]),
+                        lid=(st(k)["consequence"] or {}).get("law"), why=f"default on {ln['id']}")
     _start_redemption_round(k)
 
 
@@ -392,8 +391,7 @@ def redeem_par(k, aid, cur, item, coins):
             break
     used = min(coins, paid / pv)
     if used > 0:
-        k._add(aid, cur, -used)
-        c["supply"] = max(0.0, c["supply"] - used)
+        k.apply("burn", currency=cur, qty=used, frm=aid, via="redeem")    # the redeemed coins are destroyed
         k.log("redeem", aid, {"currency": cur, "item": item, "coins": used, "qty": paid / float(k.w["unit"][item]), "par": True,
                               "paid": got}, vis=[aid])
     if paid + 1e-9 < want:

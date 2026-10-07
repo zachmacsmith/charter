@@ -335,10 +335,7 @@ def contribute(k, src, pid, item, qty) -> float:
     have = k.bal(src, item)
     if have + 1e-9 < qty:
         raise L.LawError(f"{'the reserve holds' if src == 'reserve' else 'you hold'} only {have:g} {item}")
-    k._add(src, item, -qty)
-    mine = p["contributions"].setdefault(src, {})
-    mine[item] = round(mine.get(item, 0.0) + qty, 6)
-    p["pooled"][item] = round(p["pooled"].get(item, 0.0) + qty, 6)
+    k.apply("contribute", agent=src, project=p["id"], item=item, qty=qty)   # into the project's escrow
     public = cfg(k)["public_contributions"]
     vis = "public" if public else ([src] if src != "reserve" else "public")
     k.log("project_contribution", None if src == "reserve" else src,
@@ -360,10 +357,9 @@ def _new_camp(k, p) -> tuple[str, list[str]]:
     cid = f"camp{n}"
     camp = C.make_camp(cid, p["params"]["tier"], k.spec["camps"], random.Random(f"{k.inst['seed']}|camp|{p['id']}"), S.draw)
     camp["origin"] = p["id"]
-    k.w["camps"][cid] = camp
+    k.apply("create_camp", camp=cid, kind=p["kind"], made=camp)
     right = f"harvest:{cid}"
-    if right not in k.w["rights"]:
-        k.w["rights"] = sorted(k.w["rights"] + [right])
+    k.apply("create_right", right=right)
     contributors = [a for a in _contributors(k, p, float(p["params"].get("min_each", 1))) if _grantable(k, a)]   # no crumb claims
     workers = [a for a, v in k.w["agents"].items() if v["cls"] == "worker" or "worker" in (v.get("also") or ())]
     if p["params"].get("rights") == "all":
@@ -371,9 +367,7 @@ def _new_camp(k, p) -> tuple[str, list[str]]:
     else:
         who = contributors or workers
     for a in who:
-        ag = k.w["agents"][a]
-        if right not in ag["rights"]:
-            ag["rights"] = sorted(ag["rights"] + [right])
+        k.apply("grant_right", agent=a, right=right, quiet=True)          # no rights event: camp_created names the holders
     k.log("camp_created", None, {"camp": cid, "resource": camp["resource"], "tier": camp["tier"], "project": p["id"], "holders": who},
           vis="public")
     k.log("camp_truth", None, {"camp": cid, "fn": camp["fn"], "K": camp["K"], "S": camp["S"], "r": camp["r"], "sigma": camp["sigma"],
@@ -381,29 +375,30 @@ def _new_camp(k, p) -> tuple[str, list[str]]:
     return cid, who
 
 
-def recompute_yield(camp, r):
-    """A camp's max_yield = its base x every upgrade still in force."""
-    ups = [u for u in camp.get("upgrades", []) if u["until"] is None or u["until"] >= r]
-    camp["upgrades"] = ups
+def recompute_yield(k, cid, ups=None):
+    """A camp's max_yield = its base x every upgrade still in force (ups: the upgrades to apply, default the camp's own)."""
+    camp = k.w["camps"][cid]
+    ups = [u for u in (camp.get("upgrades", []) if ups is None else ups) if u["until"] is None or u["until"] >= k.r]
+    k.apply("set_camp_state", camp=cid, key="upgrades", value=ups)
     if "base_max_yield" in camp:
-        camp["max_yield"] = camp["base_max_yield"] * math.prod(u["mult"] for u in ups)
+        k.apply("set_camp_state", camp=cid, key="max_yield", value=camp["base_max_yield"] * math.prod(u["mult"] for u in ups))
 
 
 def fund(k, p):
-    p["status"], p["funded_round"] = "funded", k.r
-    p["spent"], p["pooled"] = dict(p["pooled"]), {}
+    k.apply("settle_project", project=p["id"], status="funded", record=p)       # the escrow is spent
     pr = p["params"]
     if p["kind"] == "granary":
         camp = k.w["camps"][pr["camp"]]
-        camp["granary"] = {"floor": pr["floor"], "until": None if not pr.get("rounds") else k.r + pr["rounds"] - 1, "project": p["id"]}
+        k.apply("set_camp_state", camp=pr["camp"], key="granary",
+                value={"floor": pr["floor"], "until": None if not pr.get("rounds") else k.r + pr["rounds"] - 1, "project": p["id"]})
         p["beneficiaries"] = [a for a in eligible(k) if k.has(a, f"harvest:{pr['camp']}")]
         p["effect"] = {"camp": pr["camp"], "floor": pr["floor"], "until": camp["granary"]["until"]}
     elif p["kind"] == "upgrade":
         camp = k.w["camps"][pr["camp"]]
-        camp.setdefault("base_max_yield", camp["max_yield"])
-        camp.setdefault("upgrades", []).append({"mult": pr["mult"], "until": None if not pr.get("rounds") else k.r + pr["rounds"] - 1,
-                                                "project": p["id"]})
-        recompute_yield(camp, k.r)
+        if "base_max_yield" not in camp:
+            k.apply("set_camp_state", camp=pr["camp"], key="base_max_yield", value=camp["max_yield"])
+        new = {"mult": pr["mult"], "until": None if not pr.get("rounds") else k.r + pr["rounds"] - 1, "project": p["id"]}
+        recompute_yield(k, pr["camp"], camp.get("upgrades", []) + [new])
         p["beneficiaries"] = [a for a in eligible(k) if k.has(a, f"harvest:{pr['camp']}")]
         p["effect"] = {"camp": pr["camp"], "mult": pr["mult"], "max_yield": camp["max_yield"]}
     else:
@@ -424,17 +419,7 @@ def _effect_text(k, p) -> str:
 
 
 def fail(k, p):
-    p["status"] = "failed"
-    back = {}
-    if p["refund"]:
-        for src, its in p["contributions"].items():
-            for i, q in its.items():
-                k._add(src, i, q)
-            back[src] = dict(its)
-    else:
-        for i, q in p["pooled"].items():
-            k._add("reserve", i, q)
-    p["returned"] = back
+    k.apply("settle_project", project=p["id"], status="failed", record=p)       # the escrow: refunded, or forfeited to the reserve
     k.log("project_failed", None, {"project": p["id"], "kind": p["kind"], "pooled": p["pooled"], "refunded": p["refund"],
                                    "pooled_value": round(pooled_value(k, p), 4), "threshold_value": round(threshold_value(k, p), 4),
                                    "too_few_took_part": not _participation_met(k, p)}, vis="public")
@@ -449,11 +434,11 @@ def start_round(k):
     for cid, camp in k.w["camps"].items():
         g = camp.get("granary")
         if g and g["until"] is not None and g["until"] < k.r:
-            camp["granary"] = None
+            k.apply("set_camp_state", camp=cid, key="granary", value=None)
             k.log("project_expired", None, {"camp": cid, "what": "granary", "project": g["project"]}, vis="public")
         if camp.get("upgrades"):
             before = len(camp["upgrades"])
-            recompute_yield(camp, k.r)
+            recompute_yield(k, cid)
             if len(camp["upgrades"]) < before:
                 k.log("project_expired", None, {"camp": cid, "what": "upgrade", "max_yield": camp["max_yield"]}, vis="public")
 

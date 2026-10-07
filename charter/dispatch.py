@@ -438,12 +438,13 @@ def do_create_currency(k, name, backed, reserve, lid=None) -> dict:
     return {"currency": name}
 
 
-def do_grant_right(k, agent, right, lid=None) -> dict:
+def do_grant_right(k, agent, right, lid=None, quiet=False) -> dict:
     a = k.agent(agent)
     changed = right not in a["rights"]
     if changed:
         a["rights"] = sorted(a["rights"] + [right])
-        k.log("rights", None, {"agent": agent, "right": right, "change": "grant", "law": lid}, vis="public")
+        if not quiet:                                               # P2.4c: a new camp's harvest right is granted silently, as today
+            k.log("rights", None, {"agent": agent, "right": right, "change": "grant", "law": lid}, vis="public")
     return {"changed": changed}
 
 
@@ -462,9 +463,10 @@ def do_suspend_right(k, agent, right, rounds, lid=None) -> dict:
     return {"until": k.r + int(rounds)}
 
 
-def do_limit_actions(k, agent, n, rounds, lid=None) -> dict:
+def do_limit_actions(k, agent, n, rounds, lid=None, why=None) -> dict:
     k.agent(agent)["limit"] = {"n": int(n), "until": k.r + int(rounds)}
-    k.log("sanction", None, {"agent": agent, "limit_actions": int(n), "rounds": int(rounds), "law": lid}, vis="public")
+    k.log("sanction", None, {"agent": agent, "limit_actions": int(n), "rounds": int(rounds), "law": lid,
+                             **({"why": why} if why is not None else {})}, vis="public")     # why: P2.4c (a loan default)
     return {"n": int(n)}
 
 
@@ -579,3 +581,117 @@ def do_end_life(k, agent, cause, by, public=True, named=True, holdings="frozen")
         return {"ended": True, "cause": cause, "departure": EV.leave_world(k, agent, holdings)}
     from charter import mortality as MO
     return MO.end(k, agent, cause, by, public, named)
+# ====================================================================== P2.4c: world causes (camps, outside, events, projects, credit)
+# Rows routed by P2.4c: regrow, drift, destroy, set_camp_state, create_camp, contribute, settle_project. Their call sites run inside
+# world root frames (Kernel.cause("world", ..., root=True): regrowth, drift, raids, tribute demands, world-event firings, the
+# projects steps) where a frame already existed; no frame is added around a logged event, so every event's `cause` is unchanged.
+# Existing rows gain call options: grant_right `quiet` (a new camp's harvest right is granted without a `rights` event, as today),
+# limit_actions `why` (a loan default's sanction says why).
+OPTIONS.update({"regrow": frozenset(), "drift": frozenset(), "destroy": frozenset(), "set_camp_state": frozenset(),
+                "create_camp": frozenset({"made"}), "contribute": frozenset(), "settle_project": frozenset({"record"}),
+                "grant_right": OPTIONS["grant_right"] | {"quiet"}, "limit_actions": OPTIONS["limit_actions"] | {"why"}})
+
+
+def check_camp(k, p):
+    if p["camp"] not in k.w["camps"]:
+        raise L.LawError(f"no such camp: {p['camp']}")
+    return p
+
+
+def check_destroy(k, p):
+    qty = float(p["qty"])
+    if qty < 0 or qty != qty:
+        raise L.LawError("quantity must be non-negative")
+    if qty == 0:
+        raise _Noop({"destroyed": 0.0})
+    if k.bal(p["owner"], p["item"]) + 1e-9 < qty:
+        raise PhysicsError("insufficient")
+    return {**p, "qty": qty}
+
+
+def check_create_camp(k, p):
+    if p["camp"] in k.w["camps"]:
+        raise L.LawError(f"{p['camp']} already exists")
+    return p
+
+
+def check_contribute(k, p):
+    if str(p["project"]) not in k.w["projects"]:
+        raise L.LawError(f"no project {p['project']}")
+    qty = float(p["qty"])
+    if not qty > 0:
+        raise L.LawError("qty must be positive")
+    if k.bal(p["agent"], p["item"]) + 1e-9 < qty:
+        raise PhysicsError("insufficient")
+    return {**p, "project": str(p["project"]), "qty": qty}
+
+
+CHECKS.update({"regrow": check_camp, "drift": check_camp, "set_camp_state": check_camp, "destroy": check_destroy,
+               "create_camp": check_create_camp, "contribute": check_contribute})
+
+
+def do_regrow(k, camp, qty=None) -> dict:
+    """A camp's stock grows by the logistic law, less this round's harvests (camps.regrow). Physics: no law may stop it."""
+    from charter import camps as C
+    c = k.w["camps"][camp]
+    before = c["S"]
+    C.regrow(c)
+    return {"S": c["S"], "grown": c["S"] - before}
+
+
+def do_drift(k, camp) -> dict:
+    """A camp's hidden rule is redrawn (camps.drift) from the round's drift stream for that camp."""
+    from charter import camps as C
+    C.drift(k.w["camps"][camp], k.stream("drift", k.r, camp))
+    return {}
+
+
+def do_destroy(k, owner, item, qty, cause) -> dict:
+    """Goods leave the world (tribute paid to the outside power, goods seized by a raid). The caller logs the event."""
+    k._add(owner, item, -qty)
+    return {"destroyed": qty}
+
+
+def do_set_camp_state(k, camp, key, value) -> dict:
+    """A camp's physical state changes by a world cause: a raid's stock loss, a blight, a destruction, a redrawn rule, a reveal,
+    a granary or an upgrade a project funded. Not a rule (set_camp_rule): no law may stop it."""
+    k.w["camps"][camp][key] = value
+    return {key: value}
+
+
+def do_create_camp(k, camp, kind, made=None) -> dict:
+    """A new camp enters the world (a discovery, a funded road). `made` is the camp as camps.make_camp drew it."""
+    k.w["camps"][camp] = made
+    return {"camp": camp}
+
+
+def do_contribute(k, agent, project, item, qty) -> dict:
+    """Goods go from agent (or the reserve) into a project's escrow (its `pooled` goods, by contributor)."""
+    p = k.w["projects"][project]
+    k._add(agent, item, -qty)
+    mine = p["contributions"].setdefault(agent, {})
+    mine[item] = round(mine.get(item, 0.0) + qty, 6)
+    p["pooled"][item] = round(p["pooled"].get(item, 0.0) + qty, 6)
+    return {"taken": qty}
+
+
+def do_settle_project(k, project, status, record=None) -> dict:
+    """A project's escrow is paid out: funded (the pooled goods are spent) or failed (refunded to each contributor when the project
+    refunds, else forfeited to the reserve). `record` is the project dict when the caller holds it (projects.fund and fail)."""
+    p = record if record is not None else k.w["projects"][project]
+    if status == "funded":
+        p["status"], p["funded_round"] = "funded", k.r
+        p["spent"], p["pooled"] = dict(p["pooled"]), {}
+        return {"spent": p["spent"]}
+    p["status"] = "failed"
+    back = {}
+    if p["refund"]:
+        for src, its in p["contributions"].items():
+            for i, q in its.items():
+                k._add(src, i, q)
+            back[src] = dict(its)
+    else:
+        for i, q in p["pooled"].items():
+            k._add("reserve", i, q)
+    p["returned"] = back
+    return {"returned": back}

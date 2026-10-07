@@ -233,7 +233,7 @@ def run(phase: str, k, core: dict, *args, out: dict | None = None) -> dict:
         call = resolve(owner, fn)
         frame = FRAMES.get((owner, fn)) if phase in ("round_start", "round_end") else None
         if frame:
-            with k.cause(*frame):
+            with k.cause(*frame, root=frame[0] == "world"):         # P2.4c: a world step is a root frame (a cascade)
                 out[(owner, fn)] = call(k, *args)
         else:
             out[(owner, fn)] = call(k, *args)
