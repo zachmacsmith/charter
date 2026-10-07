@@ -14,7 +14,6 @@ from __future__ import annotations
 import copy
 import json
 import marshal
-import math
 import random
 import types
 from contextlib import contextmanager
@@ -23,6 +22,7 @@ from charter import camps as C
 from charter import context as CX                                     # context: files and scratchpads (charter/context.py)
 from charter import conflict as CF                                  # conflict: attacks, forts, assassin (off by default)
 from charter import credit as CR
+from charter import dispatch as D                                     # Kernel.apply: primitives, legacy hook aliases (P2.1)
 from charter.camptypes import framework as CT                    # camps: typed camps, modifiers and leases (no-op under legacy)
 from charter import hidden as H
 from charter import jurisdictions as J
@@ -207,14 +207,8 @@ class Kernel:
         return max(0, min(self.dm_cap(), int(lim["all"]) + extra))
 
     def set_dm_limit(self, n, agent=None, by=None):
-        n = max(0, min(self.dm_cap(), int(n)))
-        if agent is None:
-            self.w["dm_limit"]["all"] = n
-        else:
-            self.agent(agent)
-            self.w["dm_limit"]["agents"][agent] = n
-        self.log("dm_limit", by, {"n": n, "agent": agent}, vis="public")
-        return n
+        """The set_dm_limit primitive (dispatch.do_set_dm_limit); returns the limit set. Board and Fixer: PhysicsError."""
+        return self.apply("set_dm_limit", agent=agent, n=n, actor=by).result["n"]
 
     # ------------------------------------------------------------------ loans (exist only while a law enables them)
     def loans_enabled(self) -> bool:
@@ -282,24 +276,18 @@ class Kernel:
             del tgt[item]
 
     def move(self, src, dst, item, qty, why="move", by=None):
-        qty = float(qty)
-        if qty < 0 or math.isnan(qty):
-            raise L.LawError("quantity must be non-negative")
-        if qty == 0:
-            return True
-        if self.bal(src, item) + 1e-9 < qty:
+        """The move primitive as a yes/no (every module's moves): False when the balance is short or a law blocks it."""
+        try:
+            return self.apply("move", src=src, dst=dst, item=item, qty=qty, why=why, actor=by).ok
+        except D.PhysicsError:
             return False
-        self._add(src, item, -qty)
-        self._add(dst, item, qty)
-        e = self.w["effects"]
-        if dst == "reserve" and src != "reserve":
-            e["to_reserve"][why] = e["to_reserve"].get(why, 0.0) + qty * self._v(item)
-        if src == "reserve" and dst != "reserve":
-            cls = self.cls_of(dst)
-            e["from_reserve_by_class"][cls] = e["from_reserve_by_class"].get(cls, 0.0) + qty * self._v(item)
-            e["from_reserve_recipients"].add(dst)
-        self.log("move", by, {"src": src, "dst": dst, "item": item, "qty": qty, "why": why}, vis="monitor")
-        return True
+
+    # ------------------------------------------------------------------ primitives (P2.1): the single entry point for state changes
+    def apply(self, name, /, **payload):
+        """Apply primitive `name` (charter/primitives.py) with its payload (and the call options dispatch.OPTIONS names): physics
+        check, legacy before-aliases, the change, charges, legacy after-aliases. Returns a dispatch.Outcome; raises
+        dispatch.PhysicsError when the change is impossible (callers convert: ActionError, a law's False, a kernel refusal)."""
+        return D.apply(self, name, payload)
 
     def _v(self, item):
         try:
@@ -337,16 +325,41 @@ class Kernel:
         return next(iter(frame))
 
     @contextmanager
-    def cause(self, kind, value=True, **info):
+    def cause(self, kind, value=True, *, root=False, **info):
         """Push a cause frame for the duration of the block: `with k.cause("law", lid, hook="on_transfer"): ...`. Details that
-        are None are left out."""
+        are None are left out. root=True (an action item; later phase steps, world events, interventions) opens a cascade
+        (dispatch.Cascade) whose after-queue drains when the frame exits; the flag is not part of the frame. A root frame inside
+        another joins the outer cascade (P3.1 makes nesting an error)."""
         assert kind in self.CAUSE_KINDS, kind
         n = len(self._causes)
         self._causes.append({kind: value, **{x: v for x, v in info.items() if v is not None}})
+        cascades = self._cascade_stack()
+        opened = root and not cascades
+        if opened:
+            cascades.append(D.Cascade(root=D.frame_view(self._causes[n]), index=n))
         try:
             yield
         finally:
             del self._causes[n:]
+            if opened:
+                D.drain(self, cascades.pop())
+
+    def _cascade_stack(self) -> list:
+        """The open cascades (at most one in P2.1); empty between rounds, so checkpoints and dry runs hold none."""
+        return self.__dict__.setdefault("_cascades", [])
+
+    def cascade(self):
+        """The cascade of the open root frame, or None (kernel bookkeeping outside any root frame)."""
+        cs = self._cascade_stack()
+        return cs[-1] if cs else None
+
+    def chain(self, viewer=None) -> tuple:
+        """The cause chain from the open root frame inward, as {"kind", "id", ...meta} copies (dispatch.frame_view); () outside
+        any root frame. `viewer` (a law id) drops what a law may not see (a turn's call key); P3.1 adds the rest of review 09 §4.4."""
+        cas = self.cascade()
+        if cas is None:
+            return ()
+        return tuple(D.frame_view(f, viewer) for f in self._causes[cas.index:])
 
     def current_cause(self) -> tuple:
         """The active cause chain (outermost first), as copies: read-only for callers such as law hooks."""
@@ -410,43 +423,23 @@ class Kernel:
             cls = None if cls is None else k.norm_cls(cls)                   # class names are case-insensitive ("Worker" == "worker")
             return [a for a, v in k.w["agents"].items() if (cls is None or v["cls"] == cls) and v["cls"] != "observer" and v.get("departed") is None]
 
-        def grant(aid, right):
-            right = k.norm_right(right)
-            a = k.agent(aid)
-            if right in ENTRENCHED or RT.role_bound(right):              # a role's right changes only with the role (secret or not:
-                k.w["effects"]["kernel_refusals"].append(f"grant {right}")   # refused whoever the agent is, so nothing leaks)
+        def refused(prim, **payload):
+            """Apply a primitive for this law; a physics refusal is recorded as a kernel refusal and returns False."""
+            try:
+                k.apply(prim, **payload)
+            except D.PhysicsError as e:
+                k.w["effects"]["kernel_refusals"].append(e.reason)
                 return False
-            if right not in k.w["rights"]:
-                raise L.LawError(f"no such right: {right}")
-            never = NEVER.get(a["cls"], set())
-            if (never is None) or (right in never) or (a["cls"] == "fixer" and right.startswith("harvest:")):
-                k.w["effects"]["kernel_refusals"].append(f"grant {right} to {a['cls']} {aid}")
-                return False
-            if right not in a["rights"]:
-                a["rights"] = sorted(a["rights"] + [right])
-                k.log("rights", None, {"agent": aid, "right": right, "change": "grant", "law": lid}, vis="public")
             return True
+
+        def grant(aid, right):                                           # entrenched and role-bound rights are refused (dispatch)
+            return refused("grant_right", agent=aid, right=right, lid=lid)
 
         def revoke(aid, right):
-            right = k.norm_right(right)
-            a = k.agent(aid)
-            if right in ENTRENCHED or RT.role_bound(right):
-                k.w["effects"]["kernel_refusals"].append(f"revoke {right}")
-                return False
-            if right in a["rights"]:
-                a["rights"] = [x for x in a["rights"] if x != right]
-                k.log("rights", None, {"agent": aid, "right": right, "change": "revoke", "law": lid}, vis="public")
-            return True
+            return refused("revoke_right", agent=aid, right=right, lid=lid)
 
         def create_right(name):
-            name = str(name)
-            if name in ENTRENCHED:
-                raise L.LawError("veto and patch are entrenched")
-            if RT.reserved(name):
-                raise L.LawError(f"{name} is reserved: it belongs to a role or is an old name of one of its rights")
-            if name not in k.w["rights"]:
-                k.w["rights"] = sorted(k.w["rights"] + [name])
-            return name
+            return k.apply("create_right", right=name).result["right"]
 
         def define_action(right, name, fn):
             if right not in k.w["rights"] or RT.is_secret(k, right):   # a secret right is as good as absent to a law
@@ -456,39 +449,20 @@ class Kernel:
             k.w["actions"][str(name)] = {"right": right, "law": lid, "fn": k._reg(lid, fn)}
 
         def create_currency(name, backed=True, reserve="reserve"):
-            name = str(name)
-            if name in k.w["currencies"] or name in k.w["unit"]:
-                raise L.LawError(f"{name} already exists")
-            k.w["currencies"][name] = {"backed": bool(backed), "supply": 0.0, "created_round": k.r, "law": lid, "reserve": reserve}
-            return name
+            return k.apply("create_currency", name=name, backed=backed, reserve=reserve, lid=lid).result["currency"]
 
         def mint(cur, qty, to):
-            c = k.w["currencies"].get(cur)
-            if c is None:
-                raise L.LawError(f"no such currency: {cur}")
-            qty = float(qty)
-            if qty < 0:
-                raise L.LawError("cannot mint a negative amount")
-            c["supply"] += qty
-            k._add(to, cur, qty)
-            e = k.w["effects"]
-            e["minted"][cur] = e["minted"].get(cur, 0.0) + qty
-            if to != "reserve":
-                cl = k.cls_of(to)
-                e["minted_to_class"][cl] = e["minted_to_class"].get(cl, 0.0) + qty
-            k.log("mint", None, {"currency": cur, "qty": qty, "to": to, "law": lid}, vis="monitor")
+            k.apply("mint", currency=cur, qty=qty, to=to, lid=lid, via="law")
 
         def burn(cur, qty, frm):
-            c = k.w["currencies"].get(cur)
-            if c is None or k.bal(frm, cur) + 1e-9 < float(qty):
+            try:
+                k.apply("burn", currency=cur, qty=qty, frm=frm, via="law")
+            except D.PhysicsError:                                      # no such currency or not enough: False (no refusal)
                 return False
-            k._add(frm, cur, -float(qty))
-            c["supply"] = max(0.0, c["supply"] - float(qty))
-            k.w["effects"]["burned"][cur] = k.w["effects"]["burned"].get(cur, 0.0) + float(qty)
             return True
 
         def move(src, dst, item, qty):
-            return k.move(src, dst, item, qty, why=f"law:{lid}", by=None)
+            return k.move(src, dst, item, qty, why=f"law:{lid}", by=None)       # Kernel.move -> apply("move")
 
         def set_convertible(cur, only=None, only_item=None):
             """Turn on the kernel's deposit/redeem actions for a backed currency (optionally for one resource only; `only_item` is
@@ -505,13 +479,13 @@ class Kernel:
             return k.w["camps"][c]
 
         def set_quota(c, n):
-            camp_of(c)["quota"] = None if n is None else int(n)
+            k.apply("set_camp_rule", key="quota", value=None if n is None else int(n), camp=c)
 
         def set_harvest_limit(c, n):
-            camp_of(c)["harvest_limit"] = None if n is None else int(n)
+            k.apply("set_camp_rule", key="harvest_limit", value=None if n is None else int(n), camp=c)
 
         def set_fee(c, item, qty):
-            camp_of(c)["fee"] = None if not qty else {"item": item, "qty": float(qty)}
+            k.apply("set_camp_rule", key="fee", value=None if not qty else {"item": item, "qty": float(qty)}, camp=c)
 
         def set_procedure(law_class, fn):
             if law_class not in ("ordinary", "structural", "procedural"):
@@ -527,18 +501,12 @@ class Kernel:
         def fine(aid, item, qty):
             take = min(float(qty), k.bal(aid, item))
             if take > 0:
-                k.move(aid, "reserve", item, take, why="fine")
+                k.move(aid, "reserve", item, take, why="fine")                # Kernel.move -> apply("move")
                 k.w["effects"]["fines"] += take * k._v(item)
             return take
 
         def suspend(aid, right, rounds):
-            right = k.norm_right(right)
-            if right in ENTRENCHED or RT.role_bound(right):
-                k.w["effects"]["kernel_refusals"].append(f"suspend {right}")
-                return False
-            k.agent(aid)["suspended"][right] = k.r + int(rounds)
-            k.log("sanction", None, {"agent": aid, "suspend": right, "rounds": int(rounds), "law": lid}, vis="public")
-            return True
+            return refused("suspend_right", agent=aid, right=right, rounds=rounds, lid=lid)
 
         def enable_loans(enforce=True):
             """Loans exist while this law is in force: agents offer (lend), accept and repay them. enforce: past-due debts are seized."""
@@ -555,20 +523,11 @@ class Kernel:
         def loans_view():
             return {i: dict(ln) for i, ln in k.w["loans"].items()}
 
-        def set_dm_limit(n, agent=None):
-            if agent is not None and k.cls_of(agent) in ("board", "fixer"):
-                k.w["effects"]["kernel_refusals"].append(f"set_dm_limit on {k.cls_of(agent)}")
-                return False
-            k.set_dm_limit(n, agent, by=f"law:{lid}")
-            return True
+        def set_dm_limit(n, agent=None):                                  # the Board's and Fixer's: refused (dispatch)
+            return refused("set_dm_limit", agent=agent, n=n, actor=f"law:{lid}")
 
         def limit_actions(aid, n, rounds):
-            if k.cls_of(aid) in ("board", "fixer"):
-                k.w["effects"]["kernel_refusals"].append(f"limit_actions on {k.cls_of(aid)}")
-                return False
-            k.agent(aid)["limit"] = {"n": int(n), "until": k.r + int(rounds)}
-            k.log("sanction", None, {"agent": aid, "limit_actions": int(n), "rounds": int(rounds), "law": lid}, vis="public")
-            return True
+            return refused("limit_actions", agent=aid, n=n, rounds=rounds, lid=lid)
 
         def censure(aid, text):
             k.log("censure", None, {"agent": aid, "text": str(text)[:400], "law": lid}, vis="public")
@@ -595,18 +554,11 @@ class Kernel:
             return [{"id": x["id"], "title": x["title"], "class": x["cls"], "author": x["author"]} for x in k.active_laws()]
 
         def hide_post(eid):
-            e = next((x for x in k.events if x["id"] == str(eid)), None)
-            if e is None or e["type"] not in POSTABLE:
-                raise L.LawError(f"{eid} is not a post")
-            if str(eid) not in k.w["hidden"]:
-                k.w["hidden"].append(str(eid))
-                k.log("post_hidden", None, {"event": str(eid), "law": lid}, vis="public")
+            k.apply("hide_post", event=eid, hide=True, lid=lid)
             return True
 
         def unhide_post(eid):
-            if str(eid) in k.w["hidden"]:
-                k.w["hidden"].remove(str(eid))
-                k.log("post_revealed", None, {"event": str(eid), "law": lid}, vis="public")
+            k.apply("hide_post", event=eid, hide=False, lid=lid)
             return True
 
         def posts(n=20):

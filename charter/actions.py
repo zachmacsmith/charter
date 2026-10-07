@@ -106,8 +106,9 @@ def _looks_like_code(v) -> bool:
 
 
 def act(k, aid: str, name: str, args: dict) -> str:
-    """Dispatch one action; everything it logs carries an action cause frame (kernel.cause)."""
-    with k.cause("action", str(name), agent=None if k.current_turn_agent() == aid else aid):
+    """Dispatch one action; everything it logs carries an action cause frame (kernel.cause), a root frame: the action item's
+    primitives (Kernel.apply) form one cascade."""
+    with k.cause("action", str(name), agent=None if k.current_turn_agent() == aid else aid, root=True):
         return _act(k, aid, name, args)
 
 
@@ -231,19 +232,8 @@ def _harvest(k, aid, camp, x=None, **extra):
     else:
         y, eff, noise = C.harvest(c, x, hrng)
         y = P.granary_cap(k, c, y)                                     # a funded granary keeps seed stock out of reach
-    ded = 0.0
-    for _, out in k.hooks("on_harvest", aid, camp, list(x), y):
-        if isinstance(out, (int, float)) and out > 0:
-            ded += float(out)
-    ded = min(ded, y)
-    item = c["resource"]
-    if y - ded > 0:
-        k._add(aid, item, y - ded)
-    if ded > 0:
-        k._add(J.home_reserve(k, aid), item, ded)                        # jurisdictions: to the harvester's jurisdiction ("reserve" when off)
-    v = k.w["unit"][item]
-    k.w["effects"]["harvest_yield"] += y * v
-    k.w["effects"]["harvest_deducted"] += ded * v
+    item = c["resource"]                                               # on_harvest deductions go to the harvester's home reserve
+    ded = k.apply("harvest", agent=aid, camp=camp, x=x, item=item, qty=y).result["deducted"]
     k.eff.setdefault(aid, {}).setdefault(camp, []).append((k.r, eff))
     k.log("harvest", aid, {"camp": camp, "x": x, "yield": y, "deducted": ded, "efficiency": round(eff, 4), "noise": round(noise, 4),
                            "stock_before": round(c["S"], 3), **({"info": info} if info else {})}, vis=[aid])
@@ -285,12 +275,7 @@ def _post(k, aid, text):
     MD.check_post(k, aid)                                              # media2: posting needs a licence from some outlet
     text = str(text)[:2000]
     t = k.agent(aid)["title"]
-    eid = k.log("post", aid, {"text": text, "title": t}, vis="public")
-    k.current_post = eid
-    try:
-        k.hooks("on_post", aid, text)
-    finally:
-        k.current_post = None
+    eid = k.apply("post", agent=aid, kind="post", text=text, actor=aid, data={"text": text, "title": t}).result["event"]
     return f"Posted ({eid})."
 
 
@@ -301,13 +286,7 @@ def _anon_post(k, aid, text):
         return MD.submit(k, aid, text, anon=True)
     MD.check_post(k, aid)                                              # media2: posting needs a licence from some outlet
     text = str(text)[:2000]
-    eid = k.log("anon_post", None, {"text": text}, vis="public")
-    k.log("anon_truth", aid, {"event": eid, "author": aid}, vis="monitor")
-    k.current_post = eid
-    try:
-        k.hooks("on_post", "anonymous", text)
-    finally:
-        k.current_post = None
+    eid = k.apply("post", agent=aid, kind="anon_post", text=text, actor=None, data={"text": text}).result["event"]
     return f"Posted anonymously ({eid})."
 
 
@@ -336,12 +315,9 @@ def _deliver(k, aid, to, text, encrypted=False, extra=None):
     """Log a DM (after _dm_check). Convention: the event's `agent` is always the TRUE sender and data["to"] the TRUE recipient; a
     forged DM carries data["shown_as"] (the apparent sender) and a reply to one carries data["shown_to"] (whom the replier believes
     they answered). Feeds show the apparent names except to the true recipient (agents.render_event); laws (on_dm) see the apparent ones."""
-    extra = extra or {}
-    k.w["dm_sent"][aid] = k.w["dm_sent"].get(aid, 0) + 1
-    eid = k.log("dm", aid, {"to": to, "text": str(text)[:2000], "encrypted": bool(encrypted), **extra}, vis=[aid, to])
-    if k.spec["conditions"].get("law_reads_dms"):                    # laws see DMs only when the world allows it; never encrypted text
-        k.hooks("on_dm", extra.get("shown_as") or aid, extra.get("shown_to") or to, None if encrypted else str(text)[:2000], bool(encrypted))
-    return eid
+    extra = extra or {}                                                # laws (on_dm) see DMs only when the world allows it (readable)
+    return k.apply("dm", sender=aid, recipient=to, text=str(text)[:2000], encrypted=encrypted, shown_as=extra.get("shown_as"),
+                   shown_to=extra.get("shown_to"), extra=extra).result["event"]
 
 
 _BAD_ESCAPE = __import__("re").compile(r'\\(?!["\\/bfnrtu])')
@@ -463,7 +439,7 @@ def _set_dm_limit(k, aid, n, agent=None):
     _need(k, aid, "dm_rules", "set the private-message limit")
     if agent is not None and k.cls_of(agent) in ("board", "fixer"):
         raise ActionError("the Board's and Fixer's messages cannot be limited")
-    n = k.set_dm_limit(n, agent, by=aid)
+    n = k.apply("set_dm_limit", agent=agent, n=n, actor=aid).result["n"]
     return f"DM limit set to {n} per round" + (f" for {agent}" if agent else " for everyone") + "; it applies to messages not yet sent this round."
 
 
@@ -501,20 +477,12 @@ def _send(k, aid, to, item, qty, extra=None):
         raise ActionError("qty must be positive")
     if k.bal(aid, item) + 1e-9 < qty:
         raise ActionError(f"you have only {k.bal(aid, item):g} {item}")
-    tax, blocked = 0.0, False
-    for _, out in k.hooks("on_transfer", aid, to, item, qty):
-        if out is False:
-            blocked = True
-        elif isinstance(out, (int, float)) and not isinstance(out, bool) and out > 0:
-            tax += float(out)
-    if blocked:
+    out = k.apply("move", src=aid, dst=to, item=item, qty=qty, why="transfer", actor=aid)   # on_transfer may block or tax it
+    if not out.ok:
         k.w["effects"]["blocked_transfers"] += 1
         k.log("transfer_blocked", aid, {"to": to, "item": item, "qty": qty, **(extra or {})}, vis=[aid, to])
         raise ActionError("a law blocked this transfer")
-    tax = min(tax, qty)
-    k.move(aid, to, item, qty - tax, why="transfer", by=aid)
-    if tax:
-        k.move(aid, J.home_reserve(k, aid), item, tax, why="transfer_tax", by=aid)   # jurisdictions: the payer's ("reserve" when off)
+    tax = out.result["charged"]                                        # paid to the payer's home reserve ("reserve" when off)
     v = k._v(item)
     k.w["effects"]["transfer_qty"] += qty * v
     k.w["effects"]["transfer_taxed"] += tax * v
@@ -550,13 +518,11 @@ def _deposit(k, aid, currency, item, qty):
         backing = sum(k.w["unit"].get(i, 0) * v for i, v in k.w["reserve"].items()) \
             if c.get("reserve", "reserve") == "reserve" else sum(k.w["unit"].get(i, 0) * v for i, v in (J.pool(k, rk) if rk != "reserve" else k.w.get("reserves", {}).get(c["reserve"], {})).items())
         if backing > 1e-9:
-            c["supply"] += backing
-            k._add(rk, currency, backing)
+            k.apply("mint", currency=currency, qty=backing, to=rk, via="treasury")
             k.log("treasury_coins", None, {"currency": currency, "coins": backing}, vis="public")
     coins = qty * k.unit_value(item) / k.price(currency)
     k.move(aid, rk, item, qty, why="deposit", by=aid)
-    c["supply"] += coins
-    k._add(aid, currency, coins)
+    k.apply("mint", currency=currency, qty=coins, to=aid, via="deposit")
     k.log("deposit", aid, {"currency": currency, "item": item, "qty": qty, "coins": coins}, vis=[aid])
     return f"Deposited {qty:g} {item}; received {coins:.4g} {currency} (P={k.price(currency):.4g})."
 
@@ -574,8 +540,7 @@ def _redeem(k, aid, currency, item, coins):
     rk = J.currency_reserve(k, currency)                                # jurisdictions: the reserve backing it ("reserve" when off)
     if k.bal(rk, item) + 1e-9 < qty:
         raise ActionError(f"the reserve holds only {k.bal(rk, item):g} {item}")
-    k._add(aid, currency, -coins)
-    k.w["currencies"][currency]["supply"] = max(0.0, k.w["currencies"][currency]["supply"] - coins)
+    k.apply("burn", currency=currency, qty=coins, frm=aid, via="redeem")
     k.move(rk, aid, item, qty, why="redeem", by=aid)
     k.log("redeem", aid, {"currency": currency, "item": item, "coins": coins, "qty": qty}, vis=[aid])
     return f"Redeemed {coins:g} {currency} for {qty:.4g} {item}."
@@ -745,8 +710,8 @@ def _commission(k, aid, maker, spec=None, payment=None):
 def _publish(k, aid, headline, text):
     """A front-page story at the top of every agent's next feed."""
     _need(k, aid, "press", "publish stories")
-    eid = k.log("story", aid, {"headline": str(headline)[:200], "text": str(text)[:2500]}, vis="public")
-    k.hooks("on_post", aid, f"{headline} {text}")
+    eid = k.apply("post", agent=aid, kind="story", text=f"{headline} {text}", actor=aid,
+                  data={"headline": str(headline)[:200], "text": str(text)[:2500]}).result["event"]
     return f"Published ({eid})."
 
 
@@ -765,7 +730,8 @@ def _report(k, aid, event, text):
     if not orig or orig["type"] not in ("post", "story", "channel_post") or not k.can_see(aid, orig):
         raise ActionError(f"{event} is not a post you can see")
     said = orig["data"].get("text", "")
-    eid = k.log("report", aid, {"source": orig["id"], "about": orig["agent"], "text": str(text)[:2000]}, vis="public")
+    eid = k.apply("post", agent=aid, kind="report", text=str(text)[:2000], actor=aid,
+                  data={"source": orig["id"], "about": orig["agent"], "text": str(text)[:2000]}).result["event"]
     k.log("report_truth", aid, {"report": eid, "source": orig["id"], "original": said, "reported": str(text)[:2000],
                                 "verbatim": " ".join(said.split()) in " ".join(str(text).split())}, vis="monitor")
     return f"Reported on {event} ({eid})."
@@ -819,7 +785,8 @@ def _channel_post(k, aid, channel, text):
     ch = k.w["channels"].get(str(channel))
     if not ch or not (ch["open"] or aid in ch["members"]):
         raise ActionError(f"you cannot post in {channel}")
-    eid = k.log("channel_post", aid, {"channel": str(channel), "text": str(text)[:2000]}, vis=f"channel:{channel}")
+    eid = k.apply("post", agent=aid, kind="channel_post", text=str(text)[:2000], outlet=str(channel), actor=aid,
+                  data={"channel": str(channel), "text": str(text)[:2000]}, vis=f"channel:{channel}").result["event"]
     return f"Posted in {channel} ({eid})."
 
 
