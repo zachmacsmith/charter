@@ -7,7 +7,7 @@ calls reach `llm.fail_stop_fraction` (default 0.5) of max(planned decisions, cal
     and the readable reports are rebuilt from the cut files; the abandoned model calls are moved to abandoned_calls.jsonl;
   - STOPPED.md in the run directory records the round, the counts and sample errors;
   - the runner raises RunStopped, so `python -m charter resume <dir>` (or the same command again) replays the round.
-Side effects outside the run directory cannot be undone: a Scientist's write_archive in the abandoned round stays in the shared archive.
+Archive writes in the abandoned round are cut with the run's overlay: the shared archive only receives a run's writes when it completes (archive.Frozen).
 `fail_stop_fraction: null` keeps the old rule (stop only when every call fails); a value above 1 never stops.
 """
 from __future__ import annotations
