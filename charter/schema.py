@@ -214,6 +214,7 @@ def _ann():
         "agents": dict(kind="leaf", types=("dict",), check=_check_agents),
         "rounds": dict(types=("int",), range=(1, None)),
         "turns": dict(types=("str",), enum=("sequential", "simultaneous")),
+        "rng_version": dict(types=("int",), enum=(1, 2)),
         "parallel_calls": dict(types=("int",), range=(1, None)),
         "actions_per_turn": dict(types=("int",), range=NONNEG),
         "actions_jitter": dict(range=NONNEG),
@@ -378,6 +379,7 @@ def _ann():
 
 # Keys the code reads that no DEFAULTS dict or base.yaml lists: path -> default (types and enums in ANN, docs in DOCS).
 EXTRA = {
+    "rng_version": 1,
     "fixer_model": None,
     "camps.model": "legacy",
     "models.by_class": {},
@@ -593,6 +595,8 @@ DOCS = {
     "seed": "the world's seed (set by the generator; `--seed` on the command line)",
     "agents": "agents per class (worker, scientist, legislator, media, board, fixer); `a+b: n` gives n agents holding both classes",
     "rounds": "rounds in the run",
+    "rng_version": "1: one kernel random stream (every existing run) | 2: named streams per purpose (turn order per round, harvest "
+                   "noise per agent/camp/harvest, drift per camp, rng() per law and round), so one extra draw shifts no other",
     "unit_values": "value of one unit of each resource (scoring and welfare)",
     "camps": "the camps (common-pool resources) and their harvest functions",
     "camps.model": "legacy (the tiers) | types (typed camps from charter/camptypes/)",
