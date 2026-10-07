@@ -40,7 +40,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   auth or CLI errors), the round is abandoned, also mid-round in sequential mode: the logs are cut back to the last checkpoint (a
   checkpoint is also written before round 1), `STOPPED.md` gives the round, the counts and sample errors, and the run stops with exit
   code 2. Run the same command again (or `resume`) later to replay that round. Writes to the shared archive in the abandoned round
-  are not undone. Runs from before checkpoints existed cannot be resumed. The abandoned round's model calls are moved to
+  are cut with the run's overlay (they reach the live archive only when the run completes). Runs from before checkpoints existed cannot be resumed. The abandoned round's model calls are moved to
   `abandoned_calls.jsonl`, not deleted.
 - `run.json` (charter/provenance.py) records how the run was made: git sha, dirty flag and a sha of `git diff HEAD`, Python version,
   policy (dry or not), backend, models and the `llm` config (never keys), spec and instance sha, seed, and a `code` block (a sha per
@@ -48,7 +48,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   (scorer.SCORING_VERSION)). Every start and resume appends a `segments` entry with its first round, the code it ran under, the
   modules whose hash changed since the previous segment, and how it ended (`complete` or `stopped`). `resume` reads the dry flag from
   it (older runs: from the directory name).
-- Every append-only file (`provenance.APPEND_ONLY`: events, reasoning, observer, calls) is covered by the checkpoint offsets.
+- Every append-only file (`provenance.APPEND_ONLY`: events, reasoning, observer, calls, turns, archive_overlay, sandbox) is covered by the checkpoint offsets.
 
 ## What a run produces (`charter/out/<spec>/<run>/`, git-ignored)
 - `story.html`: the run as a story you scroll through (`python -m charter view RUN_DIR --open` rebuilds it; it also updates every
@@ -71,6 +71,24 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   model, backend, latency, usage, `system_sha`/`user_sha`, and every attempt (raw reply text, error of a failed attempt or retry);
   scripted bots store their parsed reply instead. `prompts/system/<sha>.txt` holds each distinct system prompt actually sent, once
   (with context on it is rebuilt every turn; `prompts/<id>.system.md` is only the first).
+- Run store additions of P5.4 (read by export / History; all paths relative to the run directory):
+  - `blobs/<sha256>`: content-addressed store, file name = full sha256 hex of the bytes, each distinct content once
+    (`provenance.put_blob` / `get_blob`). Holds the frozen archive's base files and overlay texts and every sandbox call's code and
+    output. A rewind hard-links (or copies) the parent's blobs.
+  - `sandbox.jsonl` (append-only, checkpointed): one row per sandbox call (run_python), `{call: "r<round>:<agent>:<n>", round, agent,
+    n, code: <blob sha>, output: <blob sha>, chars, replayed?}`; present (possibly empty) in every run made since. Replays and forks
+    serve outputs from it (`replay.ReplaySandbox`) and never run Docker for recorded calls.
+  - Only when the shared archive is on: `archive/base.json` `{files: {"<name>.md" | "_writes.jsonl": <blob sha>}, hash, docs_hash,
+    taken, source, note?, copied_from?}` (the frozen base snapshot of the live shared archive at the run's start; `hash` is over the
+    file map, `docs_hash` equals `ground_truth.json -> shared_archive_at_start.hash`); `archive/state.json` `{publish, published,
+    published_at}`; `archive/view/` (derived: base + overlay, rebuilt at each start and resume; ignore it for analysis);
+    `archive_overlay.jsonl` (append-only, checkpointed): the run's own writes in order, `{op: "log_note" | "write", text: <blob sha>,
+    author, run, signature | doc + mode}`. `run.json -> shared_archive` repeats the base's `hash`, `docs_hash`, file count, source
+    and whether the run publishes.
+- The shared archive is **frozen per run**: every read in a run comes from its frozen base plus its own writes, so a resume, rewind,
+  fork or replay reads exactly what the run read, whatever the live archive holds by then. The run's writes reach the live archive
+  when the run completes (replays and forks never publish). Unlike before, a world no longer sees another world's notes written
+  while it runs, and a paused or stopped run publishes nothing until it completes.
 
 ## Differential test: did a refactor change behaviour? (`charter/difftest.py`)
 Runs the same scripted worlds on two code revisions and reports where they first diverge (the gate in docs/review/06 §9.3).
