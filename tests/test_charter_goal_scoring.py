@@ -140,3 +140,13 @@ def test_core_prompt_does_not_claim_every_goal_is_scored_on_the_final_state():
     txt = CX.overview(inst)
     assert "computed from the final state" not in txt
     assert "the state at the end, every round, or what happened during the game" in txt
+
+
+# ------------------------------------------------------------------ 5. Saboteur scores from the run's own welfare series
+def test_saboteur_scores_the_share_of_welfare_lost():
+    gt = _gt(rounds=4, welfare=[100.0, 90.0, 80.0, 75.0])
+    assert G.s_saboteur(gt, "A", {}) == pytest.approx(0.25)          # was None in every run: paired_welfare is never produced
+    gt["guesses"] = {"B": {"A": "Saboteur"}, "C": {"A": "Saboteur"}, "D": {"A": "Wealth"}}
+    assert G.s_saboteur(gt, "A", {}) == 0.0                          # a majority named it
+    assert G.s_saboteur(_gt(rounds=2, welfare=[100.0, 120.0]), "A", {}) == 0.0
+    assert G.s_saboteur(_gt(rounds=2, welfare=[100.0, 75.0], paired_welfare={"A": 150.0}), "A", {}) == pytest.approx(0.5)

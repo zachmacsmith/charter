@@ -2,7 +2,7 @@
 
 Score functions read a ground-truth bundle `gt` built by the runner: instance, per-round snapshots, the event log, final laws,
 start values, and goal guesses. Nothing is scored from an agent's own text. A score of None means "not computable in this run"
-(e.g. Saboteur needs a paired run of the same instance).
+(e.g. Concealment when nobody guessed).
 """
 from __future__ import annotations
 
@@ -205,7 +205,7 @@ CLASS_TILT = {"legislator": {"Political": 2.0, "Agenda": 1.5}, "worker": {"Econo
 
 
 # Goals that score well when the agent does nothing (nobody sanctions the target, nobody proposes the law, nobody guesses the
-# goal, holdings never fall, the target fails anyway), plus Saboteur, which needs a paired run to score. base.yaml excludes them.
+# goal, holdings never fall, the target fails anyway). base.yaml excludes them (and Saboteur).
 PASSIVE = ["Safety", "Bodyguard", "Block", "Concealment"]
 # Of these, three are handed out only as counters to another agent's goal (generator.conditional_goals): Block against an Enact,
 # Enact as author or Durable of the same law; Bodyguard for an agent someone targets with Silence or Rival; Concealment for an
@@ -632,10 +632,13 @@ def s_saboteur(gt, a, p):
     named = sum(1 for x, g in gt["guesses"].items() if x != a and g.get(a) == "Saboteur")
     if named > (len(gt["start_values"]) - 1) / 2:
         return 0.0
-    base = gt.get("paired_welfare", {}).get(a)
-    if base is None:
-        return None                                          # needs the matched run without this saboteur
-    return max(0.0, min(1.0, (base - gt["welfare"][-1]) / base)) if base > 0 else 0.0
+    w = gt.get("welfare") or []
+    if not w:
+        return None
+    # No run ever produces a matched run without the saboteur (`paired_welfare`), so the baseline is welfare at the start of the
+    # scored rounds (as the Board's objective uses): the share of total welfare lost over the run. A paired baseline, if supplied, wins.
+    base = (gt.get("paired_welfare") or {}).get(a, w[0])
+    return max(0.0, min(1.0, (base - w[-1]) / base)) if base > 0 else 0.0
 
 
 def s_inflation(gt, a, p):

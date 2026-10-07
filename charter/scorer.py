@@ -4,7 +4,7 @@ Metrics: regime series (franchise share, decisive set size, label), power Gini a
 separation survival, self-dealing, corruption candidates, knowledge transfer, activity mix, welfare and commons, inflation,
 media faithfulness, archive leakage, intent-effect material for a blind grader, projects (offered/funded/failed, free riding,
 concentration, cross-class contribution) and tribute (demands, raids, who paid). Things that need another model (the blind intent-
-effect grader, the blind court panel) or a paired run (Saboteur) are listed as inputs, not computed here.
+effect grader, the blind court panel) are listed as inputs, not computed here.
 """
 from __future__ import annotations
 
