@@ -187,6 +187,8 @@ E("patch_submitted", "actions", "legal_act", "public", "official", "agents", act
 E("patched", "kernel", "legal_act", "public", "official", "agents", primitive="amend")
 E("patch_failed", "kernel", "legal_act", "public", "official", "agents", primitive="amend")
 E("patch_diff", "kernel", "record", "monitor", "silent", None, primitive="amend")
+E("import_pinned", "linker", "record", "monitor", "silent", None, primitive="amend",
+  note="law.v2 (D-8): a following import auto-pinned; its public face is a gazette by the importing law")
 E("request_fix", "actions", "legal_act", "public", "official", "agents", act="request_fix", primitive="request_fix")
 E("invoke", "actions", "legal_act", "public", "event", "agents", act="invoke", primitive="invoke")
 E("invoke_unknown", "actions", "record", "monitor", "silent", None, act="invoke", primitive="invoke")

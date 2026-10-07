@@ -50,7 +50,7 @@ DOCS = {
     "jurisdictions": "lawdocs.E, gated by lawdocs.OPTIONAL: only with jurisdictions on",
     "media2": "lawdocs.E, gated by lawdocs.OPTIONAL: only with media2 on",
     "life": "lawdocs.E, gated by lawdocs.OPTIONAL: only with life on",
-    "requires": "lawdocs.E, gated by lawdocs.REQUIRES: only with life or conflict on (mortality)",
+    "requires": "lawdocs.E, gated by lawdocs.REQUIRES: only where its condition holds (mortality: life or conflict on; linker: law.v2)",
     "leases": "lawdocs.E, gated by lawdocs._gated_off: only with leasing on (camptypes/leases.py)",
     "conflict": "conflict.LAW_DOCS, shown by conflict.prompt_section with conflict on (lawdocs.MODULE_ENTRIES: never in the mapping)",
 }
@@ -78,6 +78,7 @@ class LawFn:
     docs: str = "lawdocs"       # a DOCS key
     level: str | None = None    # a law-level constraint beyond the class
     primitive: str | None = None    # the primitive it causes (its compel face, charter/primitives.py), if it writes (P1.7)
+    v2: bool = False            # exists only in law.v2 worlds (Kernel.api_for adds it; off: the name is unknown, as before)
 
     @property
     def cls(self) -> str:
@@ -271,7 +272,14 @@ LAWFNS = _fns(
         F("publish_commissions", "output", docs="life", primitive="set_birth_rules"),
         F("publish_births", "output", docs="life", primitive="set_birth_rules"),
     ),
+    _module(
+        "linker",                                                       # law.v2 (P3.3): laws building on laws
+        F("use", "meta", scope="none", why="a law reference, binds nobody: what it links runs with the calling law's own API "
+          "(scoped as that law's calls are); a hidden jurisdiction's laws are invisible to other jurisdictions", docs="requires", v2=True),
+        F("public_of", "read", scope="read", docs="requires", v2=True),  # a hidden jurisdiction's laws read as "no such law"
+    ),
 )
+V2_ONLY = {f.name for f in LAWFNS.values() if f.v2}                    # law.v2 names: off, Kernel.api_for has none of them
 # P1.7: the primitive column of the two rows P1.4 edits (kept off their lines to avoid a merge conflict; fold in after the merge)
 LAWFNS.update({n: replace(LAWFNS[n], primitive=p) for n, p in (("repeal", "repeal"), ("set_official_editor", "appoint"))})
 

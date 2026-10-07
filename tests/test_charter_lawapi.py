@@ -18,7 +18,7 @@ from charter.kernel import Kernel
 
 SNAPSHOT = Path(__file__).parent / "fixtures" / "charter_lawapi_snapshot.json"
 ALL_ON = ["jurisdictions.enabled=false", "conflict.enabled=true", "media2.enabled=true", "life.enabled=true",
-          "shared_archive.enabled=false"]
+          "shared_archive.enabled=false", "law.v2=true"]   # law.v2: use and public_of exist (lawapi.V2_ONLY)
 
 
 def _kernel():
@@ -29,8 +29,8 @@ def test_classification_and_scoping_are_byte_identical_to_the_hand_lists():
     """API_GROUPS, STRUCTURAL_CALLS, HOOKS and the scoping tables, generated from the table, equal what was written by hand."""
     want = json.loads(SNAPSHOT.read_text())
     assert list(LL.API_GROUPS) == list(want["API_GROUPS"])
-    assert {g: sorted(s) for g, s in LL.API_GROUPS.items()} == want["API_GROUPS"]
-    assert LL.API == set().union(*map(set, want["API_GROUPS"].values()))
+    assert {g: sorted(s - LA.V2_ONLY) for g, s in LL.API_GROUPS.items()} == want["API_GROUPS"]   # P3.3 adds V2_ONLY
+    assert LL.API - LA.V2_ONLY == set().union(*map(set, want["API_GROUPS"].values())) and LA.V2_ONLY == {"use", "public_of"}
     assert sorted(LL.STRUCTURAL_CALLS) == want["STRUCTURAL_CALLS"]
     assert list(LL.HOOKS) == want["HOOKS"]
     assert sorted(LA.LEGACY_ONLY) == want["LEGACY_ONLY"] and J.LEGACY_ONLY == LA.LEGACY_ONLY
@@ -55,7 +55,7 @@ def test_every_reachable_function_has_a_row_and_every_row_is_reachable():
     k = _kernel()
     api = k.api_for("_")
     assert set(api) == set(LA.LAWFNS), (sorted(set(api) - set(LA.LAWFNS)), sorted(set(LA.LAWFNS) - set(api)))
-    assert len(LA.LAWFNS) == 117
+    assert len(LA.LAWFNS) == 119
     mods = {f.module for f in LA.LAWFNS.values()} - {"kernel"}
     from_modules = set()
     for m in sorted(mods):
@@ -132,5 +132,5 @@ def test_hooks_table_matches_the_dispatch_sites_and_jurisdiction_routing():
 
 def test_rows_render():
     rows = LA.rows()
-    assert len([r for r in rows if r["kind"] == "function"]) == 117 and len([r for r in rows if r["kind"] == "hook"]) == 15
+    assert len([r for r in rows if r["kind"] == "function"]) == 119 and len([r for r in rows if r["kind"] == "hook"]) == 15
     assert all(r["dispatch"] for r in rows if r["kind"] == "hook")

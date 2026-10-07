@@ -215,6 +215,7 @@ def _ann():
         "rounds": dict(types=("int",), range=(1, None)),
         "turns": dict(types=("str",), enum=("sequential", "simultaneous")),
         "rng_version": dict(types=("int",), enum=(1, 2)),
+        "law.v2": dict(types=("bool",)),
         "parallel_calls": dict(types=("int",), range=(1, None)),
         "actions_per_turn": dict(types=("int",), range=NONNEG),
         "actions_jitter": dict(range=NONNEG),
@@ -400,6 +401,7 @@ EXTRA = {
     "prompts.manual": None,
     "prompts.profiles": {},
     "prompts.assign": [],
+    "law.v2": False,
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
@@ -595,6 +597,8 @@ DOCS = {
     "seed": "the world's seed (set by the generator; `--seed` on the command line)",
     "agents": "agents per class (worker, scientist, legislator, media, board, fixer); `a+b: n` gives n agents holding both classes",
     "rounds": "rounds in the run",
+    "law": "the legal system (docs/review/09_law_composition.md)",
+    "law.v2": "true: the legal system v2 (exports, use and public state between laws, versions; ARCHITECTURE §6); false: as before",
     "rng_version": "1: one kernel random stream (every existing run) | 2: named streams per purpose (turn order per round, harvest "
                    "noise per agent/camp/harvest, drift per camp, rng() per law and round), so one extra draw shifts no other",
     "unit_values": "value of one unit of each resource (scoring and welfare)",
