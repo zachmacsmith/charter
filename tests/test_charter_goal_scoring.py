@@ -211,3 +211,11 @@ def test_havoc_refusal_names_only_catalogue_goals():
     from charter import roles as R
     assert set(R.HAVOC_REFUSAL) <= set(G.CATALOGUE)                  # "Framer" and "Mythmaker" never existed
     assert set(G.HAVOC) <= set(R.HAVOC_REFUSAL)
+
+
+# ------------------------------------------------------------------ 9. Lineage Influence counts offices, not role or class rights
+def test_offices_exclude_role_and_class_rights():
+    f = {"rights": {"A": ["impersonate", "maker", "scholar", "anon", "sandbox", "harvest:c1"], "B": ["vote", "propose", "tax_collector"]},
+         "titles": {"B": "Archon"}}
+    assert G._offices(f, "A") == 0                                  # was 4: the Spy's secret right and role rights counted as offices
+    assert G._offices(f, "B") == 4                                  # two office rights, a right created by law, a title

@@ -1058,11 +1058,15 @@ def s_lineage_wealth(gt, a, p):
 
 OFFICE_RIGHTS = {"vote", "propose", "veto", "judge", "decree", "dm_rules", "surveil", "ledger_read", "patch", "press", "elector"}
 BASE_RIGHTS = {"sandbox", "archive", "encrypt", "see_hidden"}
+# Rights that are not offices: class tools (BASE_RIGHTS, anon) and the rights that carry a role (roles.py: the Spy's secret
+# impersonate, formerly forge; the Maker's maker; the Scholar's scholar). Kept explicit here until a rights registry says which
+# rights are offices; any other right (office rights and rights created by law) counts.
+NON_OFFICE_RIGHTS = BASE_RIGHTS | {"anon", "impersonate", "forge", "maker", "scholar"}
 
 
 def _offices(f, x) -> int:
-    """Offices an agent holds: office rights, rights created by law (not harvest rights or class tools), and a title."""
-    rs = [r for r in f["rights"].get(x, []) if not r.startswith("harvest:") and r not in BASE_RIGHTS]
+    """Offices an agent holds: office rights, rights created by law (not harvest rights, class tools or role rights), and a title."""
+    rs = [r for r in f["rights"].get(x, []) if not r.startswith("harvest:") and r not in NON_OFFICE_RIGHTS]
     return len(rs) + (1 if (f.get("titles") or {}).get(x) else 0)
 
 
