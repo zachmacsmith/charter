@@ -1,0 +1,103 @@
+"""Goal registry (P1.5): one row per goal, the old tables derived from it, every rule written, every example passing, and the
+generated text/rule listing (docs/goal_rules.md) current. No runs, no model calls."""
+from __future__ import annotations
+
+import random
+from pathlib import Path
+
+import pytest
+
+from charter import goal_registry as GR
+from charter import goals as G
+from charter import history as HI
+from charter import life as LF
+from charter import roles as RO
+
+DOC = Path(__file__).resolve().parents[1] / "docs" / "goal_rules.md"
+
+
+def test_registry_covers_the_catalogue():
+    assert set(GR.GOALS) == set(G.CATALOGUE) == set(G.SCORERS)
+    assert list(GR.GOALS) == list(G.CATALOGUE)                       # draw order is the catalogue order
+    for name, g in GR.GOALS.items():
+        assert G.CATALOGUE[name] == (g.category, g.weight, g.min_level, g.text)
+        assert GR.get(name) is g
+
+
+@pytest.mark.parametrize("name", list(GR.GOALS) + list(GR.FIXED))
+def test_every_goal_has_a_rule_and_a_version(name):
+    g = GR.get(name)
+    assert isinstance(g.rule, str) and len(g.rule.strip()) > 20, name
+    assert g.version == 1 and g.text and callable(g.score) and callable(g.params)
+    assert g.needs, name
+
+
+def test_every_example_passes():
+    assert GR.check_examples() == []
+    with_examples = [n for n, g in GR.GOALS.items() if g.examples]
+    assert len(with_examples) >= 12
+
+
+def test_a_wrong_example_is_reported():
+    bad = GR.replace(GR.GOALS["Wealth"], examples=(GR.ex("A", {}, 0.25, final={"values": {"A": 5.0, "B": 10.0}}),))
+    old = GR.GOALS["Wealth"]
+    GR.GOALS["Wealth"] = bad
+    try:
+        assert GR.check_examples(["Wealth"]) == ["Wealth example 0: expected 0.25, got 0.5"]
+    finally:
+        GR.GOALS["Wealth"] = old
+
+
+def test_score_is_the_legacy_scorer_through_history():
+    h = GR.EXAMPLES["Gifts"][0][0]()
+    for name in ("Gifts", "Safety", "Benefactor", "Wealth"):
+        g = GR.GOALS[name]
+        assert g.score(h, "A", {}, HI.Ctx(h)) == G.SCORERS[name](h.gt, "A", {}) == HI.score_goal(h, name, "A", {})
+        assert g.score.legacy is G.SCORERS[name]
+
+
+def test_old_names_are_derived_from_the_rows():
+    rows = GR.GOALS.values()
+    assert set(G.NEW_GOALS) == {g.name for g in rows if g.gate == "update"} == {"Eliminator", "Seat", "Dynasty"}
+    assert set(G.EXTRA_GATES) == {g.name for g in rows if g.gate == "package"}
+    assert all(G.EXTRA_GATES[n] == GR.GOALS[n].requires for n in G.EXTRA_GATES)
+    assert set(G.HAVOC) == {g.name for g in rows if g.category == "Havoc"}
+    assert set(G.DIRECT_SHARE) == {g.name for g in rows if g.share == "direct"}
+    assert {n for n, s in G.SLOTS.items() if s == G.NOT_PRIMARY} == G._SECONDARY_ONLY
+    assert set(G.PASSIVE) == {"Safety", "Bodyguard", "Block", "Concealment"}
+    assert list(G.COUNTER_GOALS) == ["Block", "Bodyguard", "Concealment"]
+    assert RO.HAVOC_REFUSAL == ("Eliminator",) + G.HAVOC and "Framer" not in RO.HAVOC_REFUSAL
+    assert LF.HISTORY == {g.name for g in rows if g.lineage == "record"} and LF.SUMMED == {"Wealth", "Power", "Hoard"}
+    assert "Dynasty" not in LF.HISTORY | LF.SUMMED and GR.GOALS["Dynasty"].lineage == "own"
+    assert LF.LINEAGE_OVERRIDE == {"Wealth", "Rank", "Hoard", "Diversifier", "Currency Magnate", "Power", "Office", "Sovereign",
+                                   "Seat", "Title", "Spymaster"}
+
+
+def test_samplers_and_text():
+    world = {"resources": ["timber"], "camps": ["c1"], "hardest_camp": "c1", "library": [], "agents": [("A", "worker", []),
+             ("B", "worker", ["vote"])], "compute": {}, "channels_dm": True, "has_media": False, "has_scientists": False}
+    for name in GR.GOALS:
+        r1, r2 = random.Random(name), random.Random(name)
+        assert G.sample_params(name, r1, world, "A") == GR.GOALS[name].params(r2, world, "A")
+        assert r1.random() == r2.random()                              # same RNG consumption
+    assert G.sample_params("Board objective", random.Random(1), world, "A") == {}
+    assert G.describe("Kingmaker", {"target": "B"}).startswith("get B into the top 3")
+    assert G.describe("Kingmaker", {}).startswith("get  into the top 3")    # a missing parameter renders as "" (as before)
+    g = {"primary": "Wealth", "params": {}, "secondary": "Rival", "secondary_params": {"target": "B"}}
+    assert GR.slot_text(g, [0.7, 0.3]) == (f"Primary goal (70% of your score): {G.describe('Wealth', {})}. "
+                                           f"Secondary goal (30%): {G.describe('Rival', {'target': 'B'})}.")
+    assert GR.slot_text(g, [1.0]) == G.describe("Wealth", {})
+
+
+def test_probes_are_declared_for_predicate_goals():
+    for name in ("Enact", "Enact as author", "Block", "Durable", "Outcome"):
+        assert GR.GOALS[name].probes and "predicates" in GR.GOALS[name].needs
+
+
+def test_goal_rules_doc_is_current():
+    md = GR.rules_markdown()
+    assert DOC.read_text() == md, "regenerate docs/goal_rules.md from goal_registry.rules_markdown()"
+    for name, g in GR.GOALS.items():
+        assert f"| {name} |" in md
+    for name in ("Rank", "Board objective", "Kingmaker", "Title"):
+        assert GR.TEXT_VS_SCORER[name][0] == "yes"

@@ -51,6 +51,7 @@ import math
 import random
 
 from charter import eventtypes as ET                                  # the event-type registry
+from charter import goal_registry as GR                               # per-goal lineage scoring (HISTORY, SUMMED, LINEAGE_OVERRIDE)
 from charter import lawlang as L
 from charter import mortality as MO
 
@@ -76,15 +77,14 @@ DEFAULTS = {
     "persona_tokens": 300, "letter_tokens": 1000, "commission_expiry": 5, "ensure_maker": True,
     "heir_reminder": 3,                 # rounds left at which an agent is reminded, every turn, to consider an heir
 }
-HISTORY = {"Lawmaker", "Enact as author", "Gifts", "Whistleblower", "Litigator", "Repealer", "Constitution writer", "Leaker",
-           "Bounty hunter", "Gatekeeper", "Patron", "Scholar", "Reserve banker", "Creditor"}
-SUMMED = {"Wealth", "Power", "Hoard"}
+# Lineage scoring per goal, from each goal's registry row (goal_registry.Goal.lineage / lineage_override):
+HISTORY = GR.LINEAGE_RECORD             # scored on the run's record: the best of the whole lineage, dead members included
+SUMMED = GR.LINEAGE_SUMMED              # Wealth, Power, Hoard: summed over the living lineage
 # Goals about the agent's own holdings or offices at the end: the only ones whose lineage score may replace the agent's own score
 # (scorer.score, goals.score_at_end), as agents are told ("goals about your own holdings or offices count through your living
 # descendants"). Every other goal (deeds, world-shaping, relational, ...) is scored on the agent alone; its lineage score is
 # still reported apart (score.json -> lineage).
-LINEAGE_OVERRIDE = {"Wealth", "Rank", "Hoard", "Diversifier", "Currency Magnate",                       # own holdings
-                    "Power", "Office", "Sovereign", "Seat", "Title", "Spymaster"}                       # own offices
+LINEAGE_OVERRIDE = GR.LINEAGE_OVERRIDE  # own holdings (Wealth, Rank, Hoard, ...) and own offices (Power, Office, Seat, ...)
 EVENT_TYPES = ET.rendered_by("life")                                 # this module renders them (agents.render_event)
 
 
