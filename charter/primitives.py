@@ -2,8 +2,9 @@
 named by WHAT changes, not by who changes it. P1.7 declared the metadata (the derived lawlang.HOOKS is byte-identical to the old
 hand list); P2.1 routes the first primitives through `Kernel.apply(name, **payload)` (charter/dispatch.py): a row whose `fn` is
 "dispatch:do_<name>" is routed (dispatch.ROUTED: move, harvest, mint, burn, create_currency, grant_right, revoke_right,
-suspend_right, limit_actions, create_right, post, dm, hide_post, set_camp_rule, set_dm_limit), and its legacy ALIASES are dispatched
-by dispatch.apply under exactly today's conditions; the other rows still name the function making the change today (P2.3, P2.4).
+suspend_right, limit_actions, create_right, post, dm, hide_post, set_camp_rule, set_dm_limit; P2.4b: begin_life, end_life), and its
+legacy ALIASES are dispatched by dispatch.apply under exactly today's conditions (except dispatch.PHASE_ALIASES, dispatched by a phase
+step); the other rows still name the function making the change today (P2.3, P2.4).
 
 A row (`Primitive`) says:
   name, feature, effect   the change and its effect class (EFFECTS)
@@ -204,16 +205,22 @@ _ROWS = [
       event="goal_change", causes=("world",), sites=("events:change_goal",),
       why={"gate": "a private goal change (world events); laws cannot see goals"}),
     # ------------------------------------------------------------------ life
-    P("begin_life", "life", "life", ("agent", "how", "parent"), "events:add_agent", subject="agent", parties=("agent", "parent"),
+    P("begin_life", "life", "life", ("agent", "how", "parent"), "dispatch:do_begin_life", subject="agent", parties=("agent", "parent"),
       agent_params=("agent", "parent"), blockable=False, directives=("jurisdiction",), event="birth", causes=("agent", "world"),
-      reads=("births", "children_of", "makers", "agents"), sites=("life:_birth", "life:_make", "events:add_agent", "jurisdictions:assign_newborn"),
+      reads=("births", "children_of", "makers", "agents"),
+      sites=("dispatch:do_begin_life", "events:begin", "events:add_agent", "life:_birth", "jurisdictions:assign_newborn"),
       why={"compel": "laws cannot make agents; they set birth rules (set_birth_rules)"},
-      notes="how: born (a commission due), made (a Maker's own), copy, arrival; the child's jurisdiction is a before-directive"),
-    P("end_life", "mortality", "life", ("agent", "cause", "by"), "mortality:disable", subject="agent", parties=("agent", "by"),
+      notes="how: born (a commission due: life._birth), arrival (world events, spawn requests, interventions; parent = the sponsor); "
+            "made and copy are reserved (a Maker's order is born as `born`). The change and the birth phase are events.begin; the "
+            "child's jurisdiction is the on_birth directive, dispatched by the birth phase's jurisdiction step (dispatch.PHASE_ALIASES)"),
+    P("end_life", "mortality", "life", ("agent", "cause", "by"), "dispatch:do_end_life", subject="agent", parties=("agent", "by"),
       agent_params=("agent", "by"), blockable=False, event="disabled", causes=("agent", "world"),
-      reads=("disabled_agents", "lifespan_left"), sites=("mortality:disable", "events:depart"),
+      reads=("disabled_agents", "lifespan_left"),
+      sites=("dispatch:do_end_life", "mortality:end", "mortality:disable", "events:leave_world", "events:depart"),
       why={"compel": "laws end lives only through attack (lawful_attack)", "gate": "gated through its cause (attack); old age and accidents are physics"},
-      notes="causes: attack, assassin, accident, old_age, law (mortality.CAUSES); departure is events.depart (no mortality)"),
+      notes="causes: attack, assassin, accident, old_age, law (mortality.CAUSES: the death phase, an estate account and probate) and "
+            "departure (D-9: world events and interventions; events.leave_world: no death phase, holdings frozen or to the reserve, "
+            "logged as a monitor `departure`); intervention is P5"),
     P("commission", "life", "relation", ("parent", "maker", "order"), "life:commission", subject="parent", parties=("parent", "maker"),
       agent_params=("parent", "maker"), event="commission", causes=("agent",), gates=("set_birth_rules",), reads=("commissions",),
       preview=("rules.birth_rules",), sites=("life:commission",), why={"compel": _LNA}),

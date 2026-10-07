@@ -29,9 +29,9 @@ Order. FEATURES is today's law_api merge order (api_for spreads; snapshot_fields
 render_event had their own hand order; TAILS keeps each exactly, because snapshot and ground-truth key order and prompt line order
 reach bytes. Unifying them is a golden re-record, not this package.
 
-Phases. "init" (Kernel.__init__), "round_start" (Kernel.start_round), "round_end" (Kernel.end_round) and "death" (mortality.disable)
-are executed by loops over PHASES. "after_turns" (runner) and "birth" (life._birth / events.add_agent) are declared in today's order;
-their call sites are still inline (runner turn order: P5.3; birth: P2.4b) and the completeness test checks the entries resolve.
+Phases. "init" (Kernel.__init__), "round_start" (Kernel.start_round), "round_end" (Kernel.end_round), "death" (end_life:
+mortality.end) and "birth" (begin_life: events.begin) are executed by loops over PHASES. "after_turns" (runner) is declared in
+today's order; its call sites are still inline (runner turn order: P5.3) and the completeness test checks the entries resolve.
 Most modules gate themselves inside their phase functions (today they were called unconditionally, and some do work while "off":
 projects and the outside power always keep their state); only rows with `skip_off` (life, whose calls sat behind inline checks)
 are skipped by the loop when off.
@@ -169,14 +169,16 @@ PHASES: dict[str, list[tuple[str, str]]] = {
     # runner-level, declared (call sites inline in runner.run until P5.3): the observer reads and acts after the turns, then
     # Kernel.end_round, then the editors write next round's editions
     "after_turns": [("observer", "Observer.turn"), ("core", "end_round"), ("media", "editorial_turns")],
-    # mortality.disable: core = mortality's own steps; feature functions are called (k, aid) and their results kept
+    # end_life (mortality.end): core = mortality's own steps (mark opens the estate; bequest is probate); feature functions are
+    # called (k, aid) and their results kept
     "death": [("core", "mark"), ("core", "announce"), ("life", "on_death"), ("core", "bequest"), ("core", "lapse"), ("core", "roles"),
               ("core", "seat"), ("life", "after_death"), ("core", "record")],
-    # declared (inline in events.add_agent and life._birth until P2.4b): the sponsor's subscriptions, then the parent's
-    # jurisdiction (whose on_birth law hook runs inside assign_newborn)
-    "birth": [("media", "on_birth"), ("jurisdictions", "assign_newborn")],
+    # begin_life (events.begin), called (k, aid, parent/sponsor): the agent enters, the sponsor's subscriptions, its extra messages,
+    # a child's own bookkeeping (life._birth), then its jurisdiction (an arrival's founding one; a child's parent's, whose on_birth
+    # law hook runs inside jurisdictions.assign_newborn)
+    "birth": [("core", "enter"), ("media", "on_birth"), ("core", "extras"), ("core", "child"), ("core", "jurisdiction")],
 }
-LOOPED = ("init", "round_start", "round_end", "death")              # the phases executed by run(); the others are declared only
+LOOPED = ("init", "round_start", "round_end", "death", "birth")     # the phases executed by run(); the others are declared only
 
 # Cause frames a phase loop opens around a feature step (none: the step opens its own frames, as today).
 FRAMES: dict[tuple[str, str], tuple[str, str]] = {

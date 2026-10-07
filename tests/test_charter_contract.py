@@ -34,8 +34,9 @@ LIVE = [p for p in PR.PRIMITIVES.values() if p.status == "live"]
 #   - review 09 §2.1 fact 6 hook line numbers have drifted by 1-5 lines (framework.py:376, life.py:550, jurisdictions.py 895/939/1016,
 #     kernel.py 1091/1101, dry run 883-884, probe 1158/1165); the call sites themselves are as stated.
 #   - review 09 §3/§4: end_life "causes ... departure, intervention": mortality.CAUSES is (attack, assassin, accident, old_age,
-#     law); departures are events.depart (no mortality.disable, no `disabled` event, a monitor `departure`), interventions do not
-#     exist yet. A law ends a life only through lawful_attack -> conflict.attack (cause "law"), so end_life has no compel face.
+#     law); since P2.4b (D-9) departures are end_life with cause "departure" (events.leave_world: no death phase, no `disabled`
+#     event, a monitor `departure`); an intervention cause is P5. A law ends a life only through lawful_attack -> conflict.attack
+#     (cause "law"), so end_life has no compel face.
 #   - review 09 §4.6 / 08 §3: law-caused `burn` logs nothing at all (not even monitor); `title()` (set_title), create_right,
 #     create_currency, set_procedure, clause, define_action, oblige_guard/clear_obligations, set_quota/set_harvest_limit/set_fee,
 #     set_convertible and enable_loans change state without logging any event. Regrowth (camps.regrow) logs nothing either.

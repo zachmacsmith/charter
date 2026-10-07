@@ -266,6 +266,48 @@ def test_on_death_child_is_born_when_the_parent_dies():
     assert c["status"] == "born" and k.bal(c["child"], "copper") == 2
 
 
+def test_life_primitives_end_life_estate_departure_and_begin_life():
+    """P2.4b: deaths and departures are end_life, entries are begin_life (k.apply); the estate account holds a death's goods from
+    the change to probate (journaled, no events); a departure keeps frozen holdings; world-caused deaths are under a world root."""
+    from charter import dispatch as D, events as EV
+    inst, k = world()
+    a, b, c = plain(k)[:3]
+    k.w["agents"][a]["holdings"] = {"timber": 6.0, "stone": 2.0}
+    A.act(k, a, "bequest", {"holdings": {b: 0.5}})
+    k.w["agents"][b]["holdings"] = {}
+    n = len(k.events)
+    out = k.apply("end_life", agent=a, cause="accident", by=None)
+    assert out.ok and out.result == {"ended": True, "cause": "accident", "by": None, "estate": {"timber": 6.0, "stone": 2.0}}
+    e = MO.state(k)["estates"][a]
+    assert e["status"] == "probated" and e["holdings"] == {} and [j["op"] for j in e["journal"]] == ["open", "probate"]
+    assert k.bal(b, "timber") == 3.0 and k.w["agents"][a]["holdings"] == {}
+    assert not any(ev["type"] == "move" and ev["data"]["src"].startswith("estate") for ev in k.events[n:])
+    assert k.apply("end_life", agent=a, cause="attack", by=None).result == {"ended": False}       # already gone: a no-op
+    with pytest.raises(ValueError):
+        k.apply("end_life", agent=b, cause="boredom", by=None)
+    with pytest.raises(ValueError):
+        MO.disable(k, b, "departure")
+    held = dict(k.w["agents"][c]["holdings"])
+    gone = EV.depart(k, inst, c, "frozen")                                     # D-9: a departure is end_life, holdings frozen
+    assert gone["holdings"] == held and k.w["agents"][c]["holdings"] == held and k.events[-1]["type"] == "departure"
+    assert c not in MO.state(k)["estates"] and not any(ev["type"] == "disabled" and ev["data"]["agent"] == c for ev in k.events)
+    seen = []
+    orig = D.chain_for
+    d = plain(k)[0]
+    LF.state(k)["dies_at"][d] = k.r
+    try:
+        D.chain_for = lambda k_, name: seen.append((name, orig(k_, name))) or orig(k_, name)
+        k.move(d, b, "timber", 0.0)                                            # (a no-op: no chain)
+        with k.cause("world", "ageing", agent=d, root=True):
+            assert k.chain()[0]["kind"] == "world"
+            k.move(b, d, "timber", 1.0, why="transfer")
+            MO.disable(k, d, "old_age")
+    finally:
+        D.chain_for = orig
+    assert seen and all(ch[0]["kind"] == "world" for _, ch in seen)
+    assert "on_birth" not in [x.name for x in D.ALIASES_BEFORE["begin_life"]]    # a phase step dispatches it (assign_newborn)
+
+
 def test_mutation_statistics_and_the_zero_mutation_condition():
     inst, k = world()
     spec = LF.merge_spec(k, LF.default_spec(k, plain(k)[0]), {"goal": "Wealth", "secondary": None, "persona": "p", "letter": "l",

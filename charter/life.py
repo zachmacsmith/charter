@@ -26,8 +26,10 @@ Prices (value units, `prices`): base 30 paid in timber and destroyed; tier weak 
 of life 20; +1,000 scratchpad tokens 10; +5 attack or defense 15; +1 lookup 5; all extras paid in gold (`pay`), destroyed.
 resources.pay(k, aid, items, to=None, why=why) is used if that module exists.
 
-Children are full agents: events.add_agent creates them (turn slot, system prompt, feed cursor at the next sync), born into the
-parent's jurisdiction (`born_into`). They know their parent, Maker and birth round, and their own final goal and personality, never
+Children are full agents: drawn by events.draw_agent, they enter play through the begin_life primitive (how "born"; its change and
+birth phase are events.begin, with the child's own bookkeeping as the phase's "child" step: turn slot, system prompt, feed cursor at
+the next sync), born into the parent's jurisdiction (`born_into`). Deaths are end_life (mortality.end): what a child ordered
+"on_death" takes comes from the parent's estate account. They know their parent, Maker and birth round, and their own final goal and personality, never
 what was ordered. Population cap: `cap_mult` (1.5) x the starting count of agents in play; births queue beyond it (FIFO), and so do
 arrivals (events.h_agent_arrives skips them). With Life on, random departures are off (events.attach_schedule): agents die of age.
 
@@ -240,15 +242,15 @@ def end_of_round(k) -> None:
         return
     for aid in sorted(st["dies_at"], key=lambda a: (st["dies_at"][a], a)):
         if st["dies_at"][aid] <= k.r and MO.alive(k, aid):
-            with k.cause("world", "ageing", agent=aid):              # provenance: a death from old age
+            with k.cause("world", "ageing", agent=aid, root=True):   # provenance: a death from old age (a world root frame)
                 MO.disable(k, aid, "old_age")
-    with k.cause("world", "births"):
+    with k.cause("world", "births", root=True):
         _births(k)
     for c in sorted(st["commissions"].values(), key=lambda c: c["id"]):
         if c["status"] == "open" and k.r >= c["expires"]:
-            with k.cause("world", "commission_expiry", commission=c["id"]):
+            with k.cause("world", "commission_expiry", commission=c["id"], root=True):
                 _refund(k, c, "expired: the Maker did not make it in time")
-    with k.cause("world", "maker"):
+    with k.cause("world", "maker", root=True):
         ensure_maker(k)
     st["population"].append({"round": k.r, "living": len(k.players()), "cap": st["cap"],
                              "queued": sum(1 for c in st["commissions"].values() if c["status"] == "due")})
@@ -263,10 +265,9 @@ def on_death(k, aid) -> dict:
             continue
         c["status"], c["due_round"] = "due", k.r
         got = {}
-        for item, q in (c["final"].get("holdings") or {}).items():
-            take = min(float(q), k.bal(aid, item))
+        for item, q in (c["final"].get("holdings") or {}).items():         # from the estate account (end_life opened it)
+            take = MO.estate_take(k, aid, item, q, f"commission:{c['id']}")
             if take > 0:
-                k._add(aid, item, -take)
                 got[item] = take
         c["reserved"] = got
         c["files_reserved"] = _take_files(k, aid, c["final"].get("files") or [])
@@ -891,22 +892,24 @@ def _birth(k, c) -> str | None:
              "actions": int(k.spec["actions_per_turn"]) + int(sp["stats"]["actions"]),
              "extra": {"persona": sp.get("persona") or "", "parent": parent, "maker": maker, "commission": c["id"],
                        "origin": {"parent": parent, "maker": maker, "born_round": k.r + 1}}}
-    a = EV.add_agent(k, k.inst, cls=sp["cls"], sponsor=parent, rng=rng, endowment=hold, child=child)
+    a = EV.draw_agent(k, k.inst, cls=sp["cls"], sponsor=parent, rng=rng, endowment=hold, child=child)
     if a is None:
         return None
     aid = a["id"]
-    EV.state(k)["arrivals"][aid] = k.r + 1                                # it plays (and is scored) from the next round
-    st["parent"][aid], st["maker_of"][aid], st["born"][aid] = parent, maker, k.r + 1
-    span = _draw_lifespan(k, rng) + round(int(sp["stats"]["lifespan"]) * _scale(k))
-    st["lifespan"][aid], st["elapsed"][aid] = span, 0
-    st["dies_at"][aid] = k.r + span
-    st["approx"][aid] = round(rng.uniform(-1, 1) * float(cfg(k.spec)["approx_error"]), 4)
-    st["stats"][aid] = {x: sp["stats"][x] for x in ("scratchpad", "attack", "defense", "lookups")}
-    try:
-        from charter import jurisdictions as J
-        st["jurisdiction"][aid] = J.assign_newborn(k, aid, parent) if J.enabled(k) else J.member_of(k, parent)   # a member at birth
-    except ImportError:
-        st["jurisdiction"][aid] = None
+    drawn = {}                                                            # the lifespan, drawn in settle after the agent enters
+
+    def settle(aid):                                                      # the birth phase's "child" step (events.begin)
+        EV.state(k)["arrivals"][aid] = k.r + 1                            # it plays (and is scored) from the next round
+        st["parent"][aid], st["maker_of"][aid], st["born"][aid] = parent, maker, k.r + 1
+        drawn["span"] = span = _draw_lifespan(k, rng) + round(int(sp["stats"]["lifespan"]) * _scale(k))
+        st["lifespan"][aid], st["elapsed"][aid] = span, 0
+        st["dies_at"][aid] = k.r + span
+        st["approx"][aid] = round(rng.uniform(-1, 1) * float(cfg(k.spec)["approx_error"]), 4)
+        st["stats"][aid] = {x: sp["stats"][x] for x in ("scratchpad", "attack", "defense", "lookups")}
+
+    born = k.apply("begin_life", agent=aid, how="born", parent=parent, record=a, inst=k.inst, settle=settle)
+    st["jurisdiction"][aid] = born.result["jurisdiction"]                 # a member at birth (the on_birth directive)
+    span = drawn["span"]
     if "file_space" in k.w and sp["stats"]["scratchpad"]:
         k.w["file_space"][aid] = k.w["file_space"].get(aid, 0) + int(sp["stats"]["scratchpad"])
     if files and "files" in k.w:

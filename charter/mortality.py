@@ -3,14 +3,18 @@
 Contract (docs/parallel_build_contracts.md):
     disable(k, aid, cause, by=None, public=True, named=True) -> bool
     alive(k, aid) -> bool
-Other modules (Conflict, Jurisdictions, Life's old-age deaths) call `disable`; it is the only way an agent dies.
+Other modules (Conflict, Jurisdictions, Life's old-age deaths) call `disable`, or `k.apply("end_life", agent=aid, cause=cause,
+by=by, public=..., named=...)` directly (dispatch.py documents the primitive); it is the only way an agent dies. `end` is the
+change (P2.4b), `estate`/`estate_bal`/`estate_take` the estate account.
 
-What disable does, in order:
+What end_life does for a death, in order (the death phase, features.PHASES["death"]):
   1. marks the agent out of play: k.w["agents"][aid]["departed"] = k.r (so k.players(), events.active, has() and act() already
-     exclude it) and ["dead"] = {"round", "cause", "by"}; its votes in open ballots are dropped; it leaves every channel;
+     exclude it) and ["dead"] = {"round", "cause", "by"}; its votes in open ballots are dropped; it leaves every channel; its goods
+     move into its estate account (internal, journaled writes: no events);
   2. logs the public `disabled` event (the attacker named only if `named`; monitor-only if not `public`);
-  3. children ordered "on my death" (life.py) take what was ordered for them first;
-  4. runs the agent's bequest (one per agent: `bequest {...}`): holdings and files to its recipients, with dead man's switch terms
+  3. children ordered "on my death" (life.py) take what was ordered for them first, from the estate;
+  4. probate: the estate is released and the agent's bequest runs (one per agent: `bequest {...}`): holdings and files to its
+     recipients, with dead man's switch terms
      (`if_disabled`) used when the cause is attack, assassin or law. Whatever is not bequeathed goes to the agent's jurisdiction
      reserve (jurisdictions.reserve_of(k, member_of(k, aid)) if that module exists, else the reserve); files not bequeathed are
      destroyed (k.w["files"][aid], the context contract);
@@ -72,27 +76,90 @@ def alive(k, aid) -> bool:
 
 # ---------------------------------------------------------------------- disable
 def disable(k, aid, cause, by=None, public=True, named=True) -> bool:
-    """Remove an agent from play (see the module docstring). Returns False if it can't be disabled (the Fixer, the observer, an
-    unknown agent, or one already gone)."""
-    v = k.w["agents"].get(aid)
-    if not v or v["cls"] in ("fixer", "observer") or v.get("departed") is not None:
-        return False
-    if cause not in CAUSES:
-        raise ValueError(f"cause must be one of {CAUSES}, not {cause!r}")
+    """Remove an agent from play (see the module docstring): the end_life primitive (k.apply("end_life", ...); its change is `end`).
+    Returns False if it can't be disabled (the Fixer, the observer, an unknown agent, or one already gone). Departures are not
+    deaths: events.depart (end_life with cause "departure")."""
+    if cause == "departure":
+        raise ValueError(f"cause must be one of {CAUSES}, not {cause!r} (a departure is events.depart)")
+    return k.apply("end_life", agent=aid, cause=cause, by=by, public=public, named=named).result["ended"]
+
+
+def end(k, aid, cause, by=None, public=True, named=True) -> dict:
+    """The change of end_life for a death (dispatch.do_end_life, after its check: a living agent, a known cause), with the death
+    phase, in a {"kernel": "death"} frame. Returns {"ended": True, "cause", "by", "estate": what the estate account opened with}."""
+    v = k.w["agents"][aid]
     with k.cause("kernel", "death", agent=aid):                      # provenance: bequests, succession, roles passed on
         return _disable(k, aid, cause, by, public, named, v)
 
 
-def _disable(k, aid, cause, by, public, named, v) -> bool:
+# ---------------------------------------------------------------------- the estate account
+# A dead agent's goods are held in its estate (k.w["mortality"]["estates"][aid]) from the change (the death phase's mark step) to
+# probate (its bequest step). Writes to it are internal: no `move` events (old goldens keep their bytes), each one journaled in the
+# estate record. Until accounts (P4.1) make "estate:<aid>" a kernel owner key, probate pays out through the deceased's frozen
+# holdings (`_release`), so its `move` events keep today's src (the deceased). P3.x: after_end_life hooks run between the two and
+# may move from the estate (power estate_access; review 09 §13.3).
+def estate(k, aid) -> dict:
+    """The goods in aid's estate account now ({} if it has none)."""
+    e = (k.w.get("mortality") or {}).get("estates", {}).get(aid)
+    return dict(e["holdings"]) if e else {}
+
+
+def estate_bal(k, aid, item) -> float:
+    e = (k.w.get("mortality") or {}).get("estates", {}).get(aid)
+    return e["holdings"].get(item, 0.0) if e else 0.0
+
+
+def estate_take(k, aid, item, qty, why) -> float:
+    """An internal write: qty of item leaves aid's estate (for `why`, e.g. "commission:C1"); the caller puts it where it goes.
+    Returns the quantity taken (at most what the estate holds)."""
+    e = state(k)["estates"][aid]
+    take = min(float(qty), e["holdings"].get(item, 0.0))
+    if take > 0:
+        _ledger(e["holdings"], item, -take)
+        e["journal"].append({"op": "take", "item": item, "qty": take, "why": why})
+    return take
+
+
+def _ledger(h, item, qty) -> None:                                     # Kernel._add's arithmetic, on an estate's goods
+    h[item] = round(h.get(item, 0.0) + qty, 6)
+    if abs(h[item]) < 1e-9:
+        del h[item]
+
+
+def _open_estate(k, aid, cause) -> dict:
+    """The change: the deceased's goods (positive balances) move into its estate account."""
+    h = k.w["agents"][aid]["holdings"]
+    goods = {i: q for i, q in h.items() if q > 0}
+    for i in goods:
+        del h[i]
+    state(k).setdefault("estates", {})[aid] = {"round": k.r, "cause": cause, "holdings": dict(goods), "status": "open",
+                                               "journal": [{"op": "open", "holdings": dict(goods)}]}
+    return goods
+
+
+def _release(k, aid) -> None:
+    """Probate begins: what is left in the estate goes back to the deceased's frozen holdings, from which the bequest pays out."""
+    e = state(k)["estates"][aid]
+    h = k.w["agents"][aid]["holdings"]
+    for item, q in e["holdings"].items():
+        if item in h:
+            _ledger(h, item, q)
+        else:
+            h[item] = q                                                   # exactly as it was (endowments are not rounded)
+    e["journal"].append({"op": "probate", "holdings": dict(e["holdings"])})
+    e["holdings"], e["status"] = {}, "probated"
+
+
+def _disable(k, aid, cause, by, public, named, v) -> dict:
     """The death phase (features.PHASES["death"], in today's order): mortality's own steps are the "core" ones; feature steps are
-    called (k, aid) and their results kept (life's on_death: what children ordered for this death take first)."""
+    called (k, aid) and their results kept (life's on_death: what children ordered for this death take first, from the estate)."""
     from charter import events as EV
     from charter import roles as RO
     st = state(k)
     r = k.r
-    d = {"was_board": v["cls"] == "board", "outcome": {}, "lost": [], "roles_lost": [], "roles_passed": [], "seat": None}
+    d = {"was_board": v["cls"] == "board", "outcome": {}, "lost": [], "roles_lost": [], "roles_passed": [], "seat": None, "estate": {}}
 
-    def mark():                                                           # out of play: votes dropped, channels left
+    def mark():                                                           # out of play: votes dropped, channels left; the estate opens
         v["departed"] = r
         v["dead"] = {"round": r, "cause": cause, "by": by}
         st["dead"][aid] = {"round": r, "cause": cause, "by": by, "cls": v["cls"]}
@@ -103,6 +170,7 @@ def _disable(k, aid, cause, by, public, named, v) -> bool:
         for ch in k.w["channels"].values():
             if aid in ch["members"]:
                 ch["members"] = [m for m in ch["members"] if m != aid]
+        d["estate"] = _open_estate(k, aid, cause)
 
     def announce():
         shown_by = by if (named and by) else None
@@ -111,7 +179,8 @@ def _disable(k, aid, cause, by, public, named, v) -> bool:
             k.log("disabled", None, {"agent": aid, "cause": cause, **({"by": shown_by} if shown_by else {}), "text": text},   # unnamed: no "by" key
                   vis="public" if public else "monitor")
 
-    def bequest():
+    def bequest():                                                        # probate: today's bequest, from the estate
+        _release(k, aid)
         d["outcome"] = _run_bequest(k, aid, cause, by if named else None)  # an unnamed (covert) attacker gets nothing and gives nothing away
 
     def lapse():
@@ -138,7 +207,7 @@ def _disable(k, aid, cause, by, public, named, v) -> bool:
     results = {}                                                          # feature steps' results, filled as the phase runs
     FT.run("death", k, {"mark": mark, "announce": announce, "bequest": bequest, "lapse": lapse, "roles": roles, "seat": seat,
                         "record": record}, aid, out=results)
-    return True
+    return {"ended": True, "cause": cause, "by": by, "estate": d["estate"]}
 
 
 # ---------------------------------------------------------------------- bequests
