@@ -320,7 +320,18 @@ def add_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None, child=N
     """Create an agent mid-run (as the generator would) and add it to the kernel and the instance; the runner picks it up at the
     next sync (turn order, system prompt, feed cursor). Returns the agent dict, or None if the class is not allowed.
     life: `child` (life.py births) gives what a made agent has instead of drawing it: model, tier, actions, personality(_text),
-    archetype(_text), goal (a dict, or a function of the new id returning one) and `extra` fields copied into the agent dict."""
+    archetype(_text), goal (a dict, or a function of the new id returning one) and `extra` fields copied into the agent dict.
+    The agent is drawn (draw_agent), then enters play through the begin_life primitive (how "born" with `child`, else "arrival";
+    parent = the sponsor): events.begin is its change and birth phase."""
+    a = draw_agent(k, inst, cls=cls, sponsor=sponsor, rng=rng, endowment=endowment, child=child)
+    if a is not None:
+        k.apply("begin_life", agent=a["id"], how="born" if child else "arrival", parent=sponsor, record=a, inst=inst)
+    return a
+
+
+def draw_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None, child=None):
+    """Everything add_agent draws (id, class rights, model, goals, personality, endowment) with no change to the world: the agent
+    dict begin_life's change adds. None if the class is not allowed."""
     from charter import archive as _archive
     from charter import generator as GEN
     from charter import personality as P
@@ -367,29 +378,70 @@ def add_agent(k, inst, cls=None, sponsor=None, rng=None, endowment=None, child=N
         med = vals[len(vals) // 2] if vals else 30.0
         endowment = GEN.bundle(med * float(S.draw(cfg.get("endowment", {"uniform": [0.5, 1.5]}), rng)), sp["unit_values"], rng)
     a["endowment"] = {i: float(q) for i, q in (endowment or {}).items() if q}
-    k.w["agents"][aid] = {"id": aid, "cls": cls, "model": model, "rights": sorted(rights), "holdings": dict(a["endowment"]),
-                          "suspended": {}, "limit": None, "title": None}
-    k.w["agents"][aid]["start_value"] = k.holdings_value(aid)
-    inst["agents"].append(a)
-    st["arrived"].append(copy.deepcopy(a))
-    st["arrivals"][aid] = k.r
-    st["dirty"].append(aid)
-    k.log("arrival", aid, {"agent": aid, "cls": cls, "model": model, "sponsor": sponsor, "endowment": a["endowment"],
-                           "goal": a["goal"]["primary"], **({"child": True} if child else {})}, vis="monitor")
-    MD.on_birth(k, aid, sponsor)                                        # media2: the sponsor's subscriptions, or the most-read outlet
-    from charter import generator as _GEN                              # its own drawn extra private messages, like the founders'
-    a["dm_extra"] = _GEN.dm_extra(sp, k.inst["seed"], aid)
-    k.w.setdefault("dm_extra", {})[aid] = a["dm_extra"]
-    mt = _GEN.memory_turns(sp, k.inst["seed"], aid)
-    if mt:
-        a["memory_turns"] = mt
-    if not child:                                                       # jurisdictions: a newcomer starts where the founders started
-        from charter import jurisdictions as J
-        J.assign_arrival(k, aid)
     return a
 
 
+def begin(k, inst, a, how, sponsor, settle=None) -> dict:
+    """The change of begin_life (dispatch.do_begin_life) and the birth phase (features.PHASES["birth"]), in today's order:
+      enter         the drawn agent `a` joins the kernel and the instance (start value, arrival record, the monitor `arrival`
+                    event; a child's carries "child": true)
+      media         media.on_birth: the sponsor's subscriptions, or the most-read outlet
+      extras        its own drawn extra private messages and memory turns, like the founders'
+      child         a child's own bookkeeping (`settle(aid)`, from life._birth: parent, lifespan, stats); nothing for an arrival
+      jurisdiction  an arrival starts where the founders started (jurisdictions.assign_arrival); a child is born into its parent's
+                    jurisdiction unless that jurisdiction's on_birth hook says otherwise (jurisdictions.assign_newborn: begin_life's
+                    on_birth alias), or into its parent's membership when jurisdictions are off
+    Returns {"agent", "jurisdiction"} (None for an arrival)."""
+    from charter import features as FT
+    from charter import generator as _GEN
+    from charter import jurisdictions as J
+    sp = inst["spec"]
+    st = state(k)
+    aid, cls, model = a["id"], a["cls"], a["model"]
+    born = how != "arrival"
+    out = {"agent": aid, "jurisdiction": None}
+
+    def enter():
+        k.w["agents"][aid] = {"id": aid, "cls": cls, "model": model, "rights": sorted(a["rights"]), "holdings": dict(a["endowment"]),
+                              "suspended": {}, "limit": None, "title": None}
+        k.w["agents"][aid]["start_value"] = k.holdings_value(aid)
+        inst["agents"].append(a)
+        st["arrived"].append(copy.deepcopy(a))
+        st["arrivals"][aid] = k.r
+        st["dirty"].append(aid)
+        k.log("arrival", aid, {"agent": aid, "cls": cls, "model": model, "sponsor": sponsor, "endowment": a["endowment"],
+                               "goal": a["goal"]["primary"], **({"child": True} if born else {})}, vis="monitor")
+
+    def extras():
+        a["dm_extra"] = _GEN.dm_extra(sp, k.inst["seed"], aid)
+        k.w.setdefault("dm_extra", {})[aid] = a["dm_extra"]
+        mt = _GEN.memory_turns(sp, k.inst["seed"], aid)
+        if mt:
+            a["memory_turns"] = mt
+
+    def child():
+        if settle is not None:
+            settle(aid)
+
+    def jurisdiction():
+        if not born:                                                    # a newcomer starts where the founders started
+            J.assign_arrival(k, aid)
+        else:                                                           # a member at birth (the on_birth directive)
+            out["jurisdiction"] = J.assign_newborn(k, aid, sponsor) if J.enabled(k) else J.member_of(k, sponsor)
+
+    FT.run("birth", k, {"enter": enter, "extras": extras, "child": child, "jurisdiction": jurisdiction}, aid, sponsor)
+    return out
+
+
 def depart(k, inst, aid, holdings="frozen") -> dict:
+    """An agent leaves the world for good (world events, interventions): the end_life primitive with cause "departure" (D-9).
+    Returns today's record {"round", "rights", "holdings", "to_reserve"}."""
+    return k.apply("end_life", agent=aid, cause="departure", by=None, holdings=holdings).result["departure"]
+
+
+def leave_world(k, aid, holdings="frozen") -> dict:
+    """The change of end_life by departure (dispatch.do_end_life): out of play with no death phase, announcement or bequest; rights
+    gone; holdings stay frozen with the agent (they still count in welfare) or move to the reserve."""
     v = k.w["agents"][aid]
     st = state(k)
     gone = {"round": k.r, "rights": list(v["rights"]), "holdings": dict(v["holdings"]), "to_reserve": holdings == "reserve"}

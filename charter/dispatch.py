@@ -514,3 +514,68 @@ def do_set_dm_limit(k, agent, n, actor=None) -> dict:
         k.w["dm_limit"]["agents"][agent] = n
     k.log("dm_limit", actor, {"n": n, "agent": agent}, vis="public")
     return {"n": n}
+
+
+# ---------------------------------------------------------------------- life (P2.4b): begin_life and end_life
+# The changes live in their owners (events.begin, events.leave_world, mortality.end); these rows route them through apply.
+#
+# begin_life(agent, how, parent)   an agent enters play. how: "arrival" (world events, spawn requests, interventions; parent is the
+#     sponsor or None) or "born" (life._birth; parent is the parent). Options: record (the agent dict events.draw_agent drew: the
+#     id is drawn before the change), inst (the instance it joins; default k.inst), settle (a child's own bookkeeping, called by the
+#     birth phase's "child" step: life._birth). Result: {"agent", "jurisdiction"} (a child's jurisdiction at birth; None for an
+#     arrival). The before-alias on_birth is a directive read by the birth phase's jurisdiction step (jurisdictions.assign_newborn:
+#     the parent's jurisdiction's laws only, after the child's bookkeeping), not by apply: PHASE_ALIASES.
+#
+# end_life(agent, cause, by)       an agent leaves play, whatever caused it (ARCHITECTURE §3.3, D-9). cause: attack, assassin,
+#     accident, old_age, law (mortality.CAUSES: the death phase in a {"kernel": "death"} frame, the estate account, probate) or
+#     departure (world events and interventions: events.leave_world, no death phase, holdings frozen or moved to the reserve).
+#     by: the attacker or None. Options: public (False: the `disabled` event is monitor-only), named (False: the attacker is not
+#     shown, and neither gets nor gives anything by the bequest), holdings ("frozen" | "reserve": departures only). Not blockable.
+#     Result: {"ended": False} (a no-op: the Fixer, the observer, an unknown agent or one already gone; never for a departure),
+#     {"ended": True, "cause", "by", "estate": {item: qty}} for a death (the estate as the change opened it), or
+#     {"ended": True, "cause": "departure", "departure": {...}} (today's events.depart record). An unknown cause is a ValueError.
+LIFE_HOWS = ("arrival", "born", "made", "copy")                       # made/copy: reserved (a Maker's order is born as "born")
+LIFE_CAUSES = ("attack", "assassin", "accident", "old_age", "law", "departure")      # mortality.CAUSES + departure; intervention: P5
+
+# Legacy aliases a phase step dispatches instead of apply (their call site keeps today's position and binding).
+PHASE_ALIASES = {"on_birth": "the birth phase's jurisdiction step (events.begin -> jurisdictions.assign_newborn)"}
+ALIASES_BEFORE = {n: tuple(a for a in v if a.name not in PHASE_ALIASES) for n, v in ALIASES_BEFORE.items()}
+ALIASES_AFTER = {n: tuple(a for a in v if a.name not in PHASE_ALIASES) for n, v in ALIASES_AFTER.items()}
+
+OPTIONS.update({"begin_life": frozenset({"record", "inst", "settle"}), "end_life": frozenset({"public", "named", "holdings"})})
+
+
+def check_begin_life(k, p):
+    if p["how"] not in LIFE_HOWS:
+        raise L.LawError(f"how must be one of {LIFE_HOWS}, not {p['how']!r}")
+    if p["agent"] in k.w["agents"]:
+        raise PhysicsError(f"{p['agent']} already exists")
+    return p
+
+
+def check_end_life(k, p):
+    from charter import mortality as MO
+    if p["cause"] == "departure":                                     # today's events.depart: no check (the caller picks a player)
+        return p
+    v = k.w["agents"].get(p["agent"])
+    if not v or v["cls"] in ("fixer", "observer") or v.get("departed") is not None:
+        raise _Noop({"ended": False})
+    if p["cause"] not in MO.CAUSES:
+        raise ValueError(f"cause must be one of {LIFE_CAUSES}, not {p['cause']!r}")
+    return p
+
+
+CHECKS.update({"begin_life": check_begin_life, "end_life": check_end_life})
+
+
+def do_begin_life(k, agent, how, parent, record=None, inst=None, settle=None) -> dict:
+    from charter import events as EV
+    return EV.begin(k, k.inst if inst is None else inst, record, how, parent, settle)
+
+
+def do_end_life(k, agent, cause, by, public=True, named=True, holdings="frozen") -> dict:
+    if cause == "departure":
+        from charter import events as EV
+        return {"ended": True, "cause": cause, "departure": EV.leave_world(k, agent, holdings)}
+    from charter import mortality as MO
+    return MO.end(k, agent, cause, by, public, named)
