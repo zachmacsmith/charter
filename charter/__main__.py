@@ -7,6 +7,7 @@
   python -m charter rewind RUN_DIR --to N --out NEW_DIR                          a copy of the run after round N, to resume (charter/replay.py)
   python -m charter fork RUN_DIR --at N --apply iv.yaml [--replicates K] [--out DIR]   branch at round N with interventions, play on live
   python -m charter branches RUN_DIR                                             the lineage tree of rewinds and forks
+  python -m charter export RUN_DIR [RUN_DIR...] --out DIR [--format parquet|csv]  long-format analysis tables (docs/export.md)
   python -m charter score RUN_DIR                                                (re)score a run
   python -m charter show RUN_DIR                                                 summary + timeline of what happened
   python -m charter view RUN_DIR [--open]                                       story.html: the run as a group chat, inboxes, laws and wealth
@@ -356,6 +357,7 @@ def main(argv=None):
     p = sub.add_parser("difftest", help="compare scripted runs on two code revisions (charter/difftest.py)")
     difftest.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(difftest.cmd(a)))
     __import__("charter.replay", fromlist=["add_commands"]).add_commands(sub)   # replay, rewind, fork, branches
+    __import__("charter.export", fromlist=["add_command"]).add_command(sub)     # export RUN.. --out DIR [--format parquet|csv]
     from charter import schema
     p = sub.add_parser("spec", help="spec check SPEC.. [--set k=v] | spec docs [--out F] (charter/schema.py)")
     schema.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(schema.cmd(a)))
