@@ -286,7 +286,8 @@ def _anon_post(k, aid, text):
         return MD.submit(k, aid, text, anon=True)
     MD.check_post(k, aid)                                              # media2: posting needs a licence from some outlet
     text = str(text)[:2000]
-    eid = k.apply("post", agent=aid, kind="anon_post", text=text, actor=None, data={"text": text}).result["event"]
+    with k.concealing(aid):                                            # the visible entry's cause chain must not name the author either
+        eid = k.apply("post", agent=aid, kind="anon_post", text=text, actor=None, data={"text": text}).result["event"]
     return f"Posted anonymously ({eid})."
 
 
@@ -415,7 +416,8 @@ def forge_message(k, sender, shown_as, to, text, cost=None, source="observer"):
             raise ActionError(f"forging a message costs {q:g} {item}, and you have {k.bal(sender, item):g}")
     for item, q in cost.items():
         k.move(sender, "reserve", item, q, why="forge_fee", by=sender)
-    eid = _deliver(k, sender, to, text, False, {"shown_as": shown_as})
+    with k.concealing(sender):                                         # the recipient's entry must not name the forger in its cause chain
+        eid = _deliver(k, sender, to, text, False, {"shown_as": shown_as})
     k.log("forged_dm", sender, {"event": eid, "shown_as": shown_as, "to": to, "cost": cost, "source": source,
                                 "text": str(text)[:2000]}, vis="monitor")
     return eid

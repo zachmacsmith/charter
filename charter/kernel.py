@@ -301,8 +301,12 @@ class Kernel:
             return None
         if vis == "public" and "jur" in self.w:                          # jurisdictions: events about a hidden one reach its members only
             vis = J.vis(self, data, vis)
+        chain = list(self._causes)                                     # the cause chain, outermost (the round) first
+        hide = getattr(self, "_concealed", None)
+        if hide and vis != "monitor":                                  # an event that hides its actor (anonymous post, forged DM, covert
+            chain = [self._redact(f, hide) for f in chain]             # attack) must not name it in its chain; truth events keep it
         e = {"id": f"e{len(self.events) + 1}", "round": self.r, "type": kind, "agent": agent, "data": data, "vis": vis,
-             "cause": list(self._causes)}                              # the cause chain, outermost (the round) first
+             "cause": chain}
         self.events.append(e)
         return e["id"]
 
@@ -319,6 +323,27 @@ class Kernel:
     # Frames are never mutated once pushed, so events share them. The stack is empty between rounds (checkpoints hold none).
     # Size: kind-keyed frames add ~25% to events.jsonl in the golden runs; {"kind": ..., ...} frames added ~40%.
     CAUSE_KINDS = ("round", "phase", "turn", "action", "law", "world", "kernel", "intervention")
+
+    @contextmanager
+    def concealing(self, *agents):
+        """Events logged inside (except monitor-only ones) do not name these agents in their cause chain: for actions whose public
+        event hides the actor. The monitor-only truth event logged alongside keeps the full chain."""
+        prev = getattr(self, "_concealed", None)
+        self._concealed = set(prev or ()) | {a for a in agents if a}
+        try:
+            yield
+        finally:
+            self._concealed = prev
+
+    @staticmethod
+    def _redact(frame, hide):
+        def clean(v):
+            if v in hide:
+                return None
+            if isinstance(v, str) and ":" in v and any(p in hide for p in v.split(":")):   # call ids such as r3:Kasper:0
+                return None
+            return v
+        return {k: clean(v) for k, v in frame.items()}
 
     @staticmethod
     def cause_kind(frame) -> str:

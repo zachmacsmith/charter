@@ -107,8 +107,9 @@ def _disable(k, aid, cause, by, public, named, v) -> bool:
     def announce():
         shown_by = by if (named and by) else None
         text = f"{aid} has been {CAUSE_TEXT[cause]}" + (f" by {shown_by}" if shown_by and cause in ("attack", "law") else "") + "."
-        k.log("disabled", None, {"agent": aid, "cause": cause, **({"by": shown_by} if shown_by else {}), "text": text},   # unnamed: no "by" key
-              vis="public" if public else "monitor")
+        with k.concealing(None if shown_by else by):                   # unnamed: neither "by" nor the cause chain names the attacker
+            k.log("disabled", None, {"agent": aid, "cause": cause, **({"by": shown_by} if shown_by else {}), "text": text},   # unnamed: no "by" key
+                  vis="public" if public else "monitor")
 
     def bequest():
         d["outcome"] = _run_bequest(k, aid, cause, by if named else None)  # an unnamed (covert) attacker gets nothing and gives nothing away

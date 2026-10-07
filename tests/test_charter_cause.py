@@ -168,3 +168,26 @@ def test_resume_equals_an_uninterrupted_run_including_causes(runs, tmp_path):
     got = _events(part)
     assert got == full
     assert all(e["cause"] for e in got)
+
+
+def test_concealed_actors_are_not_named_in_visible_cause_chains():
+    """Anonymous posts, forged DMs and unnamed disables hide their actor: no non-monitor event's chain names it (truth events do)."""
+    import json as _json
+    from charter import actions as A, generator, spec as S
+    from charter.kernel import Kernel
+    k = Kernel(generator.generate(S.apply_overrides(S.load("E3"), ["shared_archive.enabled=false"]), 2))
+    a, b, c = list(k.w["agents"])[:3]
+    k.w["agents"][a]["rights"].append("anon")
+    with k.cause("turn", a, call=f"r0:{a}:0"):
+        pid = A.act(k, a, "anon_post", {"text": "the Chair is bought"}).split("(")[1].rstrip(").")
+    e = next(x for x in k.events if x["id"] == pid)
+    assert a not in _json.dumps(e) and e["cause"]                       # the chain is kept, the author removed
+    with k.cause("turn", a, call=f"r0:{a}:1"):
+        eid = A.forge_message(k, a, c, b, "meet me", cost={})
+    e = next(x for x in k.events if x["id"] == eid)
+    assert a not in _json.dumps(e["cause"])                             # (the entry's agent field is the true sender by design: the
+    truth = next(x for x in k.events if x["type"] == "forged_dm")
+    assert truth["vis"] == "monitor" and any(f.get("turn") == a for f in truth["cause"])
+    with k.concealing(a):
+        k.log("note", None, {"x": 1}, vis="monitor")
+    assert k.events[-1]["cause"] == list(k._causes)                    # monitor events keep the full chain
