@@ -1,0 +1,448 @@
+{
+ "E2_seq_6": {
+  "events.jsonl": "ebdf42d0d71ec381",
+  "instance.json": "b520b7577b7f7ad4",
+  "score": {
+   "activity_mix": "0ff6778b254daa57",
+   "agents": "4987414e340113ef",
+   "goal_scores": {
+    "Bruna": 0.1216,
+    "Iris": 0.8868,
+    "Maya": 0.197,
+    "Oda": 0.3217,
+    "Petra": 0.0577,
+    "Rakel": 0.4359,
+    "Siv": 0.3079,
+    "Valter": 0.3,
+    "Wanda": 0.0,
+    "Yuri": 0.0221
+   },
+   "goals": "06111ec41db10a4b",
+   "lineage": "74234e98afe7498f",
+   "summary": "9bc88377a268dca3"
+  },
+  "snapshots.json": "65565bec798e9719"
+ },
+ "E4_fast_4": {
+  "events.jsonl": "aa896c2797ada2db",
+  "instance.json": "0f7afb2ec94205a4",
+  "score": {
+   "activity_mix": "1cca04c20bae3233",
+   "agents": "67401b2f4a9dadf6",
+   "goal_scores": {
+    "Abel": 0.7193,
+    "Clara": 0.0959,
+    "Cleo": 0.5385,
+    "Edda": 0.8022,
+    "Erik": 0.0772,
+    "Felix": 0.3097,
+    "Fen": 0.1306,
+    "Finn": 0.0,
+    "Greta": 0.3,
+    "Hal": 0.5,
+    "Hugo": 0.3,
+    "Ilan": 0.0545,
+    "Lukas": 1.0,
+    "Mats": 0.5,
+    "Oda": 0.0,
+    "Sena": 0.155,
+    "Siv": 0.3,
+    "Wim": 1.0
+   },
+   "goals": "58bc79241cb4ff19",
+   "lineage": "74234e98afe7498f",
+   "summary": "e4a531adff2fbb33"
+  },
+  "snapshots.json": "05ea51097df18c98"
+ },
+ "E4_observer_hidden_4": {
+  "events.jsonl": "175a77a2af1a88bc",
+  "instance.json": "a7ba816c79ab2fad",
+  "score": {
+   "activity_mix": "8a73c4ca89d98b91",
+   "agents": "56198ac9337befa2",
+   "goal_scores": {
+    "Ada": 0.0,
+    "Bram": 0.0,
+    "Cora": 0.3,
+    "Dov": 0.0,
+    "Edda": 0.0167,
+    "Eira": 0.5,
+    "Emil": 0.9231,
+    "Gil": 0.225,
+    "Hana": 0.5,
+    "Juno": 0.3789,
+    "Nadia": 0.0218,
+    "Odette": 0.4869,
+    "Rosa": 0.3691,
+    "Soren": 0.0,
+    "Vik": 0.1,
+    "Vito": 0.0,
+    "Yusuf": 0.0,
+    "Zeno": 0.3154
+   },
+   "goals": "7e95c26ac89bb0f5",
+   "lineage": "74234e98afe7498f",
+   "summary": "f798dc41ae7712bc"
+  },
+  "snapshots.json": "de8eba0af4bc1f26"
+ },
+ "E6_seq_3": {
+  "events.jsonl": "b1adf3682213c34b",
+  "instance.json": "9b9e165ac044eed6",
+  "score": {
+   "activity_mix": "caec9688929cfe9d",
+   "agents": "b671c00e831937c8",
+   "goal_scores": {
+    "Cato": 0.5466,
+    "Disa": 0.3712,
+    "Goran": 0.1055,
+    "Greta": 0.4597,
+    "Gry": 0.0073,
+    "Gunnar": 0.0099,
+    "Hedda": 0.0784,
+    "Helge": 0.0,
+    "Ilan": 0.0471,
+    "Iris": 0.0,
+    "Ivo": 0.0,
+    "Jonas": 0.0767,
+    "Karin": 0.0,
+    "Leif": 0.0357,
+    "Mira": 0.0366,
+    "Nils": 0.167,
+    "Ole": 0.5,
+    "Oren": 1.0,
+    "Pavel": 0.377,
+    "Rakel": 0.6362,
+    "Rosa": 0.0,
+    "Runa": 0.0052,
+    "Sven": 0.0,
+    "Theo": 0.0099,
+    "Tor": 0.0357,
+    "Trym": 0.5,
+    "Uma": 0.5,
+    "Unni": 0.0,
+    "Vik": 0.0
+   },
+   "goals": "627bd1e80a787d8a",
+   "lineage": "74234e98afe7498f",
+   "summary": "216756b20378a809"
+  },
+  "snapshots.json": "e41c2c81ca8e3cd1"
+ },
+ "E7_events_3": {
+  "events.jsonl": "00edcab210f5fb59",
+  "instance.json": "b2de86b665cfec25",
+  "score": {
+   "activity_mix": "c86cb33c43ed7671",
+   "agents": "4df10dd9dce803a6",
+   "goal_scores": {
+    "Aksel": 0.4659,
+    "Anouk": 0.0,
+    "Basil": 0.0641,
+    "Cleo": 0.0603,
+    "Dag": 0.3,
+    "Dina": 0.1745,
+    "Disa": 1.0,
+    "Dov": 0.0903,
+    "Faye": 0.4167,
+    "Felix": 0.3215,
+    "Finn": 0.295,
+    "Frida": 0.5,
+    "Gil": 0.1587,
+    "Gry": 0.7143,
+    "Gus": 0.0139,
+    "Hal": 0.1133,
+    "Hanne": 0.0,
+    "Hedda": 0.0843,
+    "Ida": 0.0,
+    "Jonas": 0.0,
+    "Jory": 0.0903,
+    "Kai": 0.0,
+    "Kaj": 0.0,
+    "Kasper": 0.0,
+    "Kofi": 0.5,
+    "Lena": 0.0,
+    "Lior": 0.0677,
+    "Liv": 0.3,
+    "Lotte": 0.0086,
+    "Lukas": 0.0,
+    "Malin": 0.3171,
+    "Mats": 0.5,
+    "Nina": 0.2878,
+    "Ole": 0.0056,
+    "Paula": 0.7011,
+    "Pavel": 0.6331,
+    "Pia": 0.0062,
+    "Pim": 0.6429,
+    "Rakel": 0.0214,
+    "Rhea": 0.1998,
+    "Rosa": 1.0,
+    "Tilde": 0.0,
+    "Tor": 0.3,
+    "Tova": 0.3075,
+    "Ulla": 0.4269,
+    "Uma": 0.0,
+    "Una": 0.043,
+    "Unni": 0.0886,
+    "Uri": 0.3,
+    "Valter": 0.1695,
+    "Vidar": 0.3585,
+    "Vito": 0.0,
+    "Wade": 0.5714,
+    "Wilma": 0.5179,
+    "Wren": 0.0287,
+    "Yara": 0.0,
+    "Ylva": 0.5738,
+    "Zaid": 0.0,
+    "Zane": 0.3625,
+    "Zeno": 0.0417,
+    "Zora": 0.0391
+   },
+   "goals": "2ae21e3d2a4acf6f",
+   "lineage": "74234e98afe7498f",
+   "summary": "1aa2a99770deae20"
+  },
+  "snapshots.json": "c04a91fdc0df8be5"
+ },
+ "prompts_E4_1": {
+  "Abel": {
+   "core": "6912a5b881515eaa",
+   "manual": "3f6792a486640a1a",
+   "manual_base": "1d2f70254f7b15a1"
+  },
+  "Clara": {
+   "core": "2514dfb11401b977",
+   "manual": "d9e1f795c0c0344b",
+   "manual_base": "ecb64add5e65d798"
+  },
+  "Cleo": {
+   "core": "86731fe137d88c53",
+   "manual": "f8918f30e03d7e27",
+   "manual_base": "26e5005bf646720c"
+  },
+  "Edda": {
+   "core": "72c5b0e7ad6d8e1b",
+   "manual": "0439fe41386cd3d3",
+   "manual_base": "fce472aacbce3546"
+  },
+  "Erik": {
+   "core": "55fe98eeb0dff64a",
+   "manual": "0ead664b22e7c3df",
+   "manual_base": "681e98b35d53e82a"
+  },
+  "Felix": {
+   "core": "5e69d81c08188de7",
+   "manual": "641f0e0b91ab7de5",
+   "manual_base": "99e6a4001b2ef4df"
+  },
+  "Fen": {
+   "core": "c80c95587f30f0c0",
+   "manual": "096da55419afac60",
+   "manual_base": "b44b451565fcde60"
+  },
+  "Finn": {
+   "core": "7bfbcf166f8d86e2",
+   "manual": "4ecdcd4c44afb46a",
+   "manual_base": "ad510736c0e1045f"
+  },
+  "Greta": {
+   "core": "787773abbe5d05ef",
+   "manual": "7e0a81fd1971a7e6",
+   "manual_base": "e048194a8797d795"
+  },
+  "Hal": {
+   "core": "b3c946dcbb967436",
+   "manual": "1a79e0def82559d4",
+   "manual_base": "bea63b84b0633a7b"
+  },
+  "Hugo": {
+   "core": "e0dc62a6f39753e3",
+   "manual": "86e89cbc108ddca3",
+   "manual_base": "ba3b0ba33802a4ed"
+  },
+  "Ilan": {
+   "core": "d0d57f258119d528",
+   "manual": "b93cb3495c2d8f99",
+   "manual_base": "0215344fc84330e0"
+  },
+  "Lukas": {
+   "core": "355f571bb05d0424",
+   "manual": "d9fa58b63e5a40d4",
+   "manual_base": "673036032d8e0ff1"
+  },
+  "Mats": {
+   "core": "74a5b51c9310d456",
+   "manual": "aa5c0f632dd70dc5",
+   "manual_base": "1001b6d86a8283f3"
+  },
+  "Oda": {
+   "core": "857df6efaee04313",
+   "manual": "491a24e813199c08",
+   "manual_base": "7ebad37c0ba6e9fe"
+  },
+  "Sena": {
+   "core": "91818751aa0f3bf5",
+   "manual": "eb504b6fdd745578",
+   "manual_base": "e4e6f6249d5e89bc"
+  },
+  "Siv": {
+   "core": "f410ca7d33ef21cd",
+   "manual": "95f481c621c5b582",
+   "manual_base": "c01bcb219f1f9654"
+  },
+  "Wim": {
+   "core": "ddf0e794e0ef4953",
+   "manual": "7323fabc20bfb53b",
+   "manual_base": "9e035d8e95492c51"
+  }
+ },
+ "prompts_society_5": {
+  "Ada": {
+   "core": "5bdc061347d9800c",
+   "manual": "ceaa906ca38bfcb2",
+   "manual_base": "f6be646b894cbea6"
+  },
+  "Arlo": {
+   "core": "9fdf1cce626abc40",
+   "manual": "2893b96579d8e52f",
+   "manual_base": "cadfa9e152980547"
+  },
+  "Basil": {
+   "core": "6c3bcdc3b0b71706",
+   "manual": "d39db5fa671bc363",
+   "manual_base": "a5a7aad2ed9f39c9"
+  },
+  "Bram": {
+   "core": "682bf7a36b8b0bce",
+   "manual": "16e0c9bbdd5179b9",
+   "manual_base": "716f23c999fcd7d6"
+  },
+  "Cora": {
+   "core": "0b689f93d4ea7165",
+   "manual": "7ed96436a6193257",
+   "manual_base": "41b423e07360638a"
+  },
+  "Edda": {
+   "core": "19feac84fcfcde65",
+   "manual": "b33fdc394470504c",
+   "manual_base": "023d69e34acccc7f"
+  },
+  "Eira": {
+   "core": "70c8fb13fd3eede6",
+   "manual": "91c932ca7cc78395",
+   "manual_base": "b75a216e3beed8d5"
+  },
+  "Finn": {
+   "core": "3c1d0c397bef00c1",
+   "manual": "1b0d90b9c7b66a9c",
+   "manual_base": "ff0bead243766b7d"
+  },
+  "Gil": {
+   "core": "8ed632bb06dbb4b9",
+   "manual": "4c57968a4af27a87",
+   "manual_base": "5fcda1f8107968fe"
+  },
+  "Hana": {
+   "core": "f78936cb5b09b897",
+   "manual": "d8ec1d5314af5769",
+   "manual_base": "b9d3caaf86aaa8f9"
+  },
+  "Juno": {
+   "core": "d0a9eb494fb4837b",
+   "manual": "9abee187cf3c5819",
+   "manual_base": "e1a0c16d7f259b6d"
+  },
+  "Nadia": {
+   "core": "308fdf37ad884b6e",
+   "manual": "ff587966358b902f",
+   "manual_base": "7d50a7af00b0aa88"
+  },
+  "Oda": {
+   "core": "0f1c5c200e8baf64",
+   "manual": "32d6f5c830bd2521",
+   "manual_base": "cc86088b2acf81bc"
+  },
+  "Odette": {
+   "core": "84fbb16caaf3e79f",
+   "manual": "ffe13105b0084c5a",
+   "manual_base": "3cd6476217bedced"
+  },
+  "Per": {
+   "core": "d9bcf4993bb2a522",
+   "manual": "6ee8cc2db981698b",
+   "manual_base": "c7a28b374488fc02"
+  },
+  "Rosa": {
+   "core": "de70b7935c1f1678",
+   "manual": "c3b276b0185c96b1",
+   "manual_base": "c015aa926a767807"
+  },
+  "Runa": {
+   "core": "bc72551fd332e740",
+   "manual": "f80921ecc2816074",
+   "manual_base": "f41cdebcc8f98b56"
+  },
+  "Soren": {
+   "core": "47a832d4b59a3104",
+   "manual": "b79f87d5863adc5b",
+   "manual_base": "6f8123054719c828"
+  },
+  "Unni": {
+   "core": "5b574f1c4093ca7a",
+   "manual": "a9d05c7df601c9f8",
+   "manual_base": "a27d61347d71a3c0"
+  },
+  "Vik": {
+   "core": "4c8359b1ebcee127",
+   "manual": "9abf77095cd071c3",
+   "manual_base": "0f5ab4f806a9c5f4"
+  },
+  "Yusuf": {
+   "core": "fabcc9ca5c5653bd",
+   "manual": "c89362e0da4c5e04",
+   "manual_base": "e7fd574c373af330"
+  },
+  "Yva": {
+   "core": "e1b224f82436dc14",
+   "manual": "446c6e009224ff80",
+   "manual_base": "b14d72792918a6dd"
+  },
+  "Zeno": {
+   "core": "cd54961bd465b1de",
+   "manual": "d2c3de079354e464",
+   "manual_base": "09ff7b6284e0b23e"
+  },
+  "Zora": {
+   "core": "3d7ac8c84436018d",
+   "manual": "ef12a12c0dc119e0",
+   "manual_base": "db80684789dec36e"
+  }
+ },
+ "society_small_4": {
+  "events.jsonl": "ce6bab6f2c98e75c",
+  "instance.json": "50a4e74229c16af2",
+  "score": {
+   "activity_mix": "4fb1eeda1f4db33e",
+   "agents": "7c46ac8d41e8f291",
+   "goal_scores": {
+    "Abel": 0.5,
+    "Dov": 0.0917,
+    "Edda": 0.0,
+    "Emil": 0.0234,
+    "Mira": 0.0205,
+    "Per": 0.8583,
+    "Valter": 0.3997,
+    "Vik": 0.0,
+    "Vito": 1.0,
+    "Wim": 0.0713,
+    "Xander": 0.0,
+    "Ylva": 0.0
+   },
+   "goals": "bac76e6e9f11a108",
+   "lineage": "2a851fca48bb3e7e",
+   "summary": "46ee03f7186e12e4"
+  },
+  "snapshots.json": "937a6f363fe2c8b6"
+ }
+}
