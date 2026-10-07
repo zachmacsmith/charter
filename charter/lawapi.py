@@ -2,7 +2,7 @@
 documented, how jurisdictions scope it and who dispatches it.
 
 Behaviour stays in `Kernel.api_for` and the module `law_api(k, lid)` closures; this table only describes them. Generated from it:
-  lawlang.API_GROUPS, API, STRUCTURAL_CALLS, PROCEDURAL_CALLS, L4_CALLS, HOOKS   (classification; byte-identical to the old hand lists)
+  lawlang.API_GROUPS, API, STRUCTURAL_CALLS, PROCEDURAL_CALLS, L4_CALLS, HOOKS   (classification; the old hand lists, plus repeal as structural: P1.4)
   jurisdictions.AGENT_ARGS, REFUSED, LEGACY_ONLY                                   (jurisdiction scoping)
 tests/test_charter_lawapi.py checks the table against the real API (every module's law_api closures, with every module on), against
 lawdocs (every function is documented by the mechanism its row names), against the hook call sites, and the classification against a
@@ -40,7 +40,7 @@ AGENTISH = {"a", "aid", "agent", "guard", "borrower", "attacker", "target", "src
 # lawlang.API_GROUPS keys, in their historical order
 GROUPS = ("read", "rights", "money", "camps", "governance", "output", "names", "sanctions", "text", "meta", "projects", "projects_read")
 STRUCTURAL_GROUPS = ("rights", "money", "sanctions", "projects")     # a call in these makes a law structural
-STRUCTURAL_EXTRA = ("open_ballot",)                                 # governance, but structural
+STRUCTURAL_EXTRA = ("open_ballot", "repeal")                       # governance and meta, but structural (repeal: review F1, P1.4)
 PROCEDURAL = ("set_procedure",)                                     # governance; makes a law procedural
 
 # Documentation mechanisms (where a function's or hook's text lives, and when it is shown):
@@ -176,7 +176,8 @@ LAWFNS = _fns(
         F("count", "text"),
         F("starts_with", "text"),
         F("lower", "text"),
-        F("repeal", "meta", scope="custom", why="target is a law; only this jurisdiction's laws"),
+        F("repeal", "meta", scope="custom", why="target is a law; only this jurisdiction's laws; structural (STRUCTURAL_EXTRA), and "
+          "Kernel.repeal refuses a law-caused repeal of a law of a stricter class"),
     ),
     _module(
         "credit",
@@ -250,8 +251,7 @@ LAWFNS = _fns(
         F("publish_stat", "output", docs="media2"),
         F("official_stream", "rights", ((0, "members"),), scope="none", why="names, classes or roles whose posts are streamed",
           docs="media2"),
-        F("set_official_editor", "rights", ((0, "agent"),), scope="none", why="appoints the editor of this jurisdiction's own outlet",
-          docs="media2"),
+        F("set_official_editor", "rights", ((0, "agent"),), refused=False, docs="media2"),   # only a member (D-3); None removes
         F("set_open_board", "rights", docs="media2"),
         F("set_press_freedom", "rights", docs="media2"),
         F("require_sponsor_label", "sanctions", docs="media2"),

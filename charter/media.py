@@ -138,13 +138,18 @@ def _alive(k, aid) -> bool:
 
 
 # ------------------------------------------------------------------ generation (instance level)
+def module_on(sp: dict, mod: str) -> bool:
+    """Is a library.GATED_CATEGORIES module on in this spec?"""
+    return enabled_spec(sp) if mod == "media2" else bool((sp.get(mod) or {}).get("enabled"))
+
+
 def filter_library(sp: dict, lib: list) -> list:
     """Generator: gated library categories (library.GATED_CATEGORIES: Media laws, Life laws) exist only where their module is on."""
     from charter import library as LB
     cats = sp.get("library", "all")
     out = lib
     for cat, mod in LB.GATED_CATEGORIES.items():
-        on = enabled_spec(sp) if mod == "media2" else bool((sp.get(mod) or {}).get("enabled"))
+        on = module_on(sp, mod)
         if not on or not (cats == "all" or (isinstance(cats, list) and cat in cats)):
             out = [l for l in out if l["category"] != cat]
     return out
@@ -152,13 +157,17 @@ def filter_library(sp: dict, lib: list) -> list:
 
 def archive_split(sp: dict, seed: int, scis: list) -> None:
     """Generator (media2 only): hand the gated archive documents (Media laws' code, the rare record of the hidden call) to
-    Scientists from this module's own stream, so the rest of the world is drawn exactly as without media2."""
+    Scientists from this module's own stream, so the rest of the world is drawn exactly as without media2. A gated library law's
+    code is handed out only where its category's module is on (Life and conflict laws need life and conflict)."""
     if not enabled_spec(sp) or not scis:
         return
     from charter import archive
+    from charter import library as LB
+    off = {"library/" + archive._slug(n) for n, v in LB.LIB.items()
+           if v["category"] in LB.GATED_CATEGORIES and not module_on(sp, LB.GATED_CATEGORIES[v["category"]])}
     rng = random.Random(f"{seed}|media2|archive")
     rare_p = float((sp.get("archive_split") or {}).get("rare_prob", 0.08))
-    for doc in sorted(archive.gated_docs()):
+    for doc in sorted(archive.gated_docs() - off):
         if doc.startswith("rare/"):
             got = [a for a in scis if rng.random() < rare_p]
         else:

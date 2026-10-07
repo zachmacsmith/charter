@@ -749,11 +749,14 @@ def law_api(k, lid) -> dict:
                             "by": (d.get("by") if (nm or (truth is None and d.get("cause") not in ("assassin", "accident"))) else None)})
         return out
 
-    def ban_forging(on_=True):
-        if not on(k):
+    module_on = on
+
+    def ban_forging(on=True, on_=None):                                # documented as ban_forging(on=True); on_ is the old name
+        if not module_on(k):
             return False
-        k.w["conflict"]["forge_ban"][lid] = bool(on_)
-        k.log("forge_ban", None, {"on": bool(on_), "law": lid}, vis="public")
+        v = bool(on if on_ is None else on_)
+        k.w["conflict"]["forge_ban"][lid] = v
+        k.log("forge_ban", None, {"on": v, "law": lid}, vis="public")
         return True
 
     def oblige_guard(guard, agent):

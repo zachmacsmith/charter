@@ -479,6 +479,10 @@ def validate(inst: dict, rng: random.Random) -> dict:
     if bad:                                                             # fail before any run directory exists
         hints = {n: difflib.get_close_matches(n, list(LB.LIB), 1) for n in bad}
         raise ValueError("unknown start_laws: " + ", ".join(f"{n!r}" + (f" (did you mean {h[0]!r}?)" if h else "") for n, h in hints.items()))
+    off = {n: LB.GATED_CATEGORIES[LB.LIB[n]["category"]] for n in (inst["spec"].get("start_laws") or [])
+           if LB.LIB[n]["category"] in LB.GATED_CATEGORIES and not MD.module_on(inst["spec"], LB.GATED_CATEGORIES[LB.LIB[n]["category"]])}
+    if off:                                                             # a gated module's law does nothing with the module off
+        raise ValueError("start_laws need modules that are off: " + ", ".join(f"{n!r} needs {m}.enabled=true" for n, m in off.items()))
     rep = []
     agents, camps = inst["agents"], inst["camps"]
     workers = [a for a in agents if has_cls(a, "worker")]
