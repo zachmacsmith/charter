@@ -204,3 +204,10 @@ def test_breakaway_ruler_scores_power_sovereign_and_guardian_in_its_own_jurisdic
     j0 = snap["member_of"][k.roster()[-1]]
     other = next(x for x in k.roster() if snap["member_of"].get(x) == "J0" and k.w["agents"][x]["cls"] not in ("board", "fixer"))
     assert j0 and G.s_power(gt, other, {}) == pytest.approx(snap["jurisdictions"]["J0"]["vote_weight"].get(other, 0.0))
+
+
+# ------------------------------------------------------------------ 8. refusal metrics name only real goals
+def test_havoc_refusal_names_only_catalogue_goals():
+    from charter import roles as R
+    assert set(R.HAVOC_REFUSAL) <= set(G.CATALOGUE)                  # "Framer" and "Mythmaker" never existed
+    assert set(G.HAVOC) <= set(R.HAVOC_REFUSAL)
