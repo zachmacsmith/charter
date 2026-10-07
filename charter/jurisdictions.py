@@ -18,8 +18,8 @@ Where the law reaches (enforced in the law API, `scope_api`)
   jurisdiction. Reads (agents, holders, laws, currencies, reserve, balance("reserve")) see only the law's own jurisdiction.
 
 Separate institutions (state under k.w["jurisdictions"][jid])
-  {"id", "name", "status": hidden|declared|dissolved, "founder", "founded_round", "declared_round", "declare_pending",
-   "hidden_members", "dormant": [laws passed in secret], "procedures", "procedure_history", "reserve", "camp_rules", "legacy"}
+  {"id", "kind": "polity" (an account, accounts.py), "treasury": "reserve"|"reserve:<jid>", "name",
+   "status": hidden|declared|dissolved, "founder", "founded_round", "declared_round", "declare_pending", "hidden_members", "dormant": [laws passed in secret], "procedures", "procedure_history", "reserve", "camp_rules", "legacy"}
   J0 is "legacy": its procedures, reserve, currencies and camp rules stay where they always were (k.w["procedures"],
   k.w["reserve"], top-level currencies, the camp dicts), so existing code and the legacy path work unchanged. Any other
   jurisdiction keeps its own procedures (a new one starts with a built-in rule: its members vote, majority of those voting),
@@ -116,8 +116,11 @@ def install(k) -> None:
         k.w["jur"]["member"][aid] = None if nature else "J0"
 
 
-def _new_j(jid, name, status, founder, r, legacy=False):
-    return {"id": jid, "name": str(name)[:60], "status": status, "founder": founder, "founded_round": r, "declared_round": None,
+def _new_j(jid, name, status, founder, r, legacy=False, kind="polity"):
+    """A jurisdiction record: an account (accounts.py) of `kind` "polity" ("association"/"personal" are reserved for P4.3) whose
+    treasury is the owner key "reserve" (J0, legacy, forever) or "reserve:<jid>"."""
+    return {"id": jid, "kind": kind, "treasury": "reserve" if legacy else f"reserve:{jid}",
+            "name": str(name)[:60], "status": status, "founder": founder, "founded_round": r, "declared_round": None,
             "declare_pending": False, "hidden_members": [], "dormant": [], "procedures": {}, "procedure_history": [],
             "reserve": {}, "camp_rules": {}, "legacy": legacy}
 
@@ -189,7 +192,8 @@ def reserve_of(k, jid) -> dict:
 
 
 def home_reserve(k, aid) -> str:
-    """Where deductions and taxes on this agent go: its jurisdiction's reserve ("reserve" when off)."""
+    """This agent's jurisdiction's reserve ("reserve" when off). Taxes and deductions go to the charging law's own treasury
+    (accounts.charge_destination), which is this reserve for every law that binds the agent."""
     if not enabled(k):
         return "reserve"
     return reserve_key(k, member_of(k, aid))
