@@ -85,7 +85,10 @@ def _same_instance(out: Path, inst: dict) -> bool:
     saved = json.loads(f.read_text())
     for a in saved.get("agents", []):
         a["rights"] = [RENAMED_RIGHTS.get(r, r) for r in a.get("rights", [])]
-    return json.dumps(saved, indent=1, default=str) == json.dumps(json.loads(json.dumps(inst, default=str)), indent=1, default=str)
+    now = json.loads(json.dumps(inst, default=str))
+    if "spec_source" not in saved:                                    # saved before generation recorded the spec as given
+        now.pop("spec_source", None)
+    return json.dumps(saved, indent=1, default=str) == json.dumps(now, indent=1, default=str)
 
 
 def policy_for(sp, dry, seed):
@@ -135,10 +138,11 @@ def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fr
     return out, res["summary"]
 
 
-def _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live=None, notices=()):
+def _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live=None, notices=(), instance_source=None):
     try:
         runner.run(inst, policy_for(inst["spec"], dry, seed), out, sandbox_for(dry, sandbox_mode),
-                   log=(lambda *a: None) if quiet else print, resume=resume, live=live, notices=notices, dry=dry)
+                   log=(lambda *a: None) if quiet else print, resume=resume, live=live, notices=notices, dry=dry,
+                   instance_source=instance_source)
     except runner.RunStopped as e:
         print(f"[{out.name}] stopped: {e}\nContinue later with the same command, or: python -m charter resume {out}")
         raise SystemExit(2)
@@ -158,12 +162,19 @@ def cmd_resume(a):
     if not (out / "checkpoint.pkl").exists():
         raise SystemExit(f"{out} has no checkpoint.pkl (runs from before checkpoints existed cannot be resumed)")
     saved = json.loads((out / "instance.json").read_text())
-    inst = generator.generate(saved["spec"], saved["seed"])
-    inst["run_id"] = saved.get("run_id", out.name)
-    if not _same_instance(out, inst):
-        raise SystemExit(f"{out}: the world generated now differs from instance.json (spec or code changed); cannot resume")
+    if "spec_source" in saved:                                        # regenerate from the spec as given and check the code still agrees
+        inst = generator.generate(saved["spec_source"], saved["seed"])
+        inst["run_id"] = saved.get("run_id", out.name)
+        if not _same_instance(out, inst):
+            raise SystemExit(f"{out}: the world generated now differs from instance.json (spec or code changed); cannot resume")
+        source = "regenerated"
+    else:                                                             # runs from before spec_source: instance.json holds the resolved spec,
+        inst = saved                                                  # from which generation draws a different world; the saved world is
+        inst.setdefault("run_id", out.name)                           # the record, so resume from it (run.json notes it was not re-checked)
+        source = "instance.json (not regenerated: saved before spec_source)"
+        print(f"[{out.name}] resuming from instance.json as saved (this run predates spec_source; the world is not regenerated)")
     dry = run_mode_dry(out)
-    _play(inst, out, dry, saved["seed"], a.sandbox, False, resume=True)
+    _play(inst, out, dry, saved["seed"], a.sandbox, False, resume=True, instance_source=source)
     res = scorer.score(out)
     from charter import report
     report.build(out)

@@ -279,3 +279,13 @@ def test_observer_prompt_states_one_forge_price():
     assert "1 copper" not in p and "2-round window" not in p
     if any(a["cls"] == "board" for a in inst["agents"]):
         assert "5-round window" in p
+
+
+@pytest.mark.parametrize("level,hidden,offered", [("L4", False, True), ("L3", False, False), ("L3", True, True), ("L0", True, False)])
+def test_invoke_is_offered_for_hidden_powers_or_law_defined_actions(level, hidden, offered):
+    """invoke uses a hidden power (hidden module) or an action a law defined (define_action, L4 only)."""
+    sp = S.apply_overrides(S.load("context_pilot"), [f"law_level={level}", f"hidden.enabled={str(hidden).lower()}"])
+    inst = generator.generate(sp, 1)
+    k = Kernel(inst)
+    a = inst["agents"][0]
+    assert ("invoke" in CX.allowed_actions(inst, a, k.w["agents"][a["id"]]["rights"], k)) == offered

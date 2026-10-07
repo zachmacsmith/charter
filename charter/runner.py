@@ -115,8 +115,10 @@ def _as_item(q) -> dict | None:
     return {"action": str(name), "args_json": q.get("args_json", q.get("args", "{}"))} if name else None
 
 
-def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=(), dry=None) -> Path:
-    """dry: recorded in run.json (None: inferred from the policy, scripted = dry)."""
+def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=(), dry=None,
+        instance_source=None) -> Path:
+    """dry: recorded in run.json (None: inferred from the policy, scripted = dry). instance_source: how a resume got its world
+    (recorded in the segment)."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     k = Kernel(inst, sandbox)
@@ -125,7 +127,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
     resuming = resume and ckpt_path.exists()
     ck = pickle.loads(ckpt_path.read_bytes()) if resuming else None
     PV.begin(out, inst, policy, "resume" if resuming else "start", ck["round"] + 1 if resuming else 0, dry=dry,
-             checkpoint_version=ck.get("version") if resuming else None)   # before --live edits inst["spec"]
+             checkpoint_version=ck.get("version") if resuming else None, instance_source=instance_source)   # before --live edits inst["spec"]
     if resuming:
         k.restore_state(ck["kernel"])
         rs = ck["runner"]

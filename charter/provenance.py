@@ -168,7 +168,8 @@ def read(out) -> dict | None:
         return None
 
 
-def begin(out, inst: dict, policy, kind: str, first_round: int, dry: bool | None = None, checkpoint_version=None) -> dict:
+def begin(out, inst: dict, policy, kind: str, first_round: int, dry: bool | None = None, checkpoint_version=None,
+          instance_source=None) -> dict:
     """Write run.json at a start (kind "start": a fresh run.json) or append a segment (kind "resume", later "fork")."""
     out = Path(out)
     code, git, env, pol = code_block(), git_info(), env_info(), policy_info(policy, inst, dry)
@@ -177,6 +178,8 @@ def begin(out, inst: dict, policy, kind: str, first_round: int, dry: bool | None
            "python": env["python"], "dry": pol["dry"], "backend": pol["backend"], "argv": list(sys.argv), "code": code}
     if checkpoint_version is not None:
         seg["checkpoint_version"] = checkpoint_version
+    if instance_source is not None:
+        seg["instance"] = instance_source
     if prev is None:
         spec = inst.get("spec") or {}
         data = {"run_id": inst.get("run_id") or out.name, "created": seg["started"], "seed": inst.get("seed"),

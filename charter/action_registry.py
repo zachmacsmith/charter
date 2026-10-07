@@ -15,6 +15,7 @@ An entry:  register(name, purpose, section, core=False, pre=False, msg=False, ne
               "right:<r>"     the agent holds right r ("right:harvest:*" any harvest right)
               "cls:<c>"       the agent's class (or second class) is c; "notcls:<c>" it is not
               "level:<n>"     law level at least Ln
+              "any:<a>|<b>"   at least one of the requirements a, b, ... (e.g. "any:mod:hidden|level:4")
   edge      rights that make a core action part of the holder's edge though it does not require them ("harvest:*" any harvest
             right): open camps let anyone harvest, but the rights holders are the ones it is an edge for
   when      optional state check (inst, k, a, rights) -> bool, for things that come and go (a loan law, an open poll, a group);
@@ -34,7 +35,7 @@ NICHE_PHRASE = {"your role": "use your role's other tools", "camps": "survey, im
                 "press": "subscribe to outlets, buy placements, leak, answer polls, post anonymously or use the library",
                 "finance": "lend, borrow and use coins", "jurisdictions": "found, fund or join jurisdictions",
                 "courts": "go to court or call the Fixer", "force, more": "guard others, join attacks, hire the assassin or buy initiative",
-                "inheritance": "decide your inheritance or copy an agent", "groups": "run private groups", "powers": "use a word of power"}
+                "inheritance": "decide your inheritance or copy an agent", "groups": "run private groups", "powers": "use a word of power or an action a law defined"}
 UNIVERSAL_RIGHTS = ()                                                   # rights everyone holds (none at present): never an edge
 
 
@@ -88,6 +89,8 @@ def _classes(a) -> set:
 
 def _need(inst, a, rights, n) -> bool:
     kind, _, v = n.partition(":")
+    if kind == "any":
+        return any(_need(inst, a, rights, x) for x in v.split("|"))
     if kind == "mod":
         return _mod(inst, v)
     if kind == "opt":
@@ -306,4 +309,4 @@ R("add_member", "add someone to your group", "groups", when=_k_owns_group)
 R("remove_member", "drop someone from your group", "groups", when=_k_owns_group)
 R("close_channel", "end your group", "groups", when=_k_owns_group)
 # powers
-R("invoke", "use a hidden power you know", "powers", needs=("mod:hidden", "level:1"))
+R("invoke", "use a hidden power you know, or an action a law defined", "powers", needs=("level:1", "any:mod:hidden|level:4"))

@@ -200,6 +200,7 @@ def bundle(value, unit, rng):
 
 
 def generate(spec: dict, seed: int) -> dict:
+    source = copy.deepcopy(spec)                                     # as given: generation resolves draws into inst["spec"]
     rng = random.Random(seed)
     spec, reg = RG.resolve(spec, seed)                               # a regime fixes the constitution; no regime: spec as before
     sp = resolve_instance_level(spec, rng)
@@ -466,7 +467,9 @@ def generate(spec: dict, seed: int) -> dict:
     if reg:
         inst["regime"] = reg
     from charter import events as _events                                  # hidden world-event schedule (no-op unless events.enabled)
-    return _events.attach_schedule(validate(inst, rng))
+    inst = _events.attach_schedule(validate(inst, rng))
+    inst["spec_source"] = source                                     # resume regenerates from this (inst["spec"] would draw differently)
+    return inst
 
 
 def validate(inst: dict, rng: random.Random) -> dict:

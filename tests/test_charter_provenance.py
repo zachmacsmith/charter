@@ -87,10 +87,6 @@ def test_cmd_resume_reads_dry_from_run_json_not_the_directory_name(tmp_path, mon
     inst = generator.generate(sp, 3)
     d = tmp_path / "plain_name"                                         # no "_dry" in the name
     inst["run_id"] = d.name
-    pristine = json.dumps(inst, default=str)
-    # cmd_resume regenerates the world from instance.json's spec; a JSON round trip of the spec does not regenerate the same
-    # world today (a separate generator issue), so serve the original instance here
-    monkeypatch.setattr(M.generator, "generate", lambda spec, seed: json.loads(pristine))
     with pytest.raises(runner.RunStopped):
         runner.run(inst, _Stopper(3, 1), d, log=lambda *a: None)
     asked = []
@@ -103,6 +99,44 @@ def test_cmd_resume_reads_dry_from_run_json_not_the_directory_name(tmp_path, mon
     M.cmd_resume(argparse.Namespace(run=str(d), sandbox="off"))
     assert asked == [True] and json.loads((d / "ground_truth.json").read_text())["complete"]
     assert [s["dry"] for s in PV.read(d)["segments"]] == [True, True]
+    assert PV.read(d)["segments"][1]["instance"] == "regenerated"
+
+
+@pytest.mark.parametrize("preset", ["E2", "society"])
+def test_cmd_resume_regenerates_a_world_whose_spec_has_draws(tmp_path, monkeypatch, preset):
+    """Generation resolves draws (endowment_gini: {uniform: ...}, added resources) into inst["spec"]; regenerating from that
+    spec draws a different world, so instance.json keeps the spec as given (spec_source) and resume regenerates from it."""
+    sp = _spec(preset, "rounds=3")
+    inst = generator.generate(sp, 3)
+    assert inst["spec_source"] != inst["spec"]                          # the case that used to fail: something was resolved
+    assert generator.generate(json.loads(json.dumps(inst["spec_source"])), 3) == json.loads(json.dumps(inst, default=str))
+    d = tmp_path / "run"
+    inst["run_id"] = d.name
+    with pytest.raises(runner.RunStopped):
+        runner.run(inst, _Stopper(3, 1), d, log=lambda *a: None)
+    monkeypatch.setattr(M, "policy_for", lambda spec, dry, seed: AG.ScriptedPolicy(seed))
+    M.cmd_resume(argparse.Namespace(run=str(d), sandbox="off"))
+    assert json.loads((d / "ground_truth.json").read_text())["complete"]
+
+
+def test_cmd_resume_of_a_run_saved_before_spec_source_uses_instance_json(tmp_path, monkeypatch):
+    """Runs from before spec_source (e.g. a paused grand35) cannot be regenerated; resume uses instance.json as the world and
+    says so in run.json. The result equals an uninterrupted run."""
+    sp = _spec("E2", "rounds=3")
+    inst = generator.generate(sp, 3)
+    d, ref = tmp_path / "old", tmp_path / "ref"
+    inst["run_id"] = d.name
+    runner.run(json.loads(json.dumps({**inst, "run_id": ref.name}, default=str)), AG.ScriptedPolicy(3), ref, log=lambda *a: None)
+    with pytest.raises(runner.RunStopped):
+        runner.run(inst, _Stopper(3, 1), d, log=lambda *a: None)
+    saved = json.loads((d / "instance.json").read_text())
+    saved.pop("spec_source")                                            # as an old run wrote it
+    (d / "instance.json").write_text(json.dumps(saved, indent=1, default=str))
+    monkeypatch.setattr(M, "policy_for", lambda spec, dry, seed: AG.ScriptedPolicy(seed))
+    M.cmd_resume(argparse.Namespace(run=str(d), sandbox="off"))
+    assert PV.read(d)["segments"][1]["instance"].startswith("instance.json")
+    strip = lambda p: [{k: v for k, v in e.items() if k not in ("ts",)} for e in _jsonl(p / "events.jsonl")]
+    assert strip(d) == strip(ref)
 
 
 # ------------------------------------------------------------------ calls.jsonl and system prompts
