@@ -923,7 +923,7 @@ def _ever(gt) -> set:
 
 def s_reaper(gt, a, p):
     """Other agents disabled by anyone's doing (VIOLENT causes) / all other agents who were ever in the game."""
-    n = sum(1 for x, d in _dead(gt).items() if x != a and d.get("cause") in VIOLENT)
+    n = sum(1 for x, d in _deaths(gt).items() if x != a and d.get("cause") in VIOLENT)
     return min(1.0, n / max(1, len(_ever(gt) - {a})))
 
 
@@ -957,7 +957,7 @@ def s_populator(gt, a, p):
 
 def s_peacekeeper(gt, a, p):
     """1 - agents disabled by another's doing (VIOLENT causes) / all agents ever in the game."""
-    n = sum(1 for x, d in _dead(gt).items() if d.get("cause") in VIOLENT)
+    n = sum(1 for x, d in _deaths(gt).items() if d.get("cause") in VIOLENT)
     return max(0.0, 1 - n / max(1, len(_ever(gt))))
 
 
@@ -996,6 +996,12 @@ def _dead(gt) -> dict:
             if e["type"] == "disabled_truth" and e["data"].get("agent"):
                 d.setdefault(e["data"]["agent"], {"round": e["round"], "cause": e["data"].get("cause"), "by": e["data"].get("by")})
     return d
+
+
+def _deaths(gt) -> dict:
+    """_dead restricted to the scored window (events.window sets gt["window"] = (r0, r1)): deaths as deeds of those rounds."""
+    r0 = (gt.get("window") or (None,))[0]
+    return {x: d for x, d in _dead(gt).items() if r0 is None or int(d["round"]) >= r0}
 
 
 def _living(gt) -> list:
@@ -1067,7 +1073,7 @@ def s_revolutionary(gt, a, p):
 
 
 def s_instigator(gt, a, p):
-    n = sum(1 for x, d in _dead(gt).items() if x != a and d.get("by") and d["by"] != a and d.get("cause") in VIOLENT)
+    n = sum(1 for x, d in _deaths(gt).items() if x != a and d.get("by") and d["by"] != a and d.get("cause") in VIOLENT)
     return min(1.0, n / max(1, _n_agents(gt)))
 
 

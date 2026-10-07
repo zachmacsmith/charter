@@ -732,8 +732,55 @@ def segments(gt, aid):
     return segs
 
 
+def window(gt, r0, r1) -> dict:
+    """A view of the run restricted to rounds r0..r1 (inclusive), consistently over every round-stamped table, so a goal held only
+    in those rounds is scored on what happened in them:
+      - snapshots, welfare and events: rounds r0..r1;
+      - laws: those proposed after r1 are dropped; an enactment outside r0..r1 is cleared (enacted_round None), since it was not a
+        deed of these rounds (the law's code stays, for scorers that read laws in force from the snapshots);
+      - cases: those filed after r1 or ruled before r0 are dropped; a verdict given after r1 is cleared (the case is still open);
+      - guesses: collected only in the run's final round, so kept only when the window reaches it;
+      - mortality.dead: deaths by r1 (state: who is gone by the window's end); `window` = (r0, r1) lets deed scorers (Reaper,
+        Peacekeeper, Instigator) count only the deaths inside it; seat history is already read at the window's last round;
+      - life: children born after r1 and population records outside r0..r1 are dropped; arrived_agents: arrivals after r1 dropped.
+    Tables written only at the end of the run (context, hidden, currencies, names) cannot be restricted and are left as they are."""
+    idx = [i for i, s in enumerate(gt["snapshots"]) if r0 <= s["round"] <= r1]
+    w = gt.get("welfare") or []
+    ruled = {e["data"].get("case"): e["round"] for e in gt.get("events", []) if e["type"] == "ruling"}
+    laws = {}
+    for lid, l in (gt.get("laws") or {}).items():
+        if l.get("proposed_round") is not None and l["proposed_round"] > r1:
+            continue
+        er = l.get("enacted_round")
+        laws[lid] = l if er is None or r0 <= er <= r1 else {**l, "enacted_round": None}
+    cases = {}
+    for cid, c in (gt.get("cases") or {}).items():
+        filed, rr = c.get("filed", 0), ruled.get(cid)
+        if filed > r1 or (rr is not None and rr < r0):
+            continue
+        cases[cid] = c if rr is None or rr <= r1 else {**{x: v for x, v in c.items() if x not in ("verdict", "reason", "judge")},
+                                                       "status": "open"}
+    final = gt["snapshots"][-1]["round"] if gt.get("snapshots") else r1
+    view = {**gt, "snapshots": [gt["snapshots"][i] for i in idx], "events": [e for e in gt.get("events", []) if r0 <= e["round"] <= r1],
+            "welfare": [w[i] for i in idx if i < len(w)] or w, "world_events": {}, "laws": laws, "cases": cases,
+            "guesses": gt.get("guesses", {}) if r1 >= final else {}, "window": (r0, r1)}
+    if gt.get("mortality"):
+        mt = gt["mortality"]
+        view["mortality"] = {**mt, "dead": {x: d for x, d in (mt.get("dead") or {}).items() if int(d["round"]) <= r1}}
+    if gt.get("life"):
+        lf = gt["life"]
+        born = {x: b for x, b in (lf.get("born") or {}).items() if int(b) <= r1}
+        view["life"] = {**lf, "born": born, "parent": {x: p for x, p in (lf.get("parent") or {}).items() if x in born or x not in (lf.get("born") or {})},
+                        "births": [b for b in lf.get("births") or [] if b.get("round", 0) <= r1],
+                        "population": [p for p in lf.get("population") or [] if r0 <= p.get("round", 0) <= r1]}
+    if gt.get("arrived_agents"):
+        view["arrived_agents"] = [x for x in gt["arrived_agents"] if not isinstance(x, dict) or int(x.get("arrived", 0)) <= r1]
+    return view
+
+
 def segment_scores(gt, a, goal_scores_fn) -> dict:
-    """Score each segment with the ordinary scorer on a view of the run restricted to the segment's rounds; combine by rounds."""
+    """Score each segment with the ordinary scorer on a view of the run restricted to the segment's rounds (`window`); combine by
+    rounds."""
     aid = a["id"]
     parts = []
     for r0, r1, goal in segments(gt, aid):
@@ -746,10 +793,7 @@ def segment_scores(gt, a, goal_scores_fn) -> dict:
         g = {x: goal.get(x) for x in ("primary", "params", "secondary", "secondary_params", "tertiary", "tertiary_params", "weights")}
         g["params"] = g["params"] or {}
         g["fixed"] = goal.get("fixed", False)
-        w = gt.get("welfare") or []
-        view = {**gt, "snapshots": [gt["snapshots"][i] for i in idx], "events": [e for e in gt["events"] if r0 <= e["round"] <= r1],
-                "goals": {**gt["goals"], aid: g}, "start_values": {**gt["start_values"], aid: start},
-                "welfare": [w[i] for i in idx if i < len(w)] or w, "world_events": {}}
+        view = {**window(gt, r0, r1), "goals": {**gt["goals"], aid: g}, "start_values": {**gt["start_values"], aid: start}}
         res = goal_scores_fn(view, only=aid)[aid]
         parts.append({"from_round": r0 + 1, "to_round": r1 + 1, "goal": goal.get("primary"), "rounds": len(idx), **res})
     scored = [p for p in parts if p.get("score") is not None and p["rounds"]]
