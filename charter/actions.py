@@ -14,6 +14,7 @@ from charter import camps as C
 from charter import context as CX                                     # context: lookups and files (charter/context.py)
 from charter import conflict as CF
 from charter import credit as CR
+from charter import dispatch as D                                     # legal acts: the propose payload's draft (P2.3)
 from charter import hidden as H
 from charter import jurisdictions as J
 from charter import lawlang as L
@@ -581,13 +582,7 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
         k.w["laws"][lid]["status"] = "failed_check"                    # the dry run restored a copy of the world: not `law`
         k.log("proposal_check_failed", aid, {"law": lid, "error": str(e)}, vis=[aid])
         raise ActionError(f"your law failed the 3-round dry run: {e}")
-    law["preview"] = diff
-    preview = k.spec["conditions"]["effect_preview"]
-    k.log("proposal", aid, {"law": lid, "title": law["title"], "intent": law["intent"], "class": law["cls"], "code": law["code"],
-                            **({"preview": diff[:40]} if preview else {})}, vis="public")
-    if not preview:
-        k.log("proposal_preview", aid, {"law": lid, "preview": diff[:40]}, vis="monitor")
-    k.hooks("on_proposal", None)
+    k.apply("propose", jurisdiction=None, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
     return f"Proposed {lid} '{law['title']}' ({law['cls']}); status: {k.w['laws'][lid]['status']}."
 
@@ -608,10 +603,8 @@ def _vote(k, aid, ballot, choice):
         raise ActionError(f"choice must be one of {opts}")
     else:
         choice = str(choice)
-    b["votes"][aid] = choice
-    k.log("vote", aid, {"ballot": ballot, "choice": choice}, vis="public")
-    k.hooks("on_vote", ballot, aid, choice)
-    return f"Voted {choice} on {ballot}."
+    k.apply("cast_vote", jurisdiction=J.ballot_jur(k, b) if "jur" in k.w else None, ballot=ballot, agent=aid, choice=choice)
+    return f"Voted {choice} on {ballot}."                              # on_vote ran after the vote was logged, as before
 
 
 def _veto(k, aid, law):
@@ -620,10 +613,7 @@ def _veto(k, aid, law):
     item = next((v for v in k.w["veto_queue"] if v["law"] == law), None)
     if not item:
         raise ActionError(f"{law} is not in a veto window")
-    if aid not in item["vetoes"]:
-        item["vetoes"].append(aid)
-    secret = k.spec["conditions"]["board_votes"] == "secret"
-    k.log("veto_vote", aid, {"law": law, "kind": item["kind"]}, vis="monitor" if secret else "public")
+    k.apply("veto", jurisdiction=D.jur_of(k, law), law=law, member=aid)
     return f"Veto recorded on {law}."
 
 
@@ -981,15 +971,9 @@ def _rule(k, aid, case, verdict, reason):
         raise ActionError("a judge rules on at most 3 cases per round")
     k.w["rulings_this_round"][aid] = n + 1
     guilty = str(verdict).lower().startswith("guilty")
-    c.update({"status": "decided", "verdict": "guilty" if guilty else "not guilty", "reason": str(reason)[:800], "judge": aid})
-    if guilty:
-        cl = k.w["clauses"][c["clause"]]
-        lid, fn = k.fnreg[cl["penalty"]]
-        try:
-            k.call(lid, fn, c["accused"], c["accuser"])
-        except L.LawError as e:
-            k.law_error(lid, str(e))
-    k.hooks("on_ruling", case, c["verdict"], c["accuser"], c["accused"])
+    k.apply("rule", jurisdiction=D.jur_of(k, k.w["clauses"].get(c["clause"], {}).get("law")), case=case,
+            verdict="guilty" if guilty else "not guilty", judge=aid, clause=c["clause"], accuser=c["accuser"], accused=c["accused"],
+            reason=str(reason)[:800])                                  # the penalty, then on_ruling, as before
     k.log("ruling", aid, {"case": case, "verdict": c["verdict"], "reason": c["reason"]}, vis="public")
     k.gazette(f"Case {case}: {c['verdict']} ({c['clause']}). Judge {aid}: {c['reason'][:300]}")
     return f"Ruled {c['verdict']} on {case}."

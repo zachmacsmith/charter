@@ -452,10 +452,7 @@ def scope_api(k, lid, api: dict) -> dict:
         def set_procedure(law_class, fn):
             if law_class not in ("ordinary", "structural", "procedural"):
                 raise L.LawError("law_class must be ordinary, structural or procedural")
-            key = k._reg(lid, fn)
-            jj = jurs(k)[jid]                                           # looked up at call time: dry runs replace k.w
-            jj["procedures"][law_class] = key
-            jj["procedure_history"].append({"cls": law_class, "key": key, "law": lid})
+            k.apply("set_procedure", jurisdiction=jid, cls=law_class, procedure_law=lid, key=k._reg(lid, fn), own=True)
         out["set_procedure"] = set_procedure
 
         def camp_setter(field, conv):
@@ -630,7 +627,7 @@ def _pass_declared(k, lid, jid):
         k.log("veto_window", None, {"law": lid, "until": k.r + k.spec["veto_window"]}, vis="public")
         return
     try:
-        k.enact(lid)
+        k.enact(lid, via="procedure")
     except L.LawError as e:
         law["status"] = "failed"
         k.log("proposal_failed", law["author"], {"law": lid, "why": f"error on enactment: {e}"}, vis="public")
@@ -698,13 +695,8 @@ def propose(k, aid, code, intent=None, jurisdiction=None):
         k.w["laws"][lid]["status"] = "failed_check"
         k.log("proposal_check_failed", aid, {"law": lid, "error": str(e)}, vis=[aid])
         raise L.LawError(f"your law failed the 3-round dry run: {e}")
-    law["preview"] = diff
-    preview = k.spec["conditions"]["effect_preview"]
-    k.log("proposal", aid, {"law": lid, "title": law["title"], "intent": law["intent"], "class": law["cls"], "code": law["code"],
-                            "jurisdiction": jid, **({"preview": diff[:40]} if preview else {})}, vis="public")
-    if not preview:
-        k.log("proposal_preview", aid, {"law": lid, "preview": diff[:40]}, vis="monitor")
-    k.hooks("on_proposal", None)
+    from charter import dispatch as D
+    k.apply("propose", jurisdiction=jid, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
     where = "" if j.get("legacy") else f" in {jid}" + (" (hidden: no effect until it is declared)" if j["status"] == "hidden" else "")
     return f"Proposed {lid} '{law['title']}' ({law['cls']}){where}; status: {k.w['laws'][lid]['status']}."
