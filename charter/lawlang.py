@@ -3,8 +3,8 @@
 A law module sets `title` and `intent`, may keep persistent data in `state` (a dict), and defines hooks:
 on_enact, on_repeal, on_round_start(r), on_round_end(r), on_harvest(agent, camp, x, y) (return a deduction),
 on_transfer(src, dst, item, qty) (return False to block, or a number to tax), on_proposal(p), on_vote(ballot, agent, choice),
-on_post(agent, text). It calls the kernel API (see API_GROUPS); nothing else is reachable: no imports, no I/O, no dunders,
-no global/nonlocal, no try, no classes.
+on_post(agent, text) and the module hooks in charter/lawapi.py. It calls the kernel API (see API_GROUPS, generated from the table in
+charter/lawapi.py); nothing else is reachable: no imports, no I/O, no dunders, no global/nonlocal, no try, no classes.
 
 Static class (by which API calls appear, so it cannot be misstated):
   procedural  any set_procedure
@@ -16,56 +16,21 @@ from __future__ import annotations
 import ast
 import sys
 
+from charter import lawapi as LA
+
 # Version of the law API (API_GROUPS, hooks, their signatures and semantics) seen by law code. Bump it when an existing call or hook
 # changes meaning or is removed (adding a call does not break old laws); run.json records it per run segment.
 LAW_API_VERSION = 1
 
-API_GROUPS = {
-    "read": {"agents", "holders", "has", "balance", "reserve", "price", "stock", "round", "laws", "proposer", "value", "supply",
-             "camps", "class_of", "holdings_value", "currencies", "rights_of", "rng", "bounty_number",
-             "channels", "posts", "current_post", "hidden_posts", "dm_limit", "loans",
-             "credit_record", "reserve_ratio", "redemption_open", "par", "interest_cap", "circulation"},
-    "rights": {"create_right", "grant", "revoke", "define_action"},
-    "money": {"create_currency", "mint", "burn", "move", "set_convertible", "enable_loans", "forgive_loan",
-              "set_par", "suspend_redemption", "set_interest_cap", "set_default_consequence", "restructure_loan",
-              "lend_from_reserve", "buy_loan"},
-    "camps": {"set_quota", "set_harvest_limit", "set_fee"},
-    "governance": {"set_procedure", "open_ballot"},
-    "output": {"gazette", "notify", "unhide_post"},
-    "names": {"rename", "name", "title"},
-    "sanctions": {"fine", "suspend", "limit_actions", "censure", "clause", "hide_post", "set_dm_limit"},
-    "text": {"contains", "count", "starts_with", "lower"},
-    "meta": {"repeal"},
-    "projects": {"start_project", "contribute_project", "set_refund", "pay_tribute"},   # structural: new camps/rights, reserve outflows
-    "projects_read": {"projects", "tribute_status"},
-}
-API_GROUPS["read"] = API_GROUPS["read"] | {"capability_holders"}                           # hidden powers (hidden.py)
-API_GROUPS["rights"] = API_GROUPS["rights"] | {"revoke_capability", "disclose_capability_use"}  # structural, like rights
-API_GROUPS["read"] = API_GROUPS["read"] | {"leases"}                                       # camps: leasing harvest rights
-API_GROUPS["camps"] = API_GROUPS["camps"] | {"set_lease_rules"}                            # camps: ordinary, like set_fee
-API_GROUPS["rights"] = API_GROUPS["rights"] | {"set_succession_public"}                        # life: Board succession (mortality.py)
-API_GROUPS["read"] = API_GROUPS["read"] | {"forts", "weapons_of", "defense_of", "guards", "attacks", "disabled_agents"}   # conflict
-API_GROUPS["sanctions"] = API_GROUPS["sanctions"] | {"ban_forging", "oblige_guard", "clear_obligations"}  # conflict: structural
-API_GROUPS["read"] = API_GROUPS["read"] | {"jurisdiction", "members"}                     # jurisdictions (jurisdictions.py)
-API_GROUPS["rights"] = API_GROUPS["rights"] | {"admit", "expel"}
-API_GROUPS["sanctions"] = API_GROUPS["sanctions"] | {"lawful_attack"}
-# media2 (media.py): reads; which official statistics are public (ordinary output); outlet rules and sanctions (structural)
-API_GROUPS["read"] = API_GROUPS["read"] | {"outlets", "public_stats", "submissions"}
-API_GROUPS["output"] = API_GROUPS["output"] | {"publish_stat"}
-API_GROUPS["rights"] = API_GROUPS["rights"] | {"set_official_editor", "set_open_board", "set_press_freedom", "official_stream"}
-API_GROUPS["sanctions"] = API_GROUPS["sanctions"] | {"suspend_outlet", "require_sponsor_label", "compel_subscription"}
-# life (life.py): who makes children and what is made; birth rules are structural, publishing commissions and births ordinary output
-API_GROUPS["read"] = API_GROUPS["read"] | {"makers", "commissions", "births", "children_of", "lifespan_left"}
-API_GROUPS["output"] = API_GROUPS["output"] | {"publish_commissions", "publish_births"}
-API_GROUPS["rights"] = API_GROUPS["rights"] | {"set_birth_rules"}
+# The law API's classification, generated from the table in charter/lawapi.py (one row per function and hook): group -> names.
+API_GROUPS = LA.api_groups()
 API = set().union(*API_GROUPS.values())
-STRUCTURAL_CALLS = API_GROUPS["rights"] | API_GROUPS["money"] | API_GROUPS["sanctions"] | {"open_ballot"} | API_GROUPS["projects"]
+STRUCTURAL_CALLS = LA.STRUCTURAL_CALLS                                 # rights, money, sanctions, projects, open_ballot
+PROCEDURAL_CALLS = LA.PROCEDURAL_CALLS                                 # set_procedure
+L4_CALLS = LA.L4_CALLS                                                 # define_action
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},
                  "L4": {"ordinary", "structural", "procedural"}}
-HOOKS = ("on_enact", "on_repeal", "on_round_start", "on_round_end", "on_harvest", "on_transfer", "on_proposal", "on_vote", "on_post",
-         "on_ruling", "on_dm",
-         "on_admission", "on_exit", "on_birth",                        # jurisdictions
-         "on_commission")                                              # life: return False to refuse an order
+HOOKS = LA.HOOKS                                                       # lawapi.HOOKTABLE: signatures, returns, dispatch
 SAFE_BUILTINS = {"len": len, "range": range, "min": min, "max": max, "sum": sum, "abs": abs, "int": int, "float": float,
                  "round_to": round, "sorted": sorted, "list": list, "dict": dict, "set": set, "str": str, "bool": bool,
                  "enumerate": enumerate, "zip": zip, "any": any, "all": all, "True": True, "False": False, "None": None, "tuple": tuple}
@@ -132,7 +97,7 @@ def moves_holdings_by_return(tree: ast.AST) -> bool:
 
 def classify(tree: ast.AST) -> str:
     c = calls(tree)
-    if "set_procedure" in c:
+    if c & PROCEDURAL_CALLS:
         return "procedural"
     if c & STRUCTURAL_CALLS or moves_holdings_by_return(tree):
         return "structural"
@@ -151,7 +116,7 @@ def is_repeal(tree: ast.Module) -> str | None:
 
 
 def uses_define_action(tree: ast.AST) -> bool:
-    return "define_action" in calls(tree)
+    return bool(calls(tree) & L4_CALLS)
 
 
 def header(code: str) -> tuple[str, str]:
