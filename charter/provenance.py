@@ -16,6 +16,11 @@ Writes to the run directory:
   prompts/system/<sha>.txt  each distinct system prompt sent, once (content-addressed: sha256 of the text, first 16 hex digits);
                       context runs rebuild the system prompt every turn, so this is the only record of what was actually sent.
   abandoned_calls.jsonl  calls of rounds abandoned by fail-stop or cut by a resume (kept, not deleted).
+  blobs/<sha256>      content-addressed store (full sha256 hex of the bytes; each distinct content once): the frozen shared
+                      archive's base and overlay texts (archive.py, archive/base.json, archive_overlay.jsonl) and sandbox code and
+                      outputs (sandbox.py, sandbox.jsonl). put_blob / get_blob.
+  run.json `shared_archive`  the frozen archive's snapshot: {enabled, hash (of archive/base.json's file map), docs_hash (the
+                      documents only: archive.snapshot's hash), files, taken, source, publish} (archive.Frozen).
 
 APPEND_ONLY lists every file the runner appends to; checkpoints store each one's size and a resume or fail-stop cuts each back to it
 (the one registry checkpoints and failstop.abandon consult).
@@ -35,7 +40,8 @@ from pathlib import Path
 
 PKG = Path(__file__).resolve().parent
 REPO = PKG.parent
-APPEND_ONLY = ("events.jsonl", "reasoning.jsonl", "observer.jsonl", "calls.jsonl", "turns.jsonl")   # turns.jsonl: k.turn_log
+APPEND_ONLY = ("events.jsonl", "reasoning.jsonl", "observer.jsonl", "calls.jsonl", "turns.jsonl",   # turns.jsonl: k.turn_log
+               "archive_overlay.jsonl", "sandbox.jsonl")                # P5.4: this run's shared-archive writes; sandbox calls
 KEEP_CUT = {"calls.jsonl": "abandoned_calls.jsonl"}                     # cut bytes of these files are moved, not deleted
 SECRET = re.compile(r"key|token|secret|password|credential|auth", re.I)
 
@@ -43,6 +49,52 @@ SECRET = re.compile(r"key|token|secret|password|credential|auth", re.I)
 def sha(text) -> str:
     b = text if isinstance(text, bytes) else str(text).encode()
     return hashlib.sha256(b).hexdigest()[:16]
+
+
+# ------------------------------------------------------------------ content-addressed blobs (P5.4)
+BLOBS = "blobs"
+
+
+def blob_sha(data) -> str:
+    """A blob's name: the full sha256 hex of its bytes (text as UTF-8)."""
+    return hashlib.sha256(data if isinstance(data, bytes) else str(data).encode()).hexdigest()
+
+
+def put_blob(out, data) -> str:
+    """Store bytes (or text, as UTF-8) under blobs/<sha256> once; return the sha."""
+    b = data if isinstance(data, bytes) else str(data).encode()
+    h = blob_sha(b)
+    d = Path(out) / BLOBS
+    p = d / h
+    if not p.exists():
+        d.mkdir(parents=True, exist_ok=True)
+        tmp = d / f".{h}.{os.getpid()}.{threading.get_ident()}.tmp"
+        tmp.write_bytes(b)
+        os.replace(tmp, p)
+    return h
+
+
+def get_blob(out, h: str, text: bool = True):
+    """A blob's content (str, or bytes with text=False); KeyError when it is missing."""
+    p = Path(out) / BLOBS / h
+    if not p.exists():
+        raise KeyError(f"blob {h} is missing from {Path(out) / BLOBS}")
+    b = p.read_bytes()
+    return b.decode() if text else b
+
+
+def copy_blobs(src, dst, shas) -> None:
+    """Copy the named blobs from one run directory's store to another's (hard links where possible)."""
+    sd, dd = Path(src) / BLOBS, Path(dst) / BLOBS
+    for h in set(shas):
+        if (dd / h).exists():
+            continue
+        dd.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(sd / h, dd / h)
+        except OSError:
+            import shutil
+            shutil.copy2(sd / h, dd / h)
 
 
 # ------------------------------------------------------------------ append-only files (checkpoint offsets)

@@ -23,13 +23,17 @@ ReplayDivergence when a call's prompt (system or user, by hash) differs from the
 Runs from before call keys fall back to the per-round call id `r<round>:<agent>:<n>` (and to empty reasoning text when calls.jsonl
 did not keep it: "approximate").
 
-Not replayed: Docker sandbox output (run_python is executed again: --sandbox docker for model runs that used it) and the shared
-archive, which is live state shared across runs; a replay reads and writes a private copy of its current contents, so a run that
-read the archive replays exactly only while the archive is unchanged (a difference shows as a ReplayDivergence).
+Sandbox and shared archive (P5.4). Sandbox outputs are served from the run's record (sandbox.jsonl + blobs, ReplaySandbox) by call
+key r<round>:<agent>:<n>, never by running Docker again (a call whose code differs from the recorded one: ReplayDivergence; a call
+with no record: ReplayMiss); only runs from before the record (no sandbox.jsonl) run the given sandbox (--sandbox docker). A fork
+serves the parent's record before the fork point and runs the live sandbox from it. The shared archive is the run's frozen copy
+(archive.Frozen: archive/base.json + blobs, plus the run's own overlay, which a rewind copies up to the checkpoint): a replay starts
+from the run's frozen base, so it reproduces the run however the live shared archive has changed since; replays and forks never
+publish to the live archive. A run from before the freeze has no frozen base: its replay snapshots the live archive's current
+contents (and says so in replay.json), exact only while that is unchanged.
 """
 from __future__ import annotations
 
-import contextlib
 import json
 import shutil
 import threading
@@ -116,24 +120,39 @@ class ReplayPolicy:
         return sorted(kid for kid, r in self.calls.items() if kid not in self.used and (until is None or r["round"] < until))
 
 
-@contextlib.contextmanager
-def _private_archive(inst: dict, out: Path):
-    """The shared archive for the replay: a copy of its current contents inside the replay directory (never the live one)."""
-    from charter import archive
-    real = archive.shared_dir
-    live = real(inst["spec"])
-    if live is None:
-        yield None
-        return
-    copy = out / "shared_archive_copy"
-    if copy.exists():
-        shutil.rmtree(copy)
-    shutil.copytree(live, copy)
-    archive.shared_dir = lambda spec: copy if (spec or {}).get("shared_archive", {}).get("enabled", True) else None
-    try:
-        yield copy
-    finally:
-        archive.shared_dir = real
+class ReplaySandbox:
+    """Serves a run's recorded sandbox outputs (sandbox.jsonl, blobs/) by call key; the runner wraps it in sandbox.Recording, which
+    passes the key. until: only calls of rounds before it are served, later ones go to `live` (a fork); None: every call is served
+    (a replay). A run without a record (from before P5.4) runs `live` for every call. live None: the disabled sandbox."""
+    takes_key = True
+
+    def __init__(self, run, live=None, until: int | None = None):
+        from charter import sandbox as SB
+        self.run, self.until = Path(run), until
+        self.live = live or SB.disabled
+        self.recorded = (self.run / SB.RECORD).exists()
+        self.rows = {r["call"]: r for r in _jsonl(self.run / SB.RECORD)}
+        self.served: set = set()
+        self.lock = threading.Lock()
+
+    def __call__(self, agent, code, key=None):
+        if not self.recorded or key is None or (self.until is not None and key["round"] >= self.until):
+            return self.live(agent, code)
+        row = self.rows.get(key["call"])
+        if row is None:
+            raise ReplayMiss(f"sandbox call {key['call']} ({agent}, round {key['round'] + 1}) has no recorded output")
+        if row["code"] != PV.blob_sha(str(code)):
+            raise ReplayDivergence(f"sandbox call {key['call']}: the code differs from the recorded code: the replay diverged "
+                                   "before this call")
+        with self.lock:
+            self.served.add(key["call"])
+        return PV.get_blob(self.run, row["output"])
+
+    def unused(self, until: int | None = None) -> list:
+        """Recorded sandbox calls (of rounds before `until`) never asked for."""
+        if self.until is not None:
+            until = self.until if until is None else min(until, self.until)
+        return sorted(c for c, r in self.rows.items() if c not in self.served and (until is None or r["round"] < until))
 
 
 def _norm(lines: list) -> list:
@@ -196,16 +215,28 @@ def replay(run, out=None, to: int | None = None, sandbox=None, log=print, check_
     pol = ReplayPolicy(calls, legacy, check_prompts)
     from charter import interventions as IV                             # the run's interventions are inputs too
     sched = IV.load_schedule(run / "interventions.yaml") if (run / "interventions.yaml").exists() else None
-    with _private_archive(inst, out) as arch:
-        runner.run(inst, pol, out, sandbox, log=log, dry=dry, until=to, instance_source="replay of " + str(run), schedule=sched)
+    sbx = ReplaySandbox(run, live=sandbox)                              # recorded sandbox outputs, not Docker
+    runner.run(inst, pol, out, sbx, log=log, dry=dry, until=to, instance_source="replay of " + str(run), schedule=sched,
+               archive_from=run, publish_archive=False)                 # the run's frozen archive; never published
     extra = pol.unused(to)
     if extra:
         raise ReplayMiss(f"{len(extra)} recorded call(s) were never asked for in the replay (first: {', '.join(extra[:5])})")
+    extra = sbx.unused(to)
+    if extra:
+        raise ReplayMiss(f"{len(extra)} recorded sandbox call(s) were never asked for in the replay (first: {', '.join(extra[:5])})")
     res = compare(run, out, to)
-    res.update(calls_replayed=len(pol.used), legacy_keys=legacy, approximate=pol.approximate or legacy,
-               rounds=to if to is not None else inst["rounds"], out=str(out))
-    if arch is not None:
-        res["note"] = "shared archive: replayed against a copy of its current contents, not its state when the run started"
+    res.update(calls_replayed=len(pol.used), sandbox_replayed=len(sbx.served), legacy_keys=legacy,
+               approximate=pol.approximate or legacy, rounds=to if to is not None else inst["rounds"], out=str(out))
+    from charter import archive
+    if not sbx.recorded:
+        res["sandbox_note"] = "the run has no sandbox record (made before P5.4): sandbox calls were executed again"
+    ra, oa = (PV.read(run) or {}).get("shared_archive"), (PV.read(out) or {}).get("shared_archive")
+    if oa:
+        res["shared_archive"] = oa.get("hash")
+        if not (run / archive.FROZEN_DIR / "base.json").exists():
+            res["note"] = "shared archive: the run has no frozen copy (made before P5.4); replayed against the live archive's current contents"
+        elif ra and ra.get("hash") != oa.get("hash"):
+            raise ReplayDivergence(f"the replay's frozen archive {oa.get('hash')} is not the run's {ra.get('hash')}")
     PV.annotate(out, replay_of={"run": str(run.resolve()), "run_id": meta.get("run_id") or run.name, "to": to}, replay=res)
     (out / "replay.json").write_text(json.dumps(res, indent=1))
     return res
@@ -236,6 +267,21 @@ def rewind(run, to: int, out, kind: str = "rewind", parent_extra: dict | None = 
         if (run / name).exists():
             with open(run / name, "rb") as f:
                 (out / name).write_bytes(f.read(size))
+    if (run / PV.BLOBS).exists():                                       # content-addressed texts (hard links where possible)
+        PV.copy_blobs(run, out, [p.name for p in (run / PV.BLOBS).iterdir() if not p.name.startswith(".")])
+    from charter import archive
+    if (run / archive.FROZEN_DIR / "base.json").exists():               # the frozen archive: base; the overlay was cut above
+        (out / archive.FROZEN_DIR).mkdir()
+        shutil.copy2(run / archive.FROZEN_DIR / "base.json", out / archive.FROZEN_DIR / "base.json")
+        try:
+            st = json.loads((run / archive.FROZEN_DIR / "state.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            st = {}
+        kept = sum(1 for ln in (out / archive.OVERLAY).read_text().splitlines() if ln.strip()) \
+            if (out / archive.OVERLAY).exists() else 0
+        st["published"] = kept                                          # the parent's writes are the parent's to publish
+        st.pop("published_at", None)
+        (out / archive.FROZEN_DIR / "state.json").write_text(json.dumps(st, indent=1))
     snaps = json.loads((run / "snapshots.json").read_text())[:ent["counts"]["snapshots"]]
     (out / "snapshots.json").write_text(json.dumps(snaps, default=list))
     if (run / "ground_truth.json").exists():
@@ -400,9 +446,9 @@ def fork(run, at: int, schedule=None, out=None, replicates: int | None = None, r
         if log:
             log(f"[{d.name}] fork of {run.name} at round {at + 1} (from the checkpoint after {base} rounds), replicate {i}, "
                 f"{len(sched)} intervention(s), replay {replay_mode}")
-        with _private_archive(inst, d):
-            runner.run(inst, pol, d, sandbox, log=log or (lambda *a: None), resume=True, dry=dry, schedule=sched,
-                       instance_source=f"fork of {run} at round {at}")
+        sbx = ReplaySandbox(run, live=sandbox, until=at if replay_mode != "none" else 0)   # recorded outputs before the fork point
+        runner.run(inst, pol, d, sbx, log=log or (lambda *a: None), resume=True, dry=dry, schedule=sched,
+                   instance_source=f"fork of {run} at round {at}", publish_archive=False)   # the parent's frozen archive, unpublished
         missed = [kid for kid, r in calls.items() if base <= r["round"] < at and kid not in pol.replay.used
                   and kid not in prefix] if replay_mode != "none" else []
         if missed:

@@ -17,6 +17,12 @@ Writes to the run directory (checkpointed every round, so a crash keeps everythi
   turns.jsonl        k.turn_log (one row per agent turn: reasoning, actions, results), appended at each checkpoint
   run.json           provenance (code, repository state, python, backend, dry flag, spec sha) and one segment per start/resume
   calls.jsonl        every model call: raw replies, retries, errors, latency, system prompt hash -> prompts/system/<sha>.txt
+  sandbox.jsonl      every sandbox call (run_python): key r<round>:<agent>:<n>, code and output as blobs/<sha256> (sandbox.Recording)
+  archive/           the frozen shared archive (archive.Frozen; only when the shared archive is on): base.json (file -> blob, taken
+                     at the start), state.json (publish flag, writes published), view/ (base + overlay, rebuilt at each start and
+                     resume; every read of the run comes from here); archive_overlay.jsonl: this run's writes, published to the
+                     live shared archive when the run completes
+  blobs/<sha256>     content-addressed texts: archive base and overlay, sandbox code and outputs (provenance.put_blob)
 
 A round in which `llm.fail_stop_fraction` (default half) of the model calls fail (e.g. a usage limit) is abandoned: nothing of it
 is kept (logs cut back to the last checkpoint, see failstop.py), STOPPED.md says why, and the run stops with RunStopped, so resuming
@@ -47,6 +53,7 @@ from charter import observer as OBS
 from charter import regimes as RG
 from charter import report
 from charter import roles as R                                         # roles: the Spy's reading in member mode
+from charter import sandbox as SB                                      # sandbox.jsonl: recorded run_python outputs (P5.4)
 from charter import resources as RS                              # camps: optional upkeep
 from charter.camptypes import framework as CT                    # camps: typed camps' ground truth
 from charter.kernel import STATE_SCHEMA, Kernel
@@ -170,13 +177,30 @@ def _as_item(q) -> dict | None:
 
 
 def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=(), dry=None,
-        instance_source=None, until=None, keep_checkpoints=None, schedule=None) -> Path:
+        instance_source=None, until=None, keep_checkpoints=None, schedule=None, archive_from=None, publish_archive=None) -> Path:
     """dry: recorded in run.json (None: inferred from the policy, scripted = dry). instance_source: how a resume got its world
     (recorded in the segment). until: stop (paused, resumable) after that many rounds (replay --to). keep_checkpoints: per-round
     checkpoint retention (None: CHARTER_KEEP_CHECKPOINTS, else all). schedule: interventions (interventions.load_schedule), merged
-    by id into a resumed run's schedule; live and notices (--live, --notice) become setup entries of it."""
+    by id into a resumed run's schedule; live and notices (--live, --notice) become setup entries of it.
+    Shared archive (P5.4, archive.Frozen): frozen into the run directory at a fresh start (archive_from: use that run's frozen base
+    instead, as a replay does), read from the frozen view throughout, and published to the live directory when the run completes
+    (publish_archive False: never, stored for later resumes; None: keep the stored choice, default publish)."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    resuming = resume and (out / "checkpoint.pkl").exists()
+    fz = archive.Frozen.open(out, inst["spec"], resume=resuming, base_from=archive_from, publish=publish_archive)
+    if fz is None:                                                      # the shared archive is off
+        return _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_source, until, keep_checkpoints, schedule)
+    if not resuming:
+        fz.rebuild()                                                    # a resume rebuilds once the overlay is cut to the checkpoint
+    with fz.bind(inst["spec"]):
+        res = _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_source, until, keep_checkpoints, schedule,
+                   fz=fz)
+    return res
+
+
+def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_source, until, keep_checkpoints, schedule,
+         fz=None) -> Path:
     k = Kernel(inst, sandbox)
     agents = {a["id"]: a for a in inst["agents"]}
     ckpt_path = out / "checkpoint.pkl"
@@ -193,6 +217,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
             policy.rng.setstate(rs.policy_state)
         first_round = ck["round"] + 1
         PV.truncate(out, ck["files"], why=f"cut on resume from the checkpoint after round {first_round}")   # drop whatever was logged after the checkpoint
+        if fz is not None:
+            fz.rebuild()                                                # the frozen archive: base + the overlay kept by the checkpoint
         reason_f, ev_f = open(out / "reasoning.jsonl", "a"), open(out / "events.jsonl", "a")
         n_ev = len(k.events)
         n_turns = len(k.turn_log) if ck.get("format", 1) >= 2 else 0
@@ -219,6 +245,9 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
             shutil.rmtree(out / CKPT_DIR)
         n_ev = n_turns = 0
         first_round = 0
+    k.sandbox = SB.Recording(k.sandbox, out, k, append=resuming)       # sandbox.jsonl + blobs: replay serves the outputs
+    if fz is not None:
+        PV.annotate(out, shared_archive=fz.info())                     # the frozen base's hash (run.json)
     notes, cursors, results, guesses = rs.notes, rs.cursors, rs.results, rs.guesses
     welfare_series, start_values, shared_snap, const = rs.welfare_series, rs.start_values, rs.shared_snap, rs.const
     obs = OBS.start(inst, out, k, ck["runner"].get("observer") if resuming else None)   # secret observer or None
@@ -563,6 +592,10 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
     if obs:
         obs.close()
     complete = last_round == inst["rounds"]
+    if complete and fz is not None:                                     # the end-of-run step: this run's writes go to the live archive
+        n = fz.publish()
+        if n:
+            log(f"  published {n} shared-archive write(s) to {fz.live}")
     _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=complete)
     PV.end(out, "complete" if complete else "paused", last_round - 1)
     return out
