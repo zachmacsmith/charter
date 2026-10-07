@@ -294,6 +294,9 @@ per-goal versions).
 `Section(key, render: Callable[[View], str], layers, needs, after, order, cut, priority)` as review 02 §4.4, with `needs` in the
 same DSL as `Act.needs`. `View` carries `inst, k, a, rights, classes, roles` and a cached `facts`. Every number in prose comes from
 `facts`. The core prompt, manual, legacy prompt and observer prompt are renderings of the same rows.
+As built (P1.6): `Section(key, render, layers, needs, after, order, cut: never|clip, priority, budget, sep, note)`; each layer's
+order is `sections.LAYOUTS[layer]`, modules' rows are anchored with `after=`; `render` may return `None` (absent) or a list of
+`(title, text)` (one row, several manual sections). `facts.PIECES` holds one piece per feature (unique names, `facts.OWNER`).
 
 ### 3.11 Library (`library.py`, P3.9)
 

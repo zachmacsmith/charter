@@ -1,6 +1,7 @@
 """Configurable system prompts and manuals (spec `prompts`, charter/composition.py): edits (exclude, set, append without duplicates,
-add), profiles assigned by name, class, role and share, built-in knowledge levels, memory sizes, and plug-in sections from modules."""
-from charter import composition as CP, context as CX, generator, spec as S
+add), profiles assigned by name, class, role and share, built-in knowledge levels, memory sizes, and sections modules register
+(charter/sections.py)."""
+from charter import context as CX, generator, sections as SC, spec as S
 from charter.kernel import Kernel
 
 
@@ -46,14 +47,14 @@ def test_default_world_is_unchanged_and_plugins_register():
     sp = S.load("opus20")
     inst = generator.generate(sp, 1)
     assert not any("profiles" in a for a in inst["agents"])
-    titles = [t for t, _, _, _ in CP._MANUAL]
+    titles = [s.key for s in SC.rows("manual") if s.after == "World rules"]
     assert {"Conflict", "Media", "Life and children"} <= set(titles)       # registered by their own modules
     calls = []
 
-    @CP.core_section("test_note", after="goal")
-    def _note(inst_, k_, a_):
-        calls.append(a_["id"])
-        return "A plug-in note." if a_["id"] == "Kasper" else ""
+    @SC.section("test_note", layers=("core",), after="goal")
+    def _note(v):
+        calls.append(v.aid)
+        return "A plug-in note." if v.aid == "Kasper" else ""
     try:
         k = Kernel(inst)
         kas = next(a for a in inst["agents"] if a["id"] == "Kasper")
@@ -61,7 +62,7 @@ def test_default_world_is_unchanged_and_plugins_register():
         assert "A plug-in note." in p and p.index("A plug-in note.") > p.index("Your private goal")
         assert "A plug-in note." not in CX.core_prompt(inst, inst["agents"][0] if inst["agents"][0]["id"] != "Kasper" else inst["agents"][1], k)
     finally:
-        CP._CORE[:] = [r for r in CP._CORE if r[0] != "test_note"]
+        SC.SECTIONS[:] = [s for s in SC.SECTIONS if s.key != "test_note"]
 
 
 def test_planner_profile_adds_memory_tips_once():

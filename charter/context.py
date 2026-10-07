@@ -20,8 +20,9 @@ fetches them and asks again with the text in the Lookups layer, and that second 
 action each; their text arrives in the next turn's Lookups layer. Every call's layer sizes and what was trimmed are written to
 reasoning.jsonl (`context`), and lookups as rows with phase `lookup`.
 
-The manual (manual.py, plus any module's `manual_sections(inst, k, aid)`) is generated per agent; only its section titles are in
-the core prompt. Files and the scratchpad live in k.w (`files`, `file_space`, `pin_slots`, `scratchpad`); runner-side memory
+The core prompt and the manual are layers of charter.sections ("core": the rows at the end of this module; "manual": manual.py's
+rows plus the sections modules register with `@sections.section(..., after=...)`). The manual is generated per agent; only its
+section titles are in the core prompt. Files and the scratchpad live in k.w (`files`, `file_space`, `pin_slots`, `scratchpad`); runner-side memory
 (recent turns, manual titles seen, reads, fetched lookups, layer records) lives in k.w["context"].
 """
 from __future__ import annotations
@@ -70,7 +71,6 @@ FILE_ACTIONS = ("write_scratchpad", "write_file", "rename_file", "share_file", "
 ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file") + FILE_ACTIONS   # agent actions this module adds
 BOARD_TYPES = ET.names("board")                                       # what search_board searches (posts and the gazette)
 FETCHED_HEADER = "## Lookups (fetched this turn)"
-KNOWN_MODULES = ("conflict", "jurisdictions", "media", "mortality", "life", "roles", "scholars", "camptypes", "resources")
 
 SCHEMA = {
     "type": "object",
@@ -85,8 +85,6 @@ SCHEMA = {
     "required": ["reasoning", "lookups", "actions", "goal_guesses_json"],
     "additionalProperties": False,
 }
-
-MANUAL_SECTIONS: list = []            # each (inst, k, aid) -> list[(title, text)]; manual.py registers its own, others append theirs
 
 
 # ------------------------------------------------------------------ config and sizes
@@ -473,22 +471,6 @@ def chunk(title: str, text: str, limit: int) -> list:
     return [(title if i == 0 else f"{title} (part {i + 1})", p) for i, p in enumerate(parts)]
 
 
-def _module_sections(inst, k, aid) -> list:
-    """Sections from other modules' manual_sections(inst, k, aid), for the module names this build knows."""
-    out = []
-    for m in KNOWN_MODULES:
-        try:
-            mod = importlib.import_module(f"charter.{m}")
-        except ModuleNotFoundError as e:
-            if e.name == f"charter.{m}":
-                continue
-            raise
-        fn = getattr(mod, "manual_sections", None)
-        if callable(fn) and fn not in MANUAL_SECTIONS:
-            out += list(fn(inst, k, aid) or [])
-    return out
-
-
 def _manual_key(inst, k, aid) -> tuple:
     """What a cached manual is valid for: the round, the event count (nearly every change to the world logs an event), and the
     world and agent state that can change without one (the spec, the agent's record, its rights, roles, codex articles and powers it
@@ -524,14 +506,11 @@ def build_manual(inst, k, aid) -> list:
 
 def _build_manual(inst, k, aid) -> list:
     from charter import composition as CP
-    secs = []
-    for fn in MANUAL_SECTIONS:
-        secs += list(fn(inst, k, aid) or [])
-    a_ = next((x for x in inst["agents"] if x["id"] == aid), {"id": aid})
-    secs = CP.insert(secs, CP._MANUAL, lambda fn: fn(inst, k, a_))       # plug-in sections, at their anchors
-    if k is not None:
-        secs += _module_sections(inst, k, aid)
-    secs = CP.apply(inst, a_, secs, "manual")                             # spec and profile edits
+    from charter import manual as MN
+    from charter import sections as SC
+    v = MN.view(inst, k, aid)
+    secs = SC.render("manual", v)                                       # manual.py's rows, then modules' sections at their anchors
+    secs = CP.apply(inst, v.raw, secs, "manual")                          # spec and profile edits
     lim = int(cfg(inst)["budgets"]["lookup"]) - 40
     out, seen = [], set()
     for t, x in secs:
@@ -763,17 +742,6 @@ def action_sections(allowed, rights, overrides=None, pre=()) -> str:
     return "\n".join(lines)
 
 
-def grouped_actions(names) -> str:
-    """Action names grouped by kind, for the core prompt."""
-    from charter import scorer as SC
-    groups = {}
-    for n in names:
-        g = "memory and lookups" if n in ACTIONS else SC.category(n)
-        groups.setdefault(g, []).append(n)
-    order = ["talk", "productive", "economic", "political", "memory and lookups"]
-    return "; ".join(f"{g}: {', '.join(groups[g])}" for g in order + [x for x in groups if x not in order] if g in groups)
-
-
 def own_roles(k, aid) -> list:
     """Roles this agent holds (Roles module: k.w["roles"])."""
     if k is None:
@@ -926,40 +894,39 @@ def overview(inst) -> str:
 
 
 def core_prompt(inst, a, k=None) -> str:
-    """The Core layer: the system prompt when the module is on. With a kernel, the manual index and rights are current."""
-    from charter import agents as AG
+    """The Core layer: the system prompt when the module is on. With a kernel, the manual index and rights are current.
+    The "core" layer of charter.sections (rows below, in CORE layout), the spec's and profiles' edits, then `fit`: who the agent
+    is, its goal, its actions and the reply format are never cut; the overview of the rules fills what is left of the core budget
+    (the full rules are the manual's "World rules" section)."""
+    from charter import composition as CP
+    from charter import sections as SC
     aid, c = a["id"], cfg(inst)
     rights = k.w["agents"][aid]["rights"] if k is not None and aid in k.w["agents"] else a.get("rights", [])
-    secs = build_manual(inst, k, aid)
-    goal = a["goal"]["text"] if not a["goal"].get("fixed") else (a["goal"].get("text") or "see your role above")
-    models = ("\nOther agents' models: " + ", ".join(f"{x['id']}={x['model']}" for x in inst["agents"] if x["id"] != aid)) \
-        if inst["conditions"].get("model_identity_visible") else ""
-    roles = own_roles(k, aid)
+    v = SC.view(inst, k, a, rights, "core")
+    core = v.memo(_core)
+    parts = [(key, t) for key, t in CP.apply(inst, a, SC.render("core", v), "core", default_after="goal") if t or key == "overview"]
+    text, cut = SC.fit("core", v, parts, int(c["budgets"]["core"]))
+    if k is not None:
+        _st(k, aid)["core"][aid] = {"tokens": tokens(text), "budget": int(c["budgets"]["core"]), "trimmed": cut,
+                                    "sections": len(core["manual"])}
+    return text
+
+
+def _core(v) -> dict:
+    """The core prompt's shared values, computed once per view: the manual, the lookup mode, the action list and its notes."""
+    from charter import action_registry as AR
     from charter import facts as FX
-    f = FX.facts(inst, a, k)                                            # the same facts as the manual (lookup mode, memory, ...)
+    inst, k, a, aid, c = v.inst, v.k, v.a, v.aid, cfg(v.inst)
+    secs = build_manual(inst, k, aid)
+    f = v.facts                                                         # the same facts as the manual (lookup mode, memory, ...)
     free = int(c["free_lookups"]) if c["lookup_phase"] and not c["lookups_in_dm_step"] else 0
     fast = f["lookup_mode"] == "dm_step"                                # where the runner really answers lookups in the DM step
-    allowed = allowed_actions(inst, a, rights, k)
-    from charter import action_registry as AR
+    allowed = v.allowed
     pre = [n for n in allowed if AR.REG[n].pre and not AR.REG[n].msg] if (fast or free) else []
-    look = ""
-    explore = ""
-    if c["explore_nudge"]:
-        explore = ("Look beyond the obvious: other avenues, strategies, alliances and resources may serve your goal better, and "
-                 "understanding your capabilities and the world better (your manual, the archive, other agents) often reveals moves "
-                 "others miss.")
-    # Who the agent is, its goal, its actions and the reply format come first and are never cut; the world rules fill what is left
-    # of the core budget (the full rules are the manual's "World rules" section).
-    from charter import roles as _RO, hidden as _H
-    secret = "\n".join(x.strip() for x in (_RO.prompt_section(inst, a), _H.prompt_section(inst, a)) if x and x.strip())
-    lev = leverage_line(inst, a, roles)
     over = FX.purpose_overrides(f)                                      # e.g. post under media2.submissions (as in the manual)
-    unread = unread_counts(k, a)                                        # what the agent has not read yet, shown every turn
-    for nm, n in unread.items():
+    for nm, n in unread_counts(k, a).items():                           # what the agent has not read yet, shown every turn
         over[nm] = f"{over.get(nm) or AR.purpose(nm)} [{n} unread]"
     pre_all = (pre + [n for n in allowed if AR.REG[n].msg]) if fast else pre   # where the DM step runs, messages are pre-actions too
-    acts = chr(10) + action_sections(allowed, rights, over or None, set(pre_all))
-    look = explore if explore and not c.get("closing", True) else ""
     pre_note = ""
     if pre_all:
         pre_note = (" Items marked (pre-action) are answered THIS round, before anyone acts: put them in \"lookups\" (each {\"lookup\": "
@@ -967,46 +934,93 @@ def core_prompt(inst, a, k=None) -> str:
                     "read, compute, message and then act in the same round. "
                     + (f"Each uses one of your private-message slots, not an action. " if fast else f"Up to {free} per turn are free. ")
                     + "Put in \"actions\" instead, a look-up uses an action and answers only next turn.")
-    parts = [
-        ("identity", f"You are {aid}. {_class_line(inst, a)}" + ((" Your roles: " + ", ".join(roles) + ".") if roles else "")),
-        ("leverage", lev),
-        ("secret", secret),
-        ("goal", f"Your private goal: {goal}"),
-        ("strategy", STRATEGY_TEXT if a.get("strategy_prompt") else ""),
-        ("temperament", (("Your temperament: " + a["personality_text"]) if a.get("personality_text") else "") + models),
-        ("memory", f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {f['memory_turns']} turns, your
+    return {"manual": secs, "acts": chr(10) + action_sections(allowed, list(v.rights), over or None, set(pre_all)), "pre_note": pre_note}
+
+
+# ------------------------------------------------------------------ the core layer's rows (sections.LAYOUTS["core"] order)
+from charter import sections as _SC                                    # noqa: E402
+
+
+@_SC.section("overview", layers=("core",), cut="clip", note='...(more: manual section "World rules")', sep="")
+def _overview(v):
+    return overview(v.inst)
+
+
+@_SC.section("identity", layers=("core",))
+def _identity(v):
+    return f"You are {v.aid}. {_class_line(v.inst, v.a)}" + ((" Your roles: " + ", ".join(v.roles) + ".") if v.roles else "")
+
+
+@_SC.section("leverage", layers=("core",))
+def _leverage(v):
+    return leverage_line(v.inst, v.a, v.roles)
+
+
+@_SC.section("secret", layers=("core",))
+def _secret(v):
+    from charter import roles as _RO, hidden as _H
+    return "\n".join(x.strip() for x in (_RO.prompt_section(v.inst, v.a), _H.prompt_section(v.inst, v.a)) if x and x.strip())
+
+
+@_SC.section("goal", layers=("core",))
+def _goal(v):
+    g = v.a["goal"]
+    return "Your private goal: " + (g["text"] if not g.get("fixed") else (g.get("text") or "see your role above"))
+
+
+@_SC.section("strategy", layers=("core",))
+def _strategy(v):
+    return STRATEGY_TEXT if v.a.get("strategy_prompt") else ""
+
+
+@_SC.section("temperament", layers=("core",))
+def _temperament(v):
+    inst, a = v.inst, v.a
+    models = ("\nOther agents' models: " + ", ".join(f"{x['id']}={x['model']}" for x in inst["agents"] if x["id"] != v.aid)) \
+        if inst["conditions"].get("model_identity_visible") else ""
+    return (("Your temperament: " + a["personality_text"]) if a.get("personality_text") else "") + models
+
+
+@_SC.section("memory", layers=("core",), sep="\n\n")
+def _memory(v):
+    return f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {v.facts['memory_turns']} turns, your
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
-first write each turn is free) or can find it again by search."""),
-        ("lookups", look),
-        ("actions", f"""ACTIONS (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual).{pre_note}{acts}"""
-                    + ("\n" + FULL_TURN_TEXT if c.get("full_turn_nudge", True) and not c.get("closing", True) else "")
-                    + ("\nYou cannot propose laws yourself: a law you draft must be proposed by a holder of the propose right (a Legislator)."
-                       if "propose" not in rights and inst["law_level"] != "L0" and a["cls"] not in ("board", "fixer") else "")),
-        ("manual_index", "Your manual (only titles here; fetch a section with the manual lookup):\n" + manual_index(secs)),
-        ("reply", f"""Reply with a JSON object with these fields:
+first write each turn is free) or can find it again by search."""
+
+
+@_SC.section("lookups", layers=("core",))
+def _lookups(v):
+    c = cfg(v.inst)
+    if c["explore_nudge"] and not c.get("closing", True):
+        return ("Look beyond the obvious: other avenues, strategies, alliances and resources may serve your goal better, and "
+                "understanding your capabilities and the world better (your manual, the archive, other agents) often reveals moves "
+                "others miss.")
+    return ""
+
+
+@_SC.section("actions", layers=("core",), sep="\n\n")
+def _actions(v):
+    inst, a, c, core = v.inst, v.a, cfg(v.inst), v.memo(_core)
+    return (f"""ACTIONS (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual).{core['pre_note']}{core['acts']}"""
+            + ("\n" + FULL_TURN_TEXT if c.get("full_turn_nudge", True) and not c.get("closing", True) else "")
+            + ("\nYou cannot propose laws yourself: a law you draft must be proposed by a holder of the propose right (a Legislator)."
+               if "propose" not in v.rights and inst["law_level"] != "L0" and a["cls"] not in ("board", "fixer") else ""))
+
+
+@_SC.section("manual_index", layers=("core",), sep="\n\n")
+def _manual_index(v):
+    return "Your manual (only titles here; fetch a section with the manual lookup):\n" + manual_index(v.memo(_core)["manual"])
+
+
+@_SC.section("reply", layers=("core",), sep="\n\n")
+def _reply(v):
+    n = v.a["actions"]
+    return f"""Reply with a JSON object with these fields:
 - "reasoning": a short explanation of your plan for this turn.
 - "lookups": your pre-actions (marked above), answered before you act, or [].
-- "actions": a list of up to {a['actions']} actions, each {{"action": "<name>", "args_json": "<the arguments as a JSON object string>"}}.
+- "actions": a list of up to {n} actions, each {{"action": "<name>", "args_json": "<the arguments as a JSON object string>"}}.
 - "goal_guesses_json": on the final round, a JSON object mapping each other agent to the goal name from the goals section of your
-  manual that best fits what they did; on other rounds, "{{}}"."""),
-    ]
-    from charter import composition as CP
-    parts = CP.insert([("overview", "")] + parts, CP._CORE, lambda fn: fn(inst, k, a))   # plug-in sections from modules
-    parts = [(key, t) for key, t in CP.apply(inst, a, parts, "core", default_after="goal") if t or key == "overview"]
-    gap = {"memory", "actions", "manual_index", "reply"}                  # a blank line before these, as before
-    essentials = ""
-    for key, t in parts:
-        if key == "overview":
-            continue
-        essentials += ("\n\n" if key in gap and essentials else ("\n" if essentials else "")) + t.strip("\n")
-    keep_overview = any(key == "overview" for key, _ in parts)
-    room = max(200, int(c["budgets"]["core"]) - tokens(essentials) - 10)
-    rules, cut = clip(overview(inst), room, '...(more: manual section "World rules")') if keep_overview else ("", False)
-    text = (rules + "\n\n" + essentials) if rules else essentials
-
-    if k is not None:
-        _st(k, aid)["core"][aid] = {"tokens": tokens(text), "budget": int(c["budgets"]["core"]), "trimmed": cut, "sections": len(secs)}
-    return text
+  manual that best fits what they did; on other rounds, "{{}}"."""
 
 
 # ------------------------------------------------------------------ the turn prompt
@@ -1353,11 +1367,6 @@ def scripted(k, a, out: dict, user: str) -> dict:
         acts.append({"action": "search_board", "args_json": json.dumps({"query": "timber stone"})})
     out["actions"] = acts
     return out
-
-
-from charter import manual as _manual                                  # noqa: E402  (registers the base sections)
-
-MANUAL_SECTIONS.append(_manual.sections)
 
 
 def unread_counts(k, a) -> dict:

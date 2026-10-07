@@ -1,9 +1,11 @@
 """What each agent is told: the system prompt (Core layer) and the manual as named sections, edited per world and per agent (spec
 `prompts`). Off by default: with no `prompts` in the spec every agent gets exactly the default sections.
 
-Sections. The system prompt is built from these keys, in order: overview, identity, leverage, secret, goal, strategy, temperament,
-memory, actions, lookups, manual_index, reply. The manual's sections are keyed by their titles ("World rules", "Conflict", "Your role",
-...). Roles and classes already append their own text to the right sections (a Maker's leverage line, a Scientist's archive index).
+Sections. Both are layers of charter.sections. The system prompt is built from these keys, in order (sections.LAYOUTS["core"]):
+overview, identity, leverage, secret, goal, strategy, temperament, memory, lookups, actions, manual_index, reply. The manual's
+sections are keyed by their titles ("World rules", "Conflict", "Your role", ...). Roles and classes already append their own text to
+the right sections (a Maker's leverage line, a Scientist's archive index). A module adds a section of its own by registering a row
+next to its code (`@sections.section("Conflict", after="World rules", order=1)`); the edits below apply to it like to any other.
 
 Edits (an `edits` block, for the whole world or inside a profile):
   exclude: [keys]                drop sections
@@ -29,9 +31,6 @@ nothing else in the world changes). Children are matched by class and role at bi
 from __future__ import annotations
 
 import random
-
-CORE_ORDER = ["overview", "identity", "leverage", "secret", "goal", "strategy", "temperament", "memory", "actions", "lookups",
-              "manual_index", "reply"]
 
 STRATEGY_PRIMER = (
     "Strategy notes. (1) Your goal is scored on the record and the end state, not on effort: work backwards from what must be true "
@@ -182,55 +181,3 @@ def memory(inst, a) -> dict:
     return out
 
 
-# ---------------------------------------------------------------------- plug-in sections
-# A module adds its own system-prompt or manual sections by registering them, next to the code they describe:
-#     from charter import composition as CP
-#     @CP.manual_section("Conflict", after="World rules")
-#     def _manual(inst, k, a): return "..."            # "" or None: the section is left out for this agent
-#     @CP.core_section("conflict_note", after="goal")
-#     def _core(inst, k, a): return "..."
-# Sections registered with the same anchor appear in registration order. Spec edits (above) then apply to them like any other
-# section, so a section can be switched off (exclude), replaced (set) or extended (append) per world or per profile.
-_CORE: list = []                    # (key, fn, after, order)
-_MANUAL: list = []                  # (title, fn, after, order)
-PLUGINS = ("conflict", "media", "life")          # modules imported before building, so their registrations exist
-
-
-def core_section(key, after="goal", order=0):
-    def deco(fn):
-        _CORE.append((key, fn, after, order))
-        return fn
-    return deco
-
-
-def manual_section(title, after=None, order=0):
-    """order: position among sections registered at the same anchor (lower first; ties in registration order)."""
-    def deco(fn):
-        _MANUAL.append((title, fn, after, order))
-        return fn
-    return deco
-
-
-def _load_plugins():
-    import importlib
-    for m in PLUGINS:
-        importlib.import_module(f"charter.{m}")
-
-
-def insert(sections: list, registry: list, call) -> list:
-    """sections: [(key, text)]; registry entries are called (call(fn) -> text) and inserted after their anchor (end if missing)."""
-    _load_plugins()
-    out = list(sections)
-    placed = {}                                                          # anchor -> index after the last section placed there
-    for key, fn, after, _ in sorted(registry, key=lambda r: r[3]):
-        txt = call(fn)
-        if not txt or not str(txt).strip():
-            continue
-        if after in placed:
-            idx = placed[after]
-        else:
-            idx = next((i + 1 for i, s in enumerate(out) if s[0] == after), len(out))
-        out.insert(idx, (key, str(txt).strip()))
-        placed[after] = idx + 1
-        placed = {a: (i + 1 if i > idx and a != after else i) for a, i in placed.items()}
-    return out

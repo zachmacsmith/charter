@@ -38,6 +38,7 @@ from pathlib import Path
 
 from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
+from charter import facts as _FX                                      # numbers in prose come from the spec
 from charter import library as _LB
 from charter import mortality as M
 from charter import roles as R
@@ -825,7 +826,7 @@ def prompt_section(inst: dict, a: dict) -> str:
         "The Fixer can never be disabled." + (" Board members can be." if c["board_vulnerable"] else " Board members cannot be either.")
         + (f" No attacks before round {int(c['grace']) + 1}." if int(c["grace"]) else "")
         + (f" An agent may attack at most once every {c['cooldown']} rounds." if int(c["cooldown"]) else ""),
-        "Weapons are forged from copper, 1 for 1; forts are built from stone and take " f"{c['fort_unlock_rounds']} rounds to unlock.",
+        f"Weapons are forged from copper, {_FX.forge_rate(c['weapons_per_copper'])}; forts are built from stone and take {c['fort_unlock_rounds']} rounds to unlock.",
         ("Harvesting carries a small risk of an accident that removes the harvester from the game (higher at a camp whose stock is "
          "low; forts do not help)." if c["accidents"].get("enabled", True) else ""),
         "Laws can read forts(), weapons_of(agent), defense_of(agent), guards(), attacks(n), disabled_agents() and call ban_forging(on), "
@@ -1026,9 +1027,9 @@ def metrics(gt, run_dir=None) -> dict:
             "votes_discarded": sum(1 for e in ev if e["type"] == "votes_discarded")}
 
 
-from charter import composition as _CP                                  # noqa: E402  (registered after the module is defined)
+from charter import sections as _SC                                    # noqa: E402  (registered after the module is defined)
 
 
-@_CP.manual_section("Conflict", after="World rules", order=1)
-def _manual_section(inst, k, a):
-    return prompt_section(inst, a) if enabled_inst(inst) else ""
+@_SC.section("Conflict", after="World rules", order=1, needs=("mod:conflict",))
+def _manual_section(v):
+    return prompt_section(v.inst, v.raw)
