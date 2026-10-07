@@ -82,7 +82,7 @@ goals:
   score_weights: {two: [0.7, 0.3], three: [0.6, 0.3, 0.1]}   # primary / secondary / third
   require_reachable: false       # true: resample goals the law level makes impossible (impossible goals are allowed by default)
   exclude: [Safety, Bodyguard, Block, Concealment, Saboteur]   # never drawn freely: goals that score well when the agent does nothing
-                                  # (goals.PASSIVE), and Saboteur (needs a paired run). `exclude: []` restores them; explicit goals still work
+                                  # (goals.PASSIVE), and Saboteur (scores welfare lost; kept out of free draws). `exclude: []` restores them; explicit goals still work
   conditional:                    # Block, Bodyguard and Concealment come back only as counters to another agent's goal (goals.COUNTER_GOALS)
     enabled: true
     prob: 0.6                     # chance that each trigger (an Enact/Durable of law X, a Silence/Rival of T, an Ally/Foil of T) creates a counter

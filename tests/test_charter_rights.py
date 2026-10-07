@@ -189,3 +189,17 @@ def test_ensured_maker_gets_its_right_and_the_manual_says_so():
     maker = LF.living_makers(k)[0]
     assert "maker" in k.w["agents"][maker]["rights"]
     assert f"- maker: {RT.RIGHT_DOC['maker']}" in dict(M.sections(inst, k, maker))["Your rights"]
+
+
+def test_law_holders_never_name_the_secret_observer():
+    inst = _gen(7, "observer.enabled=true")
+    k = Kernel(inst)
+    obs = next(a for a, v in k.w["agents"].items() if v["cls"] == "observer")
+    k.w["agents"][obs]["rights"].append("vote")                                # however it came to hold one
+    assert obs in k.holders("vote")                                            # the kernel knows
+    assert obs not in k.api_for("L1")["holders"]("vote")                       # laws do not
+
+
+def test_regimes_take_entrenched_and_fixer_rights_from_the_registry():
+    from charter import regimes as RG
+    assert RG.ENTRENCHED == RT.ENTRENCHED and RG.FIXER_NEVER == RT.NEVER["fixer"]

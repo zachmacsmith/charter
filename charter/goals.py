@@ -766,7 +766,7 @@ def s_whistleblower(gt, a, p):
             opened[d["event"]] = True
         elif t == "enact":
             opened[d["law"]] = True
-        elif t in PUBLIC and author(e) == a:
+        elif (t in PUBLIC or t == "submission") and author(e) == a:   # media2 submissions: a public post is logged as the author's submission
             for tok in re.findall(r"\b([eL]\d+)\b", _text(e)):
                 if opened.get(tok):
                     exposed.add(tok)

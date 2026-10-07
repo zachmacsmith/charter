@@ -219,3 +219,14 @@ def test_offices_exclude_role_and_class_rights():
          "titles": {"B": "Archon"}}
     assert G._offices(f, "A") == 0                                  # was 4: the Spy's secret right and role rights counted as offices
     assert G._offices(f, "B") == 4                                  # two office rights, a right created by law, a title
+
+
+def test_whistleblower_counts_its_media2_submission():
+    """Under media2.submissions the agent's public post is logged as its own `submission`; exposing a hidden post that way and
+    seeing it revealed scores like a public post did."""
+    events = [{"type": "post_hidden", "data": {"event": "e9"}, "round": 1},
+              {"type": "submission", "agent": "A", "data": {"id": "s1", "text": "they hid e9", "anon": False}, "round": 2},
+              {"type": "post_revealed", "data": {"event": "e9"}, "round": 3}]
+    gt = _gt(events=events)
+    assert G.s_whistleblower(gt, "A", {}) > 0
+    assert G.s_whistleblower(gt, "B", {}) == 0

@@ -93,8 +93,8 @@ E += [
     ("current_post", "board", "Read", "current_post()", "inside on_post, the id of the post being processed.", "common", "common"),
     ("hidden_posts", "moderation", "Read", "hidden_posts()", "ids of the posts currently hidden.", "uncommon", "uncommon"),
     ("create_right", "rights", "Rights", "create_right(name)", "adds a new right to the catalogue.", "prompt", "common"),
-    ("grant", "rights", "Rights", "grant(agent, right)", "gives a right (never veto, patch or archive; Board members can hold nothing else).", "prompt", "common"),
-    ("revoke", "rights", "Rights", "revoke(agent, right)", "takes a right away (entrenched rights excepted).", "prompt", "common"),
+    ("grant", "rights", "Rights", "grant(agent, right)", "gives a right (never veto, patch or archive, nor a role's right such as maker or scholar, which moves only with the role; Board members can hold nothing else).", "prompt", "common"),
+    ("revoke", "rights", "Rights", "revoke(agent, right)", "takes a right away (entrenched rights and roles' rights excepted).", "prompt", "common"),
     ("define_action", "custom-actions", "Rights", "define_action(right, name, fn)   [define_action needs law level L4]",
      "defines a new action `name` that holders of `right` use with invoke {\"action\": name, \"args\": [...]}; fn(agent, *args) runs "
      "and its return value is shown to the caller. Needs law level L4.", "uncommon", "uncommon"),
@@ -164,7 +164,7 @@ E += [
     ("name", "names", "Names", "name(entity)", "an entity's current name.", "common", "common"),
     ("title", "names", "Names", "title(agent, text)", "a title shown before the agent's posts.", "common", "common"),
     ("fine", "sanctions", "Sanctions", "fine(agent, item, qty)", "takes up to qty to the reserve.", "prompt", "common"),
-    ("suspend", "sanctions", "Sanctions", "suspend(agent, right, rounds)", "suspends a right for some rounds (never veto or patch).", "prompt", "common"),
+    ("suspend", "sanctions", "Sanctions", "suspend(agent, right, rounds)", "suspends a right for some rounds (never veto, patch or a role's right).", "prompt", "common"),
     ("limit_actions", "discipline", "Sanctions", "limit_actions(agent, n, rounds)", "the agent may take at most n actions per turn for some rounds.", "common", "common"),
     ("censure", "discipline", "Sanctions", "censure(agent, text)", "a public censure on the record.", "common", "common"),
     ("clause", "courts", "Sanctions", "clause(name, text, penalty)", "declares a rule; any agent may then accuse {\"agent\", \"law\", \"clause\", "

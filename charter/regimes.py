@@ -33,11 +33,12 @@ import random
 
 from charter import lawlang as L
 from charter import library as LB
+from charter import rights as RT
 
 LEVELS = ["L0", "L1", "L2", "L3", "L4"]
 CLASSES = ("worker", "scientist", "legislator", "media", "board", "fixer")
-ENTRENCHED = {"veto", "patch", "archive"}
-FIXER_NEVER = {"vote", "propose", "veto"}
+ENTRENCHED = RT.ENTRENCHED                                            # charter/rights.py
+FIXER_NEVER = RT.NEVER["fixer"]
 
 # ------------------------------------------------------------------ new constitutions (procedural laws)
 CONSTITUTIONS = {

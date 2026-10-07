@@ -149,7 +149,10 @@ class Kernel:
     def law_holders(self, right):
         """`holders` as laws see it: nobody holds a secret right."""
         right = self.norm_right(right)
-        return [] if RT.is_secret(self, right) else self.holders(right)
+        if RT.is_secret(self, right):
+            return []
+        roster = set(self.roster())                                    # never the secret observer
+        return [a for a in self.holders(right) if a in roster]
 
     def law_rights_of(self, aid):
         """`rights_of` as laws see it: the agent's rights without the secret ones."""
