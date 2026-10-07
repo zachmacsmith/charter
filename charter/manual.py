@@ -55,7 +55,7 @@ def sections(inst, k, aid) -> list:
     from charter import agents as AG
     from charter import archive
     from charter import context as CX
-    from charter import purposes as PU
+    from charter import action_registry as AR
     from charter import hidden as H
     from charter import projects as P
     from charter import scorer
@@ -93,9 +93,9 @@ def sections(inst, k, aid) -> list:
                                          for r in rights) or "You hold no rights."))
     out.append(("Goals in this world", AG.goal_prior(sp.get("goals"))))
 
-    allowed = CX.usable(k, aid, CX.allowed_actions(inst, a, rights), rights)
+    allowed = CX.allowed_actions(inst, a, rights, k)
     edge, groups, kinds = CX.action_layout(allowed, rights)
-    doc = lambda ns: "\n".join("- " + (AG.action_doc(n, inst, a) if n in AG.ACTION_DOC else f"{n}: {PU.purpose(n)}") for n in ns)
+    doc = lambda ns: "\n".join("- " + (AG.action_doc(n, inst, a) if n in AG.ACTION_DOC else f"{n}: {AR.purpose(n)}") for n in ns)
     if edge:
         out.append(("Actions: your edge", "Only your class or roles can do these.\n" + doc(edge)))
     for g, ns in groups:

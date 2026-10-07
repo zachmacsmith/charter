@@ -14,7 +14,7 @@ import re
 import pytest
 
 from charter import context as CX
-from charter import generator, manual as MN, media as MD
+from charter import generator, manual as MN, media as MD, scholars as SC
 from charter import spec as S
 from charter.camptypes import framework as CT
 from charter.kernel import Kernel
@@ -56,9 +56,11 @@ def test_agents_see_only_actions_they_can_use(world):
     for a in inst["agents"]:
         acts = set(re.findall(r"[a-z_]+", _actions_line(CX.core_prompt(inst, a, k)).split(":", 1)[1]))
         rights = k.w["agents"][a["id"]]["rights"]
-        if not MD.inst_editor(inst, a):
+        if not MD.edits(k, a["id"]):                                     # the checks the actions themselves make
             assert not acts & set(MD.EDITOR_ACTIONS), a["id"]
-        if not MD.inst_scholar(inst, a):
+        if SC.is_scholar(k, a["id"]):
+            assert set(MD.SCHOLAR_ACTIONS) <= acts, a["id"]
+        else:
             assert not acts & set(MD.SCHOLAR_ACTIONS), a["id"]
         if "maker" not in rights:
             assert not acts & {"create_agent", "copy_agent"}, a["id"]

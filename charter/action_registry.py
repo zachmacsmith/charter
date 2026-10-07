@@ -2,7 +2,7 @@
 needs to be able to use it. The core prompt's action list, the agent's edge, the "You can also..." sentence and the manual's
 "Actions: <kind>" sections are all generated from it (context.core_prompt, manual.sections); nothing is special-cased per class.
 
-An entry:  register(name, purpose, section, core=False, pre=False, msg=False, needs=..., when=...)
+An entry:  register(name, purpose, section, core=False, pre=False, msg=False, needs=..., edge=..., when=...)
   section   a core group ("TALK AND TRADE", "INFORMATION", "MEMORY", "PRODUCE", "POLITICS", "FORCE", "LINEAGE") or a niche kind
             ("camps", "commons", "files", "press", "finance", "jurisdictions", "courts", "force, more", "inheritance", "groups",
             "powers", "your role")
@@ -11,9 +11,12 @@ An entry:  register(name, purpose, section, core=False, pre=False, msg=False, ne
   msg       a message: a pre-action where the DM step runs
   needs     a tuple of requirements, all of which must hold:
               "mod:<key>"     spec <key>.enabled (or "mod:typed" for typed camps, "mod:leases", "mod:dm", "mod:shared_archive")
+              "opt:<key>.<o>" spec <key>.<o> is not false (a module option that defaults to on, e.g. "opt:media2.polls")
               "right:<r>"     the agent holds right r ("right:harvest:*" any harvest right)
               "cls:<c>"       the agent's class (or second class) is c; "notcls:<c>" it is not
               "level:<n>"     law level at least Ln
+  edge      rights that make a core action part of the holder's edge though it does not require them ("harvest:*" any harvest
+            right): open camps let anyone harvest, but the rights holders are the ones it is an edge for
   when      optional state check (inst, k, a, rights) -> bool, for things that come and go (a loan law, an open poll, a group);
             skipped (treated as true) when there is no kernel (generation, tests of the instance only)
 An action whose requirement is a right only some agents hold is part of the agent's edge (if it is core, it is listed first).
@@ -47,14 +50,15 @@ class Act:
     when: Callable | None = None
     args: str = ""                                                      # argument shape shown with pre-actions
     edge_rights: tuple = field(default_factory=tuple)                  # the rights in `needs` (for the edge)
+    edge: tuple = ()                                                    # further rights whose holders have it as an edge
 
 
 REG: dict[str, Act] = {}
 
 
-def register(name, purpose, section, core=False, pre=False, msg=False, needs=(), when=None, args=""):
+def register(name, purpose, section, core=False, pre=False, msg=False, needs=(), when=None, args="", edge=()):
     REG[name] = Act(name, purpose, section, core, pre, msg, tuple(needs), when, args,
-                    tuple(n.split(":", 1)[1] for n in needs if n.startswith("right:")))
+                    tuple(n.split(":", 1)[1] for n in needs if n.startswith("right:")), tuple(edge))
     return REG[name]
 
 
@@ -86,6 +90,9 @@ def _need(inst, a, rights, n) -> bool:
     kind, _, v = n.partition(":")
     if kind == "mod":
         return _mod(inst, v)
+    if kind == "opt":
+        mod, _, opt = v.partition(".")
+        return (inst["spec"].get(mod) or {}).get(opt, True) is not False
     if kind == "right":
         return any(r.startswith("harvest:") for r in rights) if v == "harvest:*" else v in rights
     if kind == "cls":
@@ -113,13 +120,19 @@ def available(inst, k, a, rights=None) -> list:
     return out
 
 
+def purpose(name) -> str:
+    """The few words on what an action is for (the core prompt's list and the manual's fallback)."""
+    return REG[name].purpose if name in REG else ""
+
+
 def layout(acts, rights) -> tuple:
     """(edge, {group: [acts]}, {kind: [acts]}): core acts gated by a right only some hold are the edge; other core acts go to their
     group; the rest are niche, by kind (a right-gated niche act joins "your role")."""
     edge, groups, kinds = [], {}, {}
     for act in acts:
         special = [r for r in act.edge_rights if r not in UNIVERSAL_RIGHTS]
-        if act.core and special:
+        held = [r for r in act.edge if (any(x.startswith("harvest:") for x in rights) if r == "harvest:*" else r in rights)]
+        if act.core and (special or held):
             edge.append(act)
         elif act.core:
             groups.setdefault(act.section, []).append(act)
@@ -168,11 +181,12 @@ def _k_founder(inst, k, a, r):
 def _k_maker_exists(inst, k, a, r):
     from charter import life as LF
     return any(m != a["id"] for m in LF.living_makers(k)) or "maker" in r
-def _k_editor(inst, k, a, r):
+def _k_editor(inst, k, a, r):                                           # the checks the actions themselves make
     from charter import media as MD
-    return bool(MD.editor_outlets(k, a["id"])) if hasattr(MD, "editor_outlets") else MD.inst_editor(inst, a)
+    return bool(MD.edits(k, a["id"]))
 def _k_scholar_self(inst, k, a, r):
-    return a["id"] in ((k.w.get("roles") or {}).get("scholar") or [])
+    from charter import scholars as SC
+    return SC.is_scholar(k, a["id"])
 
 
 # ---------------------------------------------------------------------- the actions
@@ -198,11 +212,12 @@ R("run_python", "compute: solve camps, check law code", "INFORMATION", core=True
 R("write_scratchpad", "keep notes, shown every turn", "MEMORY", core=True, needs=("mod:context",))
 R("write_archive", "leave your one note for future Scientists", "MEMORY", core=True, needs=("right:archive", "mod:shared_archive"))
 # produce
-R("harvest", "produce resources at a camp", "PRODUCE", core=True, needs=("notcls:board", "notcls:fixer"), when=_k_can_harvest)
+R("harvest", "produce resources at a camp", "PRODUCE", core=True, needs=("notcls:board", "notcls:fixer"), when=_k_can_harvest,
+  edge=("harvest:*",))
 R("create_agent", "make a new agent (Makers): to order, or your own", "PRODUCE", core=True, needs=("mod:life", "right:maker"))
 # politics
 R("propose", "write a law: change the rules", "POLITICS", core=True, needs=("right:propose", "level:1"))
-R("vote", "decide a ballot", "POLITICS", core=True, needs=("level:1",), when=_k_ballot)
+R("vote", "decide a ballot", "POLITICS", core=True, needs=("level:1",), when=_k_ballot, edge=("vote",))
 R("veto", "block a structural law (Board)", "POLITICS", core=True, needs=("cls:board", "right:veto"))
 R("name_successor", "choose who takes your Board seat", "POLITICS", core=True, needs=("cls:board", "mod:mortality", "right:veto"))
 R("patch", "fix a law to its intent (Fixer)", "POLITICS", core=True, needs=("right:patch",))
@@ -221,10 +236,10 @@ R("write_digest", "summarise the round (press)", "your role", needs=("right:pres
 R("report", "report on a post (press)", "your role", needs=("right:press",))
 R("set_dm_limit", "set how many messages each may send", "your role", needs=("right:dm_rules",))
 # the press: editors, Scholars, readers (media2)
-R("write_edition", "write your outlet's next edition", "PRODUCE", core=True, needs=("mod:media2",), when=_k_editor)
+R("write_edition", "write your outlet's next edition", "PRODUCE", core=True, needs=("mod:media2",), when=_k_editor, edge=("press",))
 R("annotate", "comment on a post in your outlet", "your role", needs=("mod:media2",), when=_k_editor)
-R("run_placement", "print a paid placement (editor)", "your role", needs=("mod:media2",), when=_k_editor)
-R("poll", "ask your readers a question (editor)", "your role", needs=("mod:media2",), when=_k_editor)
+R("run_placement", "print a paid placement (editor)", "your role", needs=("mod:media2", "opt:media2.placements"), when=_k_editor)
+R("poll", "ask your readers a question (editor)", "your role", needs=("mod:media2", "opt:media2.polls"), when=_k_editor)
 R("set_subscription_fee", "charge for your outlet (editor)", "your role", needs=("mod:media2",), when=_k_editor)
 R("send_subscriber_list", "share your readers list (editor)", "your role", needs=("mod:media2",), when=_k_editor)
 R("revoke_licence", "stop someone posting (editor)", "your role", needs=("mod:media2",), when=lambda i, k, a, r: _k_editor(i, k, a, r) and _k_licences(i, k, a, r))
@@ -234,9 +249,9 @@ R("library_permit", "let someone read your library (Scholar)", "your role", need
 R("library_remove", "remove a library document (Scholar)", "your role", needs=("mod:media2",), when=_k_scholar_self)
 R("subscribe", "receive an outlet's editions", "press", needs=("mod:media2",))
 R("unsubscribe", "stop an outlet's editions", "press", needs=("mod:media2",))
-R("buy_placement", "pay to put text in an edition", "press", needs=("mod:media2",))
+R("buy_placement", "pay to put text in an edition", "press", needs=("mod:media2", "opt:media2.placements"))
 R("leak", "pass something to an outlet", "press", needs=("mod:media2",))
-R("answer_poll", "answer an outlet's poll", "press", needs=("mod:media2",), when=_k_poll)
+R("answer_poll", "answer an outlet's poll", "press", needs=("mod:media2", "opt:media2.polls"), when=_k_poll)
 R("buy_licence", "buy back a posting licence", "press", needs=("mod:media2",), when=_k_licences)
 R("anon_post", "speak publicly without your name", "press", needs=("right:anon",))
 R("library_read", "read a library document", "press", needs=("mod:media2",), when=_k_scholar)

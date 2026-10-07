@@ -677,52 +677,13 @@ def do_lookups(k, aid, out: dict) -> list:
 
 
 # ------------------------------------------------------------------ the core prompt (system prompt, cached)
-def allowed_actions(inst, a, rights) -> list:
-    """The actions the old system prompt lists for this agent (same rules as agents.system_prompt), plus this module's."""
-    from charter import agents as AG
+def allowed_actions(inst, a, rights, k=None) -> list:
+    """The actions this agent can use (charter.action_registry: its capabilities and, with a kernel, the world's current state), less
+    any the hidden module keeps undocumented."""
+    from charter import action_registry as AR
     from charter import hidden as H
-    from charter import projects as P
-    sp = inst["spec"]
-    lvl = ["L0", "L1", "L2", "L3", "L4"].index(inst["law_level"])
-    absent = {"veto", "patch", "rule", "read_archive", "search_archive", "write_archive", "publish", "write_digest", "report", "create_channel",
-              "add_member", "remove_member", "close_channel", "set_dm_limit", "forge_dm"}
-    if not sp["channels"].get("dm", True):
-        absent |= {"dm", "channel_post", "reply"}
-    if lvl == 0:
-        absent |= {"propose", "vote", "deposit", "redeem", "invoke", "accuse", "respond"}
-    if lvl < 2:
-        absent |= {"deposit", "redeem", "accuse", "respond", "lend", "accept_loan", "repay_loan", "extend_loan"}
-    if lvl < 4:
-        absent |= {"invoke"}
-    absent |= H.undocumented_actions(inst)
-    from charter import media as _MD, conflict as _CF, jurisdictions as _J, life as _LF        # modules' own rules: off, or not for this agent
-    from charter.camptypes import framework as _CT
-    absent |= _MD.absent_actions(inst, a) | _CF.absent_actions(inst) | _J.absent_actions(inst) | _LF.absent_actions(inst, a)
-    if not _CT.typed_inst(inst):
-        absent |= {"survey", "invest"}
-    if not _CT.LS.enabled_spec(sp):
-        absent |= {"lease", "accept_lease"}
-    if "sandbox" not in rights:                                          # code only for those with a sandbox
-        absent |= {"run_python"}
-    if a["cls"] in ("board", "fixer"):                                   # they hold no other right and are barred from open camps
-        absent |= {"harvest", "survey", "invest", "lease", "accept_lease"}
-    if "maker" not in rights:                                            # Maker tools only for the Maker
-        absent |= {"create_agent", "copy_agent"}
-    if not (sp.get("outside_power") or {}).get("enabled"):
-        absent |= {"pay_tribute"}
-    if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
-        absent |= {"contribute"}
-    out = [x for x in AG.ACTION_DOC if x not in absent and x not in ACTIONS] + {
-        "board": ["veto"], "fixer": ["patch"], "scientist": ["read_archive", "search_archive", "write_archive"],
-        "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) \
-        + [x for c in (a.get("also") or ()) for x in {"scientist": ["read_archive", "search_archive", "write_archive"]}.get(c, [])] \
-        + (["rule"] if lvl >= 2 else []) + (["set_dm_limit"] if "dm_rules" in rights and sp["channels"].get("dm", True) else [])
-    if "press" in rights:                                                # the press right (Media class, a second class or the role)
-        out += [x for x in ("publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel")
-                if x not in out]
-    if "impersonate" in rights and "forge_dm" not in out and sp["channels"].get("dm", True):   # the Spy
-        out.append("forge_dm")
-    return out + list(ACTIONS)
+    hide = H.undocumented_actions(inst)
+    return [x.name for x in AR.available(inst, k, a, rights) if x.name not in hide]
 
 
 FULL_TURN_TEXT = ("Any actions you do not use are wasted. If you don't know what to do, explore: your own capabilities, the world "
@@ -742,132 +703,19 @@ def strategy_share(spec) -> float:
     return 1.0 if v is True else float(v or 0.0)
 
 
-EDGE_RIGHTS = {                                                         # rights whose actions only some agents have: the agent's edge
-    "propose": ("propose",), "vote": ("vote",), "veto": ("veto", "name_successor"), "patch": ("patch",), "judge": ("rule",),
-    "archive": ("read_archive", "search_archive", "write_archive"), "sandbox": ("run_python",), "maker": ("create_agent", "copy_agent"),
-    "press": ("publish", "write_digest", "report", "write_edition", "annotate", "run_placement", "poll", "set_subscription_fee",
-              "send_subscriber_list", "revoke_licence", "grant_licence"),
-    "scholar": ("set_memory_price", "library_permit", "library_remove"), "impersonate": ("forge_dm",), "dm_rules": ("set_dm_limit",),
-}
-HARVEST_EDGE = ("harvest",)                                             # for holders of a harvest right
-EDGE_CORE = {"press": ("write_edition", "publish"), "maker": ("create_agent",), "scholar": ("set_memory_price", "library_permit")}
-CORE_GROUPS = (                                                         # core primitives: listed with a purpose every turn
-    ("TALK AND TRADE", ("dm", "reply", "post", "transfer")),
-    ("INFORMATION", ("manual", "manual_search", "recent", "read_law", "search_board", "search_dms", "read_file")),
-    ("MEMORY", ("write_scratchpad",)),
-    ("PRODUCE", ("harvest",)),
-    ("POLITICS", ("propose", "vote")),
-    ("FORCE", ("forge", "fortify", "attack")),
-    ("LINEAGE", ("commission",)),
-)
-NICHE = (                                                               # possible, but how is in the manual: one sentence names them
-    ("camps", "survey, improve or lease camps", ("survey", "invest", "lease", "accept_lease")),
-    ("commons", "fund projects or pay the tribute", ("contribute", "pay_tribute")),
-    ("files", "keep files, pin them or buy memory from a Scholar", ("write_file", "pin", "unpin", "rename_file", "share_file",
-                                                                      "delete_file", "buy_memory")),
-    ("press", "subscribe to outlets, buy placements, leak, answer polls, post anonymously or use the library",
-     ("subscribe", "unsubscribe", "buy_placement", "leak", "answer_poll", "buy_licence", "anon_post", "library_read", "library_deposit")),
-    ("finance", "lend, borrow and use coins", ("lend", "accept_loan", "repay_loan", "extend_loan", "deposit", "redeem")),
-    ("jurisdictions", "found, fund or join jurisdictions", ("found", "invite", "join", "leave", "declare", "fund", "set_charter")),
-    ("courts", "go to court or call the Fixer", ("accuse", "respond", "request_fix", "rule")),
-    ("force, more", "guard others, join attacks, hire the assassin or buy initiative", ("guard", "join_attack", "contract", "buy_initiative")),
-    ("inheritance", "decide your inheritance or copy an agent", ("bequest", "copy_agent")),
-    ("groups", "run private groups", ("create_channel", "channel_post", "add_member", "remove_member", "close_channel")),
-    ("powers", "use a word of power", ("invoke",)),
-)
-PRE_DM = ("dm", "reply")                                                # messages are pre-actions where the DM step runs
-PRE_ARGS = {"manual": '{"section": "<title or number>"}', "manual_search": '{"query": "..."}', "recent": '{"kind": "editions|posts|gazette|dms|all", "n": 5}',
-            "search_board": '{"query": "..."}', "search_dms": '{"query": "..."}', "read_file": '{"name": "..."}',
-            "read_archive": '{"doc": "..."}', "search_archive": '{"query": "..."}', "run_python": '{"code": "..."}',
-            "dm": '{"to": "Name", "text": "..."}', "reply": '{"message": "e42", "text": "..."}', "read_law": '{"law": "L5"}'}
-PRE_RIGHTS = {"read_archive": "archive", "search_archive": "archive", "run_python": "sandbox"}
-
-
-def allowed_lookup(name, rights) -> bool:
-    return PRE_RIGHTS.get(name) is None or PRE_RIGHTS[name] in rights
-
-
-def edge_actions(allowed, rights) -> list:
-    """The core actions only this agent's class or roles give it (the rest of a role's tools are niche: its manual section)."""
-    out = []
-    for r in rights:
-        names = EDGE_CORE.get(r, EDGE_RIGHTS.get(r, ())) + (HARVEST_EDGE if r.startswith("harvest:") else ())
-        for n in names:
-            if n in allowed and n not in out:
-                out.append(n)
-    return out
-
-
-def usable(k, aid, allowed, rights) -> list:
-    """Of the actions a class and the world's modules allow, the ones this agent can use now (rights and the world's current state).
-    Unknown state (no kernel) keeps them all. The assassin's contract stays listed: whether there is an assassin is not public."""
-    if k is None or aid not in k.w["agents"]:
-        return list(allowed)
-    w = k.w
-    drop = set()
-    from charter.camptypes import framework as _CT
-    has_right = any(r.startswith("harvest:") for r in rights)
-    can_open = bool(_CT.typed(k)) and bool(_CT.open_camps(k, aid))
-    if not has_right and not can_open:
-        drop |= {"harvest"}
-    if not has_right:
-        drop |= {"survey", "invest", "lease"}
-    if not w.get("loan_law"):
-        drop |= {"lend", "accept_loan", "repay_loan", "extend_loan"}
-    if not any(c.get("convertible") for c in w["currencies"].values()):
-        drop |= {"deposit", "redeem"}
-    if "vote" not in rights and not (k.spec.get("jurisdictions") or {}).get("enabled"):
-        drop |= {"vote"}
-    if not any(aid in ch["members"] for ch in w["channels"].values()):
-        drop |= {"channel_post"}
-    if not any(c.get("accused") == aid and c.get("status") == "open" for c in w["cases"].values()):
-        drop |= {"respond"}
-    if not w["clauses"]:
-        drop |= {"accuse"}
-    roles = w.get("roles") or {}
-    if not roles.get("scholar"):
-        drop |= {"buy_memory", "library_read", "library_deposit"}
-    m = w.get("media")
-    if m:
-        if m.get("open_board") or (k.spec.get("media2") or {}).get("submissions"):
-            drop |= {"buy_licence"}
-        if not any(q.get("round") == k.r for q in m.get("polls", {}).values()):
-            drop |= {"answer_poll"}
-    return [n for n in allowed if n not in drop]
-
-
-def action_layout(allowed, rights) -> tuple:
-    """(edge, [(group, names)], [(kind, phrase, names)]): core actions by group, then the niche ones (anything unplaced: "other")."""
-    edge = edge_actions(allowed, rights)
-    allowed = [n for n in allowed if not (n == "propose" and "propose" not in rights) and not (n == "rule" and "judge" not in rights)]
-    placed = set(edge)
-    groups = []
-    for g, names in CORE_GROUPS:
-        ns = [n for n in names if n in allowed and n not in placed]
-        placed |= set(ns)
-        if ns:
-            groups.append((g, ns))
-    kinds = []
-    role_extra = [n for r in rights for n in EDGE_RIGHTS.get(r, ()) if n in allowed and n not in placed]
-    if role_extra:
-        kinds.append(("your role", "use your role's other tools", list(dict.fromkeys(role_extra))))
-        placed |= set(role_extra)
-    for kd, phrase, names in NICHE:
-        ns = [n for n in names if n in allowed and n not in placed]
-        placed |= set(ns)
-        if ns:
-            kinds.append((kd, phrase, ns))
-    rest = [n for n in allowed if n not in placed]
-    if rest:
-        kinds.append(("other", "do a few other things", rest))
-    return edge, groups, kinds
+def action_layout(names, rights) -> tuple:
+    """(edge, [(group, names)], [(kind, phrase, names)]): the registry's layout of these actions (action_registry.layout)."""
+    from charter import action_registry as AR
+    edge, groups, kinds = AR.layout([AR.REG[n] for n in names if n in AR.REG], rights)
+    nm = lambda acts: [x.name for x in acts]
+    return nm(edge), [(g, nm(v)) for g, v in groups.items()], [(kd, AR.NICHE_PHRASE[kd], nm(v)) for kd, v in kinds.items()]
 
 
 def action_sections(allowed, rights, overrides=None, pre=()) -> str:
     """The core prompt's actions: the edge, then the core groups (pre-actions marked), then one sentence naming the niche ones."""
-    from charter import purposes as PU
-    pur = lambda n: (overrides or {}).get(n) or PU.purpose(n)
-    tag = lambda n: f"{n} {PRE_ARGS[n]}" if n in pre and n in PRE_ARGS else n
+    from charter import action_registry as AR
+    pur = lambda n: (overrides or {}).get(n) or AR.purpose(n)
+    tag = lambda n: f"{n} {AR.REG[n].args}" if n in pre and AR.REG[n].args else n
     fmt = lambda ns: "; ".join(f"{tag(n)} ({pur(n)})" + (" (pre-action)" if n in pre else "") for n in ns)
     edge, groups, kinds = action_layout(allowed, rights)
     lines = []
@@ -878,19 +726,6 @@ def action_sections(allowed, rights, overrides=None, pre=()) -> str:
         lines.append("You can also " + "; ".join(f"{phrase} ({', '.join(ns)})" for _, phrase, ns in kinds)
                      + '. Check your manual for how: manual {"section": "Actions: <kind>"} or {"section": "Actions: all"}.')
     return "\n".join(lines)
-
-
-def grouped_purposes(names, overrides=None) -> str:
-    """Actions grouped by kind, one group per line, each with its short purpose (context.action_purposes)."""
-    from charter import scorer as SC, purposes as PU
-    pur = lambda n: (overrides or {}).get(n) or PU.purpose(n)
-    groups = {}
-    for n in names:
-        g = "memory and lookups" if n in ACTIONS else SC.category(n)
-        groups.setdefault(g, []).append(n)
-    order = ["talk", "productive", "economic", "political", "memory and lookups"]
-    return "\n".join(f"- {g}: " + "; ".join(f"{n} ({pur(n)})" if pur(n) else n for n in groups[g])
-                     for g in order + [x for x in groups if x not in order] if g in groups)
 
 
 def grouped_actions(names) -> str:
@@ -1063,7 +898,9 @@ def core_prompt(inst, a, k=None) -> str:
     roles = own_roles(k, aid)
     free = int(c["free_lookups"]) if c["lookup_phase"] and not c["lookups_in_dm_step"] else 0
     fast = bool(c["lookups_in_dm_step"]) and inst["spec"].get("turns") == "simultaneous"
-    pre = [n for n in LOOKUPS if allowed_lookup(n, rights)] if (fast or free) else []
+    allowed = allowed_actions(inst, a, rights, k)
+    from charter import action_registry as AR
+    pre = [n for n in allowed if AR.REG[n].pre and not AR.REG[n].msg] if (fast or free) else []
     look = ""
     explore = ""
     if c["explore_nudge"]:
@@ -1078,12 +915,10 @@ def core_prompt(inst, a, k=None) -> str:
     over = dict({"post": "ask the newspapers to print your public post", "anon_post": "ask them to print one without your name"}
                 if (inst["spec"].get("media2") or {}).get("submissions") else {})
     unread = unread_counts(k, a)                                        # what the agent has not read yet, shown every turn
-    from charter import purposes as _PU
     for nm, n in unread.items():
-        over[nm] = f"{over.get(nm) or _PU.purpose(nm)} [{n} unread]"
-    pre_all = (pre + [n for n in PRE_DM]) if fast else pre                   # where the DM step runs, messages are pre-actions too
-    allowed_all = usable(k, aid, list(dict.fromkeys(allowed_actions(inst, a, rights) + [n for n in pre if allowed_lookup(n, rights)])), rights)
-    acts = chr(10) + action_sections(allowed_all, rights, over or None, set(pre_all))
+        over[nm] = f"{over.get(nm) or AR.purpose(nm)} [{n} unread]"
+    pre_all = (pre + [n for n in allowed if AR.REG[n].msg]) if fast else pre   # where the DM step runs, messages are pre-actions too
+    acts = chr(10) + action_sections(allowed, rights, over or None, set(pre_all))
     look = explore if explore and not c.get("closing", True) else ""
     pre_note = ""
     if pre_all:
