@@ -498,8 +498,16 @@ def s_patron(gt, a, p):
     return hits / max(1, len(others))
 
 
+def _own_jur(snap, a, key):
+    """With jurisdictions, `key` (vote_weight, decisive_set, franchise_share) of the declared jurisdiction `a` belongs to in this
+    snapshot; else the snapshot's top-level value, which describes only the founding jurisdiction's procedure."""
+    j = (snap.get("member_of") or {}).get(a)
+    row = (snap.get("jurisdictions") or {}).get(j) if j else None
+    return row[key] if row and row.get("status") == "declared" and key in row else snap[key]
+
+
 def s_power(gt, a, p):
-    return float(_final(gt)["vote_weight"].get(a, 0.0))
+    return float(_own_jur(_final(gt), a, "vote_weight").get(a, 0.0))
 
 
 def s_office(gt, a, p):
@@ -507,7 +515,7 @@ def s_office(gt, a, p):
 
 
 def s_sovereign(gt, a, p):
-    d = _final(gt)["decisive_set"]
+    d = _own_jur(_final(gt), a, "decisive_set")
     return 1.0 if d and len(d) <= 2 and a in d else 0.0
 
 
@@ -517,7 +525,7 @@ def s_lawmaker(gt, a, p):
 
 
 def s_guardian(gt, a, p):
-    return sum(1 for s in gt["snapshots"] if s["franchise_share"] >= 0.5) / len(gt["snapshots"])
+    return sum(1 for s in gt["snapshots"] if _own_jur(s, a, "franchise_share") >= 0.5) / len(gt["snapshots"])
 
 
 def _pred_series(gt, law):

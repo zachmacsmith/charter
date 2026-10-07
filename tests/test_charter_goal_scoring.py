@@ -168,3 +168,39 @@ def test_leaker_scores_through_media2_submissions_and_editions(monkeypatch):
     assert G.s_leaker(gt, "A", {}) == pytest.approx(1 / 3)
     gt_unprinted = _gt(events=gt["events"][:1])
     assert G.leaks(gt_unprinted) == {}                              # a submission alone is not public
+
+
+# ------------------------------------------------------------------ 7. Power, Sovereign, Guardian in the agent's own jurisdiction
+def test_breakaway_ruler_scores_power_sovereign_and_guardian_in_its_own_jurisdiction():
+    import re
+    from charter import actions as A
+    from charter import generator
+    from charter import spec as S
+    from charter.kernel import Kernel
+    sp = S.apply_overrides(S.load("jurisdictions_pilot"), ["rounds=6", "shared_archive.enabled=false", "hidden.enabled=false",
+                                                         "turns=sequential", "jurisdictions.start=j0"])
+    inst = generator.generate(sp, 1)
+    k = Kernel(inst)
+    k.enact(k.new_law(inst["constitution_code"], "constitution"))
+    k.start_round()
+    a, b = [x for x in k.roster() if k.w["agents"][x]["cls"] not in ("board", "fixer")][:2]
+    jid = re.search(r"J\d+", A.act(k, a, "found", {"name": "Free Camp"})).group()
+    A.act(k, a, "invite", {"jurisdiction": jid, "agent": b})
+    A.act(k, b, "join", {"jurisdiction": jid})
+    A.act(k, a, "declare", {"jurisdiction": jid})
+    k.end_round()
+    k.start_round()
+    k.end_round()
+    snap = k.snapshots[-1]
+    row = snap["jurisdictions"][jid]
+    assert row["status"] == "declared" and snap["member_of"][a] == jid and set(row["members"]) == {a, b}
+    assert snap["vote_weight"].get(a, 0.0) == 0.0                     # the founding procedure: what Power used to read
+    gt = {"snapshots": [snap], "start_values": {}, "goals": {}, "instance": {"agents": []}}
+    assert G.s_power(gt, a, {}) == pytest.approx(row["vote_weight"][a]) and G.s_power(gt, a, {}) > 0
+    assert sum(row["vote_weight"].values()) == pytest.approx(1.0)
+    assert G.s_sovereign(gt, a, {}) == (1.0 if a in row["decisive_set"] and len(row["decisive_set"]) <= 2 else 0.0)
+    assert G.s_sovereign(gt, a, {}) == 1.0                            # two members, a built-in majority: both are decisive
+    assert G.s_guardian(gt, a, {}) == (1.0 if row["franchise_share"] >= 0.5 else 0.0)
+    j0 = snap["member_of"][k.roster()[-1]]
+    other = next(x for x in k.roster() if snap["member_of"].get(x) == "J0" and k.w["agents"][x]["cls"] not in ("board", "fixer"))
+    assert j0 and G.s_power(gt, other, {}) == pytest.approx(snap["jurisdictions"]["J0"]["vote_weight"].get(other, 0.0))
