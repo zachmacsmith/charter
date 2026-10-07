@@ -7,9 +7,12 @@ Writes to the run directory:
                       (later: fork) with its first round, the code it ran under and the modules whose hash changed since the
                       previous segment. A resume under different code is recorded here, never hidden.
   calls.jsonl         one row per model call (policy.act): call id `r<round>:<agent>:<n>` (also put in the reasoning row's
-                      usage["call"]), phase, model, backend, system_sha / user_sha, latency, the raw reply text of every attempt
-                      (retries and failed attempts with their errors), usage and error. Scripted policies have no raw text: their
-                      parsed reply is stored instead.
+                      usage["call"]), the explicit call key the runner passes ({round, phase, wave, agent, n} and its id
+                      `r<round>:<phase>:<wave>:<agent>:<n>`, the replay key: see call_key), phase, model, backend, system_sha /
+                      user_sha, latency, the raw reply text of every attempt (retries and failed attempts with their errors), the
+                      reasoning text returned, usage and error. The parsed reply is stored as well whenever the raw text would not
+                      give it back through llm.parse_json (scripted policies have no raw text: always), so every row can be replayed
+                      exactly (charter/replay.py).
   prompts/system/<sha>.txt  each distinct system prompt sent, once (content-addressed: sha256 of the text, first 16 hex digits);
                       context runs rebuild the system prompt every turn, so this is the only record of what was actually sent.
   abandoned_calls.jsonl  calls of rounds abandoned by fail-stop or cut by a resume (kept, not deleted).
@@ -32,7 +35,7 @@ from pathlib import Path
 
 PKG = Path(__file__).resolve().parent
 REPO = PKG.parent
-APPEND_ONLY = ("events.jsonl", "reasoning.jsonl", "observer.jsonl", "calls.jsonl")
+APPEND_ONLY = ("events.jsonl", "reasoning.jsonl", "observer.jsonl", "calls.jsonl", "turns.jsonl")   # turns.jsonl: k.turn_log
 KEEP_CUT = {"calls.jsonl": "abandoned_calls.jsonl"}                     # cut bytes of these files are moved, not deleted
 SECRET = re.compile(r"key|token|secret|password|credential|auth", re.I)
 
@@ -211,6 +214,71 @@ def end(out, status: str, last_round: int | None) -> None:
     _write(out, data)
 
 
+def branch(out, kind: str, first_round: int, parent: dict) -> dict:
+    """A new run directory made from another (kind "rewind", later "fork"): run.json (copied from the parent) gets `parent` and a
+    segment of that kind, with the code it was made under; the resume that continues it appends its own segment as usual."""
+    out = Path(out)
+    data = read(out) or {"segments": [], "note": "parent had no run.json"}
+    code, git, env = code_block(), git_info(), env_info()
+    last = (data.get("segments") or [{}])[-1].get("code") or data.get("code") or {}
+    old, new = last.get("modules") or {}, code["modules"]
+    seg = {"kind": kind, "first_round": first_round, "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "git": git,
+           "python": env["python"], "argv": list(sys.argv), "code": code, "parent": parent,
+           "changed_modules": sorted(m for m in set(old) | set(new) if old.get(m) != new.get(m)), "status": "ready"}
+    data["lineage"] = list(data.get("lineage") or []) + ([data["parent"]] if data.get("parent") else [])
+    data.update({"run_id": out.name, "parent": parent, "created": seg["started"]})
+    data.setdefault("segments", []).append(seg)
+    _write(out, data)
+    return seg
+
+
+def annotate(out, **fields) -> None:
+    """Add top-level fields to run.json (e.g. what a replay reproduced)."""
+    data = read(out)
+    if data is not None:
+        data.update(fields)
+        _write(out, data)
+
+
+# ------------------------------------------------------------------ call keys
+def call_key(key: dict) -> str:
+    """The id of an explicit call key: `r<round>:<phase>:<wave>:<agent>:<n>` (e.g. r3:decide:0:a4:0, r3:dm_reply:2:a4:0)."""
+    return f"r{key['round']}:{key['phase']}:{key.get('wave') or 0}:{key['agent']}:{key.get('n') or 0}"
+
+
+def reply_from_raw(attempts, error):
+    """The parsed reply a recorded model call gives back from its raw text alone (the last attempt through llm.parse_json; every
+    attempt failed: llm.call's empty turn with the error), or None when it cannot be rebuilt (the row then stores `parsed`)."""
+    if not attempts:
+        return None
+    last = attempts[-1]
+    if last.get("ok") and last.get("raw"):
+        from charter import llm
+        try:
+            return llm.parse_json(last["raw"])
+        except Exception:
+            return None
+    if not last.get("ok") and error and not any(x.get("ok") for x in attempts):
+        return {"actions": [], "notes": "", "goal_guesses_json": "{}", "_error": error}
+    return None
+
+
+class Keyed:
+    """A policy view that tags every call with a key (phase, wave): the runner hands it to code that calls policy.act itself
+    (the observer's turn, media2's editorial turns), so those calls get explicit keys too."""
+
+    def __init__(self, inner, **key):
+        self.inner, self.key = inner, key
+
+    def __getattr__(self, name):
+        if name == "inner":
+            raise AttributeError(name)
+        return getattr(self.inner, name)
+
+    def act(self, k, a, system, user, n_actions, final, key=None):
+        return self.inner.act(k, a, system, user, n_actions, final, key={**self.key, **(key or {})})
+
+
 # ------------------------------------------------------------------ model-call recording
 class Recorder:
     """Wraps a policy: every policy.act is recorded in calls.jsonl, its system prompt stored once under prompts/system/.
@@ -225,6 +293,18 @@ class Recorder:
         self._known = {p.stem for p in self._dir.glob("*.txt")}
         if not append and (self.out / "abandoned_calls.jsonl").exists():   # a fresh start: nothing abandoned yet
             (self.out / "abandoned_calls.jsonl").unlink()
+        if append and (self.out / "calls.jsonl").exists():             # a resume: counters go on from the kept calls (e.g. the editorial
+            for ln in (self.out / "calls.jsonl").read_text().splitlines():   # calls made after the checkpointed round's end, at k.r + 1)
+                try:
+                    row = json.loads(ln)
+                except json.JSONDecodeError:
+                    continue
+                r, aid = row.get("round"), row.get("agent")
+                self._n[(r, aid)] = self._n.get((r, aid), 0) + 1
+                kf = row.get("key_fields")
+                if kf:
+                    kt = (kf["round"], kf["phase"], kf["wave"], kf["agent"])
+                    self._n[kt] = max(self._n.get(kt, 0), kf["n"] + 1)
         self.f = open(self.out / "calls.jsonl", "a" if append else "w")
 
     def __getattr__(self, name):
@@ -243,30 +323,44 @@ class Recorder:
                 self._known.add(h)
         return h
 
-    def act(self, k, a, system, user, n_actions, final):
+    def act(self, k, a, system, user, n_actions, final, key=None):
+        """key: the runner's explicit call key ({"phase", "wave"}; round and agent are filled in here, n counts calls with the same
+        key). Without one (direct callers, tests) the phase is inferred from the agent dict."""
         r, aid = getattr(k, "r", None), a.get("id")
+        key = dict(key or {})
+        key.setdefault("phase", a.get("phase") or ("observer" if a.get("cls") == "observer" else "decide"))
+        key.update(round=r, agent=aid, wave=int(key.get("wave") or 0))
         with self._lock:
             i = self._n.get((r, aid), 0)
             self._n[(r, aid)] = i + 1
+            kt = (r, key["phase"], key["wave"], aid)
+            key["n"] = self._n.get(kt, 0)
+            self._n[kt] = key["n"] + 1
+        key = {x: key[x] for x in ("round", "phase", "wave", "agent", "n")}
         cid = f"r{r}:{aid}:{i}"
         sys_sha = self._prompt(system or "")
         attempts = None
         t0 = time.monotonic()
+        kw = {"key": {**key, "id": call_key(key), "system_sha": sys_sha, "user_sha": sha(user or "")}} \
+            if getattr(self.inner, "takes_key", False) else {}
         if hasattr(self.inner, "act_recorded"):
-            out, reasoning, usage, attempts = self.inner.act_recorded(k, a, system, user, n_actions, final)
+            out, reasoning, usage, attempts = self.inner.act_recorded(k, a, system, user, n_actions, final, **kw)
         else:
-            out, reasoning, usage = self.inner.act(k, a, system, user, n_actions, final)
+            out, reasoning, usage = self.inner.act(k, a, system, user, n_actions, final, **kw)
         latency = round(time.monotonic() - t0, 3)
         o = out if isinstance(out, dict) else {}
         usage = {**(usage or {}), "call": cid}
-        row = {"call": cid, "round": r, "agent": aid, "phase": a.get("phase") or ("observer" if a.get("cls") == "observer" else None),
+        row = {"call": cid, "key": call_key(key), "key_fields": key, "round": r, "agent": aid,
+               "phase": a.get("phase") or ("observer" if a.get("cls") == "observer" else None),
                "model": a.get("model"), "backend": (attempts[-1].get("backend") if attempts else None) or getattr(self.inner, "backend", None)
                or "scripted", "system_sha": sys_sha, "system_chars": len(system or ""), "user_sha": sha(user or ""),
-               "user_chars": len(user or ""), "latency_s": latency, "usage": usage, "error": o.get("_error")}
+               "user_chars": len(user or ""), "latency_s": latency, "usage": usage, "error": o.get("_error"), "reasoning": reasoning}
+        if getattr(self.inner, "replaying", False):
+            row["replayed"] = True
         if attempts is not None:
             row["attempts"] = attempts
             row["n_attempts"] = len(attempts)
-            if not (attempts and attempts[-1].get("raw")):
+            if reply_from_raw(attempts, o.get("_error")) != o:          # the raw text alone would not give this reply back
                 row["parsed"] = o
         else:
             row["parsed"] = o                                         # scripted bots: no raw text, the reply itself

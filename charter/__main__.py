@@ -3,6 +3,8 @@
   python -m charter generate E3 --seed 4 [--set constitution=council ...]       print / save the drawn world
   python -m charter run E3 --seed 4 [--dry] [--set ...]                          generate, play, score, report -> charter/out/<spec>/E3_seed4_<hash>
   python -m charter resume RUN_DIR                                               continue a stopped or crashed run from its last complete round
+  python -m charter replay RUN_DIR [--to N] [--out DIR]                          re-execute a run from its recorded replies; byte-identical?
+  python -m charter rewind RUN_DIR --to N --out NEW_DIR                          a copy of the run after round N, to resume (charter/replay.py)
   python -m charter score RUN_DIR                                                (re)score a run
   python -m charter show RUN_DIR                                                 summary + timeline of what happened
   python -m charter view RUN_DIR [--open]                                       story.html: the run as a group chat, inboxes, laws and wealth
@@ -333,6 +335,7 @@ def main(argv=None):
     from charter import difftest
     p = sub.add_parser("difftest", help="compare scripted runs on two code revisions (charter/difftest.py)")
     difftest.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(difftest.cmd(a)))
+    __import__("charter.replay", fromlist=["add_commands"]).add_commands(sub)   # replay, rewind
     a = ap.parse_args(argv)
     a.fn(a)
 
