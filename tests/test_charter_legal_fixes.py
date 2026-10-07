@@ -104,3 +104,19 @@ def test_a_jurisdictions_law_cannot_appoint_a_non_member_as_its_editor():
     assert any(e["type"] == "jur_out_of_scope" and e["data"].get("fn") == "set_official_editor" for e in k.events)
     assert appoint(cs[1]) is True and k.w["media"]["official"][jid]["editor"] == cs[1]
     assert LA.AGENT_ARGS["set_official_editor"] == ((0, "agent"),) and LA.REFUSED["set_official_editor"] is False
+
+
+# ------------------------------------------------------------------ ban_forging(on=...)
+def test_ban_forging_accepts_on_and_on_():
+    from charter import conflict as CF
+    _, k, _ = _world("society", ("conflict.enabled=true", "jurisdictions.enabled=false"))
+    lid = k.new_law(code("Ban", 'def on_enact():\n    ban_forging(on=False)'), "constitution")
+    k.enact(lid)
+    assert k.w["laws"][lid]["status"] == "active" and k.w["conflict"]["forge_ban"][lid] is False
+    api = CF.law_api(k, lid)
+    api["ban_forging"](on=True)
+    assert k.w["conflict"]["forge_ban"][lid] is True
+    api["ban_forging"](on_=False)
+    assert k.w["conflict"]["forge_ban"][lid] is False
+    api["ban_forging"](True)
+    assert k.w["conflict"]["forge_ban"][lid] is True
