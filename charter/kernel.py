@@ -27,6 +27,7 @@ from charter.camptypes import framework as CT                    # camps: typed 
 from charter import hidden as H
 from charter import jurisdictions as J
 from charter import lawlang as L
+from charter import linker as LK                                      # law.v2: exports, use, public, versions (off: never called)
 from charter import mortality as MO                                   # life: the mortality contract (disable, succession)
 from charter import media as MD                                       # media2
 from charter import outside as O
@@ -77,6 +78,7 @@ class Kernel:
         self.snapshots: list[dict] = []
         self.fnreg: dict = {}
         self.ns: dict = {}
+        self.links: dict = {}                                          # law.v2: importer -> [linker.Link] (rebuilt on load)
         self.dry = False
         self._fn_n = 0
         self.current_post = None                                       # the post being processed by on_post hooks
@@ -429,7 +431,10 @@ class Kernel:
 
     def call(self, lid, fn, *args):
         with self.cause("law", lid, hook=getattr(fn, "__name__", None)):
-            return self.limited(fn, *args)
+            out = self.limited(fn, *args)
+        if LK.enabled(self):                                           # law.v2: a law's public dict stays JSON data
+            LK.check_public(self, lid)
+        return out
 
     def api_for(self, lid):
         k = self
@@ -593,7 +598,7 @@ class Kernel:
             if "harvest" in str(text).lower():
                 k.w["effects"]["harvests_gazetted"] += 1
 
-        return J.scope_api(k, lid, {                                   # jurisdictions: a law reaches only its members (off: unchanged)
+        api = J.scope_api(k, lid, {                                    # jurisdictions: a law reaches only its members (off: unchanged)
             "agents": agents, "holders": k.law_holders, "has": k.law_has, "balance": k.bal, "reserve": lambda: dict(k.w["reserve"]),
             "price": k.price, "stock": lambda c: camp_of(c)["S"], "round": lambda: k.r, "laws": laws,
             "proposer": lambda: law()["author"], "value": k.unit_value, "supply": lambda cur: k._cur(cur)["supply"],
@@ -619,27 +624,43 @@ class Kernel:
             "lower": lambda t: str(t).lower(), "repeal": repeal,
             **FT.law_api(k, lid),                                          # every feature's law functions (features.TAILS order)
         })
+        if LK.enabled(k):                                              # law.v2: use(ref), public_of(lid) (charter/linker.py)
+            api.update(LK.law_api(k, lid))
+        return api
 
     # ------------------------------------------------------------------ laws
     def active_laws(self):
         return [self.w["laws"][i] for i in self.w["law_order"] if self.w["laws"][i]["status"] == "active"]
 
     def new_law(self, code, author, intent_override=None):
-        tree = L.check(code)
+        v2 = LK.enabled(self)
+        tree = L.check(code, v2=v2)
         title, intent = L.header(code)
-        cls = L.classify(tree)
+        cls = LK.new_law_class(self, code) if v2 else L.classify(tree)   # law.v2: with what it imports (transitive)
         self.w["law_seq"] += 1
         lid = f"L{self.w['law_seq']}"
         self.w["laws"][lid] = {"id": lid, "title": title, "intent": intent_override or intent, "code": code, "cls": cls, "author": author,
                                "status": "draft", "proposed_round": self.r, "enacted_round": None, "state": {}, "patches": [],
                                "repeal_target": L.is_repeal(tree), "defines_action": L.uses_define_action(tree), "preview": None}
+        if v2:
+            LK.on_new_law(self, lid)                                   # version 1, code store, public, import records
         return lid
 
-    def _load(self, lid):
+    def _exec(self, lid):
+        """Execute a law's module in a fresh namespace bound to its API and `state` (law.v2: and its `public` dict)."""
         law = self.w["laws"][lid]
-        ns = L.load_module(law["code"], lid, self.api_for(lid), law["state"], self.limited)
+        api = self.api_for(lid)
+        if "public" in law:
+            api = {**api, "public": law["public"]}
+        ns = L.load_module(law["code"], lid, api, law["state"], self.limited)
         ns["title"] = ns["intent"] = None
-        ns.update({"title": self.api_for(lid)["title"]})               # the API function, not the module's title string
+        ns.update({"title": api["title"]})                             # the API function, not the module's title string
+        return ns
+
+    def _load(self, lid):
+        # law.v2: the linker checks the import graph, relinks the module's imports and, when the code changed (an amendment),
+        # records the new version and relinks or auto-pins its dependents (linker.load)
+        ns = LK.load(self, lid) if LK.enabled(self) else self._exec(lid)
         self.ns[lid] = ns
         return ns
 
@@ -658,6 +679,8 @@ class Kernel:
         for law in hit:
             self.apply("repeal", jurisdiction=D.jur_of(self, law["id"]), law=law["id"], by_law=by_law,
                        via=via or ("law" if by_law is not None else D.via_of(self)))
+            if LK.enabled(self):                                       # law.v2: following importers auto-pin (D-8)
+                LK.on_repeal(self, law["id"])
         return bool(hit)
 
     def hooks(self, hook, *args):
@@ -690,16 +713,17 @@ class Kernel:
     def _module_data(self):
         """Laws' module-level data (lists, dicts, counters a law keeps outside `state`): copied by dry runs so a preview, probe or
         procedure check cannot leave changes in laws already in force."""
-        skip = L.API | set(L.SAFE_BUILTINS) | {"__builtins__", "title", "intent", "state"}
+        skip = L.API | set(L.SAFE_BUILTINS) | {"__builtins__", "title", "intent", "state"} | ({"public"} if LK.enabled(self) else set())
         return {lid: {n: copy.deepcopy(v) for n, v in ns.items() if n not in skip and not callable(v)} for lid, ns in self.ns.items()}
 
     def _snapshot(self):
         return (copy.deepcopy(self.w), dict(self.fnreg), dict(self.ns),
                 {lid: copy.deepcopy(l["state"]) for lid, l in self.w["laws"].items()}, self.rng.getstate(), self._law_rng_state(),
-                copy.deepcopy(self.eff), self._module_data())
+                copy.deepcopy(self.eff), self._module_data(), LK.snapshot_links(self))
 
     def _restore(self, snap):
-        self.w, self.fnreg, self.ns, states, rs, ls, self.eff, mdata = snap
+        self.w, self.fnreg, self.ns, states, rs, ls, self.eff, mdata, links = snap
+        LK.restore_links(self, links)
         for lid, data in mdata.items():
             if lid in self.ns:
                 self.ns[lid].update(copy.deepcopy(data))
@@ -708,6 +732,8 @@ class Kernel:
             if lid in self.w["laws"]:
                 self.w["laws"][lid]["state"] = states.get(lid, {})
                 ns["state"] = self.w["laws"][lid]["state"]
+                if "public" in self.w["laws"][lid]:                    # law.v2: the module's public is the record's
+                    ns["public"] = self.w["laws"][lid]["public"]
         self.rng.setstate(rs)
         self._set_law_rng_state(ls)
 
@@ -724,8 +750,8 @@ class Kernel:
         for lid, ns in self.ns.items():
             keep = {}
             for name, v in ns.items():
-                if name in api_names or callable(v) or name in ("title", "intent"):
-                    continue
+                if name in api_names or callable(v) or name in ("title", "intent") or isinstance(v, LK.Link):
+                    continue                                           # law.v2: links are relinked when the module loads again
                 keep[name] = v
             ns_data[lid] = keep
         fns = {key: (lid, _dump_fn(fn, self.ns.get(lid, {}))) for key, (lid, fn) in self.fnreg.items()}
@@ -763,11 +789,9 @@ class Kernel:
         if "law_rngs" in st:
             self._set_law_rng_state(st["law_rngs"])
         self.ns = {}
+        self.links = {}                                                # law.v2: modules relink their imports as they load
         for lid, data in st["ns_data"].items():
-            law = self.w["laws"][lid]
-            ns = L.load_module(law["code"], lid, self.api_for(lid), law["state"], self.limited)
-            ns["title"] = ns["intent"] = None
-            ns.update({"title": self.api_for(lid)["title"]})
+            ns = self._exec(lid)
             ns.update(data)
             self.ns[lid] = ns
         self.fnreg = {key: (lid, _load_fn(blob, self.ns.get(lid) or self._load(lid))) for key, (lid, blob) in st["fns"].items()}
