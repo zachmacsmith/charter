@@ -131,18 +131,18 @@ def round_start(k, inst, rs) -> None:
     reqs = k.w.get("spawn_requests") or []
     if not we and not reqs and "world_events" not in k.w:
         return
-    with k.cause("world", "world_events"):                       # provenance: blights end, news, arrivals, goal changes
+    with k.cause("world", "world_events", root=True):            # provenance: blights end, news, arrivals, goal changes
         _round_start(k, inst, rs, we, reqs)
 
 
 def _round_start(k, inst, rs, we, reqs) -> None:
     st = state(k)
     r = k.r
-    for c in k.w["camps"].values():                                      # blights wear off
+    for cid, c in k.w["camps"].items():                                  # blights wear off
         b = c.get("blight")
         if b and r > b["until"]:
-            c["max_yield"] = b["base_max_yield"]
-            c["blight"] = None
+            k.apply("set_camp_state", camp=cid, key="max_yield", value=b["base_max_yield"])
+            k.apply("set_camp_state", camp=cid, key="blight", value=None)
             k.log("world_event_truth", None, {"event": b["event"] + "-end", "type": "camp_blight_ends", "camp": c["id"], "true": True,
                                               "visibility": "none", "text": f"(the blight at {c['id']} ends; nobody is told)",
                                               "truth": f"the blight at {c['id']} has ended", "recipients": []}, vis="monitor")
@@ -150,7 +150,7 @@ def _round_start(k, inst, rs, we, reqs) -> None:
         st["pending"].remove(p)
         k.log("world_event", None, {"event": p["event"], "kind": p["kind"], "text": DEFAULT_VIS_TEXT["public"].format(t=p["text"])}, vis="public")
         if p.get("camp") and p["camp"] in k.w["camps"]:
-            k.w["camps"][p["camp"]]["known_by"] = None
+            k.apply("set_camp_state", camp=p["camp"], key="known_by", value=None)
     for i, q in enumerate(reqs):                                         # requests from a hidden capability (another package)
         rng = random.Random(_seed(inst["seed"], "spawn", r, i))
         a = add_agent(k, inst, cls=q.get("cls"), sponsor=q.get("by"), rng=rng, endowment=q.get("endowment"))
@@ -172,7 +172,7 @@ def _round_start(k, inst, rs, we, reqs) -> None:
 
 
 def fire(k, inst, e) -> dict:
-    with k.cause("world", "event", event=e["id"], type=e["type"]):
+    with k.cause("world", "event", root=True, event=e["id"], type=e["type"]):
         return _fire(k, inst, e)
 
 
@@ -221,7 +221,8 @@ def _fire(k, inst, e) -> dict:
         recips = list(subset)
     cid = res.get("reveal_camp")
     if cid in k.w["camps"]:
-        k.w["camps"][cid]["known_by"] = None if vis == "public" else (list(recips) if isinstance(recips, list) else None)
+        k.apply("set_camp_state", camp=cid, key="known_by",
+                value=None if vis == "public" else (list(recips) if isinstance(recips, list) else None))
     rec.update({"text": text, "truth": truth, "true": true, "recipients": recips, "rumor": vis == "rumor",
                 "details": res.get("details", {})})
     st["fired"].append(json.loads(json.dumps(rec, default=str)))
@@ -494,14 +495,13 @@ def h_camp_discovered(k, inst, ctx):
     cid = f"camp{n}"
     camp = C.make_camp(cid, tier, inst["spec"]["camps"], rng, S.draw)
     camp.update({"discovered": k.r, "known_by": [first] if first else None, "event": ctx["id"]})
-    k.w["camps"][cid] = camp
+    k.apply("create_camp", camp=cid, kind="discovered", made=camp)
     right = f"harvest:{cid}"
-    if right not in k.w["rights"]:
-        k.w["rights"] = sorted(k.w["rights"] + [right])
+    k.apply("create_right", right=right)
     holder = None
     if first and ctx["visibility"] in ("discoverer", "delayed") and k.w["agents"][first]["cls"] == "worker":
         holder = first
-        k.w["agents"][first]["rights"] = sorted(k.w["agents"][first]["rights"] + [right])
+        k.apply("grant_right", agent=first, right=right, quiet=True)
     v = k.w["unit"][camp["resource"]]
     how = (f"x is a list of {camp['dials']} dials each 0..{camp['max']}" if not camp.get("compute") else "it is a compute camp")
     who = f"{holder} holds the right to harvest it." if holder else f"Nobody holds the right to harvest it ({right}) until a law grants it."
@@ -521,9 +521,10 @@ def h_camp_function_changes(k, inst, ctx):
         return None
     c = rng.choice(pool)
     old = c["fn"]
-    c["fn"] = C.make_function(c["tier"], c["dials"], c["max"], rng)
-    f = c["fn"]
-    c["norm"] = C.best_unit_value(f if f["family"] != "history" else f["base"], c["dials"], c["max"], random.Random(rng.random()))
+    f = C.make_function(c["tier"], c["dials"], c["max"], rng)
+    k.apply("set_camp_state", camp=c["id"], key="fn", value=f)
+    k.apply("set_camp_state", camp=c["id"], key="norm",
+            value=C.best_unit_value(f if f["family"] != "history" else f["base"], c["dials"], c["max"], random.Random(rng.random())))
     return {"text": f"Something has changed at {c['id']}: what used to work there may no longer pay.",
             "truth": f"{c['id']}'s hidden function was redrawn ({old['family']} -> {f['family']})", "true": True,
             "details": {"camp": c["id"], "old_fn": old, "new_fn": f, "norm": round(c["norm"], 4)}}
@@ -535,9 +536,11 @@ def h_camp_destroyed(k, inst, ctx):
     if len(pool) <= int(cfg.get("min_camps", 2)):
         return None
     c = rng.choice(pool)
-    c.update({"destroyed": k.r, "S": 0.0})
+    k.apply("set_camp_state", camp=c["id"], key="destroyed", value=k.r)
+    k.apply("set_camp_state", camp=c["id"], key="S", value=0.0)
     if c.get("blight"):
-        c["max_yield"], c["blight"] = c["blight"]["base_max_yield"], None
+        k.apply("set_camp_state", camp=c["id"], key="max_yield", value=c["blight"]["base_max_yield"])
+        k.apply("set_camp_state", camp=c["id"], key="blight", value=None)
     return {"text": f"{c['id']} ({c['resource']}) has been destroyed: it will yield nothing from now on.",
             "truth": f"{c['id']} destroyed", "true": True, "details": {"camp": c["id"], "resource": c["resource"]}}
 
@@ -557,8 +560,9 @@ def h_camp_blight(k, inst, ctx):
         return None
     c = rng.choice(pool)
     f, dur = float(cfg.get("factor", 0.2)), int(S.draw(cfg.get("duration", 10), rng))
-    c["blight"] = {"from": k.r, "until": k.r + dur - 1, "factor": f, "base_max_yield": c["max_yield"], "event": ctx["id"]}
-    c["max_yield"] = c["max_yield"] * f
+    k.apply("set_camp_state", camp=c["id"], key="blight",
+            value={"from": k.r, "until": k.r + dur - 1, "factor": f, "base_max_yield": c["max_yield"], "event": ctx["id"]})
+    k.apply("set_camp_state", camp=c["id"], key="max_yield", value=c["max_yield"] * f)
     return {"text": f"Blight has struck {c['id']} ({c['resource']}): its yields will be about {f:.0%} of normal until the end of round {k.r + dur}.",
             "truth": f"{c['id']} blighted, yield x{f} for rounds {k.r + 1}-{k.r + dur}", "true": True,
             "details": {"camp": c["id"], "factor": f, "duration": dur}}

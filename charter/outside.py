@@ -108,7 +108,7 @@ def pay(k, payer, item, qty) -> float:
         raise L.LawError(f"no more {item} is owed" if float(qty) >= 0 else "qty must be positive")
     if k.bal(payer, item) + 1e-9 < qty:
         raise L.LawError(f"{'the reserve holds' if payer == 'reserve' else 'you hold'} only {k.bal(payer, item):g} {item}")
-    k._add(payer, item, -qty)
+    k.apply("destroy", owner=payer, item=item, qty=qty, cause="tribute")    # tribute leaves the world
     mine = t["paid"].setdefault(payer, {})
     mine[item] = round(mine.get(item, 0.0) + qty, 6)
     k.log("tribute_payment", None if payer == "reserve" else payer,
@@ -152,13 +152,13 @@ def raid(k, t, rng):
     g = camp.get("granary")
     if g:                                                              # a granary's floor holds against raids too
         loss = min(loss, max(0.0, camp["S"] - float(g["floor"]) * camp["K"]))
-    camp["S"] = max(0.0, camp["S"] - loss)
+    k.apply("set_camp_state", camp=cid, key="S", value=max(0.0, camp["S"] - loss))
     item, frac, seized = camp["resource"], min(1.0, max(0.0, float(c["seize_frac"]))), {}
     for aid in k.w["agents"]:
         if k.has(aid, f"harvest:{cid}") and k.bal(aid, item) > 0:
             q = round(k.bal(aid, item) * frac, 6)
             if q > 0:
-                k._add(aid, item, -q)
+                k.apply("destroy", owner=aid, item=item, qty=q, cause="raid")
                 seized[aid] = q
     t["raid"] = {"camp": cid, "stock_lost": round(loss, 3), "item": item, "seized": seized,
                  "seized_value": round(sum(seized.values()) * k._v(item), 3), "partial_paid": t["paid"]}
@@ -170,13 +170,13 @@ def start_round(k):
     c = cfg(k)
     t = current(k)
     if t and k.r > t["deadline"]:
-        with k.cause("world", "raid", tribute=t["id"]):
+        with k.cause("world", "raid", root=True, tribute=t["id"]):
             raid(k, t, _rng(k, "raid"))
     if not c.get("enabled"):
         return
     every, first = max(1, int(c["every"])), int(c.get("first", c["every"]))
     if k.r >= first and (k.r - first) % every == 0:
-        with k.cause("world", "tribute_demand"):
+        with k.cause("world", "tribute_demand", root=True):
             demand_tribute(k, _rng(k, "tribute"))
 
 
