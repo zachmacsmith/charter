@@ -104,11 +104,23 @@ def dist_error(v) -> str | None:
     return None
 
 
+def _num_key(k):
+    """A weights key as written: JSON turns number keys into strings ({0: 37} -> {"0": 37}), so instance.json and run files carry
+    them as strings; read them back as the numbers they were."""
+    if isinstance(k, str):
+        for cast in (int, float):
+            try:
+                return cast(k)
+            except ValueError:
+                pass
+    return k
+
+
 def dist_options(v) -> list:
     """The values a distribution can give that can be checked one by one: choice options, weights keys, uniform/randint/beta ends."""
     kind, arg = next(iter(v.items()))
     if kind == "weights":
-        return list(arg)
+        return [_num_key(k) for k in arg]
     if kind == "beta":
         return [0.0, 1.0]
     return list(arg)
@@ -127,7 +139,7 @@ def draw(v, rng: random.Random):
         return rng.choice(list(arg))
     if kind == "weights":
         keys = list(arg)
-        return rng.choices(keys, weights=[arg[k] for k in keys])[0]
+        return _num_key(rng.choices(keys, weights=[arg[k] for k in keys])[0])
     if kind == "beta":
         return rng.betavariate(*arg)
     raise ValueError(kind)
