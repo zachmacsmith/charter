@@ -14,8 +14,8 @@ Static class (by which API calls appear, so it cannot be misstated):
 from __future__ import annotations
 
 import ast
-import sys
 
+from charter import gas as G
 from charter import lawapi as LA
 
 # Version of the law API (API_GROUPS, hooks, their signatures and semantics) seen by law code. Bump it when an existing call or hook
@@ -43,15 +43,8 @@ ALLOWED_NODES = (ast.Module, ast.FunctionDef, ast.arguments, ast.arg, ast.Return
                  ast.Dict, ast.Set, ast.Subscript, ast.Slice, ast.Attribute, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp,
                  ast.GeneratorExp, ast.comprehension, ast.IfExp, ast.JoinedStr, ast.FormattedValue, ast.Starred,
                  ast.operator, ast.unaryop, ast.cmpop, ast.boolop, ast.expr_context)
-MAX_STEPS, MAX_DEPTH = 10_000, 20
-
-
-class LawError(Exception):
-    """A law failed the static check or raised at runtime (message is shown to the proposer / the Fixer)."""
-
-
-class StepLimit(LawError):
-    pass
+MAX_STEPS, MAX_DEPTH = G.MAX_STEPS, G.MAX_DEPTH
+LawError, StepLimit = G.LawError, G.StepLimit                          # defined in charter/gas.py (the meter raises them)
 
 
 def check(code: str) -> ast.Module:
@@ -60,6 +53,8 @@ def check(code: str) -> ast.Module:
         tree = ast.parse(code)
     except SyntaxError as e:
         raise LawError(f"syntax error on line {e.lineno}: {e.msg}")
+    unpack_ok = {id(e) for a in ast.walk(tree) if isinstance(a, ast.Assign) for t in a.targets if isinstance(t, (ast.Tuple, ast.List))
+                 for e in t.elts if isinstance(e, ast.Starred)}                # a, *rest = xs (metered by size); not in loops
     for node in ast.walk(tree):
         if not isinstance(node, ALLOWED_NODES):
             raise LawError(f"not allowed in law code: {type(node).__name__} (line {getattr(node, 'lineno', '?')})")
@@ -69,6 +64,10 @@ def check(code: str) -> ast.Module:
             raise LawError(f"attribute not allowed: .{node.attr} (line {node.lineno})")
         if isinstance(node, ast.FunctionDef) and (node.decorator_list or node.name.startswith("_")):
             raise LawError(f"function {node.name}: decorators and leading underscores are not allowed")
+        if isinstance(node, ast.arg) and node.arg.startswith("__"):    # a parameter could shadow the meter's names (gas.py)
+            raise LawError(f"parameter names may not start with '__': {node.arg}")
+        if isinstance(node, ast.Starred) and isinstance(node.ctx, ast.Store) and id(node) not in unpack_ok:
+            raise LawError(f"starred targets are allowed only in plain assignments (line {node.lineno})")
     names = {n.targets[0].id: n for n in tree.body if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
     for req in ("title", "intent"):
         if req not in names or not isinstance(names[req].value, ast.Constant) or not isinstance(names[req].value.value, str):
@@ -129,47 +128,31 @@ def header(code: str) -> tuple[str, str]:
 
 
 class Limited:
-    """Run law code under a step budget and a recursion depth limit (only frames compiled from law code count)."""
+    """Run law code under a step budget and a recursion depth limit: a thin wrapper over the gas meter (charter/gas.py). Only code
+    compiled by load_module is metered (it is instrumented). Each call opens a meter frame with its own per-call budget, so a law
+    hook run from inside another law's call has its own budget, as with the old line tracer."""
 
     def __init__(self, max_steps=MAX_STEPS, max_depth=MAX_DEPTH):
         self.max_steps, self.max_depth = max_steps, max_depth
+        self.meter = G.Meter()
 
     def __call__(self, fn, *args, **kw):
-        steps, depth = [0], [0]
-
-        def local(frame, event, arg):
-            if event == "line":
-                steps[0] += 1
-                if steps[0] > self.max_steps:
-                    raise StepLimit(f"law exceeded {self.max_steps} steps")
-            elif event == "return":
-                depth[0] -= 1
-            return local
-
-        def glob(frame, event, arg):
-            if event == "call" and frame.f_code.co_filename.startswith("<law:"):
-                depth[0] += 1
-                if depth[0] > self.max_depth:
-                    raise LawError(f"law exceeded recursion depth {self.max_depth}")
-                return local
-            return None
-
-        old = sys.gettrace()
-        sys.settrace(glob)
         try:
-            return fn(*args, **kw)
+            return self.meter.run(fn, args, kw, per_call=self.max_steps, max_depth=self.max_depth)
         except LawError:
             raise
         except Exception as e:
             raise LawError(f"{type(e).__name__}: {e}") from e
-        finally:
-            sys.settrace(old)
+
+
+def compile_law(code: str, law_id: str):
+    """Check, instrument (gas.instrument) and compile a law module."""
+    return compile(G.instrument(check(code)), f"<law:{law_id}>", "exec")
 
 
 def load_module(code: str, law_id: str, api: dict, state: dict, limited: Limited) -> dict:
-    """Exec a checked law module into a fresh namespace bound to `api` and `state`."""
-    tree = check(code)
-    ns = {"__builtins__": {}, **SAFE_BUILTINS, **api, "state": state}
-    compiled = compile(tree, f"<law:{law_id}>", "exec")
+    """Exec a checked law module into a fresh namespace bound to `api` and `state` (and to `limited`'s meter)."""
+    compiled = compile_law(code, law_id)
+    ns = {"__builtins__": {}, **SAFE_BUILTINS, **limited.meter.builtins, **api, "state": state, **limited.meter.runtime}
     limited(exec, compiled, ns)
     return ns
