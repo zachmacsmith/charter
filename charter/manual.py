@@ -54,6 +54,31 @@ def _is_maker(k, aid) -> bool:
     return k is not None and aid in ((k.w.get("roles") or {}).get("maker") or [])
 
 
+def turn_text(f: dict, lookups: list) -> str:
+    """"How your turn works": the layers of a turn and how lookups are answered, from the same facts as the core prompt
+    (charter.facts: lookup_mode, memory_turns, scratchpad, search_hits, free_lookups). lookups: the agent's look-up actions."""
+    notes = {"search_board": f"every public post ever made, {f['search_hits']} best matches",
+             "search_dms": f"only your own private messages, {f['search_hits']} best matches", "read_archive": "documents you hold",
+             "run_python": "your sandbox"}
+    names = ", ".join(n + (f" ({notes[n]})" if n in notes else "") for n in lookups)
+    text = (f"Each turn is built fresh from fixed parts: your state, what changed since your last turn (trimmed to a budget: the most important "
+            f"first, then counts and pointers such as \"(14 older posts not shown: search_board)\"), your own last {f['memory_turns']} turns, "
+            f"your scratchpad ({f['scratchpad']} tokens, shown every turn), the media you read, pinned files and what you look up. "
+            "Nothing else is remembered.\n")
+    if f["lookup_mode"] == "dm_step":
+        text += ("Lookups (pre-actions): list them in your reply's \"lookups\" field (each {\"lookup\": \"<name>\", \"args_json\": \"<JSON "
+                 "object>\"}). They are answered this round, in the private-message step before anyone acts: each uses one of your "
+                 "private-message slots (not an action), and you are asked again with their text (and any replies) before your actions run. "
+                 "Messages (dm, reply) listed there go out in the same step. A lookup put in \"actions\" instead uses an action and its text "
+                 "comes next turn.")
+    elif f["lookup_mode"] == "free":
+        text += (f"Lookups: before acting you may make up to {f['free_lookups']} free lookups (\"lookups\" field, with \"actions\" empty); you "
+                 "are then asked again with their text. Further lookups cost an action each and their text comes next turn.")
+    else:
+        text += "Lookups are actions in this world: each uses an action and its text comes next turn."
+    return text + (f" Lookups: {names}." if names else "") + "\nA token is about 4 characters."
+
+
 def sections(inst, k, aid) -> list:
     """The base manual: [(title, text)] in a fixed order."""
     from charter import agents as AG
@@ -63,32 +88,26 @@ def sections(inst, k, aid) -> list:
     from charter import hidden as H
     from charter import projects as P
     from charter import scorer
-    sp, c = inst["spec"], CX.cfg(inst)
+    from charter import facts as FX
+    sp = inst["spec"]
     a = _agent(inst, k, aid)
+    f = FX.facts(inst, a, k)                                            # every number below comes from the spec (or the agent)
     rights = _rights(inst, k, aid)
     lvl = ["L0", "L1", "L2", "L3", "L4"].index(inst["law_level"])
     out = []
 
     out.append(("World rules", AG.world_rules(inst)))                   # the full rules (the core prompt carries what fits)
     # module sections (Conflict, Media, Life and children) are registered in their modules: composition.manual_section
-    out.append(("How your turn works", (
-        f"Each turn is built fresh from fixed parts: your state, what changed since your last turn (trimmed to a budget: the most important "
-        f"first, then counts and pointers such as \"(14 older posts not shown: search_board)\"), your own last {c['recent_turns']} turns, "
-        f"your scratchpad ({c['budgets']['scratchpad']} tokens, shown every turn), the media you read, pinned files and what you look up. "
-        "Nothing else is remembered.\n"
-        f"Lookups: before acting you may make up to {c['free_lookups']} free lookups (\"lookups\" field, with \"actions\" empty); you are then "
-        "asked again with their text. Further lookups cost an action each and their text comes next turn. Lookups: manual, manual_search, "
-        "search_board (every public post ever made, 10 best matches), search_dms (only your own private messages), read_file, "
-        "read_archive (documents you hold).\n"
-        "A token is about 4 characters.")))
+    allowed = CX.allowed_actions(inst, a, rights, k)
+    out.append(("How your turn works", turn_text(f, [n for n in allowed if AR.REG[n].pre and not AR.REG[n].msg])))
     out.append(("Memory and files", (
         f"Scratchpad: write_scratchpad {{\"text\": \"...\", \"mode\": \"replace\"|\"append\"}} (the first each turn uses no action; append "
         "drops the oldest text when full).\n"
-        f"Files: extra files of up to {c['file_tokens']} tokens each, as much as your file space allows (your state shows what is left; "
+        f"Files: extra files of up to {f['file_tokens']} tokens each, as much as your file space allows (your state shows what is left; "
         "Scholars sell more space and pin slots). write_file {\"name\", \"text\"}; rename_file {\"name\", \"new_name\"}; "
         "delete_file {\"name\"}; share_file {\"name\", \"to\"} (a copy that takes space in the recipient's files); read_file {\"name\"} "
-        f"(a lookup). pin {{\"name\"}} keeps a file in every prompt (pin slots: {c['pin_slots']} at the start, at most "
-        f"{c['max_pin_slots']}); unpin {{\"name\"}}.\n"
+        f"(a lookup). pin {{\"name\"}} keeps a file in every prompt (pin slots: {f['pin_slots']} at the start, at most "
+        f"{f['max_pin_slots']}); unpin {{\"name\"}}.\n"
         "Files are destroyed when you leave the game unless a bequest or a deposit passes them on.")))
 
     role = AG.class_brief(inst, a).split("\nYour part of the archive")[0]
@@ -96,9 +115,8 @@ def sections(inst, k, aid) -> list:
     out.append(("Your rights", "\n".join(f"- {r}: {_right_doc(inst, k, r)}" for r in rights) or "You hold no rights."))
     out.append(("Goals in this world", AG.goal_prior(sp.get("goals"))))
 
-    allowed = CX.allowed_actions(inst, a, rights, k)
     edge, groups, kinds = CX.action_layout(allowed, rights)
-    doc = lambda ns: "\n".join("- " + (AG.action_doc(n, inst, a) if n in AG.ACTION_DOC else f"{n}: {AR.purpose(n)}") for n in ns)
+    doc = lambda ns: "\n".join("- " + (AG.action_doc(n, inst, a, f) if n in AG.ACTION_DOC else f"{n}: {AR.purpose(n)}") for n in ns)
     if edge:
         out.append(("Actions: your edge", "Only your class or roles can do these.\n" + doc(edge)))
     for g, ns in groups:
@@ -111,12 +129,12 @@ def sections(inst, k, aid) -> list:
     if sp["channels"].get("dm", True):
         dmc = sp.get("dm_step") or {}
         mine = k.dm_limit(aid) if k is not None else None
-        txt = (f"Each agent may send a limited number of private messages per round (from {dmc.get('dms_per_round', 5)} up, different for each "
-               f"agent, never above {dmc.get('max_per_round', 10)})" + (f"; yours is {mine}" if mine is not None else "") + ", new messages and replies together. Holders of dm_rules set the limit for everyone or one agent; "
+        txt = (f"Each agent may send a limited number of private messages per round (from {f['dms_per_round']} up, different for each "
+               f"agent, never above {f['max_dms_per_round']})" + (f"; yours is {mine}" if mine is not None else "") + ", new messages and replies together. Holders of dm_rules set the limit for everyone or one agent; "
                "laws can set it too. reply {\"message\": \"e42\", \"text\": \"...\", \"item\", \"qty\"} answers a message and can pay in the same action.")
         if sp.get("turns") == "simultaneous" and dmc.get("enabled"):
             txt += (f"\nThe DM step: messages in your plan are delivered before anyone's other actions and do not use actions. Whoever receives "
-                    f"one is asked again at once and may reply and replace its plan, up to {dmc.get('exchanges', 2)} exchanges per round. "
+                    f"one is asked again at once and may reply and replace its plan, up to {f['dm_exchanges']} exchanges per round. "
                     "Agreeing to something does not carry it out.")
         out.append(("Private messages and the DM step", txt))
 
@@ -133,7 +151,7 @@ def sections(inst, k, aid) -> list:
     if lvl >= 2 and not ({"lend", "accept_loan", "repay_loan"} & H.undocumented_actions(inst)
                          and not any(d.startswith("codex/law/loans") for d in _held_articles(inst, k, aid))):
         out.append(("Credit and loans", (
-            "Loans exist only while a law enables them. lend offers a loan (it lapses after 2 rounds); accept_loan takes one; repay_loan pays "
+            f"Loans exist only while a law enables them. lend offers a loan (it lapses after {f['offer_lapse']} rounds); accept_loan takes one; repay_loan pays "
             "in full or in part; extend_loan (lender only) rolls one over. Interest is a rate per round, simple or compounding. A debt unpaid "
             "at its due round is in default; what default costs (seizure, sanctions, nothing) is set by law. Every agent's credit record is "
             "public. A coin with a par redeems at par first come first served while the reserve lasts; a shortfall suspends redemption.")))
@@ -161,8 +179,10 @@ def sections(inst, k, aid) -> list:
         others = _others_titles(inst, aid)
         if others:
             out.append(("What other Scientists hold", others))
-        out.append(("Your archive", _archive_head(k, aid, only) + "Read with read_archive {\"doc\": \"<id>\"} (as a lookup it is answered "
-                    "before you act this round).\n" + _mark_read(k, aid, idx)))
+        how = ("an action; the text comes next turn" if f["lookup_mode"] == "action" else
+               "as a lookup it is answered before you act this round")
+        out.append(("Your archive", _archive_head(k, aid, only) + f"Read with read_archive {{\"doc\": \"<id>\"}} ({how}).\n"
+                    + _mark_read(k, aid, idx)))
     return out
 
 
@@ -208,6 +228,13 @@ def _others_titles(inst, aid) -> str:
     if not (inst["spec"].get("archive_split") or {}).get("show_others", True):
         return ""
     mine = set(next((a.get("archive_docs") or [] for a in inst["agents"] if a["id"] == aid), []))
+    paths = archive.docs(None, gated=True)                             # walked once (archive.title walks the archive on every call)
+
+    def title(d):
+        if paths.get(d) is None:
+            return archive.title(d)
+        with open(paths[d]) as fh:
+            return fh.readline().lstrip("# ").strip() or d
     lines = []
     for a in inst["agents"]:
         if a["id"] == aid or not a.get("archive_docs"):
@@ -216,7 +243,7 @@ def _others_titles(inst, aid) -> str:
         if not theirs:
             lines.append(f"- {a['id']}: only the README")
             continue
-        lines.append(f"- {a['id']}: " + "; ".join(archive.title(d) + ("" if d not in mine else " (you hold it too)") for d in theirs))
+        lines.append(f"- {a['id']}: " + "; ".join(title(d) + ("" if d not in mine else " (you hold it too)") for d in theirs))
     if not lines:
         return ""
     return ("Titles only: what each other Scientist holds (the library's law code aside). The contents are theirs to share, trade, sell "

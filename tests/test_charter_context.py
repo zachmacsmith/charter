@@ -198,6 +198,49 @@ def test_manual_differs_by_agent_and_updates():
         CX.manual_text(k, w1, "no such thing at all")
 
 
+def test_manual_cache_matches_a_fresh_build(monkeypatch):
+    """build_manual is cached per agent; the cached manual always equals a fresh build, also after changes that log no event."""
+    from charter import hidden as H
+    inst, k = world(["context.file_space=600", "context.pin_slots=1"])
+    w, sci = by_cls(k, "worker")[0], by_cls(k, "scientist")[0]
+    fresh = CX._build_manual
+    for aid in (w, sci):
+        assert CX.build_manual(inst, k, aid) == fresh(inst, k, aid)
+    calls = []
+    monkeypatch.setattr(CX, "_build_manual", lambda *x: calls.append(x[2]) or fresh(*x))
+    agent = next(x for x in inst["agents"] if x["id"] == w)
+    CX.core_prompt(inst, agent, k)                                       # the manual index, unread counts
+    CX.manual_changes(k, w)
+    CX.manual_text(k, w, "Your rights")
+    assert calls == []                                                   # one turn's builds come from the cache
+
+    def same():
+        m = CX.build_manual(inst, k, w)
+        assert m == fresh(inst, k, w)
+        return m
+    before = same()
+    k.w["agents"][w]["rights"].append("surveil")                         # a right, written without an event
+    m = same()
+    assert m != before
+    CX.write_file(k, w, "plan", "p" * 400)                               # files (rename, share, pin become possible)
+    m, before = same(), m
+    assert m != before
+    CX.pin(k, w, "plan")                                                 # pins (unpin becomes possible)
+    m, before = same(), m
+    assert m != before
+    art = sorted(d for d in H.catalogue(inst) if d.startswith("codex/law/") and d not in H.held_articles(k, w))[0]
+    H.grant_article(k, w, art, notify=False)                             # a held article
+    m, before = same(), m
+    assert m != before
+    k.set_dm_limit(1, w)                                                 # the agent's message limit
+    m, before = same(), m
+    assert m != before
+    k.log("notify", None, {"text": "x"}, vis=[w])                       # any event, and a new round
+    same()
+    k.w["round"] += 1
+    same()
+
+
 def test_law_docs_tiers_respected_in_manual():
     inst, k = world()
     w = by_cls(k, "worker")[0]
