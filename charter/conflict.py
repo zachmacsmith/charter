@@ -36,6 +36,7 @@ import random
 import re
 from pathlib import Path
 
+from charter import library as _LB
 from charter import mortality as M
 from charter import roles as R
 
@@ -785,46 +786,8 @@ LAW_DOCS = [   # (name, signature, detail): lawdocs.E entries in group "Conflict
     ("clear_obligations", "clear_obligations()", "removes every guard obligation this law made. Structural."),
 ]
 
-LAWS = {   # library laws for conflict (kept here, not in library.LIB, so worlds without conflict are unchanged)
-    "Arms Control": '''title = "Arms Control"
-intent = "Nobody may forge weapons while this law is in force."
-
-def on_enact():
-    ban_forging(True)
-
-def on_repeal():
-    ban_forging(False)
-''',
-    "Mutual Defence Pact": '''title = "Mutual Defence Pact"
-intent = "Every agent outside the Board and the Fixer is obliged to guard every other: an attack on one meets the forts of all."
-
-def bind():
-    clear_obligations()
-    members = [a for a in agents() if class_of(a) not in ["board", "fixer"]]
-    for g in members:
-        for a in members:
-            if g != a:
-                oblige_guard(g, a)
-
-def on_enact():
-    bind()
-
-def on_round_start(r):
-    bind()
-''',
-    "Bounty on Aggressors": '''title = "Bounty on Aggressors"
-intent = "Whoever openly disables an agent who had earlier disabled someone in an unlawful attack receives up to 10 timber from the reserve."
-
-def on_round_end(r):
-    aggressors = []
-    for x in attacks(200):
-        if x["success"] and x["attacker"] is not None and not x["lawful"] and x["round"] < r:
-            aggressors.append(x["attacker"])
-    for x in attacks(200):
-        if x["round"] == r and x["success"] and x["attacker"] is not None and x["target"] in aggressors:
-            move("reserve", x["attacker"], "timber", min(10, reserve().get("timber", 0)))
-''',
-}
+# library laws for conflict: library.LIB category "conflict", gated to worlds with conflict on (library.GATED_CATEGORIES)
+LAWS = {n: v["code"] for n, v in _LB.LIB.items() if v["category"] == "conflict"}
 
 
 # ------------------------------------------------------------------ prompts, feeds, state

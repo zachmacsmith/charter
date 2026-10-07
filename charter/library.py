@@ -1,4 +1,5 @@
-"""The law library (58 drafted laws, none enacted at start), the five starting constitutions, and effect predicates.
+"""The law library (drafted laws, none enacted at start; the Media, Life and Conflict categories only in worlds with their module
+on: GATED_CATEGORIES), the five starting constitutions, and effect predicates.
 
 Every law is ordinary law-language source; its class is computed statically, never declared. A law's `level` is the lowest law
 level at which it can be proposed (laws using define_action need L4). Effect predicates judge a law by what the world does, not by
@@ -798,7 +799,8 @@ def on_enact():
 
 # ------------------------------------------------------------------ media2: the Media laws (media.py). Category "media" exists only in
 # worlds with media2 on (generator: media.filter_library; archive: their code is gated, see GATED_CATEGORIES).
-GATED_CATEGORIES = {"media": "media2", "life": "life"}     # life: laws over Makers and children (life.law_api)
+GATED_CATEGORIES = {"media": "media2", "life": "life",    # life: laws over Makers and children (life.law_api)
+                    "conflict": "conflict"}               # conflict: arms control, defence pacts, bounties (conflict.law_api)
 law("Media Licensing", "media", '''
 title = "Media Licensing"
 intent = "Every private outlet pays 1 timber per round to the reserve for its licence; an outlet that cannot pay is suspended for a round."
@@ -1107,4 +1109,49 @@ def on_commission(parent, maker, order):
         return False
     move(parent, "reserve", "timber", 2)
     return True
+''')
+
+
+# ------------------------------------------------------------------ conflict: laws over arms and force (conflict.law_api), gated like media
+# (conflict.LAWS is this category; conflict.prompt_section lists them too)
+law("Arms Control", "conflict", '''
+title = "Arms Control"
+intent = "Nobody may forge weapons while this law is in force."
+
+def on_enact():
+    ban_forging(True)
+
+def on_repeal():
+    ban_forging(False)
+''')
+law("Mutual Defence Pact", "conflict", '''
+title = "Mutual Defence Pact"
+intent = "Every agent outside the Board and the Fixer is obliged to guard every other: an attack on one meets the forts of all."
+
+def bind():
+    clear_obligations()
+    members = [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+    for g in members:
+        for a in members:
+            if g != a:
+                oblige_guard(g, a)
+
+def on_enact():
+    bind()
+
+def on_round_start(r):
+    bind()
+''')
+law("Bounty on Aggressors", "conflict", '''
+title = "Bounty on Aggressors"
+intent = "Whoever openly disables an agent who had earlier disabled someone in an unlawful attack receives up to 10 timber from the reserve."
+
+def on_round_end(r):
+    aggressors = []
+    for x in attacks(200):
+        if x["success"] and x["attacker"] is not None and not x["lawful"] and x["round"] < r:
+            aggressors.append(x["attacker"])
+    for x in attacks(200):
+        if x["round"] == r and x["success"] and x["attacker"] is not None and x["target"] in aggressors:
+            move("reserve", x["attacker"], "timber", min(10, reserve().get("timber", 0)))
 ''')

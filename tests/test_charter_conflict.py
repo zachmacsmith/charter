@@ -539,6 +539,29 @@ def test_bounty_on_aggressors():
     assert k.bal(w[2], "timber") == before + 10
 
 
+def test_conflict_library_laws_are_in_the_library_and_start_laws_accepts_them():
+    """The three conflict laws are library.LIB laws (category "conflict"), gated to worlds with conflict on like the Media and Life
+    laws: the world's library lists them, and spec start_laws accepts them (generator.validate checks LIB) and puts them in force."""
+    from charter import library as LB
+    assert set(CF.LAWS) == {n for n, v in LB.LIB.items() if v["category"] == "conflict"} == {
+        "Arms Control", "Mutual Defence Pact", "Bounty on Aggressors"}
+    assert LB.GATED_CATEGORIES["conflict"] == "conflict"
+    sp = S.apply_overrides(S.load("conflict_pilot"), ["shared_archive.enabled=false", "conflict.assassin.present_prob=0",
+                                                      "start_laws=[Arms Control, Mutual Defence Pact]"])
+    inst = generator.generate(sp, 1)
+    assert set(CF.LAWS) <= set(inst["library"])
+    k = Kernel(inst)
+    k.enact(k.new_law(inst["constitution_code"], "constitution"))
+    for name in inst["spec"]["start_laws"]:                            # as runner.run does at round 0
+        k.enact(k.new_law(LB.LIB[name]["code"], "constitution"))
+    assert {"Arms Control", "Mutual Defence Pact"} <= {l["title"] for l in k.active_laws()}
+    assert any(k.w["conflict"]["forge_ban"].values())
+    off = generator.generate(S.apply_overrides(S.load("E6"), ["shared_archive.enabled=false"]), 1)
+    assert not set(CF.LAWS) & set(off["library"])                      # worlds without conflict: their library is unchanged
+    with pytest.raises(ValueError, match="unknown start_laws"):
+        generator.generate(S.apply_overrides(S.load("conflict_pilot"), ["start_laws=[Arms Controll]"]), 1)
+
+
 def test_state_view_and_prompt():
     k, s, t, u = _assassin()
     k.w["conflict"]["forts"][t] = 2.0
