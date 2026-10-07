@@ -6,9 +6,15 @@ Writes to the run directory (checkpointed every round, so a crash keeps everythi
   reasoning.jsonl    per agent turn: private reasoning, notes, chosen actions, results, usage (stored apart from the event log)
   snapshots.json     per-round state (holdings, rights, vote weights, decisive set, predicates, efficiency, welfare)
   ground_truth.json  goals, constitution law id, start values, final laws (code, patches), goal guesses, shared-archive snapshot
-  checkpoint.pkl     full state after the last complete round (kernel, law data and callbacks, agents' notes and feed cursors,
-                     offsets of every append-only file in provenance.APPEND_ONLY): `run(..., resume=True)` continues from it,
-                     trimming anything logged after it
+  checkpoint.pkl     state after the last complete round (kernel world, law data and callbacks, RNG states, agents' notes and feed
+                     cursors, offsets of every append-only file in provenance.APPEND_ONLY): `run(..., resume=True)` continues from
+                     it, trimming anything logged after it. State only: the event log, snapshots and turn log are read back from
+                     events.jsonl, snapshots.json and turns.jsonl up to the recorded offsets and counts (format 2; a format-1
+                     checkpoint, which holds them, still resumes).
+  checkpoints/rNNNN.pkl  the same checkpoint for every round: rNNNN = after N complete rounds (r0000: before round 1); index.json
+                     lists each with its offsets and size. `python -m charter rewind RUN --to N` continues a copy from one.
+                     Retention: keep_checkpoints / CHARTER_KEEP_CHECKPOINTS ("all", the default, or K: every K-th and the latest).
+  turns.jsonl        k.turn_log (one row per agent turn: reasoning, actions, results), appended at each checkpoint
   run.json           provenance (code, repository state, python, backend, dry flag, spec sha) and one segment per start/resume
   calls.jsonl        every model call: raw replies, retries, errors, latency, system prompt hash -> prompts/system/<sha>.txt
 
@@ -21,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import pickle
+import shutil
 import time
 from pathlib import Path
 
@@ -116,16 +123,17 @@ def _as_item(q) -> dict | None:
 
 
 def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=(), dry=None,
-        instance_source=None) -> Path:
+        instance_source=None, until=None, keep_checkpoints=None) -> Path:
     """dry: recorded in run.json (None: inferred from the policy, scripted = dry). instance_source: how a resume got its world
-    (recorded in the segment)."""
+    (recorded in the segment). until: stop (paused, resumable) after that many rounds (replay --to). keep_checkpoints: per-round
+    checkpoint retention (None: CHARTER_KEEP_CHECKPOINTS, else all)."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     k = Kernel(inst, sandbox)
     agents = {a["id"]: a for a in inst["agents"]}
     ckpt_path = out / "checkpoint.pkl"
     resuming = resume and ckpt_path.exists()
-    ck = pickle.loads(ckpt_path.read_bytes()) if resuming else None
+    ck = load_checkpoint(out, ckpt_path) if resuming else None
     PV.begin(out, inst, policy, "resume" if resuming else "start", ck["round"] + 1 if resuming else 0, dry=dry,
              checkpoint_version=ck.get("version") if resuming else None, instance_source=instance_source)   # before --live edits inst["spec"]
     if resuming:
@@ -139,6 +147,9 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         PV.truncate(out, ck["files"], why=f"cut on resume from the checkpoint after round {first_round}")   # drop whatever was logged after the checkpoint
         reason_f, ev_f = open(out / "reasoning.jsonl", "a"), open(out / "events.jsonl", "a")
         n_ev = len(k.events)
+        n_turns = len(k.turn_log) if ck.get("format", 1) >= 2 else 0
+        if not n_turns:                                                 # a format-1 checkpoint: turns.jsonl starts from its turn log
+            (out / "turns.jsonl").write_text("")
         FS.clear(out)
         log(f"  resuming after round {first_round} of {inst['rounds']}")
         _apply_live(k, inst, dict(k.w.get("live") or {}), log, announce=False)   # settings switched on in earlier resumes
@@ -159,7 +170,10 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         notes, cursors, results, guesses, welfare_series = {}, {}, {}, {}, []
         start_values = {a: k.holdings_value(a) for a in agents}
         reason_f, ev_f = open(out / "reasoning.jsonl", "w"), open(out / "events.jsonl", "w")
-        n_ev = 0
+        (out / "turns.jsonl").write_text("")
+        if (out / CKPT_DIR).exists():                                   # a fresh start: no per-round checkpoints of an earlier run
+            shutil.rmtree(out / CKPT_DIR)
+        n_ev = n_turns = 0
         first_round = 0
     obs = OBS.start(inst, out, k, ck["runner"].get("observer") if resuming else None)   # secret observer or None
     policy = PV.Recorder(policy, out, append=resuming)                 # calls.jsonl and prompts/system/<sha>.txt
@@ -181,7 +195,15 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                 "const": const, "policy_rng": policy.rng.getstate() if hasattr(policy, "rng") else None,
                 "observer": obs.state() if obs else None}
 
+    keep = keep_checkpoints if keep_checkpoints is not None else os.environ.get("CHARTER_KEEP_CHECKPOINTS", "all")
+
     def offsets():
+        nonlocal n_turns
+        if len(k.turn_log) > n_turns:                                   # the turn log goes to turns.jsonl, not into checkpoints
+            with open(out / "turns.jsonl", "a") as tf:
+                for t in k.turn_log[n_turns:]:
+                    tf.write(json.dumps(t, default=list) + "\n")
+            n_turns = len(k.turn_log)
         for f in (ev_f, reason_f, obs.f if obs else None, policy):
             if f is not None:
                 f.flush()
@@ -193,7 +215,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         n_ev = len(k.events)
         (out / "snapshots.json").write_text(json.dumps(k.snapshots, default=list))
         _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=False)
-        _checkpoint(ckpt_path, -1, k, runner_state(), offsets())
+        _checkpoint(ckpt_path, -1, k, runner_state(), offsets(), keep)
     fail_frac = FS.fraction(inst["spec"]["llm"])
 
     def stop_if_failing(r, tally):
@@ -208,7 +230,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
             PV.end(out, "stopped", r - 1)
             raise RunStopped(msg)
 
-    for r in range(first_round, inst["rounds"]):
+    last_round = inst["rounds"] if until is None else max(first_round, min(inst["rounds"], int(until)))
+    for r in range(first_round, last_round):
         k.start_round()
         EV.round_start(k, inst, ev_rs)                                  # world events, goal changes, arrivals and departures
         CF.sync_runner(k, agents)                                       # conflict: disabled agents leave the turn order
@@ -275,7 +298,8 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                     seen[aid] = len(k.events)
                     asks.append((aid, AG.dm_prompt(k, agents[aid], preps[aid][2], decisions[aid][0], plan[aid], new, k.w["dm_sent"].get(aid, 0), k.dm_limit(aid),
                                                     preps[aid][1], wave + 1, waves, final)))
-                outs = in_parallel(lambda q: policy.act(k, agents[q[0]], sysp[q[0]], q[1], preps[q[0]][1], final), asks)
+                outs = in_parallel(lambda q: policy.act(k, agents[q[0]], sysp[q[0]], q[1], preps[q[0]][1], final,
+                                                        key={"phase": "dm_reply", "wave": wave + 1}), asks)
                 agent_calls = [(o, q[0]) for o, q in zip(outs, asks) if not (obs and q[0] == obs.id)]   # the observer never counts
                 tally.add([o[0] for o, _ in agent_calls], [a for _, a in agent_calls])
                 stop_if_failing(r, tally)
@@ -325,7 +349,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
             if not asks:
                 return {}
             preps2 = [prepare(aid) for aid, _, _ in asks]
-            outs = in_parallel(lambda p: policy.act(k, p[0], sysp[p[0]["id"]], p[2], p[1], final), preps2)
+            outs = in_parallel(lambda p: policy.act(k, p[0], sysp[p[0]["id"]], p[2], p[1], final, key={"phase": "lookup"}), preps2)
             tally.add([o[0] for o in outs], [aid for aid, _, _ in asks])
             stop_if_failing(r, tally)
             return {aid: (p, o) for (aid, _, _), p, o in zip(asks, preps2, outs)}
@@ -403,7 +427,9 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
             oprep = obs.step_prepare(k, final) if obs and dm_step and obs.in_dm_step \
                 and k.w["agents"][obs.id].get("departed") is None else None   # observer's DM-step turn (roles: not once removed)
             xsysp = {**sysp, **({obs.id: obs.system} if oprep else {})}
-            decisions = in_parallel(lambda pr: policy.act(k, pr[0], xsysp[pr[0]["id"]], pr[2], pr[1], final), preps + ([oprep] if oprep else []))
+            decisions = in_parallel(lambda pr: policy.act(k, pr[0], xsysp[pr[0]["id"]], pr[2], pr[1], final,
+                                                          key={"phase": "observer_step" if pr is oprep else "decide"}),
+                                    preps + ([oprep] if oprep else []))
             odec = decisions.pop() if oprep else None
             tally.add([d[0] for d in decisions], order)                   # agents only: the observer never counts
             stop_if_failing(r, tally)
@@ -429,18 +455,18 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                 if CF.skip_turn(k, aid) or k.w["agents"][aid].get("departed") is not None:   # conflict, life: removed earlier this round
                     continue
                 pr = prepare(aid)
-                dec = policy.act(k, pr[0], sysp[aid], pr[2], pr[1], final)
+                dec = policy.act(k, pr[0], sysp[aid], pr[2], pr[1], final, key={"phase": "decide"})
                 tally.add([dec[0]], [aid])
                 stop_if_failing(r, tally)                               # mid-round: the round is abandoned, nothing kept
                 if cx and (got := cx_lookups([(aid, pr, dec)])):       # context: lookup phase, then the action call
                     pr, dec = got[aid]
                 execute(pos, aid, pr, dec)
         if obs:                                                         # the secret observer reads and acts after everyone
-            obs.turn(k, r, policy, final, reason_f, mode)
+            obs.turn(k, r, PV.Keyed(policy, phase="observer"), final, reason_f, mode)
         k.end_round(PREDICATES)
         k.snapshots[-1]["welfare"] = welfare(k)
         welfare_series.append(k.snapshots[-1]["welfare"])
-        MD.editorial_turns(k, policy, agents, sysp, in_parallel, reason_f, results, r, final)   # media2: editors write next round's editions
+        MD.editorial_turns(k, PV.Keyed(policy, phase="editorial"), agents, sysp, in_parallel, reason_f, results, r, final)   # media2: editors write next round's editions
         for e in k.events[n_ev:]:
             ev_f.write(json.dumps(e, default=list) + "\n")
         n_ev = len(k.events)
@@ -448,7 +474,7 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         (out / "snapshots.json").write_text(json.dumps(k.snapshots, default=list))
         _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=False)
         reason_f.flush()
-        _checkpoint(ckpt_path, r, k, runner_state(), offsets())
+        _checkpoint(ckpt_path, r, k, runner_state(), offsets(), keep)
         _live(out, f"round {r + 1} of {inst['rounds']} complete", full=True)
         log(f"  round {r + 1}/{inst['rounds']} done ({time.time() - t0:.0f}s): laws {len(k.active_laws())}, "
             f"currencies {list(k.w['currencies'])}, decisive set {len(k.snapshots[-1]['decisive_set'])}")
@@ -457,16 +483,81 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
     policy.close()
     if obs:
         obs.close()
-    _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=True)
-    PV.end(out, "complete", inst["rounds"] - 1)
+    complete = last_round == inst["rounds"]
+    _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=complete)
+    PV.end(out, "complete" if complete else "paused", last_round - 1)
     return out
 
 
-def _checkpoint(path, r, k, runner_state, files):
-    """Write checkpoint.pkl atomically (a crash while writing keeps the previous one)."""
+CKPT_DIR = "checkpoints"
+CKPT_FORMAT = 2                                                         # 2: state only (logs read back from the files); 1: logs inside
+
+
+def ckpt_name(n: int) -> str:
+    """The per-round checkpoint after n complete rounds (r0000: before round 1)."""
+    return f"r{n:04d}.pkl"
+
+
+def _atomic(path: Path, data: bytes) -> None:
     tmp = path.with_suffix(".tmp")
-    tmp.write_bytes(pickle.dumps({"version": STATE_SCHEMA, "round": r, "kernel": k.checkpoint_state(), "runner": runner_state, "files": files}))
+    tmp.write_bytes(data)
     os.replace(tmp, path)
+
+
+def _checkpoint(path, r, k, runner_state, files, keep="all"):
+    """Write the state after round r (-1: before round 1) atomically to checkpoints/r<r+1>.pkl and checkpoint.pkl (the latest; a
+    crash while writing keeps the previous one). State only: the event log, snapshots and turn log are counted, not copied."""
+    st = k.checkpoint_state()
+    counts = {"events": len(st.pop("events")), "snapshots": len(st.pop("snapshots")), "turn_log": len(st.pop("turn_log"))}
+    blob = pickle.dumps({"version": STATE_SCHEMA, "format": CKPT_FORMAT, "round": r, "kernel": st, "counts": counts,
+                         "runner": runner_state, "files": files})
+    d = Path(path).parent / CKPT_DIR
+    d.mkdir(exist_ok=True)
+    n = r + 1
+    _atomic(d / ckpt_name(n), blob)
+    _atomic(Path(path), blob)
+    idx_p = d / "index.json"
+    try:
+        idx = json.loads(idx_p.read_text())
+    except (OSError, json.JSONDecodeError):
+        idx = {}
+    for x in [x for x in idx if int(x) > n]:                            # a resume replays later rounds: their old checkpoints go
+        (d / idx.pop(x)["file"]).unlink(missing_ok=True)
+    idx[str(n)] = {"round": r, "file": ckpt_name(n), "bytes": len(blob), "files": files, "counts": counts}
+    if str(keep) not in ("all", "", "0", "None"):                       # retention: every K-th (and r0000) plus the latest
+        every = int(keep)
+        for x in list(idx):
+            if int(x) != n and int(x) % every:
+                (d / idx[x]["file"]).unlink(missing_ok=True)
+                del idx[x]
+    _atomic(idx_p, json.dumps(idx, indent=1).encode())
+
+
+def _read_prefix(p: Path, size: int) -> list:
+    """The JSON rows of an append-only file up to a byte offset."""
+    if not size:
+        return []
+    with open(p, "rb") as f:
+        data = f.read(size)
+    return [json.loads(ln) for ln in data.splitlines() if ln.strip()]
+
+
+def load_checkpoint(out, path) -> dict:
+    """A checkpoint with its kernel state complete: a format-2 (state-only) checkpoint gets its event log, turn log and snapshots
+    back from events.jsonl, turns.jsonl (up to the recorded offsets) and snapshots.json (the recorded count)."""
+    out = Path(out)
+    ck = pickle.loads(Path(path).read_bytes())
+    if ck.get("format", 1) < 2:
+        return ck
+    st, n = ck["kernel"], ck["counts"]
+    st["events"] = _read_prefix(out / "events.jsonl", ck["files"].get("events.jsonl", 0))
+    st["turn_log"] = _read_prefix(out / "turns.jsonl", ck["files"].get("turns.jsonl", 0))
+    snaps = json.loads((out / "snapshots.json").read_text()) if n["snapshots"] else []
+    st["snapshots"] = snaps[:n["snapshots"]]
+    got = {"events": len(st["events"]), "snapshots": len(st["snapshots"]), "turn_log": len(st["turn_log"])}
+    if got != n:
+        raise RuntimeError(f"{out}: the logs do not match the checkpoint after round {ck['round'] + 1} (expected {n}, found {got})")
+    return ck
 
 
 def _live(out, status, full=False):

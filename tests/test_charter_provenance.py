@@ -189,7 +189,7 @@ def test_llm_attempts_keep_raw_text_and_failed_attempts(tmp_path, monkeypatch):
                                                                                 "SYSTEM", "USER", 3, False)
     row = _jsonl(tmp_path / "calls.jsonl")[-1]
     assert out["_error"] and row["error"] == out["_error"] and [x["ok"] for x in row["attempts"]] == [False, False]
-    assert row["call"] == "r4:a1:0"                                     # a new Recorder (a new segment) counts from 0 again
+    assert row["call"] == "r4:a1:1" and row["key"] == "r4:observer:0:a1:1"   # a new Recorder (a resume) goes on from the kept calls
 
 
 # ------------------------------------------------------------------ checkpoint offsets: the member Spy's observer.jsonl
