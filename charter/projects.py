@@ -506,7 +506,7 @@ def state_lines(k, aid) -> list[str]:
     return ["Open projects (contribute {\"project\", \"item\", \"qty\"}):\n  " + "\n  ".join(out)]
 
 
-def render_event(e, tag) -> str | None:
+def render_event(k, e, tag, viewer=None) -> str | None:
     d, t, who = e["data"], e["type"], e["agent"]
     if t == "project_open":
         return f"{tag} NEW PROJECT {d['project']} ({d['kind']}): {d['description']}"

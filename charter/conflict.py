@@ -36,6 +36,7 @@ import random
 import re
 from pathlib import Path
 
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import library as _LB
 from charter import mortality as M
@@ -79,11 +80,11 @@ def config(spec: dict) -> dict:
 
 
 def enabled_inst(inst: dict) -> bool:
-    return bool(((inst.get("spec") or {}).get("conflict") or {}).get("enabled"))
+    return FT.on("conflict", inst)
 
 
 def on(k) -> bool:
-    return "conflict" in k.w
+    return FT.on("conflict", k)
 
 
 def _cfg(k) -> dict:
@@ -840,7 +841,7 @@ def _intent(code) -> str:
     return m.group(1) if m else ""
 
 
-def render(k, e, tag):
+def render_event(k, e, tag, viewer=None):
     d, t = e["data"], e["type"]
     if t == "disabled":
         who, cause = d["agent"], d.get("cause")
@@ -918,7 +919,7 @@ def snapshot_fields(k) -> dict:
                          "assassin": R.holders(k, "assassin")}}
 
 
-def truth(k) -> dict:
+def truth(k, inst=None) -> dict:
     """ground_truth.json["conflict"] (monitor-only): every attack with its true attacker, covert and disguised strikes, accidents,
     contracts, article holders and the assassin."""
     if not on(k):

@@ -41,6 +41,7 @@ import copy
 import random
 import re
 
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import context as CTX
 from charter import jurisdictions as J
@@ -106,11 +107,11 @@ def config(spec: dict) -> dict:
 
 
 def enabled_spec(spec: dict) -> bool:
-    return bool(((spec or {}).get("media2") or {}).get("enabled"))
+    return FT.on("media", spec or {})
 
 
 def enabled(k) -> bool:
-    return enabled_spec(k.spec) and "media" in k.w
+    return FT.on("media", k)
 
 
 def _cfg(k) -> dict:
@@ -1283,7 +1284,7 @@ def snapshot_fields(k) -> dict:
                       "official_editors": {j: o["editor"] for j, o in m["official"].items()}}}
 
 
-def truth(k) -> dict:
+def truth(k, inst=None) -> dict:
     if not enabled(k):
         return {}
     m = k.w["media"]

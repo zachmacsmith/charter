@@ -50,6 +50,7 @@ import json
 import math
 import random
 
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
 from charter import mortality as MO
@@ -99,7 +100,7 @@ def cfg(spec) -> dict:
 
 
 def enabled(spec) -> bool:
-    return bool((spec.get("life") or {}).get("enabled"))
+    return FT.on("life", spec)
 
 
 def state(k) -> dict:
@@ -1058,7 +1059,7 @@ def absent_actions(inst, a) -> set:
     return out
 
 
-def render_event(e, tag) -> str | None:
+def render_event(k, e, tag, viewer=None) -> str | None:
     if e["type"] == "birth_rules":
         d = e["data"]
         rules = ", ".join(f"{x.replace('_', ' ')} {y}" for x, y in (d.get("rules") or {}).items() if y)
@@ -1111,7 +1112,7 @@ def scripted_actions(k, aid, n) -> list:
 
 
 # ---------------------------------------------------------------------- truth and scoring
-def truth(k) -> dict:
+def truth(k, inst=None) -> dict:
     st = k.w.get("life")
     if st is None:
         return {}

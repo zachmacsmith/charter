@@ -413,7 +413,7 @@ def end_round(k):
                                      "reserve_ratio": reserve_ratio(k, cur)}, vis="public")
 
 
-def snapshot(k) -> dict:
+def snapshot_fields(k) -> dict:
     out = {"reserve_ratio": {}, "redemption": {}, "redemption_demand": dict(st(k)["demand"])}
     for cur, c in k.w["currencies"].items():
         out["reserve_ratio"][cur] = reserve_ratio(k, cur)

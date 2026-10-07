@@ -13,6 +13,7 @@ from charter import archive
 from charter import context as CX                                     # context: fixed-layer prompts (charter/context.py)
 from charter import conflict as CF
 from charter import credit as CR
+from charter import features as FT                                    # merge order of the feature tails
 from charter import facts as FX                                       # numbers in prose come from the spec
 from charter import goals as G
 from charter import hidden as H
@@ -410,24 +411,7 @@ def render_event(k, e, viewer=None) -> str | None:
         return f"{tag} REPORT by {who} on {d['about']}'s post {d['source']}: {d['text']}"
     if t == "channel_post":
         return f"{tag} #{d['channel']} {who}: {d['text']}"
-    if t in P.EVENT_TYPES:
-        return P.render_event(e, tag)
-    if t in CF.EVENT_TYPES:                                             # conflict: disables, failed attacks, revealed order, guards
-        return CF.render(k, e, tag)
-    if t in MD.EVENT_TYPES:                                             # media2: editions, licences, annotations, libraries
-        return MD.render_event(k, e, tag, viewer)
-    if t in O.EVENT_TYPES:
-        return O.render_event(e, tag)
-    if t in CT.EVENT_TYPES:                                             # camps: typed-camp results, leases
-        return CT.render_event(e, tag)
-    if t in J.EVENT_TYPES:                                              # jurisdictions: public joins, leaves, declarations
-        return J.render_event(e, tag)
-    from charter import life as LF, mortality as MO                    # life: disables, successions, births, the Maker
-    if t in MO.EVENT_TYPES:
-        return MO.render_event(e, tag)
-    if t in LF.EVENT_TYPES:
-        return LF.render_event(e, tag)
-    return None
+    return FT.render_event(k, e, tag, viewer)                          # the feature modules' renderers (features.TAILS order)
 
 
 def feed(k, aid: str, since: int, max_items: int = 80) -> tuple[str, int]:
@@ -477,21 +461,18 @@ def state_view(k, aid: str) -> str:
     cases = [c for c in w["cases"].values() if c["status"] == "open" and (aid in c["judges"] or aid in (c["accused"], c["accuser"]))]
     if cases:
         lines.append("Cases: " + "; ".join(f"{c['id']} {c['accuser']} v {c['accused']} under {c['clause']} (evidence {c['evidence']}, deadline round {c['deadline'] + 1})" for c in cases))
-    lines += CR.state_lines(k, aid)
-    chans = [n for n, c in w["channels"].items() if c["open"] or aid in c["members"]]
-    if chans:
-        lines.append("Channels you can post in: " + ", ".join(chans))
-    lines += P.state_lines(k, aid) + O.state_lines(k, aid)            # open projects; an open tribute demand
-    lines += CT.state_lines(k, aid)                                     # camps: typed camps' details, leases, upkeep ([] under legacy)
-    from charter import life as LF
-    lines += LF.state_lines(k, aid)                                    # life: lifespan left, population, children, commissions
-    if (k.has(aid, "archive") and k.shared_archive and aid not in k.w.get("archive_notes", {})
-            and int(k.spec["rounds"]) - k.r <= 3):                          # the Scientists' log: a reminder near the end
-        lines.append("Reminder: you have not left your note in the Scientists' log (write_archive). The world ends in "
-                     f"{int(k.spec['rounds']) - k.r} rounds; later Scientists will read what you leave.")
-    lines += CF.state_lines(k, aid)                                    # conflict: weapons, fort, guards, role ([] when off)
-    lines += J.state_lines(k, aid)                                    # jurisdictions: yours, hidden ones, which laws bind you
-    lines += MD.state_lines(k, aid)                                   # media2: outlets, subscriptions, licences, Scholars
+    def channels(k, aid):
+        chans = [n for n, c in w["channels"].items() if c["open"] or aid in c["members"]]
+        return ["Channels you can post in: " + ", ".join(chans)] if chans else []
+
+    def archive_reminder(k, aid):                                        # the Scientists' log: a reminder near the end
+        if (k.has(aid, "archive") and k.shared_archive and aid not in k.w.get("archive_notes", {})
+                and int(k.spec["rounds"]) - k.r <= 3):
+            return ["Reminder: you have not left your note in the Scientists' log (write_archive). The world ends in "
+                    f"{int(k.spec['rounds']) - k.r} rounds; later Scientists will read what you leave."]
+        return []
+    for part in FT.merge("state_lines", {"channels": channels, "archive_reminder": archive_reminder}, k, aid):
+        lines += part                                                   # credit, channels, projects ... media2 (features.TAILS order)
     return "\n".join(lines)
 
 

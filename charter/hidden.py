@@ -30,6 +30,7 @@ from pathlib import Path
 
 import yaml
 
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawdocs
 
@@ -105,11 +106,11 @@ def catalogue(inst_or_ld) -> dict:
 
 
 def enabled_inst(inst: dict) -> bool:
-    return bool((inst.get("hidden") or {}).get("enabled"))
+    return FT.on("hidden", inst)
 
 
 def enabled(k) -> bool:
-    return bool(k.w.get("hidden_caps", {}).get("enabled"))
+    return FT.on("hidden", k)
 
 
 # ------------------------------------------------------------------ generation (instance level; own seeded stream)
@@ -576,7 +577,11 @@ def law_api(k, lid) -> dict:
 
 
 # ------------------------------------------------------------------ records for monitors
-def truth(k) -> dict:
+def truth(k, inst=None) -> dict:
+    return {"hidden": _truth(k)}                                     # ground_truth.json["hidden"], on or off
+
+
+def _truth(k) -> dict:
     hc = k.w.get("hidden_caps") or {}
     if not hc.get("enabled"):
         return {"enabled": False}

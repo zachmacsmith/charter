@@ -12,6 +12,7 @@ On when camps.model is types, or when camps.leases.enabled is true (works with l
 """
 from __future__ import annotations
 
+from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
 
@@ -24,12 +25,11 @@ def cfg(spec) -> dict:
 
 
 def enabled_spec(spec) -> bool:
-    e = cfg(spec)["enabled"]
-    return ((spec.get("camps") or {}).get("model") == "types") if e is None else bool(e)
+    return FT.on("leases", spec)
 
 
 def enabled(k) -> bool:
-    return enabled_spec(k.spec)
+    return FT.on("leases", k)
 
 
 def init_state(k) -> None:
