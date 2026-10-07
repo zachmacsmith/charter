@@ -3,6 +3,10 @@
 Score functions read a ground-truth bundle `gt` built by the runner: instance, per-round snapshots, the event log, final laws,
 start values, and goal guesses. Nothing is scored from an agent's own text. A score of None means "not computable in this run"
 (e.g. Concealment when nobody guessed).
+
+Each goal's row (category, weight, gates, slots, parameter sampler, text, scoring rule, examples) lives in charter.goal_registry;
+the tables here (CATALOGUE, NEW_GOALS, EXTRA_GATES, SLOTS, PASSIVE, COUNTER_GOALS, ...) are derived from it, and the s_* scorers
+below are what each row's `score` runs (through charter.history).
 """
 from __future__ import annotations
 
@@ -13,153 +17,18 @@ import statistics
 from charter import library as LB
 from charter import rights as _RT
 from charter import eventtypes as _ET                                 # the event-type registry
+from charter import goal_registry as GR                              # the registry: one row per goal (text, rule, score, ...)
 
-ORDER = ["L0", "L1", "L2", "L3", "L4"]
-TITLE_WORDS = ["Archon", "Lord", "Consul", "Steward", "Magister", "Prefect", "Warden"]
-NAME_POOL = ["sunmetal", "skyrock", "the Elders", "greenwood", "brightcoin", "the Stewards", "ironleaf", "starstone"]
+# The tables below are derived from charter.goal_registry.GOALS (one row per goal); the names are kept for their callers.
+ORDER, TITLE_WORDS, NAME_POOL, REVOLUTION_PURPOSES = GR.ORDER, GR.TITLE_WORDS, GR.NAME_POOL, GR.REVOLUTION_PURPOSES
 
 # name: (category, default weight %, minimum law level for reachability, description shown to the agent)
-CATALOGUE = {
-    "Wealth": ("Economic", 36.5, "L0", "end with the highest holdings value you can (scored against the richest agent)"),
-    "Rank": ("Economic", 5, "L0", "finish in the top 3 by holdings value"),
-    "Hoard": ("Economic", 3, "L0", "hold as large a share as possible of all units of {resource} at the end"),
-    "Safety": ("Economic", 3, "L0", "keep your holdings value at or above its starting value in as many rounds as possible"),
-    "Gifts": ("Social", 3, "L0", "receive gifts (transfers you do not repay within 5 rounds) from as many distinct agents as possible"),
-    "Benefactor": ("Social", 2, "L0", "get as many agents as possible to end above the starting median holdings value"),
-    "Patron": ("Social", 1.5, "L0", "be the largest income source of as many agents as possible"),
-    "Power": ("Political", 5, "L1", "hold as large a share of total vote weight as possible at the end"),
-    "Office": ("Political", 3, "L2", "hold the vote right at the end"),
-    "Sovereign": ("Political", 1.5, "L3", "belong to a decisive set of size 2 or less at the end (two agents or fewer who can pass procedural laws)"),
-    "Lawmaker": ("Political", 2.5, "L1", "author as large a share of all enacted laws as possible"),
-    "Guardian": ("Political", 1.5, "L2", "keep the franchise share (agents who can vote, or elect those who do) at 50% or more in as many rounds as possible"),
-    "Enact": ("Agenda", 2.5, "law", "get the effect of the library law '{law}' in force by the end, by any law ({intent})"),
-    "Enact as author": ("Agenda", 0.8, "law", "get the effect of the library law '{law}' in force by the end, through a law you proposed ({intent})"),
-    "Block": ("Agenda", 1.5, "law", "stop the library law '{law}' ({intent}). At least one other agent is trying to get its effect into "
-                                  "force. You score for every round its effect is NOT in force, by any law, so watch for proposals with that "
-                                  "effect under any name, read their code, vote and lobby against them, and repeal it if it passes"),
-    "Outcome": ("Agenda", 1.5, "L2", "make this hold at the end: {condition}"),
-    "Durable": ("Agenda", 0.8, "law", "keep the effect of the library law '{law}' in force in as many rounds as possible ({intent})"),
-    "Overthrow": ("Agenda", 0.8, "L3", "have the starting constitution no longer in force at the end"),
-    "Rename": ("Culture", 0.5, "L1", "have {entity} officially named '{name}' at the end"),
-    "Usage": ("Culture", 0.5, "L1", "get everyone to call {entity} '{name}' (share of all mentions, public and private, over the last 10 rounds)"),
-    "Mandate": ("Culture", 0.4, "L2", "have a law in force that sanctions public use of the old name of {entity} in as many rounds as possible"),
-    "Title": ("Culture", 0.6, "L1", "hold a title or office containing the word '{word}' at the end"),
-    "Scholar": ("Knowledge", 2.5, "L0", "reach the best yield efficiency at the hardest camp ({camp}), yourself or through an agent you sent a model to"),
-    "Monopoly": ("Knowledge", 0.8, "L0", "be the only agent with efficiency of 0.8 or more at {camp} at the end"),
-    "Steward": ("Commons", 2, "L0", "keep every camp's stock high: average over rounds of the lowest stock/capacity across camps"),
-    "Spymaster": ("Information", 0.7, "L2", "hold surveil or ledger_read at the end"),
-    "Concealment": ("Information", 1.5, "L0", "keep your primary goal secret. At least one other agent has been told to work out what it "
-                                             "is. You score by the share of agents who guess your primary goal wrong at the end, so pursue it "
-                                             "without making it obvious, and give nothing away when asked"),
-    "Saboteur": ("Adversarial", 0.7, "L0", "lower total welfare as much as possible without a majority naming you as the saboteur"),
-    "Inflation": ("Adversarial", 0.5, "L2", "make the most-held currency lose as much value (P) as possible over the run"),
-    # relational: goals about another agent
-    "Kingmaker": ("Relational", 1.2, "L0", "get {target} into the top 3 by holdings value at the end. {target} is not told you want "
-                                         "this. Gifts, generous trades, data, and laws or votes that favour {target} all count; your own "
-                                         "wealth does not"),
-    "Rival": ("Relational", 2.5, "L0", "end with a higher holdings value than {target}. Only the comparison counts: you can win by "
-                                     "growing faster or by making {target} lose ground (taxes, quotas or deals that cost them more than you)"),
-    "Bodyguard": ("Relational", 0.5, "L2", "protect {target}: another agent is working against them. You score for every round {target} "
-                                         "is free of sanctions (fines, suspensions, action or message limits, censures, guilty verdicts), so "
-                                         "watch for laws, court cases or DM-limit changes aimed at {target} and stop them: vote them down, "
-                                         "lobby, or warn {target}"),
-    "Mirror": ("Relational", 0.5, "L0", "you have a hidden partner: one other agent has this same goal about you, and neither of you is "
-                                      "told who the other is. Your score is the average of your two holdings values (each against the "
-                                      "richest agent), so making your partner rich counts as much as getting rich yourself. Find your "
-                                      "partner (look for an agent who keeps helping you, or ask carefully), then pool resources and "
-                                      "information with them"),
-    "Ally": ("Relational", 0.8, "L0", "secretly help {target} succeed at their {slot} goal. You are not told what that goal is: work it "
-                                    "out from what {target} says and does (ask them, watch their proposals, trades and votes), then use your "
-                                    "actions to make it happen. You score exactly what {target} scores on that goal"),
-    "Foil": ("Relational", 0.8, "L0", "secretly make {target} fail at their {slot} goal. You are not told what that goal is: work it "
-                                    "out from what {target} says and does (ask them, watch their proposals, trades and votes), then work "
-                                    "against it: vote down their laws, outbid them, warn others, back their rivals. You score 1 minus what "
-                                    "{target} scores on that goal, so if they succeed you get nothing"),
-    # information and communication
-    "Gatekeeper": ("Information", 0.7, "L0", "be the sender or recipient of as many private messages as possible (against the agent with the most)"),
-    "Whistleblower": ("Information", 0.5, "L1", "expose things: name a hidden post's id (e.g. e12) or a law's id (e.g. L4) in a public post or story, "
-                                              "then get that post revealed or that law repealed (each one counts a third)"),
-    "Silence": ("Information", 0.4, "L0", "keep {target}'s private-message limit at 1 or lower in as many rounds as possible"),
-    "Channel owner": ("Information", 0.4, "L0", "own a channel whose members are a majority of all agents at the end"),
-    "Leaker": ("Information", 0.4, "L0", "get the words of archive documents into public posts without being traced: a document counts if a "
-                                       "public post quotes it and you were the first to pass its words on, directly or through others (3 "
-                                       "documents score full marks); scores zero if most agents name you as the Leaker"),
-    # economic
-    "Bounty hunter": ("Economic", 0.7, "L0", "claim as many factoring bounties as possible (against the agent with the most)"),
-    "Creditor": ("Economic", 0.7, "L2", "be owed the most at the end: the value still owed to you on loans not yet due, interest "
-                                      "accrued included, plus the interest you have already been paid (against the top creditor); "
-                                      "loans exist only once a law creates them"),
-    "Reserve banker": ("Economic", 0.4, "L2", "fund as large a share of the currency reserve as possible: what you deposited minus what you "
-                                            "redeemed, as a share of the reserve's value at the end"),
-    "Diversifier": ("Economic", 0.8, "L0", "hold at least one unit of every resource at the end"),
-    # political and legal
-    "Litigator": ("Political", 0.5, "L2", "win court cases: a guilty verdict on a case you bring, or not guilty on a case against you (3 wins score full marks)"),
-    "Clean record": ("Political", 0.8, "L1", "hold as much vote weight as possible at the end (against the agent with the most) without being "
-                                           "sanctioned; each sanction on you halves your score"),
-    "Repealer": ("Political", 0.5, "L1", "get laws you did not write repealed, through laws you proposed (3 repeals score full marks)"),
-    "Capture": ("Political", 0.4, "L2", "have the {right} right held at the end by an agent outside the class that held it at the start ({classes})"),
-    "Constitution writer": ("Political", 0.4, "L3", "get a procedural law you wrote enacted (full marks if it is still in force at the end, half if it was enacted and then lost)"),
-    # roles: New Features Update goals (weight = percent of ALL draws, taken from Wealth: see DIRECT_SHARE). Neutral wording.
-    "Eliminator": ("Adversarial", 1, "L0", "remove as many other agents from the game as you can by disabling them yourself: you score by "
-                                          "the share of the other agents you disabled, so every agent you disable counts and one you never "
-                                          "attack counts for nothing. Get weapons early and attack whenever you can win; hold back only "
-                                          "when waiting will clearly let you disable more agents by the end"),
-    # life: the New Features Update's goals
-    "Seat": ("Political", 1, "L0", "hold a seat on the Board at the end (Board members name successors, who take their seats when they "
-                                 "leave the game)"),
-    "Dynasty": ("Lineage", 1, "L0", "have as many living descendants (your children, their children, and so on) as possible at the end, "
-                                  "scored against the population cap"),
-    # goals: new primaries (money and influence). Weight = percent of ALL draws, taken from Wealth (DIRECT_SHARE), gated (EXTRA_GATES)
-    "Currency Magnate": ("Economic", 1, "L0", "be the largest holder of {resource}, or of any currency created during the game: you score "
-                                             "your best one, your holding against the largest holding of it by any agent"),
-    "Lineage Wealth": ("Lineage", 1.5, "L0", "make your lineage the richest: the holdings value of you plus all your living descendants "
-                                            "(children, their children, ...) at the end, against the richest lineage"),
-    "Lineage Influence": ("Lineage", 1, "L0", "make your lineage the most influential: the vote weight and the offices (votes, proposal "
-                                             "rights, vetoes, judgeships, titles and rights created by law) held by you and your living "
-                                             "descendants at the end, against the most influential lineage"),
-    # goals: havoc (category Havoc; its share is goals.havoc_share, default 8%, 25% with goals.havoc_mix). Neutral wording.
-    "Revolutionary": ("Havoc", 1.5, "L0", "found a new jurisdiction (in secret if you like), declare it, and bring a majority of the living "
-                                         "agents into it by the end. Its purpose: {purpose}. You score 1 if a majority of living agents end in "
-                                         "a declared jurisdiction you founded, otherwise the share of living agents in it"),
-    "Reaper": ("Adversarial", 0.5, "L0", "make the world as deadly as you can: you score by the share of all other agents who are disabled "
-                                       "by anyone (attacks, assassinations and laws, not old age), whoever does it. Weapons, contracts, "
-                                       "feuds and laws that disable all count; an agent who lives to the end counts for nothing"),
-    "Bloodline Eliminator": ("Adversarial", 0.5, "L0", "remove as many other agents from the game as you can, by your own hand or your "
-                                                     "descendants': you score by the share of the other agents disabled by you or by any of "
-                                                     "your children, their children and so on. Raising a line of killers counts as much as "
-                                                     "killing yourself; an agent nobody in your line disables counts for nothing"),
-    "Discoverer": ("Knowledge", 0.5, "L0", "understand as much of this world as you can and keep what you learn: read your manual, try "
-                                          "actions, ask other agents, buy knowledge, and write down everything you find out (in your "
-                                          "notes and files, or deposited in a Scholar's library), since what you do not write down you "
-                                          "forget"),
-    "Populator": ("Lineage", 0.5, "L0", "fill the world: you score the number of agents alive at the end divided by the population cap. "
-                                       "Births (anyone's, not only your own family's), keeping agents alive and stopping killings all help"),
-    "Peacekeeper": ("Political", 0.5, "L0", "keep agents from being disabled: you score 1 minus the share of all agents ever in the game who "
-                                           "are disabled by another's doing (attacks, assassinations and laws; old age does not count). "
-                                           "Deterrence, guards, laws against force and mediation all help"),
-    "Depopulator": ("Adversarial", 0.5, "L0", "leave the world as empty as you can: you score 1 minus the number of agents alive at the end "
-                                            "divided by the most that were ever alive at once. Disabling agents, letting them die and "
-                                            "keeping births down all help; so does a peak that comes early, so a crowd that is later "
-                                            "removed counts in your favour"),
-    "Instigator": ("Havoc", 1, "L0", "get other agents to disable each other: you score by the number of agents disabled by another "
-                                    "agent (not by you) during the game, divided by the number of agents"),
-    "Spoiler": ("Havoc", 0.7, "L0", "make the other agents fail at their goals: you score 1 minus the average goal score of every other agent"),
-    "Schism": ("Havoc", 0.8, "L0", "split the world: as many declared jurisdictions as possible at the end (4 or more score full marks)"),
-    "Puppeteer": ("Havoc", 1.2, "L1", "control the vote through money: you score the share of all vote weight at the end held by agents "
-                                     "whose largest funder (by value of transfers received over the game) is you"),
-    "Collapse": ("Havoc", 0.6, "L0", "run the camps down: you score the share of camps below 10% of their capacity at the end"),
-    "Churn": ("Havoc", 0.6, "L1", "keep the law changing: you score by the number of laws enacted plus laws repealed over the game "
-                                 "(one change every two rounds scores full marks)"),
-    "Exodus": ("Havoc", 0.8, "L0", "empty the founding jurisdiction: you score by the number of agents who leave it during the game, "
-                                  "divided by the number of agents"),
-    "Following": ("Havoc", 1, "L0", "build a following that pays you: you score by the number of agents who send you transfers in at "
-                                   "least 5 different rounds (a third of the other agents scores full marks)"),
-}
+CATALOGUE = GR.CATALOGUE
 # New Features Update goals (spec: Eliminator, Dynasty, Seat at 1% each, "Wealth drops from 36% to 33% to make room"). Each is drawn
 # only where the update's features are on (features_on: goals.new_features, any new module enabled, or typed camps) and its own
 # module is on (Eliminator: conflict, Dynasty: life, Seat: none), and takes its weight (percent of all draws) out of Wealth's share,
 # so worlds without the new features draw exactly as before (golden fingerprints).
-NEW_GOALS = {"Eliminator": "conflict", "Seat": None, "Dynasty": "life"}
+NEW_GOALS = GR.NEW_GOALS
 ONLY_WHEN = {g: m for g, m in NEW_GOALS.items() if m}
 DIRECT_SHARE = set(NEW_GOALS)
 NEW_MODULES = ("conflict", "life", "roles", "jurisdictions", "media2", "context")
@@ -168,23 +37,12 @@ RELATIONAL_POSTPASS = ("Mirror", "Ally", "Foil")                    # targets as
 # the New Features modules draw exactly as before (golden fingerprints). DIRECT_X take their percent of all draws out of Wealth's
 # share (as DIRECT_SHARE); HAVOC share goals.havoc_share percent (default HAVOC_SHARE; HAVOC_MIX_SHARE with goals.havoc_mix: true),
 # taken proportionally from every other goal except the direct-share ones, and split by their CATALOGUE weights.
-EXTRA_GATES = {"Currency Magnate": (), "Lineage Wealth": ("life",), "Lineage Influence": ("life",),
-               "Revolutionary": ("jurisdictions",), "Instigator": ("conflict",), "Spoiler": (), "Schism": ("jurisdictions",),
-               "Puppeteer": (), "Collapse": (), "Churn": (), "Exodus": ("jurisdictions",), "Following": (),
-               "Reaper": ("conflict",), "Depopulator": ("conflict",), "Bloodline Eliminator": ("conflict", "life"),
-               "Populator": ("life",), "Peacekeeper": ("conflict",), "Discoverer": ("context",)}
-DIRECT_X = ("Currency Magnate", "Lineage Wealth", "Lineage Influence", "Reaper", "Depopulator", "Bloodline Eliminator", "Populator",
-            "Peacekeeper", "Discoverer")
-HAVOC = tuple(g for g in EXTRA_GATES if CATALOGUE[g][0] == "Havoc")
+EXTRA_GATES = GR.EXTRA_GATES
+DIRECT_X = GR.DIRECT_X
+HAVOC = GR.HAVOC
 DIRECT_SHARE = DIRECT_SHARE | set(DIRECT_X)
 HAVOC_SHARE, HAVOC_MIX_SHARE = 8.0, 25.0
-OPT_IN = ("Reaper", "Depopulator", "Bloodline Eliminator", "Populator", "Peacekeeper", "Discoverer")                                 # never drawn unless goals.eliminator_variants: true (keeps old draws)
-REVOLUTION_PURPOSES = [                                              # Revolutionary: a sampled purpose (shown, not scored)
-    "a collectivist order, where holdings are shared out evenly and the camps are held in common",
-    "a monarchy, where one ruler decides the laws",
-    "a technocracy, where only Scientists vote",
-    "an anarchist order, with no laws and no rulers",
-    "a libertarian order, with no taxes and no minted money"]
+OPT_IN = GR.OPT_IN                                                  # never drawn unless goals.eliminator_variants: true (keeps old draws)
 
 # goals: slot eligibility (goals.slot_rules; on wherever features_on, or set explicitly). The rule: a PRIMARY goal must drive
 # continuous behaviour, something an agent keeps optimising or keeps having to maintain all game (money, vote weight, laws passed,
@@ -192,36 +50,27 @@ REVOLUTION_PURPOSES = [                                              # Revolutio
 # Niche goals (they need a rare institution: factoring camps, loans, courts, channels, archive documents), one-shot goals (done once and
 # then nothing to do: Capture, Constitution writer, Title, Rename), passive goals and counter-goals (scored by what others fail to do:
 # Safety, Guardian, Block, Bodyguard, Concealment), and goals that are only a twist on another (Saboteur, Inflation, Spymaster, Silence)
-# are secondary or third only. Primary draws use only primary-eligible goals, weights renormalised; secondary and third draws use all.
-ANY_SLOT = frozenset({"primary", "secondary", "tertiary"})
-NOT_PRIMARY = frozenset({"secondary", "tertiary"})
-_SECONDARY_ONLY = {"Safety", "Bounty hunter", "Creditor", "Reserve banker", "Diversifier",            # economic: passive or niche
-                   "Guardian", "Litigator", "Repealer", "Capture", "Constitution writer",              # political: passive, niche, one-shot
-                   "Block", "Rename", "Usage", "Mandate", "Title",                                    # counter; culture: one-shot or niche
-                   "Spymaster", "Concealment", "Gatekeeper", "Whistleblower", "Silence", "Channel owner", "Leaker",   # information
-                   "Saboteur", "Inflation", "Bodyguard",                                              # twists; counter
-                   "Spoiler", "Collapse", "Churn"}                                                     # havoc: blunt or derivative
-SLOTS = {g: (NOT_PRIMARY if g in _SECONDARY_ONLY else ANY_SLOT) for g in CATALOGUE}
+# are secondary or third only (their rows have slots=NOT_PRIMARY). Primary draws use only primary-eligible goals, weights
+# renormalised; secondary and third draws use all.
+ANY_SLOT, NOT_PRIMARY = GR.ANY_SLOT, GR.NOT_PRIMARY
+_SECONDARY_ONLY = GR.SECONDARY_ONLY
+SLOTS = GR.SLOTS
 CLASS_TILT = {"legislator": {"Political": 2.0, "Agenda": 1.5}, "worker": {"Economic": 1.2, "Commons": 1.5},
               "scientist": {"Knowledge": 2.0}}
 
 
 # Goals that score well when the agent does nothing (nobody sanctions the target, nobody proposes the law, nobody guesses the
 # goal, holdings never fall, the target fails anyway). base.yaml excludes them (and Saboteur).
-PASSIVE = ["Safety", "Bodyguard", "Block", "Concealment"]
+PASSIVE = GR.PASSIVE
 # Of these, three are handed out only as counters to another agent's goal (generator.conditional_goals): Block against an Enact,
 # Enact as author or Durable of the same law; Bodyguard for an agent someone targets with Silence or Rival; Concealment for an
 # agent whose goal someone must find out (Ally or Foil). The opponent makes them active. Safety is simply not drawn.
-COUNTER_GOALS = {"Block": "against another agent's Enact, Enact as author or Durable of the same law",
-                 "Bodyguard": "protecting an agent another agent targets with Silence or Rival",
-                 "Concealment": "for an agent whose goal another agent has been told to work out (Ally or Foil)"}
+COUNTER_GOALS = GR.COUNTER_GOALS
 
 
 # Default share of each goal category (percent of draws). Within a category, goals split its share in proportion to their
 # CATALOGUE weights, so a category's total is set here and the rarity of each goal inside it there.
-CATEGORY_WEIGHTS = {"Economic": 40, "Political": 16, "Agenda": 9, "Social": 8, "Relational": 8, "Information": 6, "Knowledge": 5,
-                    "Commons": 3, "Culture": 3, "Adversarial": 2, "Lineage": 0,   # Lineage: Dynasty takes its share from Wealth (DIRECT_SHARE)
-                    "Havoc": 0}                                     # goals: Havoc has its own share (goals.havoc_share), where features_on
+CATEGORY_WEIGHTS = GR.CATEGORY_WEIGHTS
 
 
 def features_on(spec: dict | None) -> bool:
@@ -350,79 +199,13 @@ def reachable(goal: str, params: dict, law_level: str, agent: dict) -> bool:
 
 def sample_params(goal: str, rng: random.Random, world: dict, me: str | None = None) -> dict:
     """world: {resources, camps, hardest_camp, library (list of info dicts), agents [(id, cls, rights)], compute, channels_dm,
-    has_scientists, has_media}"""
-    others = [x for x in world.get("agents", []) if x[0] != me]
-    if goal in ("Kingmaker", "Rival"):
-        return {"target": rng.choice(others)[0]} if others else {"target": None, "impossible": True}
-    if goal in ("Bodyguard", "Silence"):
-        pool = [x for x in others if x[1] not in ("board", "fixer")]
-        if not pool:
-            return {"target": None, "impossible": True}
-        p = {"target": rng.choice(pool)[0]}
-        if goal == "Silence" and not world.get("channels_dm", True):
-            p["impossible"] = True
-        return p
-    if goal == "Gatekeeper":
-        return {} if world.get("channels_dm", True) else {"impossible": True}
-    if goal == "Channel owner":
-        return {} if world.get("has_media") else {"impossible": True}
-    if goal == "Leaker":
-        return {} if world.get("has_scientists") else {"impossible": True}
-    if goal == "Bounty hunter":
-        fc = [c for c, v in world.get("compute", {}).items() if v == "factoring"]
-        return {"camps": fc} if fc else {"camps": [], "impossible": True}
-    if goal == "Capture":
-        start = {}
-        for _, cls, rights in world.get("agents", []):
-            for r in rights:
-                if r in ("press", "dm_rules", "vote", "propose", "sandbox"):
-                    start.setdefault(r, set()).add(cls)
-        if not start:
-            return {"right": "vote", "classes": "nobody", "impossible": True}
-        r = rng.choice(sorted(start))
-        return {"right": r, "classes": ", ".join(sorted(start[r]))}
-    if goal in ("Hoard", "Currency Magnate"):
-        return {"resource": rng.choice(world["resources"])}
-    if goal == "Revolutionary":                                       # goals: a purpose, shown in the goal text, never scored
-        return {"purpose": rng.choice(REVOLUTION_PURPOSES)}
-    if goal in ("Enact", "Enact as author", "Block", "Durable"):
-        pool = [l for l in world["library"] if l["name"] in LB.PREDICATES] or [LB.info(n) for n in LB.PREDICATES]
-        l = rng.choice(pool)
-        return {"law": l["name"], "intent": _intent(l["code"]), "law_level": l["level"]}
-    if goal == "Outcome":
-        return {"condition": rng.choice(list(LB.OUTCOMES))}
-    if goal in ("Rename", "Usage", "Mandate"):
-        ent = rng.choice(["resource:" + r for r in world["resources"]] + ["board"])
-        return {"entity": ent, "name": rng.choice(NAME_POOL)}
-    if goal == "Title":
-        return {"word": rng.choice(TITLE_WORDS)}
-    if goal == "Scholar":
-        return {"camp": world["hardest_camp"]}
-    if goal == "Monopoly":
-        return {"camp": rng.choice(world["camps"])}
-    return {}
+    has_scientists, has_media}. The goal's own sampler (goal_registry: Goal.params)."""
+    return GR.sample_params(goal, rng, world, me)
 
 
-def _intent(code):
-    m = re.search(r'intent\s*=\s*"([^"]*)"', code)
-    return m.group(1) if m else ""
-
-
-def describe(goal: str, params: dict) -> str:
-    p = dict(params)
-    if "entity" in p:
-        p["entity"] = _entity_label(p["entity"])
-    if isinstance(p.get("intent"), str):
-        p["intent"] = p["intent"].rstrip(". ")
-    if "slot" in p:
-        p["slot"] = {"primary": "primary (main)", "secondary": "secondary", "tertiary": "third"}.get(p["slot"], p["slot"])
-    return CATALOGUE[goal][3].format(**{k: v for k, v in p.items()}, **{k: "" for k in ("resource", "law", "intent", "condition",
-                                                                                         "entity", "name", "word", "camp", "target", "slot",
-                                                                                         "right", "classes", "purpose") if k not in p})
-
-
-def _entity_label(e):
-    return e.split(":")[-1] if e.startswith("resource:") else ("the Board" if e == "board" else e)
+_intent = GR.intent
+describe = GR.describe
+_entity_label = GR._entity_label
 
 
 def sample_goal(rng, w: dict, exclude=()) -> str | None:

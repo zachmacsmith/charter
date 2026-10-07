@@ -44,6 +44,7 @@ import random
 
 from charter import camps as C
 from charter import goals as G
+from charter import goal_registry as GR
 from charter import media as MD                                       # media2
 from charter import spec as S
 
@@ -248,14 +249,7 @@ def _goal_text(g, sw):
     from charter import generator as GEN
     ws = GEN.score_weights(g, sw)
     g["weights"] = ws
-    if len(ws) == 1:
-        g["text"] = G.describe(g["primary"], g["params"])
-    else:
-        parts = [f"Primary goal ({ws[0]:.0%} of your score): {G.describe(g['primary'], g['params'])}.",
-                 f"Secondary goal ({ws[1]:.0%}): {G.describe(g['secondary'], g['secondary_params'])}."]
-        if len(ws) == 3:
-            parts.append(f"Third goal ({ws[2]:.0%}): {G.describe(g['tertiary'], g['tertiary_params'])}.")
-        g["text"] = " ".join(parts)
+    g["text"] = GR.slot_text(g, ws)
     return g
 
 

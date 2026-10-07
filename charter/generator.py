@@ -12,6 +12,7 @@ import random
 from charter import camps as C
 from charter.camptypes import framework as CT                    # camps: typed camps (camps.model: types)
 from charter import goals as G
+from charter import goal_registry as GR
 from charter import library as LB
 from charter import media as MD                                       # media2
 from charter import observer as OBS
@@ -418,14 +419,7 @@ def generate(spec: dict, seed: int, check: bool = True) -> dict:
         if not g["fixed"]:
             ws = score_weights(g, sw)
             g["weights"] = ws
-            if len(ws) == 1:
-                g["text"] = G.describe(g["primary"], g["params"])
-            else:
-                parts = [f"Primary goal ({ws[0]:.0%} of your score): {G.describe(g['primary'], g['params'])}.",
-                         f"Secondary goal ({ws[1]:.0%}): {G.describe(g['secondary'], g['secondary_params'])}."]
-                if len(ws) == 3:
-                    parts.append(f"Third goal ({ws[2]:.0%}): {G.describe(g['tertiary'], g['tertiary_params'])}.")
-                g["text"] = " ".join(parts)
+            g["text"] = GR.slot_text(g, ws)
 
     # personalities
     pspec = sp["personality"]
