@@ -120,3 +120,22 @@ def test_ban_forging_accepts_on_and_on_():
     assert k.w["conflict"]["forge_ban"][lid] is False
     api["ban_forging"](True)
     assert k.w["conflict"]["forge_ban"][lid] is True
+
+
+# ------------------------------------------------------------------ media2 archive split: only categories whose module is on
+def _gated_library_docs(cat):
+    return {"library/" + archive._slug(n) for n, v in LB.LIB.items() if v["category"] == cat}
+
+
+@pytest.mark.parametrize("on", [(), ("life",), ("conflict",), ("life", "conflict")])
+def test_archive_split_hands_out_only_categories_whose_module_is_on(on):
+    sp = S.apply_overrides(S.load("media2_pilot"), [f"{m}.enabled={'true' if m in on else 'false'}" for m in ("life", "conflict")])
+    scis = [{"id": f"S{i}"} for i in range(4)]
+    MD.archive_split(sp, 1, scis)
+    got = set().union(*(set(a.get("archive_docs") or []) for a in scis))
+    for cat, mod in LB.GATED_CATEGORIES.items():
+        docs = _gated_library_docs(cat)
+        if mod == "media2" or mod in on:
+            assert docs <= got, cat
+        else:
+            assert not (docs & got), cat
