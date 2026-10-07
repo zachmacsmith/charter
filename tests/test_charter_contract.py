@@ -50,9 +50,13 @@ LIVE = [p for p in PR.PRIMITIVES.values() if p.status == "live"]
 #     name_successor, suspend_law, drift, invite, declare, set_charter, found, dissolve, licence, improve_camp.
 #   - ARCHITECTURE §3.3 "seize (= move with why)": not a separate primitive here (credit.settle seizes with k.move and logs a
 #     `sanction`); `convert` covers forge, deposit and redeem; `fortify` stays separate (its own event path, force family).
-#   - review 09 §4.3 sketches on_birth with verdict "directive" and on_exit as after-only: both as implemented. on_harvest and
-#     on_transfer also fire in Kernel.probe previews (root kind "preview" in the alias filter). on_exit fires for law-caused moves
-#     too (expel/admit, applied at round end): its filter is always-true.
+#   - review 09 §4.3 sketches on_birth with verdict "directive" on begin_life and on_exit as after-only. P2.4d: on_birth is a
+#     before-alias of join (via "born": jurisdictions.assign_newborn, where it always ran, after the birth itself), its directive is
+#     "jurisdiction"; on_exit is a BEFORE-alias of leave (verdict ignored): it has always run before the member leaves, while laws
+#     still bind it, so an exit tax or seizure works. That closes ("gate", "leave"): a law can charge a leaver. on_harvest and
+#     on_transfer also fire in Kernel.probe previews (root kind "preview" in the alias filter); on_harvest fires for every typed
+#     camp's yield (via "typed", also paid at the end of the round). on_exit fires for law-caused moves too (expel/admit, applied
+#     at round end): every actual exit (not a request, via "leave", nor leaving a hidden jurisdiction, via "unpledge").
 #   - ARCHITECTURE §3.13: lawlang.HOOKS is "primitives + clock + lifecycle + ALIASES"; until P2.x dispatches before_/after_ hooks,
 #     only the live ones (today's 15, in today's order) are in it; the derived 160+ rows are in primitives.HOOKS with live=False.
 #   - ARCHITECTURE §3.8 names the registry eventtypes.EVENTS; it is eventtypes.REG at 827c74a.
@@ -71,7 +75,7 @@ KNOWN_GAPS = frozenset({
     ("gate", "mint"), ("gate", "burn"), ("gate", "destroy"), ("gate", "set_dm_limit"), ("gate", "set_initiative"),
     ("gate", "set_will"), ("gate", "name_successor"), ("gate", "subscribe"), ("gate", "licence"), ("gate", "set_price"),
     ("gate", "library_doc"), ("gate", "library_permit"), ("gate", "set_capacity"), ("gate", "found"), ("gate", "invite"),
-    ("gate", "leave"), ("gate", "admit"), ("gate", "expel"), ("gate", "declare"), ("gate", "dissolve"), ("gate", "offer_loan"),
+    ("gate", "admit"), ("gate", "expel"), ("gate", "declare"), ("gate", "dissolve"), ("gate", "offer_loan"),
     ("gate", "open_loan"), ("gate", "settle_loan"), ("gate", "loan_terms"), ("gate", "improve_camp"), ("gate", "contribute"),
     ("gate", "invoke"), ("gate", "request_fix"), ("gate", "open_case"), ("gate", "answer_case"),
 })
@@ -332,6 +336,7 @@ def test_alias_filters_reproduce_today_s_firing():
     assert not w("on_transfer").when(_p("move", why="transfer_tax"), T)               # the tax itself
     assert not w("on_transfer").when(_p("move", why="harvest_fee"), T)
     assert w("on_harvest").when(_p("harvest"), T) and not w("on_harvest").when(_p("harvest"), LAW)
+    assert w("on_harvest").when(_p("harvest", via="typed"), LAW)                      # a typed camp's yield at the end of the round
     for kind, fires in (("post", True), ("anon_post", True), ("story", True), ("channel_post", False), ("submission", False),
                         ("annotation", False), ("report", False)):
         assert w("on_post").when(_p("post", kind=kind), T) is fires, kind
@@ -340,8 +345,10 @@ def test_alias_filters_reproduce_today_s_firing():
     assert w("on_dm").args(_p("dm", encrypted=True))[2] is None
     assert w("on_dm").args(_p("dm", shown_as="a9"))[0] == "a9"
     assert w("on_admission").when(_p("join", via="join"), T) and not w("on_admission").when(_p("join", via="admit"), LAW)
-    assert w("on_exit").when(_p("leave"), LAW)                                        # law_caused: expel/admit moves too
-    assert w("on_birth").when(_p("begin_life", how="born"), LAW) and not w("on_birth").when(_p("begin_life", how="arrival"), LAW)
+    assert w("on_exit").when(_p("leave", via="left"), LAW)                            # law_caused: expel/admit moves too
+    assert not w("on_exit").when(_p("leave", via="leave"), T)                         # the request (act_leave) runs no hook
+    assert w("on_birth").when(_p("join", via="born"), LAW) and not w("on_birth").when(_p("join", via="arrival"), LAW)
+    assert not w("on_admission").when(_p("join", via="born"), LAW) and w("on_birth").args(_p("join", via="born")) == ("a1", "a1")
     assert w("on_proposal").args(_p("propose")) == (None,)                             # fact 9: on_proposal receives None
     assert w("on_harvest").args(_p("harvest")) == ("a1", "camp1", [3, 4], 2.0)
     assert w("on_transfer").args(_p("move")) == ("a1", "a2", "grain", 2.0)
@@ -350,7 +357,7 @@ def test_alias_filters_reproduce_today_s_firing():
 def test_law_caused_flags_agree_with_the_legacy_hook_table():
     """lawapi.Hook.law_caused (does today's hook fire for a law-caused change?) agrees with the alias filter on a law chain."""
     samples = {"on_harvest": {}, "on_transfer": {"why": "transfer"}, "on_proposal": {}, "on_vote": {}, "on_post": {"kind": "post"},
-               "on_ruling": {}, "on_dm": {"readable": True}, "on_admission": {"via": "admit"}, "on_exit": {}, "on_birth": {"how": "arrival"},
+               "on_ruling": {}, "on_dm": {"readable": True}, "on_admission": {"via": "admit"}, "on_exit": {"via": "left"}, "on_birth": {"via": "arrival"},
                "on_commission": {}}
     for a in PR.ALIASES:
         assert a.when(_p(a.primitive, **samples[a.name]), LAW) == bool(LA.HOOKTABLE[a.name].law_caused), a.name

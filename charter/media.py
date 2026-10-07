@@ -506,9 +506,7 @@ def _charge_fees(k) -> None:
                 continue
             if compelled(k, a, oid):
                 continue                                                # a compelled subscription cannot lapse
-            m["subs"][a].remove(oid)
-            k.notify(a, f"Your subscription to {o['name']} lapsed: you could not pay its fee ({f['qty']:g} {f['item']}).")
-            k.log("subscription_lapsed", a, {"outlet": oid, "name": o["name"]}, vis=[a, o["editor"]])
+            k.apply("subscribe", agent=a, outlet=oid, on=False, via="lapse")
 
 
 def _publish(k, o) -> None:
@@ -585,12 +583,16 @@ def on_birth(k, child, parent=None) -> None:
         return
     m = k.w["media"]
     if parent and m["subs"].get(parent):
-        m["subs"][child] = [o for o in m["subs"][parent] if m["outlets"].get(o, {}).get("editor") != child]
-        return
-    opn = private_outlets(k)
-    if opn:
+        mine = [o for o in m["subs"][parent] if m["outlets"].get(o, {}).get("editor") != child]
+    else:
+        opn = private_outlets(k)
+        if not opn:
+            return
         best = max(opn, key=lambda o: (len(subscribers(k, o)), -int(o["id"][1:])))
-        m["subs"][child] = [best["id"]] if best["editor"] != child else []
+        mine = [best["id"]] if best["editor"] != child else []
+    m["subs"][child] = []                                              # a newcomer's (empty) record, then its subscriptions
+    for oid in mine:
+        k.apply("subscribe", agent=child, outlet=oid, on=True, via="birth")
 
 
 # ------------------------------------------------------------------ the editorial turn (runner)
@@ -775,8 +777,7 @@ def subscribe(k, aid, outlet_ref):
     mx = int(_cfg(k)["max_subscriptions"])
     if len(subs) >= mx:
         raise _err(f"you can subscribe to at most {mx} outlets; unsubscribe first")
-    subs.append(o["id"])
-    k.log("subscribe", aid, {"outlet": o["id"], "name": o["name"]}, vis=[aid, o["editor"]])
+    k.apply("subscribe", agent=aid, outlet=o["id"], on=True)
     fee = f"; its fee ({o['fee']['qty']:g} {o['fee']['item']} per round) is charged at the start of each round" if o.get("fee") else ""
     return f"Subscribed to {o['name']}{fee}. You read its edition from the next one it publishes."
 
@@ -788,9 +789,79 @@ def unsubscribe(k, aid, outlet_ref):
         raise _err(f"you do not subscribe to {outlet_ref}")
     if compelled(k, aid, o["id"]):
         raise _err(f"a law compels your subscription to {o['name']}")
-    subs.remove(o["id"])
-    k.log("unsubscribe", aid, {"outlet": o["id"], "name": o["name"]}, vis=[aid, o["editor"]])
+    k.apply("subscribe", agent=aid, outlet=o["id"], on=False)
     return f"Unsubscribed from {o['name']}."
+
+
+# ------------------------------------------------------------------ changes (P2.4d: made by Kernel.apply, through dispatch.do_<name>)
+def change_subscribe(k, agent, outlet, on, via="agent", lid=None) -> dict:
+    """subscribe: via "agent" (subscribe/unsubscribe: its event), "law" (compel_subscription: its record and monitor event; the
+    subscriptions it drops log nothing), "lapse" (a fee not paid: notice and event), "birth" (a newcomer's: no event)."""
+    m = k.w["media"]
+    o = m["outlets"].get(outlet) or {}
+    subs = m["subs"].setdefault(agent, [])
+    if on:
+        if outlet not in subs:
+            subs.append(outlet)
+        if via == "agent":
+            k.log("subscribe", agent, {"outlet": outlet, "name": o["name"]}, vis=[agent, o["editor"]])
+        elif via == "law":
+            m["compelled"].setdefault(agent, {})[outlet] = lid
+            k.log("compelled_subscription", None, {"agent": agent, "outlet": outlet, "law": lid}, vis="monitor")
+    else:
+        subs.remove(outlet)
+        if via == "agent":
+            k.log("unsubscribe", agent, {"outlet": outlet, "name": o["name"]}, vis=[agent, o["editor"]])
+        elif via == "lapse":
+            f = o["fee"]
+            k.notify(agent, f"Your subscription to {o['name']} lapsed: you could not pay its fee ({f['qty']:g} {f['item']}).")
+            k.log("subscription_lapsed", agent, {"outlet": outlet, "name": o["name"]}, vis=[agent, o["editor"]])
+    return {"on": bool(on)}
+
+
+def check_outlet_rule(k, outlet, key) -> None:
+    """Physics of an outlet rule: no law suspends an outlet under press freedom (a kernel refusal)."""
+    from charter import dispatch as D
+    if key == "suspended_until" and k.w["media"]["press_freedom"]:
+        raise D.PhysicsError(f"suspend_outlet {outlet} under press freedom")
+
+
+def change_outlet_rule(k, outlet, key, value, lid=None) -> dict:
+    o = k.w["media"]["outlets"][outlet]
+    o[key] = value
+    if key == "suspended_until":
+        k.log("outlet_suspended", None, {"outlet": outlet, "name": o["name"], "until_round": value + 1, "law": lid}, vis="public")
+    return {key: value}
+
+
+def change_media_rule(k, jurisdiction, key, value, lid=None) -> dict:
+    """A media rule (the world's, `jurisdiction` None): open_board, press_freedom, sponsor_label; stat:<name> (a statistic public or
+    not); official_stream (this law's members whose posts go out verbatim; [] closes it)."""
+    m = k.w["media"]
+    if key.startswith("stat:"):
+        m["stats"][key[5:]] = value
+        k.log("media_rule", None, {"statistic": key[5:], "public": value, "law": lid}, vis="public")
+    elif key == "official_stream":
+        st = m.setdefault("streams", {})
+        if value:
+            st[lid] = value
+        else:
+            st.pop(lid, None)
+        k.log("official_stream", None, {"law": lid, "members": value}, vis="public")
+    else:
+        m[key] = value
+        k.log("media_rule", None, {key: value, "law": lid}, vis="public")
+    return {key: value}
+
+
+def change_appoint(k, office, agent, lid=None) -> dict:
+    """An office filled: "official_editor:<jid>" (the jurisdiction's official outlet's editor; None leaves it without one)."""
+    kind, _, jid = office.partition(":")
+    if kind != "official_editor":
+        raise ValueError(f"appoint: no office {office}")
+    k.w["media"]["official"][jid]["editor"] = agent
+    k.log("official_editor", None, {"jurisdiction": jid, "agent": agent, "law": lid}, vis="public")
+    return {"agent": agent}
 
 
 def set_subscription_fee(k, aid, item=None, qty=0, outlet_ref=None):
@@ -1175,8 +1246,7 @@ def law_api(k, lid) -> dict:
         if str(name) not in STATS:
             from charter.lawlang import LawError
             raise LawError(f"no statistic {name!r}; statistics: {', '.join(STATS)}")
-        k.w["media"]["stats"][str(name)] = bool(on)
-        k.log("media_rule", None, {"statistic": str(name), "public": bool(on), "law": lid}, vis="public")
+        k.apply("set_media_rule", jurisdiction=None, key=f"stat:{name}", value=bool(on), lid=lid)
         return True
 
     def set_official_editor(agent, jurisdiction=None):
@@ -1190,15 +1260,13 @@ def law_api(k, lid) -> dict:
             raise LawError(f"no official outlet for jurisdiction {jid}")
         if agent is not None:
             k.agent(agent)
-        off[jid]["editor"] = agent
-        k.log("official_editor", None, {"jurisdiction": jid, "agent": agent, "law": lid}, vis="public")
+        k.apply("appoint", office=f"official_editor:{jid}", agent=agent, lid=lid)
         return True
 
     def _rule(key, on):
         if not _on():
             return False
-        k.w["media"][key] = bool(on)
-        k.log("media_rule", None, {key: bool(on), "law": lid}, vis="public")
+        k.apply("set_media_rule", jurisdiction=None, key=key, value=bool(on), lid=lid)
         return True
 
     def suspend_outlet(target, rounds):
@@ -1208,11 +1276,12 @@ def law_api(k, lid) -> dict:
         if o is None or o.get("official"):
             from charter.lawlang import LawError
             raise LawError(f"no private outlet {target}")
-        if k.w["media"]["press_freedom"]:
-            k.w["effects"]["kernel_refusals"].append(f"suspend_outlet {o['id']} under press freedom")
+        from charter import dispatch as D
+        try:
+            k.apply("set_outlet_rule", outlet=o["id"], key="suspended_until", value=k.r + int(rounds), lid=lid)
+        except D.PhysicsError as e:                                    # press freedom: a kernel refusal
+            k.w["effects"]["kernel_refusals"].append(e.reason)
             return False
-        o["suspended_until"] = k.r + int(rounds)
-        k.log("outlet_suspended", None, {"outlet": o["id"], "name": o["name"], "until_round": k.r + int(rounds) + 1, "law": lid}, vis="public")
         return True
 
     def compel_subscription(agent, target):
@@ -1232,10 +1301,8 @@ def law_api(k, lid) -> dict:
                 drop = next((x for x in subs if not compelled(k, agent, x)), None)
                 if drop is None:
                     return False
-                subs.remove(drop)
-            subs.append(o["id"])
-        m["compelled"].setdefault(agent, {})[o["id"]] = lid
-        k.log("compelled_subscription", None, {"agent": agent, "outlet": o["id"], "law": lid}, vis="monitor")
+                k.apply("subscribe", agent=agent, outlet=drop, on=False, via="law", lid=lid)
+        k.apply("subscribe", agent=agent, outlet=o["id"], on=True, via="law", lid=lid)
         return True
 
     def official_stream(members=None):
@@ -1250,12 +1317,7 @@ def law_api(k, lid) -> dict:
         if bad:
             from charter.lawlang import LawError
             raise LawError(f"official_stream: unknown members {', '.join(bad)} (names, or {', '.join(STREAM_TOKENS)})")
-        st = k.w["media"].setdefault("streams", {})
-        if ms:
-            st[lid] = ms
-        else:
-            st.pop(lid, None)
-        k.log("official_stream", None, {"law": lid, "members": ms}, vis="public")
+        k.apply("set_media_rule", jurisdiction=None, key="official_stream", value=ms, lid=lid)
         return True
 
     def submissions():

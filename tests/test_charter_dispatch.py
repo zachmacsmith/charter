@@ -253,7 +253,9 @@ def _enact(k, body):
 def test_routed_rows_name_dispatch_functions():
     from charter import dispatch as D, primitives as PR
     want = {"move", "harvest", "mint", "burn", "create_currency", "grant_right", "revoke_right", "suspend_right", "limit_actions",
-            "create_right", "post", "dm", "hide_post", "set_camp_rule", "set_dm_limit"}
+            "create_right", "post", "dm", "hide_post", "set_camp_rule", "set_dm_limit",
+            # P2.4d: membership, media, typed camps and leases
+            "join", "leave", "admit", "expel", "subscribe", "set_outlet_rule", "set_media_rule", "appoint", "lease", "improve_camp"}
     assert set(D.ROUTED) == want
     for n in want:
         p = PR.get(n)

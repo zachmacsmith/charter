@@ -126,9 +126,10 @@ def drain(k, cas: Cascade) -> None:
 
 
 # ---------------------------------------------------------------------- legacy aliases
-def legacy_hooks(k, name: str, args: tuple) -> list:
+def legacy_hooks(k, name: str, args: tuple, p: dict | None = None) -> list:
     """Dispatch a legacy hook exactly as its old call site did (Kernel.hooks: enactment order; jurisdictions' binding). One literal
-    call per alias of a routed primitive, so lawapi.dispatch_sites() finds them (P2.3/P2.4 add theirs here)."""
+    call per alias of a routed primitive, so lawapi.dispatch_sites() finds them (P2.3/P2.4 add theirs here). `p` is the payload:
+    the membership hooks run on one jurisdiction's laws only (J.hooks_of the payload's polity), as they always have."""
     if name == "on_transfer":
         return k.hooks("on_transfer", *args)
     if name == "on_harvest":
@@ -137,6 +138,12 @@ def legacy_hooks(k, name: str, args: tuple) -> list:
         return k.hooks("on_post", *args)
     if name == "on_dm":
         return k.hooks("on_dm", *args)
+    if name == "on_admission":                                       # P2.4d: membership (the polity's own laws only)
+        return J.hooks_of(k, p["polity"], "on_admission", *args)
+    if name == "on_exit":
+        return J.hooks_of(k, p["polity"], "on_exit", *args)
+    if name == "on_birth":
+        return J.hooks_of(k, p["polity"], "on_birth", *args) if p["polity"] else []
     raise NotRouted(f"legacy hook {name} is not dispatched by k.apply yet")
 
 
@@ -156,17 +163,55 @@ def _read_harvest(out):
     return None, None
 
 
-READERS = {"on_transfer": _read_transfer, "on_harvest": _read_harvest}
+def _read_typed_harvest(out):
+    """on_harvest at a typed camp (camptypes.framework.pay_yield): a positive number (not a bool) is deducted, as it always was."""
+    if isinstance(out, (int, float)) and not isinstance(out, bool) and out > 0:
+        return "charge", float(out)
+    return None, None
+
+
+def _read_admission(out):
+    """on_admission (admit_or_refuse): False refuses (a block), True admits (directive admit); anything else is no answer."""
+    if out is False:
+        return "block", None
+    if out is True:
+        return "directive", ("admit", True)
+    return None, None
+
+
+def _read_birth(out):
+    """on_birth (jurisdiction_or_none): False puts the child in no jurisdiction, a jurisdiction's id puts it there if declared
+    (DIRECTIVE_OK, checked when resolved); the last valid answer in canonical order wins (today's fold)."""
+    if out is False:
+        return "directive", ("jurisdiction", None)
+    if isinstance(out, str):
+        return "directive", ("jurisdiction", out)
+    return None, None
+
+
+def _read_ignored(out):
+    return None, None
+
+
+# Readers by alias name; a (name, payload via) key overrides one for a variant of a primitive (typed camps' harvests).
+READERS = {"on_transfer": _read_transfer, "on_harvest": _read_harvest, ("on_harvest", "typed"): _read_typed_harvest,
+           "on_admission": _read_admission, "on_birth": _read_birth, "on_exit": _read_ignored}
+
+# A directive value a verdict may set, checked when it is resolved (not valid: the verdict is ignored, as today).
+DIRECTIVE_OK = {"admit": lambda k, v: True,
+                "jurisdiction": lambda k, v: v is None or J.jurs(k).get(v, {}).get("status") == "declared"}
 
 
 def resolve(k, P: PR.Primitive, payload: dict, verdicts: list) -> Decision:
     """Before-verdicts -> a Decision: any block blocks; numeric verdicts are charges of the row's (payer, item) to the payer's home
     reserve (J.home_reserve; per-law destinations are P4.1), their sum capped by the payload's quantity."""
-    blocked, charges = [], []
+    blocked, charges, directives = [], [], {}
     for alias, lid, out in verdicts:
-        kind, qty = READERS[alias.name](out)
+        kind, qty = (READERS.get((alias.name, payload.get("via"))) or READERS[alias.name])(out)
         if kind == "block":
             blocked.append(lid)
+        elif kind == "directive" and qty[0] in P.directives and DIRECTIVE_OK[qty[0]](k, qty[1]):
+            directives[qty[0]] = qty[1]                              # the last in canonical order wins
         elif kind == "charge" and P.charge:
             payer, item = (payload[x] for x in P.charge)
             charges.append(Charge(lid, payer, item, qty, J.home_reserve(k, payer)))
@@ -175,7 +220,7 @@ def resolve(k, P: PR.Primitive, payload: dict, verdicts: list) -> Decision:
         total += c.qty
     cap = payload.get("qty")
     charged = min(total, cap) if cap is not None else total
-    return Decision(block=bool(blocked), blocked_by=tuple(blocked), charges=tuple(charges), charged=charged)
+    return Decision(block=bool(blocked), blocked_by=tuple(blocked), charges=tuple(charges), charged=charged, directives=directives)
 
 
 @contextmanager
@@ -202,7 +247,7 @@ def apply(k, name: str, payload: dict) -> Outcome:
     p = {x: payload.get(x) for x in P.params}
     opts = {x: payload[x] for x in allowed if x in payload}
     try:
-        p = CHECKS[name](k, p) if name in CHECKS else p
+        p = (CHECKS[name](k, p, **{x: opts[x] for x in CHECK_OPTIONS.get(name, ()) if x in opts}) if name in CHECKS else p)
     except _Noop as n:
         return Outcome(ok=True, result=n.result)
     before = [a for a in ALIASES_BEFORE.get(name, ()) if P.before]
@@ -211,16 +256,17 @@ def apply(k, name: str, payload: dict) -> Outcome:
     verdicts = []
     for a in before:
         if a.when(p, chain):
-            verdicts.extend((a, lid, out) for lid, out in legacy_hooks(k, a.name, a.args(p)))
+            verdicts.extend((a, lid, out) for lid, out in legacy_hooks(k, a.name, a.args(p), p))
     d = resolve(k, P, p, verdicts) if verdicts else Decision()
     if d.block and P.blockable:
         return Outcome(ok=False, blocked_by=d.blocked_by, charges=d.charges)
     extra = {"charged": d.charged, "charge_to": d.charges[0].dst if d.charges else None} if P.charge else {}
+    extra.update(d.directives)                                      # the verdicts' directives (only those set) reach the change
     result = fn(k, **p, **opts, **extra)
     with _after_context(k, name, p, result):
         for a in after:
             if a.when(p, chain):
-                legacy_hooks(k, a.name, a.args(p))
+                legacy_hooks(k, a.name, a.args(p), p)
     return Outcome(ok=True, result=result, charges=d.charges)
 
 
@@ -248,8 +294,8 @@ ALIASES_AFTER = {n: tuple(a for a in PR.ALIASES if a.primitive == n and a.phase 
 # data/vis = a post's event data and visibility; extra = a DM's extra event data (reply_to, payment, contract, ...).
 OPTIONS = {
     "move": frozenset({"actor"}), "harvest": frozenset(), "mint": frozenset({"lid", "via"}), "burn": frozenset({"via"}),
-    "create_currency": frozenset({"lid"}), "grant_right": frozenset({"lid"}), "revoke_right": frozenset({"lid"}),
-    "suspend_right": frozenset({"lid"}), "limit_actions": frozenset({"lid"}), "create_right": frozenset(),
+    "create_currency": frozenset({"lid"}), "grant_right": frozenset({"lid", "via"}), "revoke_right": frozenset({"lid", "via"}),
+    "suspend_right": frozenset({"lid"}), "limit_actions": frozenset({"lid"}), "create_right": frozenset({"via"}),
     "post": frozenset({"actor", "data", "vis"}), "dm": frozenset({"extra"}), "hide_post": frozenset({"lid"}),
     "set_camp_rule": frozenset(), "set_dm_limit": frozenset({"actor"}),
 }
@@ -267,11 +313,11 @@ def check_move(k, p):
     return {**p, "qty": qty}
 
 
-def check_grant_right(k, p):
+def check_grant_right(k, p, via="law"):
     right = k.norm_right(p["right"])
     a = k.agent(p["agent"])
-    if right in RT.ENTRENCHED or RT.role_bound(right):             # a role's right changes only with the role (secret or not:
-        raise PhysicsError(f"grant {right}")                         # refused whoever the agent is, so nothing leaks)
+    if right in RT.ENTRENCHED or (RT.role_bound(right) and via != "role"):   # a role's right changes only with the role (secret
+        raise PhysicsError(f"grant {right}")                         # or not: refused whoever the agent is, so nothing leaks)
     if right not in k.w["rights"]:
         raise L.LawError(f"no such right: {right}")
     never = RT.NEVER.get(a["cls"], set())
@@ -280,10 +326,10 @@ def check_grant_right(k, p):
     return {**p, "right": right}
 
 
-def check_revoke_right(k, p):
+def check_revoke_right(k, p, via="law"):
     right = k.norm_right(p["right"])
     k.agent(p["agent"])
-    if right in RT.ENTRENCHED or RT.role_bound(right):
+    if right in RT.ENTRENCHED or (RT.role_bound(right) and via != "role"):
         raise PhysicsError(f"revoke {right}")
     return {**p, "right": right}
 
@@ -302,11 +348,11 @@ def check_limit_actions(k, p):
     return p
 
 
-def check_create_right(k, p):
+def check_create_right(k, p, via="law"):
     name = str(p["right"])
     if name in RT.ENTRENCHED:
         raise L.LawError("veto and patch are entrenched")
-    if RT.reserved(name):
+    if RT.reserved(name) and not (via == "role" and RT.role_bound(name)):  # the roles module adds its rights to the catalogue
         raise L.LawError(f"{name} is reserved: it belongs to a role or is an old name of one of its rights")
     return {**p, "right": name}
 
@@ -361,6 +407,8 @@ def check_dm(k, p):
     return {**p, "encrypted": bool(p["encrypted"]), "readable": bool(k.spec["conditions"].get("law_reads_dms"))}
 
 
+CHECK_OPTIONS = {"grant_right": ("via",), "revoke_right": ("via",), "create_right": ("via",)}   # call options a check reads
+
 CHECKS = {"move": check_move, "grant_right": check_grant_right, "revoke_right": check_revoke_right,
           "suspend_right": check_suspend_right, "limit_actions": check_limit_actions, "create_right": check_create_right,
           "create_currency": check_create_currency, "mint": check_mint, "burn": check_burn, "hide_post": check_hide_post,
@@ -396,13 +444,20 @@ def _move(k, src, dst, item, qty, why, actor) -> bool:
     return True
 
 
-def do_harvest(k, agent, camp, x, item, qty, charged=0.0, charge_to=None) -> dict:
-    """A harvest's yield reaches the harvester, less the laws' deductions, which go to charge_to (its home reserve)."""
+def do_harvest(k, agent, camp, x, item, qty, via=None, charged=0.0, charge_to=None) -> dict:
+    """A harvest's yield reaches the harvester, less the laws' deductions, which go to charge_to (its home reserve). via "typed": a
+    typed camp's yield (camptypes.framework.pay_yield), whose deductions have always gone to the world reserve."""
+    if via == "typed":
+        charge_to = "reserve"
     if qty - charged > 0:
         k._add(agent, item, qty - charged)
     if charged > 0:
         k._add(charge_to, item, charged)
-    v = k.w["unit"][item]
+    if via == "typed":
+        from charter import resources as RS
+        v = k.w["unit"].get(item, RS.VALUE.get(item, 0.0))
+    else:
+        v = k.w["unit"][item]
     k.w["effects"]["harvest_yield"] += qty * v
     k.w["effects"]["harvest_deducted"] += charged * v
     return {"yield": qty, "deducted": charged}
@@ -438,21 +493,25 @@ def do_create_currency(k, name, backed, reserve, lid=None) -> dict:
     return {"currency": name}
 
 
-def do_grant_right(k, agent, right, lid=None) -> dict:
+def do_grant_right(k, agent, right, lid=None, via="law") -> dict:
+    """via: "law" (a law's grant: a public `rights` event), or the module whose own change carries the right and logs its own event
+    (P2.4d: "lease" a lease's start or end, "role" a role passing, "hidden" a hidden power lost): no `rights` event, as before."""
     a = k.agent(agent)
     changed = right not in a["rights"]
     if changed:
         a["rights"] = sorted(a["rights"] + [right])
-        k.log("rights", None, {"agent": agent, "right": right, "change": "grant", "law": lid}, vis="public")
+        if via == "law":
+            k.log("rights", None, {"agent": agent, "right": right, "change": "grant", "law": lid}, vis="public")
     return {"changed": changed}
 
 
-def do_revoke_right(k, agent, right, lid=None) -> dict:
+def do_revoke_right(k, agent, right, lid=None, via="law") -> dict:
     a = k.agent(agent)
     changed = right in a["rights"]
     if changed:
         a["rights"] = [x for x in a["rights"] if x != right]
-        k.log("rights", None, {"agent": agent, "right": right, "change": "revoke", "law": lid}, vis="public")
+        if via == "law":
+            k.log("rights", None, {"agent": agent, "right": right, "change": "revoke", "law": lid}, vis="public")
     return {"changed": changed}
 
 
@@ -468,7 +527,7 @@ def do_limit_actions(k, agent, n, rounds, lid=None) -> dict:
     return {"n": int(n)}
 
 
-def do_create_right(k, right) -> dict:
+def do_create_right(k, right, via="law") -> dict:
     if right not in k.w["rights"]:
         k.w["rights"] = sorted(k.w["rights"] + [right])
     return {"right": right}
@@ -514,3 +573,70 @@ def do_set_dm_limit(k, agent, n, actor=None) -> dict:
         k.w["dm_limit"]["agents"][agent] = n
     k.log("dm_limit", actor, {"n": n, "agent": agent}, vis="public")
     return {"n": n}
+
+
+# ---------------------------------------------------------------------- P2.4d: typed camps and leases, membership, media
+# Each change is made by its feature's module (the feature owns its state); these wrappers are the rows' `fn`. Call options:
+# lid = the law causing it; via (subscribe) = which of today's paths: agent (subscribe/unsubscribe), law (compel_subscription),
+# lapse (a fee not paid), birth (a newcomer's subscriptions). Membership's `via` is payload (its aliases filter on it).
+OPTIONS.update({
+    "join": frozenset(), "leave": frozenset(), "admit": frozenset({"lid"}), "expel": frozenset({"lid"}),
+    "subscribe": frozenset({"via", "lid"}), "set_outlet_rule": frozenset({"lid"}), "set_media_rule": frozenset({"lid"}),
+    "appoint": frozenset({"lid"}), "lease": frozenset(), "improve_camp": frozenset(),
+})
+
+
+def check_set_outlet_rule(k, p):
+    from charter import media as MD
+    MD.check_outlet_rule(k, p["outlet"], p["key"])
+    return p
+
+
+CHECKS["set_outlet_rule"] = check_set_outlet_rule
+
+
+def do_join(k, agent, polity, via, parent=None, **directives) -> dict:
+    """directives: admit (on_admission: True admits), jurisdiction (on_birth: where the child goes; None: none)."""
+    return J.change_join(k, agent, polity, via, parent, **directives)
+
+
+def do_leave(k, agent, polity, via) -> dict:
+    return J.change_leave(k, agent, polity, via)
+
+
+def do_admit(k, polity, agent, lid=None) -> dict:
+    return J.change_admit(k, polity, agent)
+
+
+def do_expel(k, polity, agent, lid=None) -> dict:
+    return J.change_expel(k, polity, agent)
+
+
+def do_subscribe(k, agent, outlet, on, via="agent", lid=None) -> dict:
+    from charter import media as MD
+    return MD.change_subscribe(k, agent, outlet, on, via, lid)
+
+
+def do_set_outlet_rule(k, outlet, key, value, lid=None) -> dict:
+    from charter import media as MD
+    return MD.change_outlet_rule(k, outlet, key, value, lid)
+
+
+def do_set_media_rule(k, jurisdiction, key, value, lid=None) -> dict:
+    from charter import media as MD
+    return MD.change_media_rule(k, jurisdiction, key, value, lid)
+
+
+def do_appoint(k, office, agent, lid=None) -> dict:
+    from charter import media as MD
+    return MD.change_appoint(k, office, agent, lid)
+
+
+def do_lease(k, lease, lessor, lessee, status) -> dict:
+    from charter.camptypes import leases as LS
+    return LS.change_lease(k, lease, lessor, lessee, status)
+
+
+def do_improve_camp(k, agent, camp, qty) -> dict:
+    from charter.camptypes import framework as FW
+    return FW.change_improve(k, agent, camp, qty)
