@@ -236,6 +236,105 @@ def test_preset_hook_sequences_are_identical_to_before_p2_1(recorded, name):
     assert now == recorded["presets"][name], _first_diff(recorded["presets"][name], now)
 
 
+# ---------------------------------------------------------------------- the dispatcher itself
+@pytest.fixture()
+def k():
+    from charter import generator, spec as S
+    from charter.kernel import Kernel
+    return Kernel(generator.generate(S.apply_overrides(S.load("E4"), ["shared_archive.enabled=false"]), 1))
+
+
+def _enact(k, body):
+    lid = k.new_law(f'title = "T"\nintent = "t"\n{body}', "constitution")
+    k.enact(lid)
+    return lid
+
+
+def test_routed_rows_name_dispatch_functions():
+    from charter import dispatch as D, primitives as PR
+    want = {"move", "harvest", "mint", "burn", "create_currency", "grant_right", "revoke_right", "suspend_right", "limit_actions",
+            "create_right", "post", "dm", "hide_post", "set_camp_rule", "set_dm_limit"}
+    assert set(D.ROUTED) == want
+    for n in want:
+        p = PR.get(n)
+        assert p.fn == f"dispatch:do_{n}" and p.fn in p.sites and callable(getattr(D, f"do_{n}"))
+        assert set(D.OPTIONS[n]).isdisjoint(p.params), n
+
+
+def test_apply_returns_an_outcome_and_refuses_with_physics_errors(k):
+    from charter import dispatch as D
+    a, b = k.roster()[0], k.roster()[2]
+    have = k.bal(a, "timber")
+    out = k.apply("move", src=a, dst=b, item="timber", qty=1, why="gift")
+    assert isinstance(out, D.Outcome) and out.ok and out.result == {"moved": 1.0, "charged": 0.0} and k.bal(a, "timber") == have - 1
+    assert k.events[-1]["type"] == "move" and k.events[-1]["data"]["why"] == "gift" and k.events[-1]["agent"] is None
+    with pytest.raises(D.PhysicsError) as e:
+        k.apply("move", src=a, dst=b, item="timber", qty=10 ** 6, why="gift")
+    assert e.value.reason == "insufficient"
+    assert k.move(a, b, "timber", 10 ** 6) is False                    # Kernel.move keeps its yes/no contract
+    assert k.apply("move", src=a, dst=b, item="timber", qty=0, why="gift").ok
+    with pytest.raises(D.L.LawError, match="non-negative"):
+        k.apply("move", src=a, dst=b, item="timber", qty=-1, why="gift")
+    with pytest.raises(TypeError, match="unexpected payload keys: colour"):
+        k.apply("move", src=a, dst=b, item="timber", qty=1, why="gift", colour="red")
+    with pytest.raises(D.NotRouted):
+        k.apply("attack", attacker=a, target=b, units=1, covert=False, disguise=False, lawful=False)
+    with pytest.raises(D.PR.UnknownPrimitive):
+        k.apply("teleport", agent=a)
+
+
+def test_law_functions_convert_refusals(k):
+    board = next(a for a in k.roster() if k.cls_of(a) == "board")
+    lid = _enact(k, f'def on_enact():\n    state["r"] = [grant("{board}", "propose"), limit_actions("{board}", 1, 1), '
+                    f'set_dm_limit(2, "{board}"), suspend("{board}", "veto", 1), burn("nothing", 1, "{board}")]')
+    assert k.w["laws"][lid]["state"]["r"] == [False, False, False, False, False]
+    assert k.w["effects"]["kernel_refusals"] == ["grant propose to board " + board, "limit_actions on board",
+                                                 "set_dm_limit on board", "suspend veto"]
+
+
+def test_chain_and_root_frames(k):
+    from charter import actions as A
+    assert k.chain() == () and k.cascade() is None
+    seen = {}
+    real = k.apply
+
+    def spy(name, /, **payload):
+        seen.setdefault(name, k.chain())
+        return real(name, **payload)
+    k.apply = spy
+    a, b = k.roster()[0], k.roster()[2]
+    k.begin_round_cause(phase="turns")
+    with k.cause("turn", a, call="r0:x:0"):
+        A.act(k, a, "transfer", {"to": b, "item": "timber", "qty": 1})
+        assert k.cascade() is None                                       # the action's cascade closed with its frame
+    k.end_round_cause()
+    assert seen["move"] == ({"kind": "action", "id": "action:transfer"},)
+    assert [f["kind"] for f in k.current_cause()] == []
+    ev = next(e for e in reversed(k.events) if e["type"] == "move")
+    assert ev["cause"] == [{"round": 0}, {"phase": "turns"}, {"turn": a, "call": "r0:x:0"}, {"action": "transfer"}]   # unchanged
+    from charter import dispatch as D
+    assert D.chain_for(k, "move") == ({"kind": "kernel", "id": "kernel:move"},)                                       # implicit root
+    with k.cause("action", "x", root=True):
+        with k.cause("action", "y", root=True):                          # a nested root joins the outer cascade
+            assert len(k._cascade_stack()) == 1 and [f["id"] for f in k.chain()] == ["action:x", "action:y"]
+        with k.cause("law", "L1", hook="on_dm"):
+            assert k.chain(viewer="L1")[-1] == {"kind": "law", "id": "law:L1", "hook": "on_dm"}
+
+
+def test_law_caused_moves_fire_no_legacy_hook(k):
+    """review 09 §2.1 fact 7, now as an alias filter: on_transfer fires for an agent's transfer only (root kind action)."""
+    from charter import actions as A
+    a, b = k.roster()[0], k.roster()[2]
+    _enact(k, 'def on_transfer(src, dst, item, qty):\n    state["n"] = state.get("n", 0) + 1\n    return 0.5\n')
+    lid = next(iter(k.w["laws"]))
+    k.move(a, b, "timber", 1, why="transfer")                            # outside any action: the implicit kernel root
+    assert k.w["laws"][lid]["state"].get("n") is None
+    A.act(k, a, "transfer", {"to": b, "item": "timber", "qty": 2})
+    assert k.w["laws"][lid]["state"]["n"] == 1
+    moves = [e["data"] for e in k.events if e["type"] == "move"][-2:]
+    assert [(m["qty"], m["why"]) for m in moves] == [(1.5, "transfer"), (0.5, "transfer_tax")]
+
+
 if __name__ == "__main__":                                              # re-record (only on the pre-P2.1 revision)
     FIXTURE.write_text(json.dumps(record(), indent=0, sort_keys=True))
     print("wrote", FIXTURE)
