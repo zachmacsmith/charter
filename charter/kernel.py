@@ -621,6 +621,9 @@ class Kernel:
 
     def repeal(self, target, by_law=None):
         hit = [l for l in self.active_laws() if l["id"] == target or l["title"].lower() == target.lower()]
+        if by_law is not None:                                          # law-caused: never a law of a stricter class (review F1)
+            rank = self.w["laws"].get(by_law, {}).get("cls")
+            hit = [l for l in hit if L.CLASS_RANK.get(l["cls"], 0) <= L.CLASS_RANK.get(rank, 0)]
         for law in hit:
             ns = self.ns.get(law["id"], {})
             if "on_repeal" in ns:

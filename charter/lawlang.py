@@ -8,7 +8,8 @@ charter/lawapi.py); nothing else is reachable: no imports, no I/O, no dunders, n
 
 Static class (by which API calls appear, so it cannot be misstated):
   procedural  any set_procedure
-  structural  any rights, money, sanctions, governance (open_ballot), clause or project/tribute call
+  structural  any rights, money, sanctions, governance (open_ballot), clause, project/tribute or repeal call (a law calling nothing
+              but repeal(<constant>) takes its target's class instead: is_repeal)
   ordinary    only read, camp, names, text and output calls
 """
 from __future__ import annotations
@@ -25,9 +26,10 @@ LAW_API_VERSION = 1
 # The law API's classification, generated from the table in charter/lawapi.py (one row per function and hook): group -> names.
 API_GROUPS = LA.api_groups()
 API = set().union(*API_GROUPS.values())
-STRUCTURAL_CALLS = LA.STRUCTURAL_CALLS                                 # rights, money, sanctions, projects, open_ballot
+STRUCTURAL_CALLS = LA.STRUCTURAL_CALLS                                 # rights, money, sanctions, projects, open_ballot, repeal
 PROCEDURAL_CALLS = LA.PROCEDURAL_CALLS                                 # set_procedure
 L4_CALLS = LA.L4_CALLS                                                 # define_action
+CLASS_RANK = {"ordinary": 0, "structural": 1, "procedural": 2}         # strictness: a law may not repeal a stricter one (Kernel.repeal)
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},
                  "L4": {"ordinary", "structural", "procedural"}}
 HOOKS = LA.HOOKS                                                       # lawapi.HOOKTABLE: signatures, returns, dispatch
