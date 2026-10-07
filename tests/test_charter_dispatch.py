@@ -481,6 +481,15 @@ def test_legal_acts_scenario_is_identical_to_before_p2_3(legal_recorded, name):
     """Every hook invocation, every event (cause included) and the final legal state of the legal-act scenario, recorded at 18a9556
     (before P2.3) with `python tests/test_charter_dispatch.py legal`."""
     now = legal_scenario(LEGAL_CASES[name])
+    from charter import generator, spec as S
+    from charter.kernel import Kernel
+    assert all(l["status"] != "draft" for l in now["laws"].values())
+    k = Kernel(generator.generate(S.apply_overrides(S.load("E4"), ["shared_archive.enabled=false", *LEGAL_CASES[name]]), 1))
+    from charter import actions as A
+    leg = next(a for a in k.roster() if k.has(a, "propose"))
+    A.act(k, leg, "propose", {"code": ORDINARY.replace("Notice Board", "Preview Probe")})
+    assert k.w["laws"] and all(l.get("preview") is None for l in k.w["laws"].values())   # as before P2.3 (dispatch.do_propose)
+    assert next(e for e in k.events if e["type"] == "proposal")["data"]["preview"]        # the event carries it
     assert not _first_diff(legal_recorded[name], now), _first_diff(legal_recorded[name], now)
     for hook in ("on_proposal", "on_vote", "on_ruling", "on_enact", "on_repeal", "tally", "penalty", "act_census"):
         assert any(f'"{hook}"' in c for c in now["calls"]), (name, hook)

@@ -587,11 +587,12 @@ def draft(k, lid) -> dict:
 
 
 def do_propose(k, jurisdiction, draft, actor=None, preview=None) -> dict:
-    """A checked draft goes to the procedure: its dry-run preview is kept and the proposal is published (the preview inline, or
-    monitor-only when effect previews are off). The procedure runs next (Kernel.decide), after the on_proposal alias."""
+    """A checked draft goes to the procedure: the proposal is published with its dry-run preview (inline, or monitor-only when
+    effect previews are off). The procedure runs next (Kernel.decide), after the on_proposal alias.
+    The law record's "preview" stays None, as before P2.3: the callers used to set it on the record they held from before the dry
+    run, which Kernel._restore had replaced, so it never reached the world (storing it changes ground_truth; a later fix)."""
     lid = draft["id"]
     law = k.w["laws"][lid]
-    law["preview"] = preview
     shown = k.spec["conditions"]["effect_preview"]
     k.log("proposal", actor, {"law": lid, "title": law["title"], "intent": law["intent"], "class": law["cls"], "code": law["code"],
                               **({"jurisdiction": jurisdiction} if jurisdiction is not None else {}),
