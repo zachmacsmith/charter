@@ -445,7 +445,8 @@ def resolve_attacks(k) -> None:
     pending, st["pending"] = st["pending"], []
     for rec in sorted(pending, key=lambda r: (pos.get(r["attacker"], len(pos)), int(r["id"][1:]))):
         rec["deferred"] = True
-        _resolve(k, rec)
+        with k.cause("world", "attack", attack=rec["id"], attacker=rec["attacker"]):   # provenance: a deferred attack resolves
+            _resolve(k, rec)
     for p in st["pledges"]:
         if not p.get("used") and alive(k, p["ally"]):
             k._add(p["ally"], WEAPONS, p["units"])
@@ -488,10 +489,11 @@ def after_harvest(k, aid, camp_id) -> bool:
     roll = _rng(k, "accident", aid, camp_id, st["harvests"]).random()
     if roll >= p:
         return False
-    k.log("accident_truth", aid, {"agent": aid, "camp": camp_id, "p": p, "roll": round(roll, 6), "low_stock": low,
-                                  "safety": bool(c.get("safety"))}, vis="monitor")
-    st["log"].append({"id": f"X{st['harvests']}", "round": k.r, "attacker": None, "target": aid, "status": "accident", "camp": camp_id})
-    return M.disable(k, aid, "accident", by=None, public=True, named=False)
+    with k.cause("world", "accident", agent=aid, camp=camp_id):      # provenance: chance, inside the harvest that risked it
+        k.log("accident_truth", aid, {"agent": aid, "camp": camp_id, "p": p, "roll": round(roll, 6), "low_stock": low,
+                                      "safety": bool(c.get("safety"))}, vis="monitor")
+        st["log"].append({"id": f"X{st['harvests']}", "round": k.r, "attacker": None, "target": aid, "status": "accident", "camp": camp_id})
+        return M.disable(k, aid, "accident", by=None, public=True, named=False)
 
 
 # ------------------------------------------------------------------ actions (actions.py delegates here)

@@ -170,12 +170,14 @@ def start_round(k):
     c = cfg(k)
     t = current(k)
     if t and k.r > t["deadline"]:
-        raid(k, t, _rng(k, "raid"))
+        with k.cause("world", "raid", tribute=t["id"]):
+            raid(k, t, _rng(k, "raid"))
     if not c.get("enabled"):
         return
     every, first = max(1, int(c["every"])), int(c.get("first", c["every"]))
     if k.r >= first and (k.r - first) % every == 0:
-        demand_tribute(k, _rng(k, "tribute"))
+        with k.cause("world", "tribute_demand"):
+            demand_tribute(k, _rng(k, "tribute"))
 
 
 def status(k) -> dict:

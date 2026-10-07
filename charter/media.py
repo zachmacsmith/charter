@@ -471,12 +471,15 @@ def start_round(k) -> None:
     """Kernel.start_round: outlets refreshed, subscription fees charged, pending editions published."""
     if not enabled(k):
         return
-    refresh_outlets(k)
-    _charge_fees(k)
+    with k.cause("world", "media"):                                # provenance: outlets refreshed, fees due (clock)
+        refresh_outlets(k)
+        _charge_fees(k)
     for o in all_outlets(k):
-        _publish(k, o)
+        with k.cause("world", "edition", outlet=o.get("id")):       # provenance: last round's edition comes out
+            _publish(k, o)
     from charter import scholars as SC
-    SC.start_round(k)
+    with k.cause("world", "scholars"):
+        SC.start_round(k)
 
 
 def _charge_fees(k) -> None:
@@ -643,25 +646,26 @@ def editorial_turns(k, policy, agents, sysp, in_parallel, reason_f, results, r, 
     asks = [(a, editorial_prompt(k, a)) for a in eds]
     outs = in_parallel(lambda q: policy.act(k, {**agents[q[0]], "phase": "editorial"}, sysp[q[0]], q[1], n, False), asks)
     for (aid, prompt), (o, reasoning, usage) in zip(asks, outs):
-        res = []
-        acts = list(o.get("actions") or [])[:n]
-        for item in acts:
-            name = str(item.get("action", ""))
-            try:
-                if name not in EDITORIAL_ACTIONS:
-                    raise A.ActionError(f"only {', '.join(EDITORIAL_ACTIONS)} can be used in the editorial turn")
-                res.append(f"{name}: " + A.act(k, aid, name, A.parse_args(item)))
-            except (A.ActionError, json.JSONDecodeError) as e:
-                res.append(f"{name}: ERROR {e}")
-        if o.get("_error"):
-            res.append(f"(your editorial reply could not be used: {o['_error'][:200]})")
-        results.setdefault(aid, [])
-        results[aid] = list(results[aid]) + [f"(editorial turn after round {r + 1}) {x}" for x in res]
-        k.log("editorial_turn", aid, {"actions": acts, "results": res}, vis="monitor")
-        reason_f.write(json.dumps({"round": r, "position": 0, "agent": aid, "model": agents[aid]["model"], "phase": "editorial",
-                                   "reasoning": reasoning, "stated_reasoning": str(o.get("reasoning", "")), "notes": "",
-                                   "actions": acts, "results": res, "usage": usage, "prompt_chars": len(sysp[aid]) + len(prompt),
-                                   "prompt": prompt, "error": o.get("_error")}) + "\n")
+        with k.cause("turn", aid, call=(usage or {}).get("call")):   # provenance: the editor's editorial turn
+            res = []
+            acts = list(o.get("actions") or [])[:n]
+            for item in acts:
+                name = str(item.get("action", ""))
+                try:
+                    if name not in EDITORIAL_ACTIONS:
+                        raise A.ActionError(f"only {', '.join(EDITORIAL_ACTIONS)} can be used in the editorial turn")
+                    res.append(f"{name}: " + A.act(k, aid, name, A.parse_args(item)))
+                except (A.ActionError, json.JSONDecodeError) as e:
+                    res.append(f"{name}: ERROR {e}")
+            if o.get("_error"):
+                res.append(f"(your editorial reply could not be used: {o['_error'][:200]})")
+            results.setdefault(aid, [])
+            results[aid] = list(results[aid]) + [f"(editorial turn after round {r + 1}) {x}" for x in res]
+            k.log("editorial_turn", aid, {"actions": acts, "results": res}, vis="monitor")
+            reason_f.write(json.dumps({"round": r, "position": 0, "agent": aid, "model": agents[aid]["model"], "phase": "editorial",
+                                       "reasoning": reasoning, "stated_reasoning": str(o.get("reasoning", "")), "notes": "",
+                                       "actions": acts, "results": res, "usage": usage, "prompt_chars": len(sysp[aid]) + len(prompt),
+                                       "prompt": prompt, "error": o.get("_error")}) + "\n")
     reason_f.flush()
 
 

@@ -121,6 +121,12 @@ def _looks_like_code(v) -> bool:
 
 
 def act(k, aid: str, name: str, args: dict) -> str:
+    """Dispatch one action; everything it logs carries an action cause frame (kernel.cause)."""
+    with k.cause("action", str(name), agent=None if k.current_turn_agent() == aid else aid):
+        return _act(k, aid, name, args)
+
+
+def _act(k, aid: str, name: str, args: dict) -> str:
     hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MD.ACTIONS))   # context, media2: off = unknown
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")

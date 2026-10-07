@@ -239,12 +239,16 @@ def end_of_round(k) -> None:
         return
     for aid in sorted(st["dies_at"], key=lambda a: (st["dies_at"][a], a)):
         if st["dies_at"][aid] <= k.r and MO.alive(k, aid):
-            MO.disable(k, aid, "old_age")
-    _births(k)
+            with k.cause("world", "ageing", agent=aid):              # provenance: a death from old age
+                MO.disable(k, aid, "old_age")
+    with k.cause("world", "births"):
+        _births(k)
     for c in sorted(st["commissions"].values(), key=lambda c: c["id"]):
         if c["status"] == "open" and k.r >= c["expires"]:
-            _refund(k, c, "expired: the Maker did not make it in time")
-    ensure_maker(k)
+            with k.cause("world", "commission_expiry", commission=c["id"]):
+                _refund(k, c, "expired: the Maker did not make it in time")
+    with k.cause("world", "maker"):
+        ensure_maker(k)
     st["population"].append({"round": k.r, "living": len(k.players()), "cap": st["cap"],
                              "queued": sum(1 for c in st["commissions"].values() if c["status"] == "due")})
 

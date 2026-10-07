@@ -130,6 +130,11 @@ def round_start(k, inst, rs) -> None:
     reqs = k.w.get("spawn_requests") or []
     if not we and not reqs and "world_events" not in k.w:
         return
+    with k.cause("world", "world_events"):                       # provenance: blights end, news, arrivals, goal changes
+        _round_start(k, inst, rs, we, reqs)
+
+
+def _round_start(k, inst, rs, we, reqs) -> None:
     st = state(k)
     r = k.r
     for c in k.w["camps"].values():                                      # blights wear off
@@ -166,6 +171,11 @@ def round_start(k, inst, rs) -> None:
 
 
 def fire(k, inst, e) -> dict:
+    with k.cause("world", "event", event=e["id"], type=e["type"]):
+        return _fire(k, inst, e)
+
+
+def _fire(k, inst, e) -> dict:
     st = state(k)
     cfg = cfg_of(inst["spec"], e["type"])
     gl = inst["spec"].get("events") or {}
