@@ -11,6 +11,7 @@ import re
 import statistics
 
 from charter import library as LB
+from charter import rights as _RT
 
 ORDER = ["L0", "L1", "L2", "L3", "L4"]
 TITLE_WORDS = ["Archon", "Lord", "Consul", "Steward", "Magister", "Prefect", "Warden"]
@@ -1056,12 +1057,11 @@ def s_lineage_wealth(gt, a, p):
     return lin.get(a, 0.0) / top if top > 0 else 0.0
 
 
-OFFICE_RIGHTS = {"vote", "propose", "veto", "judge", "decree", "dm_rules", "surveil", "ledger_read", "patch", "press", "elector"}
+OFFICE_RIGHTS = _RT.OFFICE_RIGHTS
 BASE_RIGHTS = {"sandbox", "archive", "encrypt", "see_hidden"}
-# Rights that are not offices: class tools (BASE_RIGHTS, anon) and the rights that carry a role (roles.py: the Spy's secret
-# impersonate, formerly forge; the Maker's maker; the Scholar's scholar). Kept explicit here until a rights registry says which
-# rights are offices; any other right (office rights and rights created by law) counts.
-NON_OFFICE_RIGHTS = BASE_RIGHTS | {"anon", "impersonate", "forge", "maker", "scholar"}
+# Rights that are not offices: class tools and role rights (charter.rights kinds "tool" and "role", plus their old names);
+# any other right (office rights and rights created by law) counts.
+NON_OFFICE_RIGHTS = frozenset(set(_RT.names()) - _RT.OFFICE_RIGHTS) | frozenset(_RT.RENAMED_RIGHTS)
 
 
 def _offices(f, x) -> int:
