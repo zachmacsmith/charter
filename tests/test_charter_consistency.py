@@ -21,10 +21,16 @@ def test_law_api_classification_and_docs_agree():
     assert api <= set(LD.ENTRIES) and set(LD.ENTRIES) - api <= non_functions
 
 
-def test_every_action_has_a_doc_and_an_activity_category():
-    for name in A.ACTIONS:
-        assert name in AG.ACTION_DOC, name
-        assert scorer.category(name, strict=True) in ("productive", "political", "talk", "economic"), name
+def test_every_action_has_a_doc_and_an_explicit_activity_category():
+    """Strict: every row names its category (no fallback to talk), and the derived views are the registry, no more, no less."""
+    assert set(AR.REG) == set(A.ACTIONS) == set(AG.ACTION_DOC) == set().union(*scorer.CATEGORIES.values())
+    assert len(A.ACTIONS) == len(set(A.ACTIONS)) == len(AR.REG)
+    assert list(scorer.CATEGORIES) == ["productive", "economic", "political", "talk"]
+    assert sum(len(v) for v in scorer.CATEGORIES.values()) == len(AR.REG), "an action in two categories"
+    for name, act in AR.REG.items():
+        assert act.category in AR.CATEGORIES, name
+        assert scorer.category(name, strict=True) == act.category, name
+        assert act.doc and AG.ACTION_DOC[name] == act.doc and act.doc.startswith(name), name
 
 
 def test_category_lookup_is_strict_for_unknown_names():
@@ -32,12 +38,57 @@ def test_category_lookup_is_strict_for_unknown_names():
     assert scorer.category("no_such_action") == "talk"                 # the activity mix still counts invented actions as talk
 
 
-def test_every_registered_action_has_a_category_and_the_registry_matches_actions():
-    missing = sorted(n for n in AR.REG if scorer.category(n, strict=True) is None)
-    assert not missing, missing
-    assert set(AR.REG) == set(A.ACTIONS), (sorted(set(AR.REG) - set(A.ACTIONS)), sorted(set(A.ACTIONS) - set(AR.REG)))
-    assert set().union(*scorer.CATEGORIES.values()) <= set(A.ACTIONS), "a category names an action that does not exist"
-    assert sum(len(v) for v in scorer.CATEGORIES.values()) == len(set().union(*scorer.CATEGORIES.values())), "an action in two categories"
+def test_every_action_row_is_complete():
+    import inspect
+    from charter import conflict as CF, context as CX, eventtypes as ET, jurisdictions as J, media as MD
+    for name, act in AR.REG.items():
+        fn = AR.resolve(act.handler)
+        assert callable(fn), name
+        params = list(inspect.signature(fn).parameters.values())
+        assert [p.name for p in params[:1]] == ["k"] and len(params) >= 2, (name, act.handler)
+        named = {p.name for p in params[2:]}
+        if not any(p.kind == p.VAR_KEYWORD for p in params):
+            assert set(act.aliases.values()) <= named, (name, act.aliases)   # a synonym maps to a real argument
+        assert set(act.emits) <= set(ET.REG), (name, act.emits)
+        assert all(ET.REG[e].act == name for e in act.emits), (name, act.emits)
+        assert act.module in AR.MODULES and act.legacy == (act.module != "context"), name
+    for t in ET.REG.values():                                           # every event an action logs as its own is declared on it
+        if t.act is not None:
+            assert t.name in AR.REG[t.act].emits, (t.name, t.act)
+    assert A.DM_ACTIONS == ("dm", "reply", "forge_dm") == tuple(n for n in A.ACTIONS if AR.REG[n].msg)
+    mods = lambda *m: {n for n, x in AR.REG.items() if x.module in m}
+    assert mods("context") == set(CX.ACTIONS) and mods("conflict") == set(CF.ACTIONS) and mods("jurisdictions") == set(J.ACTIONS)
+    assert mods("media", "scholars") == set(MD.ACTIONS)
+
+
+def test_actions_dispatch_through_the_registry_without_trampolines():
+    direct = [n for n, x in AR.REG.items() if not x.handler.startswith("actions:")]
+    assert len(direct) >= 36 and not any(hasattr(A, "_" + n) for n in direct)
+    assert all(hasattr(A, x.handler.split(":")[1]) for x in AR.REG.values() if x.handler.startswith("actions:"))
+
+
+def test_unknown_action_error_lists_actions_in_the_old_order():
+    import pytest
+    assert A.ACTIONS[:8] == ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose")
+    assert A.ACTIONS[-3:] == ("buy_memory", "library_deposit", "library_read")
+    k = Kernel(generator.generate(S.load("E6"), 1))
+    aid = next(iter(k.w["agents"]))
+    with pytest.raises(A.ActionError) as e:
+        A.act(k, aid, "no_such_action", {})
+    hidden = set(A.CONTEXT_ACTIONS) | set(A.MEDIA_ACTIONS)              # E6: context and media2 are off, so theirs are unknown
+    assert str(e.value) == "unknown action 'no_such_action'. Actions: " + ", ".join(x for x in A.ACTIONS if x not in hidden)
+
+
+def test_bad_arguments_name_the_action_function_as_before():
+    import pytest
+    k = Kernel(generator.generate(S.load("conflict_pilot"), 1))
+    aid = next(iter(k.w["agents"]))
+    with pytest.raises(A.ActionError) as e:
+        A.act(k, aid, "fortify", {"qty": 1, "bogus": 2})
+    assert str(e.value) == "bad arguments for fortify: _fortify() got an unexpected keyword argument 'bogus'"
+    with pytest.raises(A.ActionError) as e:
+        A.act(k, aid, "forge", {})
+    assert str(e.value) == "bad arguments for forge: _forge() missing 1 required positional argument: 'qty'"
 
 
 def test_the_observer_never_appears_in_public_system_events(tmp_path):

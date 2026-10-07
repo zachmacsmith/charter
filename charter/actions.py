@@ -1,10 +1,15 @@
-"""Agent actions. act(kernel, agent, name, args) -> result text shown to the agent. Every action is logged."""
+"""Agent actions. act(kernel, agent, name, args) -> result text shown to the agent. Every action is logged.
+
+act() looks the action up in charter/action_registry.py and calls its handler: a `_name` function here, or the owning module's
+function where that takes the action's arguments as they are (Act.handler "conflict:act_fortify"). ACTIONS, DM_ACTIONS and
+_ALIASES are derived from the registry."""
 from __future__ import annotations
 
 import json
 
 import difflib
 
+from charter import action_registry as AR                             # every action's row: handler, doc, category
 from charter import camps as C
 from charter import context as CX                                     # context: lookups and files (charter/context.py)
 from charter import conflict as CF
@@ -17,19 +22,10 @@ from charter import outside as O
 from charter import projects as P
 from charter import roles as R                                         # roles: court evidence the Spy read
 
-ACTIONS = ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "request_fix",
-           "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive",
-           "publish", "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel",
-           "anon_post", "set_dm_limit", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
-           "reply", "forge_dm",
-           "bequest", "name_successor", "commission", "create_agent", "copy_agent")   # life (mortality.py, life.py)
-CONTEXT_ACTIONS = CX.ACTIONS                                           # context: lookups and files; they exist only when it is on
-ACTIONS = ACTIONS + CONTEXT_ACTIONS
-ACTIONS += ("lease", "accept_lease", "survey", "invest")             # camps: leasing harvest rights; typed camps' survey and invest
-ACTIONS += CF.ACTIONS                                                  # conflict: attack, join_attack, forge, fortify, guard, buy_initiative, contract
-ACTIONS += J.ACTIONS                                                   # jurisdictions: found, invite, join, leave, declare (off: refused)
-ACTIONS += MD.ACTIONS                                                 # media2: outlets, licences, commentary, Scholars (media.py)
-DM_ACTIONS = ("dm", "reply", "forge_dm")                               # private messages: the DM limit applies; fast mode's DM step delivers them
+ACTIONS = AR.actions()                                                 # every action (charter/action_registry.py), in the old order
+CONTEXT_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module == "context")   # context: lookups and files; only when it is on
+MEDIA_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module in ("media", "scholars"))   # media2: outlets, licences, Scholars
+DM_ACTIONS = AR.dm_actions()                                           # private messages: the DM limit applies; fast mode's DM step delivers them
 
 
 class ActionError(Exception):
@@ -37,18 +33,7 @@ class ActionError(Exception):
 
 
 _CAMP_REF = __import__("re").compile(r"^\s*(?:camp)?\s*(\d+)\s*$", __import__("re").I)
-_ALIASES = {"dm": {"message": "text", "msg": "text", "recipient": "to", "agent": "to", "target": "to"},
-            "post": {"message": "text"}, "fortify": {"amount": "qty", "stone": "qty", "quantity": "qty"},
-            "forge": {"amount": "qty", "copper": "qty", "quantity": "qty"}, "vote": {"option": "choice", "vote": "choice", "answer": "choice", "value": "choice",
-                                                    "position": "choice", "selection": "choice", "ballot_id": "ballot"}, "write_scratchpad": {"note": "text", "notes": "text", "content": "text"},
-            "write_archive": {"note": "text", "content": "text", "message": "text"},
-            "found": {"charter": "laws", "starting_laws": "laws"},
-            "name_successor": {"name": "agent", "successor": "agent", "to": "agent", "target": "agent"},
-            "guard": {"target": "agent", "protect": "agent", "who": "agent", "to": "agent"}, "harvest": {"values": "x", "settings": "x"}, "propose": {"law": "code", "text": "code", "source": "code"},
-            "transfer": {"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item",
-                         "resources": "item", "goods": "item", "good": "item", "payment": "item"},
-            "reply": {"message_id": "message", "id": "message", "payment": "item", "pay": "item", "goods": "item"},
-            "write_edition": {"body": "text", "content": "text", "edition": "text"}}
+_ALIASES = AR.aliases()                                                 # forgiving argument names, per action (Act.aliases)
 _IGNORED = {"propose": {"title", "name"}, "write_edition": {"title", "headline"}, "reply": {"to", "recipient"}}   # a reply goes to the sender
 
 
@@ -127,7 +112,7 @@ def act(k, aid: str, name: str, args: dict) -> str:
 
 
 def _act(k, aid: str, name: str, args: dict) -> str:
-    hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MD.ACTIONS))   # context, media2: off = unknown
+    hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MEDIA_ACTIONS))   # context, media2: off = unknown
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):
@@ -159,7 +144,7 @@ def _act(k, aid: str, name: str, args: dict) -> str:
                 ref = mine[0]["id"] if mine else None
             if ref:
                 name, args = "create_agent", {"commission": ref}
-    fn = globals()[f"_{name}"]
+    fn = AR.resolve(AR.REG[name].handler)
     args = _normalise_args(name, args)
     if name == "veto" and isinstance(args, dict):                      # {"should_veto": false} means: no veto
         flag = args.get("should_veto", args.get("veto", True))
@@ -185,11 +170,17 @@ def _act(k, aid: str, name: str, args: dict) -> str:
     try:
         return fn(k, aid, **(args or {}))
     except TypeError as e:
-        raise ActionError(f"bad arguments for {name}: {e}")
+        raise ActionError(f"bad arguments for {name}: {_as_before(e, fn, name)}")
     except L.LawError as e:
         raise ActionError(str(e))
     except (ValueError, KeyError, AttributeError, IndexError) as e:     # a malformed argument must fail the action, never the run
         raise ActionError(f"bad arguments for {name}: {type(e).__name__}: {e}")
+
+
+def _as_before(e: TypeError, fn, name: str) -> str:
+    """A bad-arguments message names the function called; it said "_fortify()" when every action had a function here, and still does."""
+    msg, own = str(e), getattr(fn, "__qualname__", "") + "()"
+    return f"_{name}()" + msg[len(own):] if own != f"_{name}()" and msg.startswith(own) else msg
 
 
 def _need(k, aid, right, what):
@@ -265,17 +256,6 @@ def _harvest(k, aid, camp, x=None, **extra):
         extra = "; correct factor: bounty paid, N redrawn" if info.get("factored") else "; not a factor of N"
     return f"Harvested {y - ded:.3g} {k.name_of('resource:' + item)} at {camp} with x={x if len(str(x)) < 200 else str(x)[:200]}{extra}" + (f" ({ded:.3g} deducted by law)" if ded else "") \
         + (" An accident at the camp has removed you from the game." if accident else "")                       # conflict
-
-
-def _lease(k, aid, right, to, rounds, fee=None):
-    """camps: offer a harvest right for a term; the tenant takes it with accept_lease (charter/camptypes/leases.py)."""
-    from charter.camptypes import leases as LS
-    return LS.offer(k, aid, right, to, rounds, fee)
-
-
-def _accept_lease(k, aid, lease):
-    from charter.camptypes import leases as LS
-    return LS.accept(k, aid, lease)
 
 
 def _survey(k, aid, camp, x):
@@ -491,19 +471,6 @@ def _lend(k, aid, to, item, qty, repay_qty=None, due_in=1, repay_item=None, rate
     (defaults: qty, the same item) within due_in rounds, growing by `rate` per round (simple, or compounding). `refinance`: an
     outstanding loan of `to` that the new money pays off first. The offer lapses after 2 rounds. See credit.py."""
     return CR.lend(k, aid, to, item, qty, repay_qty, due_in, repay_item, rate, compound, refinance)
-
-
-def _accept_loan(k, aid, loan):
-    return CR.accept(k, aid, loan)
-
-
-def _repay_loan(k, aid, loan, qty=None):
-    return CR.repay(k, aid, loan, qty)
-
-
-def _extend_loan(k, aid, loan, rounds, rate=None):
-    """Lender only: roll a loan over (later due round, same or lower rate); revives a defaulted loan."""
-    return CR.extend(k, aid, loan, rounds, rate)
 
 
 def _contribute(k, aid, project, item, qty):
@@ -763,11 +730,6 @@ def _bequest(k, aid, **terms):
     return MO.set_bequest(k, aid, terms)
 
 
-def _name_successor(k, aid, agent):
-    from charter import mortality as MO
-    return MO.name_successor(k, aid, agent)
-
-
 def _commission(k, aid, maker, spec=None, payment=None):
     from charter import life as LF
     out = LF.commission(k, aid, maker, spec, payment)
@@ -776,16 +738,6 @@ def _commission(k, aid, maker, spec=None, payment=None):
         if mine:
             out += " " + LF.create_agent(k, aid, commission=max(mine, key=lambda c: int(c["id"][1:]))["id"])
     return out
-
-
-def _create_agent(k, aid, spec=None, commission=None):
-    from charter import life as LF
-    return LF.create_agent(k, aid, spec, commission)
-
-
-def _copy_agent(k, aid, parent=None, edits=None, commission=None):
-    from charter import life as LF
-    return LF.copy_agent(k, aid, parent, edits, commission)
 
 
 # ------------------------------------------------------------------ media: shaping what others see
@@ -871,6 +823,8 @@ def _channel_post(k, aid, channel, text):
 
 
 # ------------------------------------------------------------------ media2: outlets, licences, commentary, Scholars (media.py, scholars.py)
+# These adapt argument names (an action's "outlet" is media's outlet_ref, "poll" its poll_id); actions whose module function takes
+# the action's own arguments are dispatched to it directly (Act.handler: "scholars:buy_memory", "conflict:act_fortify", ...).
 def _subscribe(k, aid, outlet):
     MD.need(k)
     return MD.subscribe(k, aid, outlet)
@@ -894,11 +848,6 @@ def _write_edition(k, aid, text, audience=None, outlet=None):
 def _buy_placement(k, aid, outlet, text, item, qty):
     MD.need(k)
     return MD.buy_placement(k, aid, outlet, text, item, qty)
-
-
-def _run_placement(k, aid, placement, sponsored=True):
-    MD.need(k)
-    return MD.run_placement(k, aid, placement, sponsored)
 
 
 def _leak(k, aid, outlet, message):
@@ -939,42 +888,6 @@ def _buy_licence(k, aid, outlet):
 def _annotate(k, aid, post, text, outlet=None):
     MD.need(k)
     return MD.annotate(k, aid, post, text, outlet)
-
-
-def _set_memory_price(k, aid, kind, item, qty):
-    MD.need(k)
-    from charter import scholars as SC
-    return SC.set_memory_price(k, aid, kind, item, qty)
-
-
-def _buy_memory(k, aid, scholar, kind="file", n=1):
-    MD.need(k)
-    from charter import scholars as SC
-    return SC.buy_memory(k, aid, scholar, kind, n)
-
-
-def _library_deposit(k, aid, scholar, title, text):
-    MD.need(k)
-    from charter import scholars as SC
-    return SC.library_deposit(k, aid, scholar, title, text)
-
-
-def _library_read(k, aid, scholar, doc=None):
-    MD.need(k)
-    from charter import scholars as SC
-    return SC.library_read(k, aid, scholar, doc)
-
-
-def _library_permit(k, aid, doc, agent, allow=True):
-    MD.need(k)
-    from charter import scholars as SC
-    return SC.library_permit(k, aid, doc, agent, allow)
-
-
-def _library_remove(k, aid, doc):
-    MD.need(k)
-    from charter import scholars as SC
-    return SC.library_remove(k, aid, doc)
 
 
 # ------------------------------------------------------------------ the Scientists' archive
@@ -1112,7 +1025,7 @@ def _rule(k, aid, case, verdict, reason):
     return f"Ruled {c['verdict']} on {case}."
 
 
-# ------------------------------------------------------------------ context: lookups used as actions, scratchpad and files (charter/context.py)
+# ------------------------------------------------------------------ context: lookups used as actions (charter/context.py)
 def _manual(k, aid, section=None):
     return CX.act_lookup(k, aid, "manual", {"section": section})
 
@@ -1139,85 +1052,3 @@ def _search_dms(k, aid, query):
 
 def _read_file(k, aid, name):
     return CX.act_lookup(k, aid, "read_file", {"name": name})
-
-
-def _write_scratchpad(k, aid, text, mode="replace"):
-    return CX.write_scratchpad(k, aid, text, mode)
-
-
-def _write_file(k, aid, name, text):
-    return CX.write_file(k, aid, name, text)
-
-
-def _rename_file(k, aid, name, new_name):
-    return CX.rename_file(k, aid, name, new_name)
-
-
-def _share_file(k, aid, name, to):
-    return CX.share_file(k, aid, name, to)
-
-
-def _delete_file(k, aid, name):
-    return CX.delete_file(k, aid, name)
-
-
-def _pin(k, aid, name):
-    return CX.pin(k, aid, name)
-
-
-def _unpin(k, aid, name):
-    return CX.unpin(k, aid, name)
-# ------------------------------------------------------------------ conflict (charter/conflict.py; "there is no fighting" when off)
-def _attack(k, aid, target, units, covert=False, disguise=False):
-    return CF.act_attack(k, aid, target, units, covert, disguise)
-
-
-def _join_attack(k, aid, attacker, target, units):
-    return CF.act_join_attack(k, aid, attacker, target, units)
-
-
-def _forge(k, aid, qty):
-    return CF.act_forge(k, aid, qty)
-
-
-def _fortify(k, aid, qty, unlock=False):
-    return CF.act_fortify(k, aid, qty, unlock)
-
-
-def _guard(k, aid, agent=None, item=None, qty=None, accept=None, stop=False):
-    return CF.act_guard(k, aid, agent, item, qty, accept, stop)
-
-
-def _buy_initiative(k, aid, n):
-    return CF.act_buy_initiative(k, aid, n)
-
-
-def _contract(k, aid, to, target, item=None, qty=0, text=""):
-    return CF.act_contract(k, aid, to, target, item, qty, text)
-# ------------------------------------------------------------------ jurisdictions (charter/jurisdictions.py; refused when the module is off)
-def _found(k, aid, name, laws=None):
-    return J.act_found(k, aid, name, laws)
-
-
-def _fund(k, aid, jurisdiction, item, qty):
-    return J.act_fund(k, aid, jurisdiction, item, qty)
-
-
-def _set_charter(k, aid, jurisdiction, laws=None):
-    return J.act_set_charter(k, aid, jurisdiction, laws)
-
-
-def _invite(k, aid, jurisdiction, agent):
-    return J.act_invite(k, aid, jurisdiction, agent)
-
-
-def _join(k, aid, jurisdiction):
-    return J.act_join(k, aid, jurisdiction)
-
-
-def _leave(k, aid, jurisdiction=None):
-    return J.act_leave(k, aid, jurisdiction)
-
-
-def _declare(k, aid, jurisdiction):
-    return J.act_declare(k, aid, jurisdiction)

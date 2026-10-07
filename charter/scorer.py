@@ -13,6 +13,7 @@ import re
 import statistics
 from pathlib import Path
 
+from charter import action_registry as AR
 from charter import archive
 from charter import credit as CR
 from charter import events as EV
@@ -27,26 +28,7 @@ from charter import projects as P
 # score.json files and run.json segments say which rules produced them.
 SCORING_VERSION = 1
 
-CATEGORIES = {                                                         # activity category of every agent action (activity_mix)
-    "productive": {"harvest", "run_python", "read_archive", "search_archive", "write_archive", "survey", "invest",   # camps
-                   "create_agent", "copy_agent"},                                         # life
-    "economic": {"transfer", "deposit", "redeem", "lend", "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute",
-                 "lease", "accept_lease", "bequest", "commission"},                       # camps: leases; life
-    "political": {"propose", "vote", "veto", "patch", "request_fix", "accuse", "respond", "rule", "invoke", "set_dm_limit",
-                  "name_successor", "found", "invite", "join", "leave", "declare"},       # life; jurisdictions
-    "talk": {"post", "dm", "reply", "forge_dm", "anon_post", "publish", "write_digest", "report", "create_channel", "channel_post",
-             "add_member", "remove_member", "close_channel"},
-}
-CATEGORIES["productive"] |= {"manual", "manual_search", "search_board", "search_dms", "read_file", "write_scratchpad",   # context:
-                           "write_file", "rename_file", "delete_file", "pin", "unpin"}
-CATEGORIES["talk"] |= {"share_file"}                                   # context:
-CATEGORIES["political"] |= {"attack", "join_attack", "guard", "contract"}      # conflict: force and protection
-CATEGORIES["economic"] |= {"forge", "fortify", "buy_initiative"}               # conflict: arming and initiative
-CATEGORIES["productive"] |= {"read_law", "recent"}                     # context: look-ups, like manual and search_board
-CATEGORIES["economic"] |= {"fund"}                                     # jurisdictions: paying a treasury, like contribute
-CATEGORIES["political"] |= {"set_charter"}                             # jurisdictions: a founder setting laws, like found/declare
-for _c, _names in MD.CATEGORIES.items():                                # media2 actions
-    CATEGORIES[_c] = CATEGORIES[_c] | _names
+CATEGORIES = AR.categories()                                           # activity category of every agent action (Act.category)
 PRODUCTIVE, POLITICAL = CATEGORIES["productive"], CATEGORIES["political"]
 
 
