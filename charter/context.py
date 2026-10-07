@@ -1014,7 +1014,8 @@ def overview(inst) -> str:
     camps = "; ".join(f"{c['id']} {c['resource']}" + (f" ({_short.get(c.get('type'), 'dials and a hidden rule')}; {harvest_args(c)})"
                                                       if c.get("type") else f" (tier {c.get('tier')}: dials and a hidden rule)")
                       for c in inst["camps"])
-    lines = [f"Charter: {len(inst['agents'])} agents, {inst['rounds']} rounds. Your score is your goal (below), computed from the final state.",
+    lines = [f"Charter: {len(inst['agents'])} agents, {inst['rounds']} rounds. Your score is your goal (below), measured after the game "
+             "from its record: depending on the goal, the state at the end, every round, or what happened during the game.",
              f"Camps: {camps}. You harvest only where you hold a harvest right (or at an open camp, if your class may play it); stocks regrow, so overharvesting hurts "
              "everyone. [manual: World rules]",
              "Money: barter until a law creates a currency; a backed coin is worth its reserve per coin; unbacked coins are worth 0 at the end. "

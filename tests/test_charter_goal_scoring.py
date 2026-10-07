@@ -128,3 +128,15 @@ def test_lineage_override_covers_only_goals_about_own_holdings_or_offices():
     assert got["B"] == 1.0                                           # B's descendant C holds vote
     gt2 = _life_gt({"A": _goal("Rival", params={"target": "B"})}, values={"A": 1.0, "B": 5.0, "D": 10.0})
     assert _override(gt2)["A"] == pytest.approx(0.2)                 # A against B, not A's child D against B
+
+
+
+# ------------------------------------------------------------------ 4. the core prompt's score sentence
+def test_core_prompt_does_not_claim_every_goal_is_scored_on_the_final_state():
+    from charter import context as CX
+    from charter import generator
+    from charter import spec as S
+    inst = generator.generate(S.apply_overrides(S.load("context_pilot"), ["shared_archive.enabled=false"]), 1)
+    txt = CX.overview(inst)
+    assert "computed from the final state" not in txt
+    assert "the state at the end, every round, or what happened during the game" in txt
