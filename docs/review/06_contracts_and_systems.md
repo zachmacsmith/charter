@@ -308,3 +308,117 @@ goal registry with History (for §7).
 and template-vs-raw-code share per model tier. If Haiku-class agents found fewer than one association per run, steps 4-7 are
 building for agents that will not use them. Spend the effort on prompt affordances (a short "institutions you can set up" menu)
 instead.
+
+## 9. Addendum: re-expressing jurisdictions (including J0) as contracts
+
+*Written after the owner pushed back on §5. I checked the counts again, and **my earlier "don't" was too strong.** The storage
+move is smaller than I implied:*
+- `w["reserve"]` is read at 20 sites in 9 files;
+- `w["procedures"]`/`procedure_history` at 14;
+- and 27 `J.*` call sites outside jurisdictions.py, besides the ~41 jurisdiction lines in kernel.py and actions.py.
+
+*Once the refactor cost is accepted, the owner's framing is right. The revised recommendation is in §9.4: do it, but later.*
+
+### 9.1 Is the end state more elegant? Yes, with one caveat.
+
+**What gets simpler.** Today every world runs one of two paths: "no jurisdictions" (`"jur" not in k.w`, where `binds` is always
+True) or "jurisdictions". J0 is a third, hybrid case: the `legacy` flag, 22 uses in jurisdictions.py. A contract kind (06 §3)
+would add a fourth. The end state has **one path**, in which every law belongs to an account with members and a power table. Things
+that would be deleted or merged:
+- **Hook dispatch:** `Kernel.hooks` (kernel.py:639-655) duplicates `J.hooks`.
+- **Proposals:** `Kernel.decide`/`passed` duplicate `J.decide`/`passed` (about 35 lines each).
+- **Political analytics:** `Kernel.procedure_spec`/`decisive_set`/`vote_weights`/`franchise_share` (kernel.py:1127-1215) duplicate
+  `J._procedure_spec`/`decisive_set`/`franchise_share`/`vote_weights` (jurisdictions.py:1152-1215). This is about 90 lines, and
+  today the goals have to choose between the two copies.
+- **Reserve lookups:** the `"reserve"` vs `"reserve:<jid>"` branches in `bal`/`_add`/`price`, `pool`/`reserve_key`/`home_reserve`/
+  `currency_reserve`, and the `legacy` flag itself.
+- **Proposing:** `_propose` (actions.py:611-651) is a near-copy of `J.propose`.
+- **Feature checks:** the `J.enabled` guards in actions (the propose, invoke, accuse and judges branches).
+
+My estimate is about −300 lines net, after adding a power table (about 60 lines), a migration (about 40) and the association code.
+The bigger gain is edit locality: a new law function or hook is written once, not for the legacy path, the J path and then
+contracts as well.
+
+**What gets more complex.**
+- Every world, including E0-E7, now runs through `scope_api` and per-account dispatch. The runtime cost is negligible; the cost to
+  readers is real.
+- The spec switch `jurisdictions.enabled` stops meaning "represented as polities" and starts meaning "agents may found, join and
+  leave". That has to be documented and tested.
+- J0 must be bootstrapped in `Kernel.__init__` before the constitution, regime statutes and `start_laws` are enacted into it. In a
+  state-of-nature start there is no J0 and those laws are void, as today.
+
+**The caveat.** It is "one mechanism plus a short list of kernel invariants", not "one mechanism".
+- The Board's entrenched veto, the Fixer's patch right, the static classes and law levels, the 3-round dry run, and the DM and
+  secrecy rules stay kernel rules.
+- They attach to *polity* accounts (the Board to the founding one, per `board_scope`) through the power table.
+- They must not become contract code that a law can repeal. That is the experimental contract (review 07 §4).
+
+### 9.2 What breaks or changes behaviour, and is any of it fundamental?
+
+**Nothing I found is fundamental.** Each of the semantic differences becomes a column of the power table, not a contradiction:
+
+| Difference | In the unified model |
+|---|---|
+| Law classes and levels (lawlang `classify`, `LEVEL_CLASSES`) | Per kind: polities enforce levels; associations are capped by their power table instead |
+| Entrenchment, Board veto, `board_scope` | A kernel invariant; the veto window applies to polity accounts the Board reviews (exactly `J.board_reviews` today) |
+| Fixer patching and error queue | Per kind: polities yes, associations no (06 §3) |
+| Dry-run previews | Every proposal in every account, as today; for association templates, optional |
+| `decisive_set`, `franchise_share` | One implementation per account; the snapshot's top-level values are J0's or the founding polity's, as now |
+| Hidden jurisdictions | A lifecycle status (hidden, then declared) of polity accounts; associations are live from the start |
+| Credit, par, projects, tribute (`LEGACY_ONLY`) | A "founding polity only" power. Making credit per polity is a separate feature, not part of this refactor |
+
+**Things that are work, not principle:**
+1. **Byte-level goldens.** Making J0 always present adds `jur` and `jurisdictions` keys to state and snapshots. That forces one
+   golden re-record, with the reason given.
+2. **Old checkpoints.** A `restore_state` migration (next to `_migrate_rights`, kernel.py:729) builds the J0 record from the
+   legacy keys.
+3. **Readers of old snapshots.** Post-hoc analysis and the History object need a schema-version branch.
+
+**Is any experiment's meaning lost?** No, provided behaviour is identical. That can be *proved* with a differential test: run every
+golden preset on the old and new code and compare the event streams after normalising the new keys. If they match, E0-E7 mean
+what they meant. My reading of the code says they should match:
+- `J.binds` is True for everyone in J0, including the Board and the Fixer, because `install` makes every agent a member
+  (jurisdictions.py:121-122);
+- hooks run in the same `active_laws` order;
+- ballots without a jurisdiction resolve to J0 through `ballot_jur`;
+- the agents' prompts are gated by the spec, not by the representation.
+
+**Keep `"reserve"` as J0's owner key forever.** Library laws and agent-written laws contain the literal `move("reserve", ...)`, and
+old move events log it.
+
+**The one place I would expect a real difference** is `J.vis` filtering every public log call, and `scope_api` wrappers that
+silently refuse rather than raise (`REFUSED`). Those only act on non-members, of whom J0 has none. This is where the differential
+test earns its keep.
+
+### 9.3 Refactor path
+
+Each step keeps the differential test (old vs new event streams) and the existing goldens green, unless the step says otherwise.
+
+| Step | What | Effort | Risk |
+|---|---|---|---|
+| 0 | Associations v1 per §8 steps 2-3 (a `kind` field, the power table in `lawapi.LAWFNS`, per-law tax destinations) | (already planned) | medium |
+| 1 | A differential harness: presets E0-E7 and the society case, old and new code, comparing normalised `events.jsonl` and snapshots | 1 day | low |
+| 2 | One political-analytics implementation: the kernel's copies delegate to the per-account versions for J0 | ½ day | low |
+| 3 | Split `J.enabled` into `represented(k)` (always) and `feature_on(spec)` (actions and prompts). Install J0 in every world. **One golden re-record** for the new state keys | 1-2 days | **high**: the log, visibility, hooks and API scoping become live in every world |
+| 4 | Route `hooks`, `decide`, `passed`, `enact` and `_propose` through the account path unconditionally. Delete the kernel copies | 1-2 days | medium |
+| 5 | Move J0's storage into the J0 record: the reserve, procedures and procedure history, currencies' reserve tags, camp rules. `"reserve"` resolves to J0. Delete `legacy` | 2 days | **high**: credit backing, first-coin treasury issue (actions.py:572-580), projects escrow, tribute, mortality's leftovers |
+| 6 | `LEGACY_ONLY` becomes a "founding polity" power in the table | ½ day | low |
+| 7 | Checkpoint migration, schema version, History loader branch | 1 day | medium |
+
+**Total:** about 7-10 agent-days after associations v1. Steps 3 and 5 carry the risk. Do not merge either without a clean
+differential run on all presets, including jurisdictions-on with hidden jurisdictions and a state-of-nature start.
+
+### 9.4 Revised recommendation: do it, later
+
+Do it after **associations v1 has shipped and been piloted** (§8 step 3), and after **review 04's recording work and the History
+schema version** exist. The deciding reasons:
+1. **The elegance is real, and it compounds.** Once a second account kind exists, every new law function or hook would otherwise
+   be written for three paths (legacy, J, association). The refactor pays for itself in the second or third feature after
+   contracts.
+2. **But design the power table from two real kinds, not one.** Re-expressing J0 first would freeze a table shaped only by
+   polities. Associations will reveal which powers actually vary: paying outsiders, escrow-only seizure, the Fixer and levels per
+   kind.
+3. **The differential test makes it safe.** The re-recorded golden then loses no experimental meaning. Without that test, I would
+   still say don't.
+4. **Draw the line at the invariants.** The Board, the Fixer, entrenchment, classes and the dry run stay kernel rules attached by
+   kind. Turning them into repealable seed code would be a different simulation (review 07 §4), not a refactor.
