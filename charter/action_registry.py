@@ -214,6 +214,7 @@ R("write_archive", "leave your one note for future Scientists", "MEMORY", core=T
 # produce
 R("harvest", "produce resources at a camp", "PRODUCE", core=True, needs=("notcls:board", "notcls:fixer"), when=_k_can_harvest,
   edge=("harvest:*",))
+# right:maker agrees with life.is_maker (the role): the right is carried by the role and no law can grant, revoke or suspend it
 R("create_agent", "make a new agent (Makers): to order, or your own", "PRODUCE", core=True, needs=("mod:life", "right:maker"))
 # politics
 R("propose", "write a law: change the rules", "POLITICS", core=True, needs=("right:propose", "level:1"))
