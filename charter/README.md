@@ -72,6 +72,25 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   scripted bots store their parsed reply instead. `prompts/system/<sha>.txt` holds each distinct system prompt actually sent, once
   (with context on it is rebuilt every turn; `prompts/<id>.system.md` is only the first).
 
+## Differential test: did a refactor change behaviour? (`charter/difftest.py`)
+Runs the same scripted worlds on two code revisions and reports where they first diverge (the gate in docs/review/06 §9.3).
+```bash
+.venv/bin/python -m charter difftest --base main --head WORKTREE --presets E0,E1,E2,E3,E4,E5,E6,E7,society --seeds 1,2 --rounds 3
+.venv/bin/python -m charter difftest --base main --head HEAD --presets E4 --seeds 1 --rounds 4 --set turns=simultaneous \
+    --ignore-field cause --json diff.json        # an intended new `cause` field must not hide a real divergence
+```
+- `--base`/`--head` are git revisions, checked out into temporary `git worktree`s (removed afterwards); `--head WORKTREE` (the
+  default) is the current checkout with uncommitted changes. Each preset/seed runs in its own subprocess rooted in that tree, with
+  `ScriptedPolicy`, the shared archive off, API keys stripped and `LLMPolicy` disabled: no model calls.
+- Compares `instance.json`, `events.jsonl`, `snapshots.json`, `ground_truth.json` and `score.json`. The report gives, per case, the
+  **first diverging event** (index, round, type, both versions and the differing fields), event counts per type that changed, the
+  differing snapshot fields per round, and goal-score differences per agent and goal component. `--json` writes the full report;
+  exit status 1 when anything diverges.
+- Normalising intended changes: `--ignore-field NAME` (any depth, or a dotted path such as `data.cause`), `--ignore-type TYPE` (a new
+  event type; add `--ignore-field id` since ids shift), `--rename OLD=NEW` and `--rename-type OLD=NEW` (applied to the base side),
+  `--float-tol`. `--keep DIR` keeps both sides' run directories; `--jobs N` sets parallel runs.
+- Cost: a scripted E2/E4 run of 3 rounds takes about 8-12 s on one core; base and head each run every case.
+
 ## Layout
 | Module | Role |
 |---|---|
