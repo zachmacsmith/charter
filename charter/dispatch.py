@@ -8,7 +8,7 @@ P2.1 is the skeleton WITHOUT new semantics. For a routed primitive `apply`:
   3. runs the legacy BEFORE aliases (primitives.ALIASES) whose filter matches the payload and the cause chain, through Kernel.hooks
      (enactment order; with jurisdictions on, J.hooks' binding), in canonical order;
   4. resolves their verdicts (`resolve`): today's readers per alias (on_transfer: False blocks, a positive non-bool number taxes;
-     on_harvest: a positive number, True counting 1, deducts); charges go to J.home_reserve(payer) until P4.1, capped by the change;
+     on_harvest: a positive number, True counting 1, deducts); charges go to the charging law's treasury (accounts.charge_destination, P4.1), capped by the change;
   5. makes the change: the row's `fn` ("dispatch:do_<name>", (k, **payload, **options) -> dict result);
   6. runs the legacy AFTER aliases synchronously, as today (on_post with current_post set, on_dm).
 New-style before_<p>/after_<p> hooks are not live (law.v2, P3.1): the after-queue of a cascade therefore stays empty, and `drain`
@@ -31,6 +31,7 @@ from collections import deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
+from charter import accounts as AC
 from charter import eventtypes as ET
 from charter import jurisdictions as J
 from charter import lawlang as L
@@ -216,8 +217,9 @@ DIRECTIVE_OK = {"admit": lambda k, v: True,
 
 
 def resolve(k, P: PR.Primitive, payload: dict, verdicts: list) -> Decision:
-    """Before-verdicts -> a Decision: any block blocks; numeric verdicts are charges of the row's (payer, item) to the payer's home
-    reserve (J.home_reserve; per-law destinations are P4.1), their sum capped by the payload's quantity."""
+    """Before-verdicts -> a Decision: any block blocks; numeric verdicts are charges of the row's (payer, item) to the charging
+    law's own treasury (accounts.charge_destination, P4.1; today always the payer's home reserve), their sum capped by the payload's
+    quantity."""
     blocked, charges, directives = [], [], {}
     for alias, lid, out in verdicts:
         kind, qty = (READERS.get((alias.name, payload.get("via"))) or READERS[alias.name])(out)
@@ -227,7 +229,7 @@ def resolve(k, P: PR.Primitive, payload: dict, verdicts: list) -> Decision:
             directives[qty[0]] = qty[1]                              # the last in canonical order wins
         elif kind == "charge" and P.charge:
             payer, item = (payload[x] for x in P.charge)
-            charges.append(Charge(lid, payer, item, qty, J.home_reserve(k, payer)))
+            charges.append(Charge(lid, payer, item, qty, AC.charge_destination(k, lid, payer)))
     total = 0.0
     for c in charges:
         total += c.qty
@@ -273,7 +275,7 @@ def apply(k, name: str, payload: dict) -> Outcome:
     d = resolve(k, P, p, verdicts) if verdicts else Decision()
     if d.block and P.blockable:
         return Outcome(ok=False, blocked_by=d.blocked_by, charges=d.charges)
-    extra = {"charged": d.charged, "charge_to": d.charges[0].dst if d.charges else None} if P.charge else {}
+    extra = {"charged": d.charged, "charge_to": AC.charge_plan(d.charges, d.charged)} if P.charge else {}
     extra.update(d.directives)                                      # the verdicts' directives (only those set) reach the change
     result = fn(k, **p, **opts, **extra)
     with _after_context(k, name, p, result):
@@ -330,7 +332,11 @@ def check_move(k, p):
         raise L.LawError("quantity must be non-negative")
     if qty == 0:
         raise _Noop({"moved": 0.0})
-    if k.bal(p["src"], p["item"]) + 1e-9 < qty:
+    if str(p["why"]).startswith("law:"):                            # accounts: a law's move names agents and treasuries only
+        for key in (p["src"], p["dst"]):
+            if not AC.law_key_allowed(k, key):
+                raise L.LawError(f"no such agent: {key}")
+    if not AC.can_pay(k, p["src"], p["item"], qty):
         raise PhysicsError("insufficient")
     return {**p, "qty": qty}
 
@@ -442,8 +448,8 @@ def do_move(k, src, dst, item, qty, why, actor=None, charged=0.0, charge_to=None
     """Goods change owner. A charge (a legacy tax) is taken from what dst receives and moved, as its own move, to charge_to."""
     moved = qty - charged if charged else qty
     ok = _move(k, src, dst, item, moved, why, actor)
-    if charged:
-        k.move(src, charge_to, item, charged, why=f"{why}_tax", by=actor)
+    for to, q in AC.payouts(charge_to, charged):                    # one destination today; one move per law treasury (P4.1)
+        k.move(src, to, item, q, why=f"{why}_tax", by=actor)
     return {"moved": moved if ok else 0.0, "charged": charged}
 
 
@@ -474,7 +480,8 @@ def do_harvest(k, agent, camp, x, item, qty, via=None, charged=0.0, charge_to=No
     if qty - charged > 0:
         k._add(agent, item, qty - charged)
     if charged > 0:
-        k._add(charge_to, item, charged)
+        for to, q in AC.payouts(charge_to, charged):                # the laws' treasuries (one destination today)
+            k._add(to, item, q)
     if via == "typed":
         from charter import resources as RS
         v = k.w["unit"].get(item, RS.VALUE.get(item, 0.0))

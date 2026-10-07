@@ -495,6 +495,8 @@ def test_legal_acts_scenario_is_identical_to_before_p2_3(legal_recorded, name):
     A.act(k, leg, "propose", {"code": ORDINARY.replace("Notice Board", "Preview Probe")})
     assert k.w["laws"] and all(l.get("preview") is None for l in k.w["laws"].values())   # as before P2.3 (dispatch.do_propose)
     assert next(e for e in k.events if e["type"] == "proposal")["data"]["preview"]        # the event carries it
+    for j in ((now.get("state") or {}).get("jurisdictions") or {}).values():   # P4.1: records gained their account kind and treasury key
+        j.pop("kind", None), j.pop("treasury", None)
     assert not _first_diff(legal_recorded[name], now), _first_diff(legal_recorded[name], now)
     for hook in ("on_proposal", "on_vote", "on_ruling", "on_enact", "on_repeal", "tally", "penalty", "act_census"):
         assert any(f'"{hook}"' in c for c in now["calls"]), (name, hook)

@@ -19,6 +19,7 @@ import types
 from contextlib import contextmanager
 
 from charter import context as CX                                     # context: files and scratchpads (charter/context.py)
+from charter import accounts as AC                                     # accounts: owner keys -> holder records (P4.1)
 from charter import conflict as CF                                  # conflict: attacks, forts, assassin (off by default)
 from charter import credit as CR
 from charter import dispatch as D                                     # Kernel.apply: primitives, legacy hook aliases (P2.1)
@@ -261,18 +262,11 @@ class Kernel:
                          for k, q in self.agent(aid)["holdings"].items()), 4)
 
     def bal(self, owner, item):
-        if owner == "reserve":
-            return self.w["reserve"].get(item, 0.0)
-        if isinstance(owner, str) and owner.startswith("reserve:"):         # jurisdictions: another jurisdiction's reserve
-            return J.pool(self, owner).get(item, 0.0)
-        return self.agent(owner)["holdings"].get(item, 0.0)
+        """Balance of any registered account (accounts.py: an agent, "reserve", "reserve:<jid>", "estate:<aid>")."""
+        return AC.bal(self, owner, item)
 
     def _add(self, owner, item, qty):
-        tgt = self.w["reserve"] if owner == "reserve" else J.pool(self, owner) if isinstance(owner, str) and owner.startswith("reserve:") \
-            else self.agent(owner)["holdings"]                           # jurisdictions: "reserve:<jid>"
-        tgt[item] = round(tgt.get(item, 0.0) + qty, 6)
-        if abs(tgt[item]) < 1e-9:
-            del tgt[item]
+        AC.add(self, owner, item, qty)                                 # accounts.py: any registered owner key
 
     def move(self, src, dst, item, qty, why="move", by=None):
         """The move primitive as a yes/no (every module's moves): False when the balance is short or a law blocks it."""
