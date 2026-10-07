@@ -32,7 +32,7 @@ L4_CALLS = LA.L4_CALLS                                                 # define_
 CLASS_RANK = {"ordinary": 0, "structural": 1, "procedural": 2}         # strictness: a law may not repeal a stricter one (Kernel.repeal)
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},
                  "L4": {"ordinary", "structural", "procedural"}}
-HOOKS = LA.HOOKS                                                       # lawapi.HOOKTABLE: signatures, returns, dispatch
+from charter.primitives import LAW_HOOKS as HOOKS                     # noqa: E402  live hooks of primitives.HOOKS (lawapi.HOOKTABLE)
 SAFE_BUILTINS = {"len": len, "range": range, "min": min, "max": max, "sum": sum, "abs": abs, "int": int, "float": float,
                  "round_to": round, "sorted": sorted, "list": list, "dict": dict, "set": set, "str": str, "bool": bool,
                  "enumerate": enumerate, "zip": zip, "any": any, "all": all, "True": True, "False": False, "None": None, "tuple": tuple}
