@@ -566,8 +566,8 @@ def law_api(k, lid) -> dict:
                 hs[key].remove(agent)
                 n += 1
                 if key == "secret_camps" and not k.dry:            # the camp goes with the power (never in a preview: no leak)
-                    a = k.agent(agent)
-                    a["rights"] = [r for r in a["rights"] if not secret_right(k, r)]
+                    for r in [r for r in k.agent(agent)["rights"] if secret_right(k, r)]:
+                        k.apply("revoke_right", agent=agent, right=r, via="hidden")   # no `rights` event (secret), as before
         if n:
             k.log("power_revoked", None, {"agent": agent, "name": name, "count": n, "law": lid}, vis="monitor")
         return n

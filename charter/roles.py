@@ -196,7 +196,8 @@ def init_state(k) -> None:
         return
     k.w["roles"] = copy.deepcopy(r["holders"])
     k.w["roles_state"] = {"seen": {}, "reads": {}, "passed": []}
-    k.w["rights"] = sorted(set(k.w["rights"]) | RT.ROLE_RIGHTS)
+    for right in sorted(RT.ROLE_RIGHTS - set(k.w["rights"])):        # the role rights join the catalogue (create_right, via "role")
+        k.apply("create_right", right=right, via="role")
 
 
 def _alive(k, aid) -> bool:
@@ -296,11 +297,8 @@ def pass_on(k, role, from_aid) -> None:
         return
     new = random.Random(f"{k.inst['seed']}|roles|pass|{_stream(role)}|{k.r}|{from_aid}").choice(pool)
     lst.append(new)
-    if role == "spy":
-        rights = k.w["agents"][new]["rights"]
-        if RT.RIGHT_OF_ROLE["spy"] not in rights:
-            rights.append(RT.RIGHT_OF_ROLE["spy"])
-            rights.sort()
+    if role == "spy":                                                # a role's right changes only with the role (via "role")
+        k.apply("grant_right", agent=new, right=RT.RIGHT_OF_ROLE["spy"], via="role")
         st["reads"].pop(new, None)
     st["passed"].append({"round": k.r, "role": role, "from": from_aid, "to": new})
     k.log("notify", None, {"to": new, "text": "A role has passed to you. " + role_text(k, role)}, vis=[new])

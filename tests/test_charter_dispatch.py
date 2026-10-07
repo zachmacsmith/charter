@@ -258,6 +258,8 @@ def test_routed_rows_name_dispatch_functions():
     want |= {"regrow", "drift", "destroy", "set_camp_state", "create_camp", "contribute", "settle_project"}       # P2.4c: world causes
     want |= {"propose", "decide", "open_ballot", "cast_vote", "close_ballot", "veto", "enact", "repeal", "amend", "set_procedure", "rule",
              "define_action"}                                          # P2.3
+    want |= {"join", "leave", "admit", "expel", "subscribe", "set_outlet_rule", "set_media_rule", "appoint", "lease",
+             "improve_camp"}                                           # P2.4d: membership, media, typed camps and leases
     assert set(D.ROUTED) == want
     for n in want:
         p = PR.get(n)
