@@ -4,7 +4,7 @@ Writes to the run directory:
   run.json            provenance at the start of the run (git sha, dirty flag + sha of `git diff HEAD`, python, policy/backend/models,
                       llm config without secrets, dry flag, spec and instance sha, seed, a `code` block with a sha per charter module
                       and the explicit state-schema / law-API / scoring versions) and `segments`: one record per start or resume
-                      (later: fork) with its first round, the code it ran under and the modules whose hash changed since the
+                      (rewind and fork: replay.py) with its first round, the code it ran under and the modules whose hash changed since the
                       previous segment. A resume under different code is recorded here, never hidden.
   calls.jsonl         one row per model call (policy.act): call id `r<round>:<agent>:<n>` (also put in the reasoning row's
                       usage["call"]), the explicit call key the runner passes ({round, phase, wave, agent, n} and its id
@@ -173,7 +173,8 @@ def read(out) -> dict | None:
 
 def begin(out, inst: dict, policy, kind: str, first_round: int, dry: bool | None = None, checkpoint_version=None,
           instance_source=None) -> dict:
-    """Write run.json at a start (kind "start": a fresh run.json) or append a segment (kind "resume", later "fork")."""
+    """Write run.json at a start (kind "start": a fresh run.json, `parent` and `replicate` null) or append a segment (kind
+    "resume"; rewinds and forks get theirs from branch())."""
     out = Path(out)
     code, git, env, pol = code_block(), git_info(), env_info(), policy_info(policy, inst, dry)
     prev = read(out) if kind != "start" else None
@@ -188,7 +189,7 @@ def begin(out, inst: dict, policy, kind: str, first_round: int, dry: bool | None
         data = {"run_id": inst.get("run_id") or out.name, "created": seg["started"], "seed": inst.get("seed"),
                 "spec_sha": sha(json.dumps(spec, sort_keys=True, default=str)),
                 "instance_sha": sha(json.dumps(inst, sort_keys=True, default=str)),
-                **pol, "git": git, **env, "code": code, "segments": []}
+                **pol, "git": git, **env, "code": code, "parent": None, "replicate": None, "segments": []}
         if kind != "start":
             data["note"] = "run.json first written on a resume: earlier segments are unknown"
         seg["changed_modules"], seg["changed_versions"] = [], {}
@@ -215,7 +216,7 @@ def end(out, status: str, last_round: int | None) -> None:
 
 
 def branch(out, kind: str, first_round: int, parent: dict) -> dict:
-    """A new run directory made from another (kind "rewind", later "fork"): run.json (copied from the parent) gets `parent` and a
+    """A new run directory made from another (kind "rewind" or "fork"): run.json (copied from the parent) gets `parent` and a
     segment of that kind, with the code it was made under; the resume that continues it appends its own segment as usual."""
     out = Path(out)
     data = read(out) or {"segments": [], "note": "parent had no run.json"}

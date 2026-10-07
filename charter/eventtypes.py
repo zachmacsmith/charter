@@ -213,6 +213,7 @@ E("round_start", "runner", "summary", "public", "silent", None,
   silent="the published turn order; agents are not shown it in feeds (KNOWN GAP: public and unrendered, not one of the twelve)")
 E("turn", "runner", "record", "monitor", "silent", None)
 E("rules_changed", "runner", "record", "monitor", "silent", None)
+E("intervention", "interventions", "record", "monitor", "silent", None)   # interventions.apply_due: one per applied op
 E("lookup", "context", "record", "monitor", "silent", None)
 E("observer_exists", "observer", "record", "monitor", "silent", None)
 E("observer_read", "observer", "record", "monitor", "silent", None)

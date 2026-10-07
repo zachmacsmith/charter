@@ -39,6 +39,7 @@ from charter import conflict as CF
 from charter import failstop as FS
 from charter import hidden as H
 from charter import events as EV
+from charter import interventions as IV                               # interventions: scheduled typed ops (charter/interventions.py)
 from charter import library as LB
 from charter import provenance as PV
 from charter import media as MD                                       # media2
@@ -49,6 +50,7 @@ from charter import roles as R                                         # roles: 
 from charter import resources as RS                              # camps: optional upkeep
 from charter.camptypes import framework as CT                    # camps: typed camps' ground truth
 from charter.kernel import STATE_SCHEMA, Kernel
+from charter.schema import RUNTIME_SAFE
 
 PREDICATES = {**LB.PREDICATES, **{f"outcome:{c}": f for c, f in LB.OUTCOMES.items()}}
 
@@ -63,8 +65,63 @@ def welfare(k) -> float:
 
 # Runtime-only settings that may be switched on part-way through a run (--live): they change how turns are played, not how the world
 # was generated, so a run with a checkpoint can still resume. The change is logged, announced to every agent, and kept in the state.
-LIVE_KEYS = {"media2.submissions", "context.lookups_in_dm_step", "context.action_purposes", "context.explore_nudge",
-             "context.budgets.core", "jurisdictions.declare_cost", "media2.edition_tokens", "context.budgets.media"}
+# The keys are those the spec schema declares runtime-safe (schema.RUNTIME_SAFE). --live is a thin wrapper over the set_spec op.
+LIVE_KEYS = frozenset(RUNTIME_SAFE)
+
+
+class RunState:
+    """The runner's loop state, one object: checkpointed whole (to_dict / from_dict) and addressable by interventions.
+      notes, cursors, results, guesses   per agent: carried-over notes, feed cursor, last results, final goal guesses
+      sysp, agents                       per agent: the current system prompt and agent dict (derived from the instance, which a
+                                         resume rebuilds, so not in to_dict)
+      schedule                           the intervention schedule (interventions.py); what was applied is in k.w["interventions"]
+      policy_state                       the policy's RNG state (scripted bots); observer: the observer's state
+      welfare_series, start_values, shared_snap, const   run-level records for ground_truth.json
+      forced                             replies set by replace_reply for this round (transient: consumed within the round)
+    Item access (rs["cursors"]) serves code that takes the runner's state as a dict (events.sync)."""
+    SAVED = ("notes", "cursors", "results", "guesses", "welfare_series", "start_values", "shared_snap", "const", "policy_state",
+             "observer", "schedule")
+
+    def __init__(self, **kw):
+        self.notes, self.cursors, self.results, self.guesses = {}, {}, {}, {}
+        self.welfare_series, self.start_values, self.shared_snap, self.const = [], {}, None, None
+        self.policy_state = self.observer = None
+        self.schedule: list = []
+        self.sysp: dict = {}
+        self.agents: dict | None = None
+        self.out = None
+        self.forced: dict = {}
+        for x, v in kw.items():
+            setattr(self, x, v)
+
+    def to_dict(self) -> dict:
+        d = {x: getattr(self, x) for x in self.SAVED}
+        d["policy_rng"] = d.pop("policy_state")                         # the checkpoint's name for it since format 1
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RunState":
+        d = dict(d)
+        if "policy_state" not in d:
+            d["policy_state"] = d.pop("policy_rng", None)
+        d["schedule"] = list(d.get("schedule") or [])
+        return cls(**{x: d[x] for x in cls.SAVED if x in d})
+
+    def __getitem__(self, name):
+        return getattr(self, name)
+
+    def get(self, name, default=None):
+        return getattr(self, name, default)
+
+
+def _setup(k, inst, rs, schedule, live, notices, first_round, log=print) -> None:
+    """At a (re)start: merge the given schedule into the run's, add --live and --notice as setup entries, apply what is due."""
+    new = list(schedule or []) + IV.live_entries(k, live, first_round) + IV.notice_entries(k, notices, first_round)
+    if new:
+        rs.schedule = IV.merge(rs.schedule, new)
+        IV.write_schedule(rs.out, rs.schedule)
+    if rs.schedule:
+        IV.apply_due(k, inst, rs, "setup", round_=first_round, log=log)
 
 
 def _apply_live(k, inst, live: dict, log=print, announce=True) -> None:
@@ -104,16 +161,6 @@ def _apply_live(k, inst, live: dict, log=print, announce=True) -> None:
                                           f"{int(live['media2.edition_tokens'])} tokens, room for more of what readers sent in.")
 
 
-def _post_notices(k, notices, log=print) -> None:
-    """--notice: public notices posted once each (kept in the state so a later resume does not repeat them)."""
-    done = k.w.setdefault("notices_posted", [])
-    for t in notices or ():
-        if t and t not in done:
-            k.gazette(str(t))
-            done.append(t)
-            log(f"  notice posted: {str(t)[:80]}")
-
-
 def _as_item(q) -> dict | None:
     """A pre-action ({"lookup": name, "args_json": ...}) in the shape of an action item ({"action": name, "args_json": ...})."""
     if not isinstance(q, dict):
@@ -123,10 +170,11 @@ def _as_item(q) -> dict | None:
 
 
 def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=(), dry=None,
-        instance_source=None, until=None, keep_checkpoints=None) -> Path:
+        instance_source=None, until=None, keep_checkpoints=None, schedule=None) -> Path:
     """dry: recorded in run.json (None: inferred from the policy, scripted = dry). instance_source: how a resume got its world
     (recorded in the segment). until: stop (paused, resumable) after that many rounds (replay --to). keep_checkpoints: per-round
-    checkpoint retention (None: CHARTER_KEEP_CHECKPOINTS, else all)."""
+    checkpoint retention (None: CHARTER_KEEP_CHECKPOINTS, else all). schedule: interventions (interventions.load_schedule), merged
+    by id into a resumed run's schedule; live and notices (--live, --notice) become setup entries of it."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     k = Kernel(inst, sandbox)
@@ -139,11 +187,10 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
     if resuming:
         k.restore_state(ck["kernel"])
         k.begin_round_cause(phase="setup")                              # provenance: --live and --notice before the round resumes
-        rs = ck["runner"]
-        notes, cursors, results, guesses = rs["notes"], rs["cursors"], rs["results"], rs["guesses"]
-        welfare_series, start_values, shared_snap, const = rs["welfare_series"], rs["start_values"], rs["shared_snap"], rs["const"]
-        if rs.get("policy_rng") is not None and hasattr(policy, "rng"):
-            policy.rng.setstate(rs["policy_rng"])
+        rs = RunState.from_dict(ck["runner"])
+        rs.agents, rs.out = agents, out
+        if rs.policy_state is not None and hasattr(policy, "rng"):
+            policy.rng.setstate(rs.policy_state)
         first_round = ck["round"] + 1
         PV.truncate(out, ck["files"], why=f"cut on resume from the checkpoint after round {first_round}")   # drop whatever was logged after the checkpoint
         reason_f, ev_f = open(out / "reasoning.jsonl", "a"), open(out / "events.jsonl", "a")
@@ -154,9 +201,6 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         FS.clear(out)
         log(f"  resuming after round {first_round} of {inst['rounds']}")
         _apply_live(k, inst, dict(k.w.get("live") or {}), log, announce=False)   # settings switched on in earlier resumes
-        if live:
-            _apply_live(k, inst, {x: v for x, v in live.items() if (k.w.get("live") or {}).get(x) != v}, log)
-        _post_notices(k, notices, log)
     else:
         shared_snap = archive.snapshot(k.shared_archive)
         k.begin_round_cause(phase="setup")                              # provenance: constitution, statutes, start laws
@@ -164,38 +208,44 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
         const = k.new_law(inst["constitution_code"], "constitution")
         k.enact(const)
         RG.enact_statutes(k, inst)                                     # a regime's starting statutes (none without a regime)
-        if live:
-            _apply_live(k, inst, live, log)
-        _post_notices(k, notices, log)
+        rs = RunState(shared_snap=shared_snap, const=const, agents=agents, out=out)
+        _setup(k, inst, rs, schedule, live, notices, 0, log)          # interventions: --live, --notice and setup entries
         for name in inst["spec"].get("start_laws") or []:              # library laws in force from round 0 (spec start_laws)
             k.enact(k.new_law(LB.LIB[name]["code"], "constitution"))
-        notes, cursors, results, guesses, welfare_series = {}, {}, {}, {}, []
-        start_values = {a: k.holdings_value(a) for a in agents}
+        rs.start_values = {a: k.holdings_value(a) for a in agents}
         reason_f, ev_f = open(out / "reasoning.jsonl", "w"), open(out / "events.jsonl", "w")
         (out / "turns.jsonl").write_text("")
         if (out / CKPT_DIR).exists():                                   # a fresh start: no per-round checkpoints of an earlier run
             shutil.rmtree(out / CKPT_DIR)
         n_ev = n_turns = 0
         first_round = 0
+    notes, cursors, results, guesses = rs.notes, rs.cursors, rs.results, rs.guesses
+    welfare_series, start_values, shared_snap, const = rs.welfare_series, rs.start_values, rs.shared_snap, rs.const
     obs = OBS.start(inst, out, k, ck["runner"].get("observer") if resuming else None)   # secret observer or None
-    policy = PV.Recorder(policy, out, append=resuming)                 # calls.jsonl and prompts/system/<sha>.txt
+    policy = IV.PromptExtra(PV.Recorder(IV.Forced(policy, rs), out, append=resuming))   # calls.jsonl, prompts/system/<sha>.txt
     EV.restore(k, inst, agents)                                         # world events: re-add arrivals, goal changes, departures
-    sysp = {aid: AG.system_prompt(inst, a) for aid, a in agents.items()}
+    IV.restore(k, inst)                                                 # interventions: model, prompt and spec edits put back
+    sysp = rs.sysp
+    sysp.update({aid: AG.system_prompt(inst, a) for aid, a in agents.items()})
     (out / "prompts").mkdir(exist_ok=True)
     for aid, txt in sysp.items():
         f = out / "prompts" / f"{aid}.system.md"
         if not f.exists():                                              # a resume never overwrites the prompt the agent started with
             f.write_text(txt)
-    ev_rs = {"agents": agents, "sysp": sysp, "cursors": cursors, "start_values": start_values, "out": out}
+    if resuming:                                                        # interventions: --live, --notice and setup entries, once the
+        _setup(k, inst, rs, schedule, live, notices, first_round, log)  # roster and prompts are rebuilt (still in the setup frame)
+    ev_rs = rs                                                        # events.sync reads agents, sysp, cursors, start_values, out
     mem = inst["spec"]["llm"].get("memory_chars", 4000)
     cx = CX.enabled(inst)                                               # context: fixed layers, lookup phase, scratchpad and files
     t0 = time.time()
 
     def runner_state():
-        return {"notes": notes, "cursors": cursors, "results": results, "guesses": guesses,
-                "welfare_series": welfare_series, "start_values": start_values, "shared_snap": shared_snap,
-                "const": const, "policy_rng": policy.rng.getstate() if hasattr(policy, "rng") else None,
-                "observer": obs.state() if obs else None}
+        rs.policy_state = policy.rng.getstate() if hasattr(policy, "rng") else None
+        rs.observer = obs.state() if obs else None
+        return rs.to_dict()
+
+    def due(phase, agent=None, r=None):                                 # interventions due now (none scheduled: nothing happens)
+        return IV.apply_due(k, inst, rs, phase, agent, r, log) if rs.schedule else ()
 
     keep = keep_checkpoints if keep_checkpoints is not None else os.environ.get("CHARTER_KEEP_CHECKPOINTS", "all")
 
@@ -235,8 +285,13 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
 
     last_round = inst["rounds"] if until is None else max(first_round, min(inst["rounds"], int(until)))
     for r in range(first_round, last_round):
+        if rs.schedule and IV.pending(k, rs, "setup", r):               # setup entries of a later (re)start, e.g. in a replay
+            k.begin_round_cause(phase="setup")
+            due("setup", r=r)
+            k.end_round_cause()
         k.begin_round_cause(r, "round_start")                          # provenance: round and phase frames (kernel.cause)
         k.start_round()
+        due("round_start", r=r)
         EV.round_start(k, inst, ev_rs)                                  # world events, goal changes, arrivals and departures
         CF.sync_runner(k, agents)                                       # conflict: disabled agents leave the turn order
         order = list(agents)
@@ -429,6 +484,9 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
 
         if mode == "simultaneous":
             # everyone decides from the same start-of-round view (model calls in parallel), then actions run in the round's order
+            if rs.schedule:                                             # interventions: every before_turn before anyone decides
+                for aid in order:
+                    due("before_turn", aid, r)
             preps = [prepare(aid) for aid in order]
             oprep = obs.step_prepare(k, final) if obs and dm_step and obs.in_dm_step \
                 and k.w["agents"][obs.id].get("departed") is None else None   # observer's DM-step turn (roles: not once removed)
@@ -459,10 +517,15 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                     continue
                 with k.cause("turn", aid, call=(dec[2] or {}).get("call")):
                     execute(pos, aid, pr, dec, pre[aid], last.get(aid))
+                due("after_turn", aid, r)
         else:
             for pos, aid in enumerate(play, 1):                         # conflict: the true order (== order unless initiative was bought)
                 if CF.skip_turn(k, aid) or k.w["agents"][aid].get("departed") is not None:   # conflict, life: removed earlier this round
                     continue
+                if rs.schedule:
+                    due("before_turn", aid, r)
+                    if k.w["agents"][aid].get("departed") is not None:   # interventions: removed just now
+                        continue
                 pr = prepare(aid)
                 dec = policy.act(k, pr[0], sysp[aid], pr[2], pr[1], final, key={"phase": "decide"})
                 tally.add([dec[0]], [aid])
@@ -471,10 +534,12 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                     pr, dec = got[aid]
                 with k.cause("turn", aid, call=(dec[2] or {}).get("call")):
                     execute(pos, aid, pr, dec)
+                due("after_turn", aid, r)
         k.phase("observer")
         if obs:                                                         # the secret observer reads and acts after everyone
             obs.turn(k, r, PV.Keyed(policy, phase="observer"), final, reason_f, mode)
         k.phase("end_of_round")
+        due("round_end", r=r)
         k.end_round(PREDICATES)
         k.snapshots[-1]["welfare"] = welfare(k)
         welfare_series.append(k.snapshots[-1]["welfare"])
