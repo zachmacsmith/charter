@@ -5,6 +5,8 @@
   python -m charter resume RUN_DIR                                               continue a stopped or crashed run from its last complete round
   python -m charter replay RUN_DIR [--to N] [--out DIR]                          re-execute a run from its recorded replies; byte-identical?
   python -m charter rewind RUN_DIR --to N --out NEW_DIR                          a copy of the run after round N, to resume (charter/replay.py)
+  python -m charter fork RUN_DIR --at N --apply iv.yaml [--replicates K] [--out DIR]   branch at round N with interventions, play on live
+  python -m charter branches RUN_DIR                                             the lineage tree of rewinds and forks
   python -m charter score RUN_DIR                                                (re)score a run
   python -m charter show RUN_DIR                                                 summary + timeline of what happened
   python -m charter view RUN_DIR [--open]                                       story.html: the run as a group chat, inboxes, laws and wealth
@@ -110,7 +112,7 @@ def sandbox_for(dry, mode):
     return DockerSandbox()
 
 
-def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fresh=False, live=None, notices=()):
+def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fresh=False, live=None, notices=(), schedule=None):
     inst = generator.generate(sp, seed)
     tag = Path(spec_name).stem
     parent = parent or RUNS / tag
@@ -136,18 +138,18 @@ def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fr
     print(f"[{out.name}] {len(inst['agents'])} agents x {inst['rounds']} rounds, constitution {inst['constitution']}, "
           + (f"regime {inst['regime']['name']}, " if inst.get("regime") else "") +
           f"law level {inst['law_level']}, backend {backend}" + (" (resuming)" if resume else ""))
-    _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live, notices)
+    _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live, notices, schedule=schedule)
     res = scorer.score(out)
     from charter import report
     report.build(out)
     return out, res["summary"]
 
 
-def _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live=None, notices=(), instance_source=None):
+def _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live=None, notices=(), instance_source=None, schedule=None):
     try:
         runner.run(inst, policy_for(inst["spec"], dry, seed), out, sandbox_for(dry, sandbox_mode),
                    log=(lambda *a: None) if quiet else print, resume=resume, live=live, notices=notices, dry=dry,
-                   instance_source=instance_source)
+                   instance_source=instance_source, schedule=schedule)
     except runner.RunStopped as e:
         print(f"[{out.name}] stopped: {e}\nContinue later with the same command, or: python -m charter resume {out}")
         raise SystemExit(2)
@@ -179,7 +181,8 @@ def cmd_resume(a):
         source = "instance.json (not regenerated: saved before spec_source)"
         print(f"[{out.name}] resuming from instance.json as saved (this run predates spec_source; the world is not regenerated)")
     dry = run_mode_dry(out)
-    _play(inst, out, dry, saved["seed"], a.sandbox, False, resume=True, instance_source=source)
+    _play(inst, out, dry, saved["seed"], a.sandbox, False, resume=True, instance_source=source,
+          schedule=load_schedules(getattr(a, "apply", None)))
     res = scorer.score(out)
     from charter import report
     report.build(out)
@@ -224,10 +227,22 @@ def cmd_generate(a):
                       "library_access": inst["library_access"], "repairs": inst["repairs"], "unreachable_goals": inst["unreachable_goals"]}, indent=1))
 
 
+def load_schedules(files):
+    """--apply FILE (repeatable): intervention schedules merged by id (charter/interventions.py); None without any."""
+    if not files:
+        return None
+    from charter import interventions as IV
+    sched = []
+    for f in files:
+        sched = IV.merge(sched, IV.load_schedule(f))
+    return sched
+
+
 def cmd_run(a):
     sp = build_spec(a.spec, a.set, getattr(a, 'fast', False))
     live = {key: S.yaml.safe_load(v) for key, _, v in (x.partition("=") for x in getattr(a, "live", []) or [])}
-    out, s = run_one(a.spec, sp, a.seed, a.dry, a.sandbox, fresh=a.fresh, live=live, notices=getattr(a, "notice", []) or [])
+    out, s = run_one(a.spec, sp, a.seed, a.dry, a.sandbox, fresh=a.fresh, live=live, notices=getattr(a, "notice", []) or [],
+                     schedule=load_schedules(getattr(a, "apply", None)))
     print(json.dumps(s, indent=1))
     print(f"run dir: {out}")
 
@@ -317,7 +332,9 @@ def main(argv=None):
         p.add_argument("--live", action="append", default=[], help="a runtime-only setting switched on when the run (re)starts, e.g. "
                        "media2.submissions=true; announced to the agents and kept for later resumes (runner.LIVE_KEYS)")
         p.add_argument("--notice", action="append", default=[], help="a public notice (gazette) posted once when the run (re)starts, "
-                       "e.g. to announce a rule change")
+                       "e.g. to announce a rule change (a gazette intervention at setup)")
+        p.add_argument("--apply", action="append", default=[], help="an intervention schedule, YAML/JSON (charter/interventions.py; "
+                       "repeatable): typed ops applied at a round and phase, recorded, never applied twice")
         p.add_argument("--fresh", action="store_true", help="a separate run in a new timestamped directory (default: stable directory; "
                                                              "skip if complete, resume if not)")
 
@@ -328,6 +345,7 @@ def main(argv=None):
     p = sub.add_parser("explore"); common(p); p.add_argument("--runs", type=int, default=8)
     p.add_argument("--perturb", action="append", default=[], help="key=<distribution YAML> (repeatable)"); p.set_defaults(fn=cmd_explore)
     p = sub.add_parser("resume"); p.add_argument("run"); p.add_argument("--sandbox", choices=["docker", "off"], default="docker")
+    p.add_argument("--apply", action="append", default=[], help="an intervention schedule to add (merged by id)")
     p.set_defaults(fn=cmd_resume)
     p = sub.add_parser("score"); p.add_argument("run"); p.set_defaults(fn=cmd_score)
     p = sub.add_parser("show"); p.add_argument("run"); p.set_defaults(fn=cmd_show)
@@ -337,7 +355,7 @@ def main(argv=None):
     from charter import difftest
     p = sub.add_parser("difftest", help="compare scripted runs on two code revisions (charter/difftest.py)")
     difftest.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(difftest.cmd(a)))
-    __import__("charter.replay", fromlist=["add_commands"]).add_commands(sub)   # replay, rewind
+    __import__("charter.replay", fromlist=["add_commands"]).add_commands(sub)   # replay, rewind, fork, branches
     from charter import schema
     p = sub.add_parser("spec", help="spec check SPEC.. [--set k=v] | spec docs [--out F] (charter/schema.py)")
     schema.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(schema.cmd(a)))

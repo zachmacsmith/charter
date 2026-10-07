@@ -8,6 +8,13 @@
       A new run directory continuing from RUN's state after N complete rounds (checkpoints/rNNNN.pkl): the append-only logs copied
       up to that checkpoint's offsets, snapshots cut to N rounds, run.json with a segment of kind "rewind" naming the parent run
       and round. `python -m charter resume NEWDIR` then plays on from round N + 1. RUN is never changed.
+  python -m charter fork RUN --at N [--apply iv.yaml] [--replicates K] [--out DIR] [--replay strict|prompt-match|none]
+      Branches: rewind to round N (from the latest checkpoint at or before it), apply the intervention schedule
+      (charter/interventions.py), and play to the end with ForkPolicy: the parent's recorded replies before round N, the live
+      policy (models, or scripted bots for dry runs) from N. --replicates K: K branches DIR/rep1..repK whose live policies get
+      distinct seeds. run.json: a segment of kind "fork" and `parent` {run, round, branch, replicate, live_seed, schedule}.
+  python -m charter branches RUN [--json]
+      The lineage: RUN's ancestors and the tree of rewinds and forks made from its root (run.json parent pointers).
 
 Replay (ReplayPolicy) serves each call's recorded reply by its explicit call key (provenance.call_key: round, phase, wave, agent,
 n), for model runs by passing the recorded raw text through llm.parse_json again (the parsed reply when the raw text would not
@@ -27,6 +34,7 @@ import json
 import shutil
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 from charter import provenance as PV
 
@@ -186,8 +194,10 @@ def replay(run, out=None, to: int | None = None, sandbox=None, log=print, check_
     out.mkdir(parents=True, exist_ok=True)
     calls, legacy = load_calls(run)
     pol = ReplayPolicy(calls, legacy, check_prompts)
+    from charter import interventions as IV                             # the run's interventions are inputs too
+    sched = IV.load_schedule(run / "interventions.yaml") if (run / "interventions.yaml").exists() else None
     with _private_archive(inst, out) as arch:
-        runner.run(inst, pol, out, sandbox, log=log, dry=dry, until=to, instance_source="replay of " + str(run))
+        runner.run(inst, pol, out, sandbox, log=log, dry=dry, until=to, instance_source="replay of " + str(run), schedule=sched)
     extra = pol.unused(to)
     if extra:
         raise ReplayMiss(f"{len(extra)} recorded call(s) were never asked for in the replay (first: {', '.join(extra[:5])})")
@@ -201,8 +211,10 @@ def replay(run, out=None, to: int | None = None, sandbox=None, log=print, check_
     return res
 
 
-def rewind(run, to: int, out) -> Path:
-    """A new run directory holding `run` as it was after `to` complete rounds, ready to resume (see module docstring)."""
+def rewind(run, to: int, out, kind: str = "rewind", parent_extra: dict | None = None, first_round: int | None = None) -> Path:
+    """A new run directory holding `run` as it was after `to` complete rounds, ready to resume (see module docstring). kind and
+    parent_extra: the run.json segment (fork() makes "fork" segments); first_round: the segment's first round (default `to`)."""
+    from charter import interventions as IV
     from charter import runner
     run, out = Path(run), Path(out)
     idx = _index(run)
@@ -214,7 +226,7 @@ def rewind(run, to: int, out) -> Path:
     if out.exists() and any(out.iterdir()):
         raise SystemExit(f"{out} exists and is not empty")
     out.mkdir(parents=True, exist_ok=True)
-    for f in ("instance.json", "run.json"):
+    for f in ("instance.json", "run.json", "interventions.yaml"):
         if (run / f).exists():
             shutil.copy2(run / f, out / f)
     if (run / "prompts").exists():
@@ -237,11 +249,218 @@ def rewind(run, to: int, out) -> Path:
         shutil.copy2(run / runner.CKPT_DIR / v["file"], d / v["file"])
     (d / "index.json").write_text(json.dumps(keep, indent=1))
     shutil.copy2(run / runner.CKPT_DIR / ent["file"], out / "checkpoint.pkl")
-    runner.load_checkpoint(out, out / "checkpoint.pkl")                 # the copied logs agree with the checkpoint
+    ck = runner.load_checkpoint(out, out / "checkpoint.pkl")            # the copied logs agree with the checkpoint
+    if ck["kernel"]["w"].get("interventions") is not None:              # interventions applied up to the checkpoint
+        IV.write_log(out, SimpleNamespace(w=ck["kernel"]["w"]))
     meta = PV.read(run) or {}
-    PV.branch(out, "rewind", int(to), {"run": str(run.resolve()), "run_id": meta.get("run_id") or run.name, "round": int(to),
-                                         "checkpoint": ent["file"]})
+    PV.branch(out, kind, int(to) if first_round is None else int(first_round),
+              {"run": str(run.resolve()), "run_id": meta.get("run_id") or run.name, "round": int(to), "checkpoint": ent["file"],
+               **(parent_extra or {})})
     return out
+
+
+# ------------------------------------------------------------------ fork
+class _RngGuard:
+    """The live policy's RNG as the runner sees it: a replicate ignores the checkpoint's policy RNG state (restored once at the
+    resume), so its post-fork sampling follows its own seed; checkpoints of the fork then save and restore it as usual."""
+
+    def __init__(self, rng, skip_restore: bool):
+        self._rng, self._skip = rng, skip_restore
+
+    def setstate(self, state) -> None:
+        if self._skip:
+            self._skip = False
+            return
+        self._rng.setstate(state)
+
+    def getstate(self):
+        return self._rng.getstate()
+
+    def __getattr__(self, name):
+        if name in ("_rng", "_skip"):
+            raise AttributeError(name)
+        return getattr(self._rng, name)
+
+
+class ForkPolicy:
+    """Replay up to the fork point, then the live policy (ARCHITECTURE §8.4: Replay(parent.calls, until=N, live=policy)).
+    mode strict: calls of rounds before `until` are served from the parent's record, and must match it (ReplayMiss /
+    ReplayDivergence otherwise); every later call goes to the live policy. prompt-match: as strict, and after the fork point a
+    recorded reply is still served while the call's key and both prompt hashes match the parent's (the run has not diverged at
+    that call), else the live policy answers. none: every call is live."""
+    takes_key = True
+
+    def __init__(self, calls: dict, legacy: bool, live, until: int, mode: str = "strict", skip_rng_restore: bool = False):
+        if mode not in ("strict", "prompt-match", "none"):
+            raise ValueError(f"replay mode {mode!r}: strict, prompt-match or none")
+        self.replay = ReplayPolicy(calls, legacy, check_prompts=True)
+        self.live, self.until, self.mode = live, int(until), mode
+        self._tl = threading.local()
+        self._guard = _RngGuard(live.rng, skip_rng_restore) if hasattr(live, "rng") else None
+        self.counts = {"replayed": 0, "live": 0}
+        self._lock = threading.Lock()
+
+    def __getattr__(self, name):
+        if name in ("live", "replay", "_tl", "_guard", "counts", "_lock", "mode", "until"):
+            raise AttributeError(name)
+        if name == "rng":
+            if self._guard is None:
+                raise AttributeError(name)
+            return self._guard
+        return getattr(self.live, name)
+
+    @property
+    def replaying(self) -> bool:                                        # provenance.Recorder: this call's row says "replayed"
+        return getattr(self._tl, "replayed", False)
+
+    @property
+    def parallel_safe(self) -> bool:
+        return getattr(self.live, "parallel_safe", False)
+
+    def act(self, k, a, system, user, n_actions, final, key=None):
+        return self.act_recorded(k, a, system, user, n_actions, final, key=key)[:3]
+
+    def act_recorded(self, k, a, system, user, n_actions, final, key=None):
+        rec = self.replay.calls.get((key or {}).get("id"))
+        use = self.mode != "none" and key["round"] < self.until
+        if not use and self.mode == "prompt-match" and rec is not None:
+            use = rec.get("system_sha") == key.get("system_sha") and rec.get("user_sha") == key.get("user_sha")
+        self._tl.replayed = use
+        with self._lock:
+            self.counts["replayed" if use else "live"] += 1
+        if use:
+            return self.replay.act_recorded(k, a, system, user, n_actions, final, key=key)
+        if hasattr(self.live, "act_recorded"):
+            return self.live.act_recorded(k, a, system, user, n_actions, final)
+        return (*self.live.act(k, a, system, user, n_actions, final), None)
+
+
+def replicate_seed(seed, at: int, i: int) -> int:
+    """The live policy's seed for replicate i of a fork at round `at` (replicates differ only after the fork point)."""
+    return int(PV.sha(f"{seed}|fork|{at}|{i}"), 16) % 2 ** 31
+
+
+def fork(run, at: int, schedule=None, out=None, replicates: int | None = None, replay_mode: str = "strict",
+         policy_factory=None, sandbox=None, log=print, fresh_schedule: bool = False) -> list[Path]:
+    """Branches of `run` from round `at` (0-based: the first round played anew; `at` complete rounds are kept): each a new run
+    directory restored from the latest checkpoint at or before `at`, with the schedule applied (merged by id into the parent's
+    pending schedule, unless fresh_schedule) and played to the end with ForkPolicy (the parent's recorded replies before `at`, the
+    live policy from `at`). replicates K: K branches <out>/rep1..repK whose live policies get distinct seeds (replicate_seed);
+    otherwise one branch whose live policy continues from the parent's state. run.json of each: a "fork" segment, `parent`
+    {run, run_id, round, checkpoint, branch, replicate, live_seed, schedule, replay} and top-level `replicate`. Returns the dirs."""
+    import pickle
+    from charter import interventions as IV
+    from charter import runner
+    run = Path(run)
+    at = int(at)
+    meta = PV.read(run) or {}
+    idx = _index(run)
+    have = sorted(int(x) for x, v in idx.items() if (run / runner.CKPT_DIR / v["file"]).exists())
+    base = max((n for n in have if n <= at), default=None)
+    if base is None:
+        raise SystemExit(f"{run} has no checkpoint at or before round {at} (per-round checkpoints: {', '.join(map(str, have)) or 'none'})")
+    inst0 = json.loads((run / "instance.json").read_text())
+    if not 0 <= at < int(inst0["rounds"]):
+        raise SystemExit(f"--at {at}: the run has rounds 0..{int(inst0['rounds']) - 1} (fork at N plays round N onwards)")
+    sched = IV.load_schedule(schedule if schedule is not None else [])
+    early = [e["id"] for e in sched if e["at"]["phase"] != "setup" and e["at"]["round"] < at]
+    if early:
+        raise SystemExit(f"interventions before the fork point (round {at}): {', '.join(early)}")
+    if policy_factory is None:
+        from charter import __main__ as M
+        policy_factory = M.policy_for
+    dry = bool(meta["dry"]) if meta.get("dry") is not None else "_dry" in run.name
+    seed = inst0.get("seed")
+    calls, legacy = load_calls(run)
+    if out is None:
+        out, n = run.parent / f"{run.name}_fork{at}", 2
+        while out.exists():
+            out, n = run.parent / f"{run.name}_fork{at}_{n}", n + 1
+    out = Path(out)
+    reps = [None] if not replicates else list(range(1, int(replicates) + 1))
+    dirs = [out] if reps == [None] else [out / f"rep{i}" for i in reps]
+    sched_sha = PV.sha(json.dumps(sched, sort_keys=True, default=str))
+    made = []
+    for i, d in zip(reps, dirs):
+        live_seed = seed if i is None else replicate_seed(seed, at, i)
+        rewind(run, base, d, kind="fork", first_round=at,
+               parent_extra={"round": at, "checkpoint_round": base, "branch": d.name, "replicate": i, "live_seed": live_seed,
+                             "schedule": [e["id"] for e in sched], "schedule_sha": sched_sha, "replay": replay_mode})
+        PV.annotate(d, replicate=i)
+        prefix = {r.get("key") or r.get("call") for r in _jsonl(d / "calls.jsonl")}   # calls made before the checkpoint
+        if fresh_schedule:                                              # drop the parent's pending interventions
+            ck = pickle.loads((d / "checkpoint.pkl").read_bytes())
+            ck["runner"]["schedule"] = []
+            blob = pickle.dumps(ck)
+            runner._atomic(d / "checkpoint.pkl", blob)
+            runner._atomic(d / runner.CKPT_DIR / runner.ckpt_name(base), blob)
+        inst = json.loads((d / "instance.json").read_text())
+        live = policy_factory(inst["spec"], dry, live_seed)
+        pol = ForkPolicy(calls, legacy, live, until=at, mode=replay_mode, skip_rng_restore=i is not None)
+        if log:
+            log(f"[{d.name}] fork of {run.name} at round {at + 1} (from the checkpoint after {base} rounds), replicate {i}, "
+                f"{len(sched)} intervention(s), replay {replay_mode}")
+        with _private_archive(inst, d):
+            runner.run(inst, pol, d, sandbox, log=log or (lambda *a: None), resume=True, dry=dry, schedule=sched,
+                       instance_source=f"fork of {run} at round {at}")
+        missed = [kid for kid, r in calls.items() if base <= r["round"] < at and kid not in pol.replay.used
+                  and kid not in prefix] if replay_mode != "none" else []
+        if missed:
+            raise ReplayMiss(f"{d}: {len(missed)} recorded call(s) before the fork point were never asked for: {', '.join(missed[:5])}")
+        PV.annotate(d, fork={"calls": dict(pol.counts)})
+        made.append(d)
+    return made
+
+
+def branches(run) -> dict:
+    """The lineage of a run: its ancestors (run.json parent pointers, root first) and the tree of branches made from the root
+    (found among run directories next to it and one level inside them, e.g. replicates). {"ancestors": [...], "tree": node};
+    node: {run, name, kind, round, replicate, schedule, status, children}."""
+    run = Path(run).resolve()
+    chain, cur, seen = [], run, set()
+    while cur is not None and cur not in seen:
+        seen.add(cur)
+        chain.append(cur)
+        p = (PV.read(cur) or {}).get("parent")
+        cur = Path(p["run"]).resolve() if p and p.get("run") and Path(p["run"]).exists() else None
+    root = chain[-1]
+    cands = set()
+    for top in {root.parent} | {c.parent for c in chain}:
+        for d in [top, *top.iterdir()] if top.exists() else []:
+            for x in [d, *(d.iterdir() if d.is_dir() else [])]:
+                if x.is_dir() and (x / "run.json").exists():
+                    cands.add(x.resolve())
+    kids: dict = {}
+    for c in cands:
+        p = (PV.read(c) or {}).get("parent")
+        if p and p.get("run"):
+            kids.setdefault(Path(p["run"]).resolve(), []).append(c)
+
+    def node(d, depth=0):
+        m = PV.read(d) or {}
+        p = m.get("parent") or {}
+        segs = m.get("segments") or []
+        kind = next((s["kind"] for s in reversed(segs) if s.get("kind") in ("fork", "rewind")), "start") if p else "start"
+        last = segs[-1] if segs else {}
+        return {"run": str(d), "name": d.name, "kind": kind, "round": p.get("round"), "replicate": m.get("replicate"),
+                "schedule": p.get("schedule"), "status": last.get("status"), "last_round": last.get("last_round"),
+                "children": [node(c, depth + 1) for c in sorted(kids.get(d, []), key=lambda x: (str(x.parent), x.name))]
+                if depth < 20 else []}
+    return {"ancestors": [str(c) for c in reversed(chain)], "tree": node(root)}
+
+
+def format_branches(b: dict, mark=None) -> str:
+    lines = []
+
+    def walk(n, pre=""):
+        bits = [n["kind"]] + ([f"from round {n['round'] + 1}"] if n.get("round") is not None else []) \
+            + ([f"replicate {n['replicate']}"] if n.get("replicate") is not None else []) \
+            + ([f"interventions {', '.join(n['schedule'])}"] if n.get("schedule") else []) + ([n["status"]] if n.get("status") else [])
+        lines.append(f"{pre}{n['name']}{'  <-' if mark and n['run'] == mark else ''}  ({'; '.join(bits)})  {n['run']}")
+        for c in n["children"]:
+            walk(c, pre + "  ")
+    walk(b["tree"])
+    return "\n".join(lines)
 
 
 # ------------------------------------------------------------------ command line (python -m charter replay / rewind)
@@ -269,6 +488,39 @@ def cmd_rewind(a) -> None:
     print(f"rewound {a.run} to the end of round {a.to}: {out}\ncontinue with: python -m charter resume {out}")
 
 
+def cmd_fork(a) -> None:
+    from charter import interventions as IV
+    from charter import __main__ as M
+    run = Path(a.run)
+    meta = PV.read(run) or {}
+    dry = bool(meta.get("dry", "_dry" in run.name))
+    sandbox = None
+    if (a.sandbox or ("off" if dry else "docker")) == "docker":
+        from charter.sandbox import DockerSandbox
+        sandbox = DockerSandbox()
+    sched = []
+    for f in a.apply or []:
+        sched = IV.merge(sched, IV.load_schedule(f))
+    try:
+        dirs = fork(run, a.at, sched, a.out, a.replicates, a.replay, M.policy_for, sandbox, fresh_schedule=a.fresh_schedule)
+    except (ReplayMiss, ReplayDivergence, IV.InterventionError) as e:
+        print(f"fork FAILED: {type(e).__name__}: {e}")
+        raise SystemExit(1)
+    from charter import report, scorer
+    for d in dirs:
+        scorer.score(d)
+        report.build(d)
+    print("\n".join(f"branch: {d}" for d in dirs))
+
+
+def cmd_branches(a) -> None:
+    b = branches(a.run)
+    if a.json:
+        print(json.dumps(b, indent=1))
+    else:
+        print(format_branches(b, mark=str(Path(a.run).resolve())))
+
+
 def add_commands(sub) -> None:
     p = sub.add_parser("replay", help="re-execute a run from its recorded model replies and check it reproduces")
     p.add_argument("run")
@@ -282,3 +534,22 @@ def add_commands(sub) -> None:
     p.add_argument("--to", type=int, required=True, help="number of complete rounds to keep")
     p.add_argument("--out", required=True)
     p.set_defaults(fn=cmd_rewind)
+    import argparse
+    from charter import interventions as IV
+    p = sub.add_parser("fork", help="branch a run at round N, apply interventions, play on with the live policy",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="Intervention ops (schedule format: charter/interventions.py):\n" + IV.describe())
+    p.add_argument("run")
+    p.add_argument("--at", type=int, required=True, help="fork point: round N (0-based) is the first round played anew")
+    p.add_argument("--apply", action="append", default=[], help="an intervention schedule (YAML/JSON; repeatable, merged by id)")
+    p.add_argument("--replicates", type=int, default=None, help="K branches OUT/rep1..repK with distinct live seeds")
+    p.add_argument("--out", default=None, help="branch directory (default <run>_fork<N>)")
+    p.add_argument("--replay", choices=["strict", "prompt-match", "none"], default="strict",
+                   help="strict: recorded replies before N, live from N; prompt-match: also after N while prompts match")
+    p.add_argument("--fresh-schedule", action="store_true", help="drop the parent's pending interventions")
+    p.add_argument("--sandbox", choices=["docker", "off"], default=None, help="default: off for dry runs, docker for model runs")
+    p.set_defaults(fn=cmd_fork)
+    p = sub.add_parser("branches", help="the lineage of a run: ancestors and the branches made from them")
+    p.add_argument("run")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_branches)
