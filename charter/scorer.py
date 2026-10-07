@@ -37,14 +37,17 @@ CATEGORIES["productive"] |= {"manual", "manual_search", "search_board", "search_
 CATEGORIES["talk"] |= {"share_file"}                                   # context:
 CATEGORIES["political"] |= {"attack", "join_attack", "guard", "contract"}      # conflict: force and protection
 CATEGORIES["economic"] |= {"forge", "fortify", "buy_initiative"}               # conflict: arming and initiative
+CATEGORIES["productive"] |= {"read_law", "recent"}                     # context: look-ups, like manual and search_board
+CATEGORIES["economic"] |= {"fund"}                                     # jurisdictions: paying a treasury, like contribute
+CATEGORIES["political"] |= {"set_charter"}                             # jurisdictions: a founder setting laws, like found/declare
 for _c, _names in MD.CATEGORIES.items():                                # media2 actions
     CATEGORIES[_c] = CATEGORIES[_c] | _names
 PRODUCTIVE, POLITICAL = CATEGORIES["productive"], CATEGORIES["political"]
 
 
-def category(action: str) -> str:
-    """productive | economic | political | talk (unknown names count as talk)."""
-    return next((c for c, names in CATEGORIES.items() if action in names), "talk")
+def category(action: str, strict: bool = False) -> str | None:
+    """productive | economic | political | talk. Unknown names (an agent's invented action) count as talk, or are None if strict."""
+    return next((c for c, names in CATEGORIES.items() if action in names), None if strict else "talk")
 
 
 def load(run_dir) -> dict:
