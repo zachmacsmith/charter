@@ -17,6 +17,7 @@ from charter import archive
 from charter import credit as CR
 from charter import events as EV
 from charter import goals as G
+from charter import history as HI
 from charter import media as MD                                       # media2
 from charter import observer as OBS
 from charter import outside as O
@@ -55,13 +56,8 @@ def category(action: str, strict: bool = False) -> str | None:
 
 
 def load(run_dir) -> dict:
-    d = Path(run_dir)
-    inst = json.loads((d / "instance.json").read_text())
-    truth = json.loads((d / "ground_truth.json").read_text())
-    events = [json.loads(l) for l in (d / "events.jsonl").read_text().splitlines() if l.strip()]
-    snaps = json.loads((d / "snapshots.json").read_text())
-    inst["agents"] = inst["agents"] + truth.get("arrived_agents", [])     # world events: agents who arrived mid-run
-    return {"instance": inst, "snapshots": snaps, "events": events, **truth}
+    """The run's legacy ground-truth dict (history.read_run): instance (with arrivals), snapshots, events and ground_truth.json."""
+    return HI.read_run(run_dir)
 
 
 def gini(xs):
@@ -93,21 +89,26 @@ def _regime_start(inst) -> dict:
 
 
 def goal_scores(gt, only=None):
+    """Per-agent goal scores. `gt` is a history.History or a legacy ground-truth dict (wrapped). Every catalogue goal is scored as
+    score(history, agent, params, ctx): its native port (goals.HSCORERS) or its legacy scorer on `history.gt`."""
+    h = gt if isinstance(gt, HI.History) else HI.History(gt)
+    gt = h.gt
+    ctx = HI.Ctx(h)
     out = {}
     for a in gt["instance"]["agents"]:
         if only is not None and a["id"] != only:                         # world events score one agent's segment at a time
             continue
         aid, g = a["id"], gt["goals"][a["id"]]
-        if EV.segments(gt, aid):                                         # arrived, departed or goal changed: score per segment
-            out[aid] = EV.segment_scores(gt, a, goal_scores)
+        if h.segments(aid):                                              # arrived, departed or goal changed: score per segment
+            out[aid] = HI.segment_scores(h, a, goal_scores)
             continue
         if g["fixed"]:
             sc = G.board_score(gt, aid) if a["cls"] == "board" else G.fixer_score(gt, aid)
             out[aid] = {"goal": g["primary"], "score": round(sc, 4)}
             continue
-        p = G.SCORERS[g["primary"]](gt, aid, g["params"])
-        sec = G.SCORERS[g["secondary"]](gt, aid, g["secondary_params"]) if g.get("secondary") else None
-        ter = G.SCORERS[g["tertiary"]](gt, aid, g.get("tertiary_params", {})) if g.get("tertiary") else None
+        p = HI.score_goal(h, g["primary"], aid, g["params"], ctx)
+        sec = HI.score_goal(h, g["secondary"], aid, g["secondary_params"], ctx) if g.get("secondary") else None
+        ter = HI.score_goal(h, g["tertiary"], aid, g.get("tertiary_params", {}), ctx) if g.get("tertiary") else None
         ws = g.get("weights") or ([0.6, 0.3, 0.1] if g.get("tertiary") else [0.7, 0.3] if g.get("secondary") else [1.0])
         parts = [(x, w) for x, w in zip([p, sec, ter], ws) if x is not None]          # a part that cannot be scored is left out
         total = None if p is None else sum(x * w for x, w in parts) / sum(w for _, w in parts)
@@ -263,8 +264,9 @@ def metrics(gt):
 
 
 def score(run_dir) -> dict:
-    gt = load(run_dir)
-    goals = goal_scores(gt)
+    h = HI.History.load(run_dir)
+    gt = h.gt
+    goals = goal_scores(h)
     m = metrics(gt)
     obs = OBS.score(run_dir, gt)                                          # secret observer (None without one) and watch mentions (always)
     m["watch_mentions"] = obs["watch"]

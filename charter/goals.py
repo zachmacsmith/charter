@@ -1217,3 +1217,65 @@ def board_score(gt, a):
 def fixer_score(gt, a):
     """Fixed Fixer objective: final holdings value (the mandate is measured separately, from its patches)."""
     return s_wealth(gt, a, {})
+
+
+# ------------------------------------------------------------------ native ports: score(history, agent, params, ctx)
+# Scorers written against charter.history.History (review 05 §4.2). Each returns exactly what its legacy s_* returns on `h.gt`
+# (tests/test_charter_history.py checks this on the golden runs and on every segment window); scorer.goal_scores prefers them.
+# Goals not listed here are scored by their legacy s_* through history.legacy.
+def h_wealth(h, a, p, ctx=None):
+    """End state: holdings value against the richest agent's, after the last round."""
+    v = h.final["values"]
+    top = max(v.values()) if v else 0
+    return v[a] / top if top > 0 else 0.0
+
+
+def _transfer_pairs(h) -> dict:
+    """(sender, recipient) -> rounds of transfers, in log order (shared by every Gifts scorer on the same History)."""
+    out = {}
+    for e in h.events("transfer"):
+        out.setdefault((e["agent"], e["data"]["to"]), []).append(e["round"])
+    return out
+
+
+def h_gifts(h, a, p, ctx=None):
+    """Count over the run: distinct agents who gave to `a` at least once with no gift back from `a` within 5 rounds, over N - 1.
+    One pass over a shared (sender, recipient) table instead of s_gifts' scan of every transfer pair."""
+    pairs = h.cached("transfers.by_pair", _transfer_pairs)
+    givers = set()
+    for (src, dst), rounds in pairs.items():
+        if dst != a or src == a:
+            continue
+        back = pairs.get((a, src), ())
+        if any(not any(r <= f <= r + 5 for f in back) for r in rounds):
+            givers.add(src)
+    return len(givers) / max(1, len(h.start_values) - 1)
+
+
+def h_steward(h, a, p, ctx=None):
+    """Mean over rounds: the lowest camp stock in each round."""
+    from charter import history as HI
+    return HI.mean_over_rounds(h, lambda s: min(s["stocks"].values()))
+
+
+def _lineage_values(h) -> dict:
+    """agent -> holdings value of the agent and its living descendants after the last round (every agent in the final values)."""
+    f = h.final
+    v, r = f["values"], f["round"]
+    living = {x for x in v if not h.dead_by(x, r)}
+    life = bool(h.gt.get("life"))
+
+    def line(x):
+        return [y for y in ([x] + h.descendants(x) if life else [x]) if y in living]
+    return {x: sum(v.get(y, 0.0) for y in line(x)) for x in v}
+
+
+def h_lineage_wealth(h, a, p, ctx=None):
+    """Lineage: the agent's and its living descendants' holdings value against the richest lineage's (one table per History)."""
+    lin = h.cached("lineage.values", _lineage_values)
+    top = max(lin.values(), default=0.0)
+    return lin.get(a, 0.0) / top if top > 0 else 0.0
+
+
+HSCORERS = {"Wealth": h_wealth, "Gifts": h_gifts, "Steward": h_steward, "Lineage Wealth": h_lineage_wealth}
+assert set(HSCORERS) <= set(SCORERS)
