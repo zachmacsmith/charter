@@ -6,8 +6,9 @@ suspend_right, limit_actions, create_right, post, dm, hide_post, set_camp_rule, 
 open_ballot, cast_vote, close_ballot, veto, enact, repeal, amend, set_procedure, rule, define_action, with on_proposal still receiving
 None; P2.4b: begin_life, end_life; P2.4c's world causes: regrow, drift, destroy, set_camp_state, create_camp, contribute,
 settle_project; P2.4d's membership, media, typed camps and leases: join, leave, admit, expel, subscribe, set_outlet_rule,
-set_media_rule, appoint, lease, improve_camp), and its legacy ALIASES are dispatched by dispatch.apply under exactly today's
-conditions; the other rows still name the function making the change today.
+set_media_rule, appoint, lease, improve_camp; P2.4a's conflict: attack, fortify, convert, guard_bind, guard_release), and its legacy
+ALIASES are dispatched by dispatch.apply under exactly today's conditions; the other rows still name the function making the change
+today.
 
 A row (`Primitive`) says:
   name, feature, effect   the change and its effect class (EFFECTS)
@@ -161,20 +162,26 @@ _ROWS = [
       notes="laws mint their own currencies; the first deposit of a backed currency issues treasury coins to the reserve"),
     P("burn", "core", "destroy", ("currency", "qty", "frm"), "dispatch:do_burn", subject="frm", parties=("frm",),
       agent_params=("frm",), causes=("law", "agent"), reads=("supply",), preview=("currencies", "holdings"), compel_vis="monitor",
-      sites=("dispatch:do_burn", "kernel:Kernel.api_for.burn", "jurisdictions:scope_api.burn", "actions:_redeem"),
-      notes="laws burn their own currencies from members; redeeming coins burns them"),
+      sites=("dispatch:do_burn", "kernel:Kernel.api_for.burn", "jurisdictions:scope_api.burn", "actions:_redeem", "conflict:_spoils"),
+      notes="laws burn their own currencies from members; redeeming coins burns them; an attack's destroyed spoils in coins "
+            "are burned (via spoils)"),
     P("create_currency", "core", "create", ("name", "backed", "reserve"), "dispatch:do_create_currency", causes=("law",),
       reads=("currencies",), preview=("currencies",), sites=("dispatch:do_create_currency", "kernel:Kernel.api_for.create_currency")),
-    P("convert", "core", "move", ("agent", "src_item", "dst_item", "qty", "via"), "actions:_deposit", subject="agent", parties=("agent",),
+    P("convert", "core", "move", ("agent", "src_item", "dst_item", "qty", "via"), "dispatch:do_convert", subject="agent", parties=("agent",),
       agent_params=("agent",), event="deposit", causes=("agent",), gates=("ban_forging", "suspend_redemption", "set_convertible"),
-      reads=("price", "redemption_open", "weapons_of"), sites=("actions:_deposit", "actions:_redeem", "credit:redeem_par", "conflict:act_forge"),
-      why={"compel": _LNA}, notes="deposit (goods -> coins at P), redeem (coins -> reserve goods), forge (copper -> weapons)"),
+      reads=("price", "redemption_open", "weapons_of"),
+      sites=("dispatch:do_convert", "actions:_deposit", "actions:_redeem", "credit:redeem_par", "conflict:act_forge"),
+      why={"compel": _LNA}, notes="deposit (goods -> coins at P), redeem (coins -> reserve goods), forge (copper -> weapons). "
+                                  "Routed (P2.4a): forge (via forge, logged as `arms` by the caller); deposits and redemptions "
+                                  "still make it in actions.py"),
     P("destroy", "core", "destroy", ("owner", "item", "qty", "cause"), "dispatch:do_destroy", subject="owner", parties=("owner",),
       agent_params=("owner",), event="destroyed", causes=("agent", "law", "world"), reads=("tribute_status",),
       sites=("dispatch:do_destroy", "resources:pay", "resources:upkeep_start_round", "outside:pay", "outside:raid", "conflict:_spoils",
-             "actions:_harvest"),
+             "conflict:_take", "conflict:act_buy_initiative", "actions:_harvest"),
       notes="goods leaving the world: costs paid to nobody, upkeep, tribute paid out, raids, spoils, inputs a camp consumes. "
-            "Routed (P2.4c): tribute payments (cause tribute) and raid seizures (cause raid); the caller logs its own event"),
+            "Routed (P2.4c): tribute payments (cause tribute) and raid seizures (cause raid); (P2.4a) weapons committed to an "
+            "attack (cause attack), spoils destroyed (cause spoils; coins are burned) and initiative bought (cause initiative). "
+            "The caller logs its own event"),
     P("set_money_rule", "credit", "rule", ("currency", "key", "value"), "credit:law_api.set_par", event="par_set", causes=("law", "world"),
       reads=("par", "interest_cap", "reserve_ratio", "redemption_open", "loans"), preview=("rules", "currencies"), compel_vis="public",
       sites=("kernel:Kernel.api_for.set_convertible", "kernel:Kernel.api_for.enable_loans", "credit:law_api.set_par",
@@ -241,7 +248,8 @@ _ROWS = [
     P("end_life", "mortality", "life", ("agent", "cause", "by"), "dispatch:do_end_life", subject="agent", parties=("agent", "by"),
       agent_params=("agent", "by"), blockable=False, event="disabled", causes=("agent", "world"),
       reads=("disabled_agents", "lifespan_left"),
-      sites=("dispatch:do_end_life", "mortality:end", "mortality:disable", "events:leave_world", "events:depart"),
+      sites=("dispatch:do_end_life", "mortality:end", "mortality:disable", "events:leave_world", "events:depart", "conflict:_resolve",
+             "conflict:after_harvest"),
       why={"compel": "laws end lives only through attack (lawful_attack)", "gate": "gated through its cause (attack); old age and accidents are physics"},
       notes="causes: attack, assassin, accident, old_age, law (mortality.CAUSES: the death phase, an estate account and probate) and "
             "departure (D-9: world events and interventions; events.leave_world: no death phase, holdings frozen or to the reserve, "
@@ -255,20 +263,33 @@ _ROWS = [
       parties=("member", "successor"), agent_params=("member", "successor"), event="successor_named", causes=("agent",),
       sites=("mortality:name_successor",), why={"compel": _LNA}),
     # ------------------------------------------------------------------ force
-    P("attack", "conflict", "relation", ("attacker", "target", "units", "covert", "disguise", "lawful"), "conflict:attack",
+    P("attack", "conflict", "relation", ("attacker", "target", "units", "covert", "disguise", "lawful"), "dispatch:do_attack",
       subject="attacker", parties=("attacker", "target"), agent_params=("attacker", "target"), event="attack_order",
       causes=("agent", "law"), reads=("attacks", "weapons_of", "defense_of"), compel_vis="public",
-      sites=("conflict:attack", "conflict:act_join_attack", "conflict:_resolve"),
-      notes="lawful_attack pays from the jurisdiction's armory; its result (disabled) is public, lawful_force is monitor-only"),
-    P("fortify", "conflict", "move", ("agent", "qty"), "conflict:act_fortify", subject="agent", parties=("agent",), agent_params=("agent",),
-      event="arms", causes=("agent",), reads=("forts", "defense_of"), sites=("conflict:act_fortify",), why={"compel": _LNA}),
-    P("guard_bind", "conflict", "relation", ("guard", "agent", "fee"), "conflict:act_guard", subject="guard", parties=("guard", "agent"),
+      sites=("dispatch:do_attack", "conflict:attack", "conflict:commit", "conflict:pledge", "conflict:act_join_attack",
+             "conflict:_resolve"),
+      notes="lawful_attack pays from the jurisdiction's armory; its result (disabled) is public, lawful_force is monitor-only. "
+            "Routed (P2.4a): an order commits its weapons (destroy) and resolves now or at round end (a world root frame); a "
+            "join_attack is the option `ally` (the weapons go into the pledge's escrow, back at round end if unused); a success "
+            "takes spoils (move, destroy/burn, fortify raze) and ends the target's life (end_life; an unnamed attacker is concealed)"),
+    P("fortify", "conflict", "move", ("agent", "qty"), "dispatch:do_fortify", subject="agent", parties=("agent",), agent_params=("agent",),
+      event="arms", causes=("agent", "world"), reads=("forts", "defense_of"),
+      sites=("dispatch:do_fortify", "conflict:fort_change", "conflict:act_fortify", "conflict:start_round", "conflict:_spoils"),
+      why={"compel": _LNA},
+      notes="option op: lock (stone into the fort), unlock (scheduled; it defends until due), release (an unlock falls due, at round "
+            "start: world), raze (a successful attack takes the fort apart: spoils share to the attacker, the rest to the bequest)"),
+    P("guard_bind", "conflict", "relation", ("guard", "agent", "fee"), "dispatch:do_guard_bind", subject="guard", parties=("guard", "agent"),
       agent_params=("guard", "agent"), event="guard", causes=("agent", "law"), reads=("guards", "defense_of"),
-      preview=("rules.guard_obligations",), compel_vis="monitor", sites=("conflict:act_guard", "conflict:law_api.oblige_guard"),
-      notes="agreed guards are paid and accepted; a law's obligation lasts while the law is in force"),
-    P("guard_release", "conflict", "relation", ("guard", "agent"), "conflict:act_guard", subject="guard", parties=("guard", "agent"),
-      agent_params=("guard", "agent"), event="guard", causes=("agent", "law"), reads=("guards",), preview=("rules.guard_obligations",),
-      compel_vis="monitor", sites=("conflict:act_guard", "conflict:law_api.clear_obligations")),
+      preview=("rules.guard_obligations",), compel_vis="monitor",
+      sites=("dispatch:do_guard_bind", "conflict:guard_bind", "conflict:act_guard", "conflict:law_api.oblige_guard"),
+      notes="agreed guards are paid and accepted; a law's obligation (option lid) lasts while the law is in force"),
+    P("guard_release", "conflict", "relation", ("guard", "agent"), "dispatch:do_guard_release", subject="guard",
+      parties=("guard", "agent"), agent_params=("guard", "agent"), event="guard", causes=("agent", "law", "world"), reads=("guards",),
+      preview=("rules.guard_obligations",), compel_vis="monitor",
+      sites=("dispatch:do_guard_release", "conflict:guard_release", "conflict:act_guard", "conflict:law_api.clear_obligations",
+             "conflict:start_round", "conflict:_resolve"),
+      notes="option why: stop (the guard's choice, logged), lapse (a party gone or a fee unpaid: world, unlogged), law (a law "
+            "clears its obligations: option lid)"),
     P("hire_assassin", "conflict", "relation", ("agent", "assassin", "target", "terms"), "conflict:act_contract", subject="agent",
       parties=("agent", "assassin"), agent_params=("agent", "assassin", "target"), event="contract_truth", causes=("agent",),
       sites=("conflict:act_contract",), why={"compel": _LNA, "gate": "a secret contract: no law can see it"}),
@@ -574,7 +595,7 @@ ACTION_PRIMITIVES = {
     "accuse": ("open_case",), "respond": ("answer_case",), "request_fix": ("request_fix",),
     # force, more
     "guard": ("guard_bind", "guard_release", "move"), "join_attack": ("attack", "end_life"), "contract": ("hire_assassin", "move"),
-    "buy_initiative": ("set_initiative", "move"),
+    "buy_initiative": ("set_initiative", "destroy"),
     # inheritance
     "bequest": ("set_will",),
     # groups
