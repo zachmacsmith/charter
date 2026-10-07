@@ -57,3 +57,37 @@ def test_registry_publishes_and_fee_hook_charges():
     k.w["agents"][aid]["holdings"]["timber"] = 1
     with pytest.raises(A.ActionError, match="refuses"):
         A.act(k, aid, "commission", {"maker": maker, "goal": "Wealth"})
+
+
+def _preview(k, name):
+    return k.dry_run(k.new_law(LB.LIB[name]["code"], "constitution"))
+
+
+@pytest.mark.parametrize("name, rule", [("No Soldiers", "{'max_stats': {'attack': 0}}"), ("Two Child Limit", "{'max_children': 2}")])
+def test_previews_show_birth_rules(name, rule):
+    inst, k, maker, aid = _world()
+    diff = _preview(k, name)
+    lid = f"L{len(k.w['laws'])}"
+    assert f"rules: birth_rules {lid}: None -> {rule}" in diff, diff
+    assert f"law {lid}: draft -> active" in diff
+    assert not k.w["life"].get("rules")                                   # rolled back
+
+
+def test_preview_of_a_repeal_shows_the_birth_rule_lifted():
+    inst, k, maker, aid = _world()
+    lid = _enact(k, "No Soldiers")
+    diff = k.dry_run(k.new_law(f'title = "Let them fight"\nintent = "x"\nrepeal("{lid}")\n', "constitution"))
+    assert f"rules: birth_rules {lid}: {{'max_stats': {{'attack': 0}}}} -> None" in diff, diff
+
+
+def test_preview_shows_published_registers():
+    inst, k, maker, aid = _world()
+    diff = _preview(k, "Child Registry")
+    lid = f"L{len(k.w['laws'])}"
+    assert f"rules: births_public: None -> ['{lid}']" in diff and f"rules: commissions_public: None -> ['{lid}']" in diff, diff
+
+
+def test_preview_shows_public_succession():
+    inst, k, maker, aid = _world()
+    diff = k.dry_run(k.new_law('title = "Open seats"\nintent = "x"\n\ndef on_enact():\n    set_succession_public(True)\n', "constitution"))
+    assert "rules: succession_public: None -> True" in diff, diff
