@@ -289,3 +289,101 @@ def test_invoke_is_offered_for_hidden_powers_or_law_defined_actions(level, hidde
     k = Kernel(inst)
     a = inst["agents"][0]
     assert ("invoke" in CX.allowed_actions(inst, a, k.w["agents"][a["id"]]["rights"], k)) == offered
+
+
+# ------------------------------------------------------------------ sections and facts (P1.6, review 02 §4.5)
+# (spec override, texts its default value gives: none may appear anywhere, the text the new value gives: must appear wherever the
+# world has that text at all). Every layer is read: core prompt, manual, legacy (context-off) prompt, observer prompt, every agent.
+PERTURB = [
+    ("veto_window=7", ["2-round window"], "7-round window"),
+    ("conflict.attack_cost=3", ["uses 2 actions", "uses 2 of your actions"], "uses 3 actions"),
+    ("conflict.fort_unlock_rounds=5", ["after 2 rounds (it keeps", "take 2 rounds to unlock"], "take 5 rounds to unlock"),
+    ("conflict.weapons_per_copper=3", ["1 for 1"], "3 weapons per copper"),
+    ("credit.offer_lapse=5", ["lapses after 2 rounds"], "lapses after 5 rounds"),
+    ("context.search_hits=13", ["10 best matches"], "13 best matches"),
+    ("context.file_tokens=1234", ["files of up to 1000 tokens"], "files of up to 1234 tokens"),
+    ("context.max_pin_slots=3", ["at most 2);"], "at most 3);"),
+    ("media2.max_subscriptions=7", ["up to 3 (", "at most 3;"], "up to 7 ("),
+    ("media2.edition_tokens=777", ["600 tokens"], "777 tokens"),
+    ("media2.annotations_per_round=9", ["(5 per round)"], "(9 per round)"),
+    ("media2.annotation_tokens=66", ["60 tokens"], "66 tokens"),
+    ("media2.scholars.file_tokens=1500", ["1,000-token"], "1,500-token"),
+    ("observer.forge_cost={copper: 6}", ["1 copper each", "costs 1 copper"], "6 copper"),
+    ("archive_reading.free_per_turn=5", ["up to 3 read_archive"], "up to 5 read_archive"),
+    ("dm_step.dms_per_round=6", ["from 5 up", "starting at 5 or more"], "6 or more"),
+    ("dm_step.max_per_round=12", ["never above 10"], "never above 12"),
+    ("dm_step.exchanges=4", ["up to 2 exchanges"], "up to 4 exchanges"),
+]
+# Worlds: every context layer (society); the legacy prompt with conflict, media, the DM step and the observer; a context world with
+# free lookups and no per-agent memory draw (its own overrides and phrases).
+PERTURB_WORLDS = {
+    "society": ("society", 5, [], []),
+    "legacy": ("conflict_pilot", 1, ["media2.enabled=true", "observer.enabled=true", "turns=simultaneous", "dm_step.enabled=true"], []),
+    "free_lookups": ("context_pilot", 1, ["context.lookups_in_dm_step=false", "conflict.enabled=true", "media2.enabled=true"],
+                     [("context.free_lookups=5", ["up to 3 free lookups"], "up to 5 free lookups"),
+                      ("context.recent_turns=6", ["last 3 turns"], "last 6 turns"),
+                      ("context.budgets.scratchpad=2345", ["(2000 tokens"], "(2345 tokens")]),
+}
+# Known gap: lawdocs' codex law articles ("Law: ..." manual sections) are documents generated from lawdocs.ENTRIES, outside the
+# sections model; enable_loans' detail there still says "lapses after 2 rounds".
+KNOWN_GAPS = ("Law: ",)
+
+
+def _all_text(preset, seed, sets) -> str:
+    """Every text of a world: every layer, every agent (and the observer)."""
+    from charter import agents as AG, observer as OBS
+    inst = generator.generate(S.apply_overrides(S.load(preset), ["shared_archive.enabled=false"] + sets), seed)
+    k = Kernel(inst)
+    out = []
+    for a in inst["agents"]:
+        out.append(AG.system_prompt(inst, a))                            # legacy (or the core prompt without a kernel)
+        if CX.enabled(inst):
+            out.append(CX.core_prompt(inst, a, k))
+        out += [f"{t}\n{x}" for t, x in CX.build_manual(inst, k, a["id"]) if not t.startswith(KNOWN_GAPS)]
+        out += [f"{t}\n{x}" for t, x in MN.sections(inst, None, a["id"]) if not t.startswith(KNOWN_GAPS)]
+    if inst.get("observer"):
+        out.append(OBS.system_prompt(inst))
+    return "\n\n".join(out)
+
+
+@pytest.mark.parametrize("world_name", sorted(PERTURB_WORLDS))
+def test_no_default_number_leaks_into_any_rendered_text(world_name):
+    """review 02 §4.5: unusual values for every spec number prose states; no default survives in any layer, and each new value
+    shows wherever the world has that text."""
+    preset, seed, sets, extra = PERTURB_WORLDS[world_name]
+    rows = PERTURB + extra
+    base = _all_text(preset, seed, sets)
+    text = _all_text(preset, seed, sets + [o for o, _, _ in rows])
+    for o, stale, new in rows:
+        for s in stale:
+            assert s not in text, f"{world_name}: {s!r} survives {o}"
+        if any(s in base for s in stale):
+            assert new in text, f"{world_name}: {new!r} missing after {o}"
+
+
+def test_sections_registry_is_consistent():
+    """Every layout key has exactly one row, modules' rows are anchored, fact names are unique and each piece is a feature's."""
+    from charter import facts as FX, features as FT, sections as SCN
+    for layer, keys in SCN.LAYOUTS.items():
+        have = [s.key for s in SCN.rows(layer) if s.after is None]
+        assert sorted(have) == sorted(keys), layer
+    assert {s.key for s in SCN.rows("manual") if s.after} >= {"Conflict", "Media", "Life and children"}
+    assert [s.key for s in SCN.rows("core") if s.cut == "clip"] == ["overview"]
+    assert set(FX.PIECES) <= set(FT.REG) | {"core"}
+    inst = generator.generate(S.load("society"), 5)
+    assert set(FX.facts(inst)) == set(FX.OWNER)
+    with pytest.raises(ValueError):
+        FX.piece("credit2", ("offer_lapse",))(lambda inst: {})
+
+
+LEGACY_FROZEN = {"E2": "e30f1ab2df1d4e4c", "E6": "378be32809e8894f", "E7": "7839996bee5319d7"}                      # sha256[:16] of every agent's prompt, seed 1
+
+
+@pytest.mark.parametrize("preset", sorted(LEGACY_FROZEN))
+def test_legacy_prompt_is_frozen(preset):
+    """D-4: the context-off system prompt stays byte-identical; new features appear only on the context path."""
+    import hashlib
+    from charter import agents as AG
+    inst = generator.generate(S.apply_overrides(S.load(preset), ["shared_archive.enabled=false"]), 1)
+    got = hashlib.sha256("\x00".join(AG.system_prompt(inst, a) for a in inst["agents"]).encode()).hexdigest()[:16]
+    assert got == LEGACY_FROZEN[preset]

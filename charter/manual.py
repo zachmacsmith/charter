@@ -1,14 +1,17 @@
 """The per-agent manual (context module): generated deterministically from the agent's class, roles and rights, the enabled
 modules, the law language it knows (law_docs tiers: the prompt-documented part plus the codex law articles it holds), the law
 library, the archive and codex articles it holds and the powers it has heard of. Only titles go in the prompt; the manual lookup
-fetches a section. Other modules add sections through `manual_sections(inst, k, aid)` (context.KNOWN_MODULES) or by appending to
-context.MANUAL_SECTIONS.
+fetches a section.
 
-`sections(inst, k, aid)` works with k=None (from the instance alone) for the system prompt written at the start of a run.
+The manual is the "manual" layer of charter.sections: the rows below (in sections.LAYOUTS["manual"] order), then the sections other
+modules register next to their code with `@sections.section(title, after="World rules", order=n)` (Conflict, Media, Life and
+children). `sections(inst, k, aid)` is the base (without those); context.build_manual adds them, applies the spec's edits and
+splits long sections. Both work with k=None (from the instance alone) for the system prompt written at the start of a run.
 """
 from __future__ import annotations
 
 from charter import rights as RT
+from charter import sections as SC
 from charter.rights import RIGHT_DOC                                    # noqa: F401  (derived from the rights registry)
 
 
@@ -50,10 +53,6 @@ def _known_powers(inst, k, aid) -> list:
     return list(((inst.get("hidden") or {}).get("knows") or {}).get(aid, []))
 
 
-def _is_maker(k, aid) -> bool:
-    return k is not None and aid in ((k.w.get("roles") or {}).get("maker") or [])
-
-
 def turn_text(f: dict, lookups: list) -> str:
     """"How your turn works": the layers of a turn and how lookups are answered, from the same facts as the core prompt
     (charter.facts: lookup_mode, memory_turns, scratchpad, search_hits, free_lookups). lookups: the agent's look-up actions."""
@@ -77,30 +76,31 @@ def turn_text(f: dict, lookups: list) -> str:
     else:
         text += "Lookups are actions in this world: each uses an action and its text comes next turn."
     return text + (f" Lookups: {names}." if names else "") + "\nA token is about 4 characters."
+def view(inst, k, aid):
+    """The manual's view of an agent: its record (a newcomer's from the kernel), the rights it may be told about, and the record
+    modules' sections have always received (the instance's, or {"id": aid})."""
+    raw = next((x for x in inst["agents"] if x["id"] == aid), {"id": aid})
+    return SC.view(inst, k, _agent(inst, k, aid), _rights(inst, k, aid), "manual", raw)
 
 
 def sections(inst, k, aid) -> list:
-    """The base manual: [(title, text)] in a fixed order."""
-    from charter import agents as AG
-    from charter import archive
-    from charter import context as CX
-    from charter import action_registry as AR
-    from charter import hidden as H
-    from charter import projects as P
-    from charter import scorer
-    from charter import facts as FX
-    sp = inst["spec"]
-    a = _agent(inst, k, aid)
-    f = FX.facts(inst, a, k)                                            # every number below comes from the spec (or the agent)
-    rights = _rights(inst, k, aid)
-    lvl = ["L0", "L1", "L2", "L3", "L4"].index(inst["law_level"])
-    out = []
+    """The base manual: [(title, text)] in the manual layout (the Section rows below, without the modules' anchored ones)."""
+    return SC.render("manual", view(inst, k, aid), anchored=False)
 
-    out.append(("World rules", AG.world_rules(inst)))                   # the full rules (the core prompt carries what fits)
-    # module sections (Conflict, Media, Life and children) are registered in their modules: composition.manual_section
-    allowed = CX.allowed_actions(inst, a, rights, k)
-    out.append(("How your turn works", turn_text(f, [n for n in allowed if AR.REG[n].pre and not AR.REG[n].msg])))
-    out.append(("Memory and files", (
+
+# ---------------------------------------------------------------------- the manual's rows (sections.LAYOUTS["manual"] order)
+# "World rules" and "Goals in this world" are shared with the legacy and observer prompts (agents.py). Module sections (Conflict,
+# Media, Life and children) are registered in their modules with after="World rules".
+@SC.section("How your turn works")
+def _turn(v):
+    from charter import action_registry as AR
+    return turn_text(v.facts, [n for n in v.allowed if AR.REG[n].pre and not AR.REG[n].msg])
+
+
+@SC.section("Memory and files")
+def _memory(v):
+    f = v.facts
+    return (
         f"Scratchpad: write_scratchpad {{\"text\": \"...\", \"mode\": \"replace\"|\"append\"}} (the first each turn uses no action; append "
         "drops the oldest text when full).\n"
         f"Files: extra files of up to {f['file_tokens']} tokens each, as much as your file space allows (your state shows what is left; "
@@ -108,81 +108,127 @@ def sections(inst, k, aid) -> list:
         "delete_file {\"name\"}; share_file {\"name\", \"to\"} (a copy that takes space in the recipient's files); read_file {\"name\"} "
         f"(a lookup). pin {{\"name\"}} keeps a file in every prompt (pin slots: {f['pin_slots']} at the start, at most "
         f"{f['max_pin_slots']}); unpin {{\"name\"}}.\n"
-        "Files are destroyed when you leave the game unless a bequest or a deposit passes them on.")))
+        "Files are destroyed when you leave the game unless a bequest or a deposit passes them on.")
 
-    role = AG.class_brief(inst, a).split("\nYour part of the archive")[0]
-    out.append(("Your role", role))
-    out.append(("Your rights", "\n".join(f"- {r}: {_right_doc(inst, k, r)}" for r in rights) or "You hold no rights."))
-    out.append(("Goals in this world", AG.goal_prior(sp.get("goals"))))
 
-    edge, groups, kinds = CX.action_layout(allowed, rights)
-    doc = lambda ns: "\n".join("- " + (AG.action_doc(n, inst, a, f) if n in AG.ACTION_DOC else f"{n}: {AR.purpose(n)}") for n in ns)
-    if edge:
-        out.append(("Actions: your edge", "Only your class or roles can do these.\n" + doc(edge)))
-    for g, ns in groups:
-        out.append((f"Actions: {g.lower()}", doc(ns)))
-    for kd, phrase, ns in kinds:
-        out.append((f"Actions: {kd}", f"How to {phrase}:\n" + doc(ns)))
+@SC.section("Your role")
+def _role(v):
+    from charter import agents as AG
+    return AG.class_brief(v.inst, v.a, archive_index=False)
+
+
+@SC.section("Your rights")
+def _rights_text(v):
+    return "\n".join(f"- {r}: {_right_doc(v.inst, v.k, r)}" for r in v.rights) or "You hold no rights."
+
+
+@SC.section("Actions")
+def _actions(v):
+    """"Actions: your edge", one section per core group and per niche kind (with each action's doc line), and "Actions: all", the
+    index: all from the same layout as the core prompt's list."""
+    from charter import agents as AG
+    from charter import action_registry as AR
+    edge, groups, kinds = v.layout
+    doc = lambda ns: "\n".join("- " + (AG.action_doc(n, v.inst, v.a, v.facts) if n in AG.ACTION_DOC else f"{n}: {AR.purpose(n)}")
+                               for n in ns)
+    out = [("Actions: your edge", "Only your class or roles can do these.\n" + doc(edge))] if edge else []
+    out += [(f"Actions: {g.lower()}", doc(ns)) for g, ns in groups]
+    out += [(f"Actions: {kd}", f"How to {phrase}:\n" + doc(ns)) for kd, phrase, ns in kinds]
     out.append(("Actions: all", "Every action you can take, by kind (open a kind's section for the arguments):\n" + "\n".join(
-        f"- {t}: " + ", ".join(ns) for t, ns in ([("your edge", edge)] if edge else []) + [(g.lower(), ns) for g, ns in groups] + [(kd, ns) for kd, _, ns in kinds])))
+        f"- {t}: " + ", ".join(ns) for t, ns in ([("your edge", edge)] if edge else []) + [(g.lower(), ns) for g, ns in groups]
+        + [(kd, ns) for kd, _, ns in kinds])))
+    return out
 
-    if sp["channels"].get("dm", True):
-        dmc = sp.get("dm_step") or {}
-        mine = k.dm_limit(aid) if k is not None else None
-        txt = (f"Each agent may send a limited number of private messages per round (from {f['dms_per_round']} up, different for each "
-               f"agent, never above {f['max_dms_per_round']})" + (f"; yours is {mine}" if mine is not None else "") + ", new messages and replies together. Holders of dm_rules set the limit for everyone or one agent; "
-               "laws can set it too. reply {\"message\": \"e42\", \"text\": \"...\", \"item\", \"qty\"} answers a message and can pay in the same action.")
-        if sp.get("turns") == "simultaneous" and dmc.get("enabled"):
-            txt += (f"\nThe DM step: messages in your plan are delivered before anyone's other actions and do not use actions. Whoever receives "
-                    f"one is asked again at once and may reply and replace its plan, up to {f['dm_exchanges']} exchanges per round. "
-                    "Agreeing to something does not carry it out.")
-        out.append(("Private messages and the DM step", txt))
 
-    if lvl > 0:
-        out.append(("Law language", H.api_doc(inst, AG.API_DOC)))
-        cat = H.catalogue(inst) if H.enabled_inst(inst) else {}
-        for d in _held_articles(inst, k, aid):
-            if d.startswith("codex/law/") and d in cat:
-                out.append((f"Law: {cat[d]['title']}", cat[d]["text"]))
-    lib = AG.library_text(inst, a)
-    if lib:
-        out.append(("Law library", lib))
+@SC.section("Private messages and the DM step", needs=("mod:dm",))
+def _dms(v):
+    sp, f = v.spec, v.facts
+    dmc = sp.get("dm_step") or {}
+    mine = v.k.dm_limit(v.aid) if v.k is not None else None
+    txt = (f"Each agent may send a limited number of private messages per round (from {f['dms_per_round']} up, different for each "
+           f"agent, never above {f['max_dms_per_round']})" + (f"; yours is {mine}" if mine is not None else "") + ", new messages and "
+           "replies together. Holders of dm_rules set the limit for everyone or one agent; laws can set it too. reply {\"message\": "
+           "\"e42\", \"text\": \"...\", \"item\", \"qty\"} answers a message and can pay in the same action.")
+    if sp.get("turns") == "simultaneous" and dmc.get("enabled"):
+        txt += (f"\nThe DM step: messages in your plan are delivered before anyone's other actions and do not use actions. Whoever receives "
+                f"one is asked again at once and may reply and replace its plan, up to {f['dm_exchanges']} exchanges per round. "
+                "Agreeing to something does not carry it out.")
+    return txt
 
-    if lvl >= 2 and not ({"lend", "accept_loan", "repay_loan"} & H.undocumented_actions(inst)
-                         and not any(d.startswith("codex/law/loans") for d in _held_articles(inst, k, aid))):
-        out.append(("Credit and loans", (
-            f"Loans exist only while a law enables them. lend offers a loan (it lapses after {f['offer_lapse']} rounds); accept_loan takes one; repay_loan pays "
-            "in full or in part; extend_loan (lender only) rolls one over. Interest is a rate per round, simple or compounding. A debt unpaid "
-            "at its due round is in default; what default costs (seizure, sanctions, nothing) is set by law. Every agent's credit record is "
-            "public. A coin with a par redeems at par first come first served while the reserve lasts; a shortfall suspends redemption.")))
-    proj = P.rules_text(sp).strip()
-    if proj:
-        out.append(("Projects and tribute", proj))
 
-    held = _held_articles(inst, k, aid)
-    if held:
-        cat = H.catalogue(inst)
-        out.append(("Codex articles you hold", "Read one with read_archive {\"doc\": \"<id>\"} (a lookup, or an action). Some articles are wrong.\n"
-                    + "\n".join(f"- {d}: {cat[d]['title']}" for d in held if d in cat)))
-    known = _known_powers(inst, k, aid)
-    if known:
-        out.append(("Words of power you have heard of", "Used through invoke {\"action\": \"<word>\", \"args\": [...]}; a word answers only "
-                    "its holders, and anyone else loses the action.\n" + "\n".join(
-                        f"- {H.CAPS[p][0]}: {H.CAPS[p][2]}; args {H.CAPS[p][3]}" for p in known if p in H.CAPS)))
+@SC.section("Law language", needs=("level:1",))
+def _law(v):
+    """The law language (the prompt-documented part), then each codex law article the agent holds."""
+    from charter import agents as AG
+    from charter import hidden as H
+    out = [("Law language", H.api_doc(v.inst, AG.API_DOC))]
+    cat = H.catalogue(v.inst) if H.enabled_inst(v.inst) else {}
+    out += [(f"Law: {cat[d]['title']}", cat[d]["text"]) for d in _held_articles(v.inst, v.k, v.aid)
+            if d.startswith("codex/law/") and d in cat]
+    return out
 
-    if a.get("cls") == "scientist" or "scientist" in (a.get("also") or ()):
-        only = a.get("archive_docs")
-        try:
-            idx = archive.index(archive.shared_dir(sp), only=only, run_id=inst.get("run_id"), summaries=True)
-        except Exception:                                              # the shared archive may be unreachable: keep the manual working
-            idx = archive.index(None, only=only, summaries=True)
-        others = _others_titles(inst, aid)
-        if others:
-            out.append(("What other Scientists hold", others))
-        how = ("an action; the text comes next turn" if f["lookup_mode"] == "action" else
-               "as a lookup it is answered before you act this round")
-        out.append(("Your archive", _archive_head(k, aid, only) + f"Read with read_archive {{\"doc\": \"<id>\"}} ({how}).\n"
-                    + _mark_read(k, aid, idx)))
+
+@SC.section("Law library")
+def _library(v):
+    from charter import agents as AG
+    return AG.library_text(v.inst, v.a) or None
+
+
+@SC.section("Credit and loans", needs=("level:2",))
+def _credit(v):
+    from charter import hidden as H
+    if ({"lend", "accept_loan", "repay_loan"} & H.undocumented_actions(v.inst)
+            and not any(d.startswith("codex/law/loans") for d in _held_articles(v.inst, v.k, v.aid))):
+        return None                                                     # loans are documented only in a codex article it lacks
+    return (f"Loans exist only while a law enables them. lend offers a loan (it lapses after {v.facts['offer_lapse']} rounds); accept_loan "
+            "takes one; repay_loan pays in full or in part; extend_loan (lender only) rolls one over. Interest is a rate per round, simple "
+            "or compounding. A debt unpaid at its due round is in default; what default costs (seizure, sanctions, nothing) is set by "
+            "law. Every agent's credit record is public. A coin with a par redeems at par first come first served while the reserve "
+            "lasts; a shortfall suspends redemption.")
+
+
+@SC.section("Projects and tribute")
+def _projects(v):
+    from charter import projects as P
+    return P.rules_text(v.spec).strip() or None
+
+
+@SC.section("Codex articles you hold")
+def _codex(v):
+    from charter import hidden as H
+    held = _held_articles(v.inst, v.k, v.aid)
+    if not held:
+        return None
+    cat = H.catalogue(v.inst)
+    return ("Read one with read_archive {\"doc\": \"<id>\"} (a lookup, or an action). Some articles are wrong.\n"
+            + "\n".join(f"- {d}: {cat[d]['title']}" for d in held if d in cat))
+
+
+@SC.section("Words of power you have heard of")
+def _powers(v):
+    from charter import hidden as H
+    known = _known_powers(v.inst, v.k, v.aid)
+    if not known:
+        return None
+    return ("Used through invoke {\"action\": \"<word>\", \"args\": [...]}; a word answers only its holders, and anyone else loses the "
+            "action.\n" + "\n".join(f"- {H.CAPS[p][0]}: {H.CAPS[p][2]}; args {H.CAPS[p][3]}" for p in known if p in H.CAPS))
+
+
+@SC.section("Scientists' archive", needs=("cls:scientist",))
+def _archive(v):
+    """"What other Scientists hold" (titles only) and "Your archive" (the agent's share, with what it has read)."""
+    from charter import archive
+    only = v.a.get("archive_docs")
+    try:
+        idx = archive.index(archive.shared_dir(v.spec), only=only, run_id=v.inst.get("run_id"), summaries=True)
+    except Exception:                                                  # the shared archive may be unreachable: keep the manual working
+        idx = archive.index(None, only=only, summaries=True)
+    others = _others_titles(v.inst, v.aid)
+    out = [("What other Scientists hold", others)] if others else []
+    how = ("an action; the text comes next turn" if v.facts["lookup_mode"] == "action" else
+           "as a lookup it is answered before you act this round")
+    out.append(("Your archive", _archive_head(v.k, v.aid, only) + f"Read with read_archive {{\"doc\": \"<id>\"}} ({how}).\n"
+                + _mark_read(v.k, v.aid, idx)))
     return out
 
 

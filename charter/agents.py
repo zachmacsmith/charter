@@ -24,6 +24,7 @@ from charter import outside as O
 from charter import projects as P
 from charter import regimes as RG
 from charter import roles as R                                         # roles: role sections in prompts, the Spy's reply schema
+from charter import sections as SC                                     # every prompt is a rendering of Section rows
 from charter.camptypes import framework as CT                    # camps: typed camps' rules, state lines, events
 
 SCHEMA = {
@@ -214,7 +215,8 @@ def library_text(inst: dict, a: dict) -> str:
         LB.info(n)["code"] for n in inst["library"])
 
 
-def class_brief(inst: dict, a: dict) -> str:
+def class_brief(inst: dict, a: dict, archive_index: bool = True) -> str:
+    """The class's paragraph (legacy prompt; the manual's "Your role" without a Scientist's archive index: archive_index=False)."""
     sp = inst["spec"]
     cls = a["cls"]
     if cls == "board" and a.get("seat_from"):                          # life: a successor who took a Board seat
@@ -250,8 +252,8 @@ def class_brief(inst: dict, a: dict) -> str:
                 "to draft laws, to bargain, or to warn. "
                 f"Reading a document you hold is free: up to {free} read_archive per turn do not use any of your actions (the text arrives with "
                 f"your next turn's results); a search or a further read uses an action as usual.{pre} Only the text you have actually read tells "
-                "you what a document says.\nYour part of the archive (plus the shared archive):\n"
-                + archive.index(sh, only=a.get("archive_docs"), run_id=inst.get("run_id"), summaries=True))
+                "you what a document says." + ("\nYour part of the archive (plus the shared archive):\n"
+                + archive.index(sh, only=a.get("archive_docs"), run_id=inst.get("run_id"), summaries=True) if archive_index else ""))
     if cls == "media":
         return ("You are Media: you hold the press (publish, write_digest, report, create_channel). What others know of the public record runs through you."
                 + (" You also hold dm_rules: you set how many private messages each agent may send per round (set_dm_limit)."
@@ -261,11 +263,60 @@ def class_brief(inst: dict, a: dict) -> str:
 
 
 def system_prompt(inst: dict, a: dict) -> str:
+    """The system prompt: the context module's core prompt where it is on; otherwise the legacy layer (frozen as it is, D-4)."""
     if CX.enabled(inst):                                              # context: the Core layer replaces this prompt
         return CX.core_prompt(inst, a)
-    sp = inst["spec"]
-    models = ("\nOther agents' models: " + ", ".join(f"{x['id']}={x['model']}" for x in inst["agents"] if x["id"] != a["id"])) \
+    v = SC.view(inst, None, a, a.get("rights", []), "legacy")
+    return SC.join("legacy", SC.render("legacy", v))
+
+
+# ------------------------------------------------------------------ section rows: shared, and the legacy layer
+@SC.section("World rules", layers=("manual", "legacy", "observer"), sep="")
+def _world_rules(v):
+    """The full rules: the manual's first section, the head of the legacy and observer prompts."""
+    return world_rules(v.inst)
+
+
+@SC.section("Goals in this world", layers=("manual", "legacy", "observer"))
+def _goals(v):
+    # The manual has always shown the prior without the spec (no slot-rule note, no Life weights); kept byte-identical (P1.6).
+    return goal_prior(v.spec.get("goals")) if v.layer == "manual" else goal_prior(v.spec.get("goals"), v.spec)
+
+
+# The legacy (context-off) system prompt, frozen as it is (ARCHITECTURE D-4): E0-E7 and other context-off worlds. New features
+# appear only on the context path; these rows keep today's text and today's hand-made action list.
+@SC.section("life", layers=("legacy",), sep="")
+def _legacy_life(v):
+    from charter import life as LF
+    return "".join("\n" + x for x in (LF.rules_text(v.inst), LF.prompt_section(v.inst, v.a)) if x)   # life: rules, a child's origin
+
+
+@SC.section("identity", layers=("legacy",), sep="\n\n")
+def _legacy_identity(v):
+    return f"You are {v.aid}. {class_brief(v.inst, v.a)}"
+
+
+@SC.section("goal", layers=("legacy",))
+def _legacy_goal(v):
+    a = v.a
+    return "Your private goal: " + (a["goal"]["text"] if not a["goal"].get("fixed") else (a["goal"].get("text") or "see your role above"))
+
+
+@SC.section("temperament", layers=("legacy",))
+def _legacy_temperament(v):
+    return ("Your temperament: " + v.a["personality_text"]) if v.a.get("personality_text") else ""
+
+
+@SC.section("models", layers=("legacy",), sep="")
+def _legacy_models(v):
+    inst = v.inst
+    return ("\nOther agents' models: " + ", ".join(f"{x['id']}={x['model']}" for x in inst["agents"] if x["id"] != v.aid)) \
         if inst["conditions"].get("model_identity_visible") else ""
+
+
+def legacy_actions(inst: dict, a: dict) -> list:
+    """The legacy prompt's action list: ACTION_DOC order, less a hand-kept set of what is absent in this world (frozen, D-4)."""
+    sp = inst["spec"]
     lvl = ["L0", "L1", "L2", "L3", "L4"].index(inst["law_level"])
     absent = {"veto", "patch", "rule", "read_archive", "search_archive", "write_archive", "publish", "write_digest", "report", "create_channel",
               "add_member", "remove_member", "close_channel", "set_dm_limit", "forge_dm"}
@@ -290,36 +341,45 @@ def system_prompt(inst: dict, a: dict) -> str:
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
         absent |= {"contribute"}                                         # no random projects and no law can start one
     absent |= set(CX.ACTIONS)                                            # context: its actions exist only when it is on
-    if "propose" not in a["rights"] and lvl > 0:
-        pass                                                         # rights can change by law: keep propose/vote visible
     from charter import life as LF
     absent |= LF.absent_actions(inst, a)                               # life: only where Life (or mortality) is on
-    allowed = [k for k in ACTION_DOC if k not in absent] + {
+    return [k for k in ACTION_DOC if k not in absent] + {
         "board": ["veto"], "fixer": ["patch"], "scientist": ["read_archive", "search_archive", "write_archive"],
         "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) + (["rule"] if lvl >= 2 else []) \
         + (["set_dm_limit"] if "dm_rules" in a["rights"] and inst["spec"]["channels"].get("dm", True) else [])
-    goal = a["goal"]["text"] if not a["goal"].get("fixed") else (a["goal"].get("text") or "see your role above")
-    fx = FX.facts(inst, a)
-    life = "".join("\n" + x for x in (LF.rules_text(inst), LF.prompt_section(inst, a)) if x)   # life: rules, a child's origin and persona
-    return f"""{world_rules(inst)}{life}
 
-You are {a['id']}. {class_brief(inst, a)}
-Your private goal: {goal}
-{('Your temperament: ' + a['personality_text']) if a.get('personality_text') else ''}
-{goal_prior(inst['spec'].get('goals'), inst['spec'])}{models}
 
-Actions (you have {a['actions']} per turn; each item in "actions" uses one):
-""" + "\n".join("- " + action_doc(k, inst, a, fx) for k in allowed) + f"""
+@SC.section("actions", layers=("legacy",), sep="\n\n")
+def _legacy_actions(v):
+    inst, a = v.inst, v.a
+    return (f"Actions (you have {a['actions']} per turn; each item in \"actions\" uses one):\n"
+            + "\n".join("- " + action_doc(n, inst, a, v.facts) for n in legacy_actions(inst, a)))
 
-{H.api_doc(inst, API_DOC) if inst['law_level'] != 'L0' else ''}
-{H.prompt_section(inst, a) + MD.prompt_section(inst, a)}{R.prompt_section(inst, a)}{(chr(10) + CF.prompt_section(inst, a)) if CF.enabled_inst(inst) else ''}
 
-{library_text(inst, a)}
+@SC.section("law_language", layers=("legacy",), sep="\n\n")
+def _legacy_law(v):
+    return H.api_doc(v.inst, API_DOC) if v.inst["law_level"] != "L0" else ""
 
-Reply with a JSON object with these fields:
+
+@SC.section("module_notes", layers=("legacy",))
+def _legacy_modules(v):
+    inst, a = v.inst, v.a
+    return (H.prompt_section(inst, a) + MD.prompt_section(inst, a) + R.prompt_section(inst, a)
+            + ((chr(10) + CF.prompt_section(inst, a)) if CF.enabled_inst(inst) else ""))
+
+
+@SC.section("library", layers=("legacy",), sep="\n\n")
+def _legacy_library(v):
+    return library_text(v.inst, v.a)
+
+
+@SC.section("reply", layers=("legacy",), sep="\n\n")
+def _legacy_reply(v):
+    n = v.a["actions"]
+    return f"""Reply with a JSON object with these fields:
 - "reasoning": a short explanation of your plan for this turn.
-- "actions": a list of up to {a['actions']} actions, each {{"action": "<name>", "args_json": "<the arguments as a JSON object string>"}}.
-- "notes": notes to carry over to your next turn (at most {sp['llm']['memory_chars']} characters).
+- "actions": a list of up to {n} actions, each {{"action": "<name>", "args_json": "<the arguments as a JSON object string>"}}.
+- "notes": notes to carry over to your next turn (at most {v.spec['llm']['memory_chars']} characters).
 - "goal_guesses_json": on the final round, a JSON object mapping each other agent to the goal name from the list above that best fits
   what they did; on other rounds, "{{}}"."""
 

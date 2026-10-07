@@ -1243,10 +1243,11 @@ def lineage_scores(gt) -> dict:
     return out
 
 
-from charter import composition as _CP                                  # noqa: E402
+from charter import sections as _SC                                    # noqa: E402
 
 
-@_CP.manual_section("Life and children", after="World rules", order=3)
-def _manual_section(inst, k, a):
+@_SC.section("Life and children", after="World rules", order=3)
+def _manual_section(v):
+    inst, k, a = v.inst, v.k, v.raw
     maker = k is not None and a["id"] in ((k.w.get("roles") or {}).get("maker") or [])
     return "\n".join(x for x in ((rules_text(inst, maker=maker) if enabled(inst["spec"]) else ""), prompt_section(inst, a)) if x)

@@ -1470,9 +1470,9 @@ def scripted_extra(k, a, acts) -> list:
     return acts[:-1] + [{"action": name, "args_json": json.dumps(args)}]
 
 
-from charter import composition as _CP                                  # noqa: E402
+from charter import sections as _SC                                    # noqa: E402
 
 
-@_CP.manual_section("Media", after="World rules", order=2)
-def _manual_section(inst, k, a):
-    return prompt_section(inst, a)
+@_SC.section("Media", after="World rules", order=2, needs=("mod:media2",))
+def _manual_section(v):
+    return prompt_section(v.inst, v.raw)

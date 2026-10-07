@@ -3,7 +3,11 @@
 Text that states a number (action docs, the manual, the core prompt, the observer prompt) takes it from here instead of writing it
 into the prose, so the text follows the spec: `facts(inst)` for world-level facts, `facts(inst, a, k)` adds the agent's own (how
 many past turns it sees, its scratchpad size). Action docs are string.Template texts (agents.ACTION_DOC: "$attack_cost") rendered
-with `render`; `$` never appears in a doc otherwise.
+with `render`; `$` never appears in a doc otherwise. Section rows (charter.sections) read them as `view.facts`.
+
+Each feature contributes its own piece (PIECES, `@piece(feature, names)`): the facts its prose states, read from its spec block.
+Names are unique across pieces; tests/test_charter_prompts.py perturbs the spec values behind them and checks that no default
+number is left in any rendered text.
 """
 from __future__ import annotations
 
@@ -39,54 +43,98 @@ def lookup_mode(x) -> str:
     return "free" if c["lookup_phase"] and int(c["free_lookups"]) > 0 else "action"
 
 
-def facts(inst: dict, a: dict | None = None, k=None) -> dict:
-    """The facts dictionary: {name: value as prose states it}. a (and k): the agent's own facts too."""
-    from charter import conflict as CF
-    from charter import context as CX
-    from charter import media as MD
+# ---------------------------------------------------------------------- per-feature pieces
+PIECES: dict = {}                    # feature (features.Feature.name, or "core") -> fn(inst) -> {name: value}
+OWNER: dict = {}                     # fact name -> the feature whose piece states it
+
+
+def piece(feature: str, names: tuple):
+    """Decorator: fn(inst) -> dict, the facts `names` of `feature`. A name may belong to one piece only, and a piece must return
+    exactly the names it declares."""
+    def deco(fn):
+        taken = sorted(n for n in names if n in OWNER)
+        if taken or feature in PIECES:
+            raise ValueError(f"facts: {feature} declares {taken or 'a second piece'} already declared")
+        OWNER.update({n: feature for n in names})
+
+        def checked(inst):
+            out = fn(inst)
+            if set(out) != set(names):
+                raise ValueError(f"facts piece {feature} returned {sorted(out)}, declared {sorted(names)}")
+            return out
+        PIECES[feature] = checked
+        return fn
+    return deco
+
+
+@piece("core", ("veto_window", "board_size", "free_reads", "dms_per_round", "max_dms_per_round", "dm_exchanges"))
+def _core(inst):
+    """Government (the Board's veto window and size), the Scientists' free archive reads, the private-message limits."""
     sp = inst["spec"]
-    cf, md, cx = CF.config(sp), MD.config(sp), CX.cfg(sp)
     dmc = sp.get("dm_step") or {}
-    wpc = float(cf["weapons_per_copper"])
-    out = {
-        # government
-        "veto_window": int(sp.get("veto_window", 2)),
-        "board_size": word(sum(1 for x in inst.get("agents", []) if x.get("cls") == "board")),
-        # conflict
-        "attack_cost": int(cf["attack_cost"]),
-        "fort_unlock_rounds": int(cf["fort_unlock_rounds"]),
-        "forge_rate": "1 for 1" if wpc == 1 else f"{wpc:g} weapons per copper",
-        # credit
-        "offer_lapse": int((sp.get("credit") or {}).get("offer_lapse", 2)),
-        # the observer's and the Spy's forgery
-        "forge_cost": cost_text((sp.get("observer") or {}).get("forge_cost"), {"copper": 1}),
-        # media2
-        "max_subscriptions": int(md["max_subscriptions"]),
-        "edition_tokens": int(md["edition_tokens"]),
-        "annotations_per_round": int(md["annotations_per_round"]),
-        "annotation_tokens": int(md["annotation_tokens"]),
-        "scholar_file_tokens": f"{int(md['scholars']['file_tokens']):,}",
-        "submissions": bool(md.get("submissions")),
-        # archive
-        "free_reads": int((sp.get("archive_reading") or {}).get("free_per_turn", 3)),
-        # private messages
-        "dms_per_round": dmc.get("dms_per_round", 5),
-        "max_dms_per_round": dmc.get("max_per_round", 10),
-        "dm_exchanges": dmc.get("exchanges", 2),
-        # context: memory and lookups
-        "lookup_mode": lookup_mode(sp),
-        "free_lookups": int(cx["free_lookups"]) if lookup_mode(sp) == "free" else 0,
-        "search_hits": int(cx["search_hits"]),
-        "memory_turns": int(cx["recent_turns"]),
-        "scratchpad": int(cx["budgets"]["scratchpad"]),
-        "file_tokens": int(cx["file_tokens"]),
-        "pin_slots": int(cx["pin_slots"]),
-        "max_pin_slots": int(cx["max_pin_slots"]),
-    }
-    out.update(_when(out["lookup_mode"]))
-    out.update(_media_words(out["submissions"]))
+    return {"veto_window": int(sp.get("veto_window", 2)),
+            "board_size": word(sum(1 for x in inst.get("agents", []) if x.get("cls") == "board")),
+            "free_reads": int((sp.get("archive_reading") or {}).get("free_per_turn", 3)),
+            "dms_per_round": dmc.get("dms_per_round", 5), "max_dms_per_round": dmc.get("max_per_round", 10),
+            "dm_exchanges": dmc.get("exchanges", 2)}
+
+
+def forge_rate(weapons_per_copper) -> str:
+    """conflict.weapons_per_copper as prose: "1 for 1", "2 weapons per copper"."""
+    wpc = float(weapons_per_copper)
+    return "1 for 1" if wpc == 1 else f"{wpc:g} weapons per copper"
+
+
+@piece("conflict", ("attack_cost", "fort_unlock_rounds", "forge_rate"))
+def _conflict(inst):
+    from charter import conflict as CF
+    cf = CF.config(inst["spec"])
+    return {"attack_cost": int(cf["attack_cost"]), "fort_unlock_rounds": int(cf["fort_unlock_rounds"]),
+            "forge_rate": forge_rate(cf["weapons_per_copper"])}
+
+
+@piece("credit", ("offer_lapse",))
+def _credit(inst):
+    return {"offer_lapse": int((inst["spec"].get("credit") or {}).get("offer_lapse", 2))}
+
+
+@piece("observer", ("forge_cost",))
+def _observer(inst):
+    """The observer's (and the Spy's) forged private message."""
+    return {"forge_cost": cost_text((inst["spec"].get("observer") or {}).get("forge_cost"), {"copper": 1})}
+
+
+@piece("media", ("max_subscriptions", "edition_tokens", "annotations_per_round", "annotation_tokens", "scholar_file_tokens",
+                 "submissions", "post_where", "anon_post_where"))
+def _media(inst):
+    from charter import media as MD
+    md = MD.config(inst["spec"])
+    out = {"max_subscriptions": int(md["max_subscriptions"]), "edition_tokens": int(md["edition_tokens"]),
+           "annotations_per_round": int(md["annotations_per_round"]), "annotation_tokens": int(md["annotation_tokens"]),
+           "scholar_file_tokens": f"{int(md['scholars']['file_tokens']):,}", "submissions": bool(md.get("submissions"))}
+    return out | _media_words(out["submissions"])
+
+
+@piece("context", ("lookup_mode", "free_lookups", "search_hits", "memory_turns", "scratchpad", "file_tokens", "pin_slots",
+                   "max_pin_slots", "text_when", "output_when", "manual_when"))
+def _context(inst):
+    """Memory and lookups (the agent's own memory_turns, scratchpad and pin_slots override these: agent_facts)."""
+    from charter import context as CX
+    sp = inst["spec"]
+    cx, mode = CX.cfg(sp), lookup_mode(sp)
+    return {"lookup_mode": mode, "free_lookups": int(cx["free_lookups"]) if mode == "free" else 0,
+            "search_hits": int(cx["search_hits"]), "memory_turns": int(cx["recent_turns"]),
+            "scratchpad": int(cx["budgets"]["scratchpad"]), "file_tokens": int(cx["file_tokens"]),
+            "pin_slots": int(cx["pin_slots"]), "max_pin_slots": int(cx["max_pin_slots"])} | _when(mode)
+
+
+def facts(inst: dict, a: dict | None = None, k=None) -> dict:
+    """The facts dictionary: {name: value as prose states it}, every feature's piece merged. a (and k): the agent's own facts too."""
+    out = {}
+    for fn in PIECES.values():
+        out.update(fn(inst))
     if a is not None:
-        out.update(agent_facts(inst, a, k, cx))
+        out.update(agent_facts(inst, a, k))
     return out
 
 

@@ -251,14 +251,24 @@ def test_law_docs_tiers_respected_in_manual():
     assert "define_action" not in law                                    # an article-only function (core preset)
 
 
-def test_module_manual_sections_are_registered(monkeypatch):
+def test_module_manual_sections_are_registered():
+    """A module's manual section is a Section row anchored after another (charter/sections.py): rendered per agent, placed after
+    its anchor, left out where its needs fail or its text is blank."""
+    from charter import manual as MN, sections as SC
     inst, k = world()
-    import types
-    fake = types.SimpleNamespace(manual_sections=lambda inst, k, aid: [("Conflict", f"rules for {aid}")])
-    import sys
-    monkeypatch.setitem(sys.modules, "charter.conflict", fake)
-    aid = k.roster()[0]
-    assert ("Conflict", f"rules for {aid}") in CX.build_manual(inst, k, aid)
+
+    @SC.section("Module notes", after="Your role", needs=("level:1",))
+    def _notes(v):
+        return f"rules for {v.aid}" if v.aid != k.roster()[1] else " "
+    try:
+        aid = k.roster()[0]
+        titles = [t for t, _ in CX.build_manual(inst, k, aid)]
+        assert ("Module notes", f"rules for {aid}") in CX.build_manual(inst, k, aid)
+        assert titles.index("Module notes") == titles.index("Your role") + 1
+        assert "Module notes" not in dict(CX.build_manual(inst, k, k.roster()[1]))
+        assert "Module notes" not in dict(MN.sections(inst, k, aid))           # the base manual has no anchored sections
+    finally:
+        SC.SECTIONS[:] = [s for s in SC.SECTIONS if s.key != "Module notes"]
 
 
 # ------------------------------------------------------------------ files

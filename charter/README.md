@@ -328,7 +328,7 @@ Runs the same scripted worlds on two code revisions and reports where they first
   modes and before the DM step. Lookups: `manual`, `manual_search`, `search_board` (every public post), `search_dms` (only the
   agent's own DMs), `read_file`, `read_archive`; as actions they cost one each and their text comes next turn. **The manual** is
   generated per agent (class, rights, enabled modules, law language by `law_docs` tier plus held codex law articles, library,
-  archive, known powers); other modules add sections with `manual_sections(inst, k, aid)`. New or changed sections are named in
+  archive, known powers); other modules add sections as `charter/sections.py` rows (`@sections.section(title, after=...)`). New or changed sections are named in
   the feed. **Files**: `write_scratchpad` (first per turn free), `write_file`, `rename_file`, `share_file` (costs the recipient's
   space), `delete_file`, `pin`, `unpin`; space (`file_space`, default 0) and pin slots (0, at most 2) are in `k.w`. Records:
   `reasoning.jsonl` rows carry `context` (each layer's tokens, budget and what was trimmed); lookup calls are rows with
