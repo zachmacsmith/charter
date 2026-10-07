@@ -65,7 +65,6 @@ KNOWN_GAPS = frozenset({
     # law-caused change seen only by the monitor (or by nobody)
     ("compel_vis", "move"), ("compel_vis", "mint"), ("compel_vis", "burn"), ("compel_vis", "set_title"),
     ("compel_vis", "guard_bind"), ("compel_vis", "guard_release"), ("compel_vis", "subscribe"),
-    # an ordinary law can cause it: review 09 F1 (repeal is in "meta"); P1.4 makes it structural and must remove this entry
     # agents can do it, no law can stop or charge it
     ("gate", "attack"), ("gate", "guard_bind"), ("gate", "guard_release"), ("gate", "fortify"),                # review 08 §3
     ("gate", "post"), ("gate", "cast_vote"), ("gate", "propose"), ("gate", "rule"),                           # after-only aliases
