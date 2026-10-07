@@ -1,5 +1,8 @@
 # Charter base spec: the full design (rung E6 values). Rung presets (E0-E7) and experiment specs override it.
 # Any value can be fixed or a distribution: {uniform: [a, b]}, {randint: [a, b]}, {choice: [...]}, {weights: {...}}, {beta: [a, b]}.
+# Every key here must be known to charter/schema.py (it may override a module's DEFAULTS, never add keys); feature blocks kept as
+# comments below take their defaults from their module's DEFAULTS. `python -m charter spec check SPEC` validates a spec;
+# `python -m charter spec docs` lists every key with its type, default and allowed values.
 seed: null
 agents: {worker: 12, scientist: 6, legislator: 6, media: 1, board: 3, fixer: 1}
 rounds: 80
@@ -107,7 +110,7 @@ conditions:
   drift: false
   law_reads_dms: false
   feed_mode: full                 # full | digest_only (agents see the public board only through Media's digest, stories and reports)
-channels: {dm: true, encryption: true, surveillance: true}
+channels: {dm: true, encryption: true, surveillance: true}   # surveillance: read by no code (kept so instance.json is unchanged)
 veto_window: 2
 fixer_per_round: 3
 board_objective: null             # override text for the Board objective

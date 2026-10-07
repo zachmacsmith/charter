@@ -9,6 +9,8 @@
   python -m charter report RUN_DIR                                               (re)build overview.md, spec_outline.md, agents/*
   python -m charter sweep E3 --seeds 3 --vary constitution=assembly,oligarchy --vary models.mix=all_weak,strong_legislators [--dry]
   python -m charter difftest --base main --head WORKTREE --presets E2,E4 --seeds 1,2 --rounds 3   where two revisions' scripted runs diverge
+  python -m charter spec check E3 [--set models.mix=balanced]                    validate a spec (unknown keys, bad values; did-you-mean hints)
+  python -m charter spec docs --out charter/docs/spec_reference.md              write the spec reference (every key, type, default, doc)
   python -m charter explore E3 --runs 8 --perturb "endowment_gini={uniform: [0.1, 0.7]}" --perturb "conditions.fixer={choice: [honest, hidden]}" [--dry]
 
 SPEC is a preset name (E0..E7, base, example_E3) or a path to a YAML spec. --set applies explicit choices (they win over draws).
@@ -164,7 +166,7 @@ def cmd_resume(a):
         raise SystemExit(f"{out} has no checkpoint.pkl (runs from before checkpoints existed cannot be resumed)")
     saved = json.loads((out / "instance.json").read_text())
     if "spec_source" in saved:                                        # regenerate from the spec as given and check the code still agrees
-        inst = generator.generate(saved["spec_source"], saved["seed"])
+        inst = generator.generate(saved["spec_source"], saved["seed"], check=False)   # a run made before the schema still resumes
         inst["run_id"] = saved.get("run_id", out.name)
         if not _same_instance(out, inst):
             raise SystemExit(f"{out}: the world generated now differs from instance.json (spec or code changed); cannot resume")
@@ -333,6 +335,9 @@ def main(argv=None):
     from charter import difftest
     p = sub.add_parser("difftest", help="compare scripted runs on two code revisions (charter/difftest.py)")
     difftest.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(difftest.cmd(a)))
+    from charter import schema
+    p = sub.add_parser("spec", help="spec check SPEC.. [--set k=v] | spec docs [--out F] (charter/schema.py)")
+    schema.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(schema.cmd(a)))
     a = ap.parse_args(argv)
     a.fn(a)
 

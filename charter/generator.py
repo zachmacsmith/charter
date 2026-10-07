@@ -18,6 +18,7 @@ from charter import observer as OBS
 from charter import personality as P
 from charter import regimes as RG
 from charter import roles as R
+from charter import schema as SC
 from charter import spec as S
 
 PER_ENTITY = [("archive_split", "copies"), ("camps", "regrowth_r"), ("camps", "start_stock"), ("camps", "noise"), ("camps", "holders_per_worker"), ("camps", "compute"),
@@ -199,7 +200,9 @@ def bundle(value, unit, rng):
     return {k: v for k, v in out.items() if v > 0}
 
 
-def generate(spec: dict, seed: int) -> dict:
+def generate(spec: dict, seed: int, check: bool = True) -> dict:
+    if check:                                                        # unknown keys, bad enums, malformed distributions: fail first
+        SC.check(spec)                                               # (check=False: resuming a run made before the schema)
     source = copy.deepcopy(spec)                                     # as given: generation resolves draws into inst["spec"]
     rng = random.Random(seed)
     spec, reg = RG.resolve(spec, seed)                               # a regime fixes the constitution; no regime: spec as before

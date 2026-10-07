@@ -8,6 +8,8 @@ A spec value is either fixed (`rounds: 30`) or a distribution:
   {beta: [a, b]}        Beta(a, b) draw
 `extends: [base, E3]` deep-merges the named files from charter/specs/ (later ones win), then this file on top.
 Overrides (`--set a.b=value`) are applied last; a value of `{choice: [...]}` given there is sampled like any other.
+Which keys exist, their types and allowed values: charter/schema.py (`schema.validate(spec)`, run by the generator; dist_error and
+dist_options below are its distribution checks).
 """
 from __future__ import annotations
 
@@ -75,6 +77,41 @@ def apply_overrides(spec: dict, overrides: list[str] | None) -> dict:
 
 def is_dist(v) -> bool:
     return isinstance(v, dict) and len(v) == 1 and next(iter(v)) in DIST_KEYS
+
+
+def dist_error(v) -> str | None:
+    """Why a distribution is malformed (None when it is well formed). Only call it on values where is_dist(v) holds."""
+    kind, arg = next(iter(v.items()))
+    if kind in ("uniform", "randint", "beta"):
+        if not (isinstance(arg, (list, tuple)) and len(arg) == 2 and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in arg)):
+            return f"{{{kind}: ...}} needs two numbers [a, b], got {arg!r}"
+        if kind == "randint" and not all(isinstance(x, int) or float(x).is_integer() for x in arg):
+            return f"{{randint: ...}} needs two integers, got {arg!r}"
+        if kind != "beta" and arg[0] > arg[1]:
+            return f"{{{kind}: [a, b]}} needs a <= b, got {arg!r}"
+        if kind == "beta" and min(arg) <= 0:
+            return f"{{beta: [a, b]}} needs a, b > 0, got {arg!r}"
+    elif kind == "choice":
+        if not (isinstance(arg, (list, tuple)) and arg):
+            return f"{{choice: ...}} needs a non-empty list, got {arg!r}"
+    elif kind == "weights":
+        if not (isinstance(arg, dict) and arg):
+            return f"{{weights: ...}} needs a non-empty mapping {{option: weight}}, got {arg!r}"
+        if not all(isinstance(w, (int, float)) and not isinstance(w, bool) and w >= 0 for w in arg.values()):
+            return f"{{weights: ...}} needs weights >= 0, got {arg!r}"
+        if not sum(arg.values()) > 0:
+            return "{weights: ...} needs at least one positive weight"
+    return None
+
+
+def dist_options(v) -> list:
+    """The values a distribution can give that can be checked one by one: choice options, weights keys, uniform/randint/beta ends."""
+    kind, arg = next(iter(v.items()))
+    if kind == "weights":
+        return list(arg)
+    if kind == "beta":
+        return [0.0, 1.0]
+    return list(arg)
 
 
 def draw(v, rng: random.Random):
