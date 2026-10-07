@@ -446,7 +446,7 @@ class Kernel:
                 raise L.LawError(f"no such right: {right}")
             if k.inst["law_level"] != "L4":
                 raise L.LawError("define_action needs law level L4")
-            k.w["actions"][str(name)] = {"right": right, "law": lid, "fn": k._reg(lid, fn)}
+            k.apply("define_action", law=lid, action=str(name), right=right, key=k._reg(lid, fn))
 
         def create_currency(name, backed=True, reserve="reserve"):
             return k.apply("create_currency", name=name, backed=backed, reserve=reserve, lid=lid).result["currency"]
@@ -490,9 +490,7 @@ class Kernel:
         def set_procedure(law_class, fn):
             if law_class not in ("ordinary", "structural", "procedural"):
                 raise L.LawError("law_class must be ordinary, structural or procedural")
-            key = k._reg(lid, fn)
-            k.w["procedures"][law_class] = key
-            k.w.setdefault("procedure_history", []).append({"cls": law_class, "key": key, "law": lid})
+            k.apply("set_procedure", jurisdiction=D.jur_of(k, lid), cls=law_class, procedure_law=lid, key=k._reg(lid, fn))
 
         def open_ballot(question, electorate, options, rule="majority", closes_in=1, on_result=None, weights=None):
             return k.open_ballot(question, list(electorate), list(options), rule, int(closes_in),
@@ -627,46 +625,21 @@ class Kernel:
         self.ns[lid] = ns
         return ns
 
-    def enact(self, lid):
-        if "jur" in self.w and J.intercept_enact(self, lid):            # jurisdictions: void (no such jurisdiction) or dormant (hidden)
-            return
-        law = self.w["laws"][lid]
-        if law["repeal_target"]:
-            law["status"] = "enacted_repeal"
-            law["enacted_round"] = self.r
-            self.repeal(law["repeal_target"], by_law=lid)
-            return
-        ns = self._load(lid)
-        law["status"] = "active"
-        law["enacted_round"] = self.r
-        self.w["law_order"].append(lid)
-        if "on_enact" in ns:
-            self.call(lid, ns["on_enact"])
-        self.log("enact", law["author"], {"law": lid, "title": law["title"], "class": law["cls"]}, vis="public")
+    def enact(self, lid, via=None):
+        """The enact primitive (dispatch.do_enact): via says how (procedure, veto_window, preview; else start, intervention or
+        kernel from the cause stack). Raises LawError when the law fails to load (callers record a failed proposal)."""
+        self.apply("enact", jurisdiction=D.jur_of(self, lid), law=lid, via=via or D.via_of(self))
 
-    def repeal(self, target, by_law=None):
+    def repeal(self, target, by_law=None, via=None):
+        """Repeal the active laws named `target` (an id or a title), one repeal primitive each (dispatch.do_repeal). A law-caused
+        repeal never reaches a law of a stricter class (review F1). True if any was repealed."""
         hit = [l for l in self.active_laws() if l["id"] == target or l["title"].lower() == target.lower()]
         if by_law is not None:                                          # law-caused: never a law of a stricter class (review F1)
             rank = self.w["laws"].get(by_law, {}).get("cls")
             hit = [l for l in hit if L.CLASS_RANK.get(l["cls"], 0) <= L.CLASS_RANK.get(rank, 0)]
         for law in hit:
-            ns = self.ns.get(law["id"], {})
-            if "on_repeal" in ns:
-                self.call(law["id"], ns["on_repeal"])
-            law["status"] = "repealed"
-            for cl, key in list(self.w["procedures"].items()):
-                if key.split("#")[0] == law["id"]:
-                    del self.w["procedures"][cl]
-                    # fall back to the procedure this law replaced, if the law that set it is still in force (e.g. the constitution)
-                    prev = next((h for h in reversed(self.w.get("procedure_history", [])) if h["cls"] == cl and h["law"] != law["id"]
-                                 and self.w["laws"].get(h["law"], {}).get("status") == "active" and h["key"] in self.fnreg), None)
-                    if prev:
-                        self.w["procedures"][cl] = prev["key"]
-                        self.log("procedure_restored", None, {"cls": cl, "law": prev["law"], "after_repeal_of": law["id"]}, vis="public")
-            for nm, act in list(self.w["actions"].items()):
-                if act["law"] == law["id"]:
-                    del self.w["actions"][nm]
-            self.log("repeal", None, {"law": law["id"], "by": by_law}, vis="public")
+            self.apply("repeal", jurisdiction=D.jur_of(self, law["id"]), law=law["id"], by_law=by_law,
+                       via=via or ("law" if by_law is not None else D.via_of(self)))
         return bool(hit)
 
     def hooks(self, hook, *args):
@@ -914,7 +887,7 @@ class Kernel:
         before = self.view()
         self.dry = True
         try:
-            self.enact(lid)
+            self.enact(lid, via="preview")
             for _ in range(rounds):
                 self.hooks("on_round_start", self.r)
                 self.hooks("on_round_end", self.r)
@@ -935,9 +908,19 @@ class Kernel:
 
     # ------------------------------------------------------------------ procedures and ballots
     def decide(self, lid):
-        """Run the current procedure for a proposal: pass, fail, or open a ballot."""
-        if "jur" in self.w:                                             # jurisdictions: the procedure of the law's jurisdiction
-            return J.decide(self, lid)
+        """The decide primitive (dispatch.do_decide): the current procedure for a proposal passes it, fails it, or opens a ballot."""
+        law = self.w["laws"][lid]
+        self.apply("decide", jurisdiction=D.jur_of(self, lid), law=lid, cls=law["cls"], rank=law.get("rank") or "statute",
+                   procedure_law=self._procedure_law(lid))
+
+    def _procedure_law(self, lid):
+        """The law whose procedure decides this proposal (None: no procedure, or a new jurisdiction's built-in members' vote)."""
+        law = self.w["laws"][lid]
+        key = J.procedure_key(self, J.law_jur(self, lid), law["cls"]) if "jur" in self.w else self.w["procedures"].get(law["cls"])
+        return (self.fnreg.get(key) or (None,))[0] if key else None
+
+    def _decide(self, lid):
+        """Kernel.decide's change with jurisdictions off (on: jurisdictions.decide)."""
         law = self.w["laws"][lid]
         key = self.w["procedures"].get(law["cls"])
         if not key:
@@ -970,13 +953,11 @@ class Kernel:
                 self.log("proposal_failed", law["author"], {"law": lid, "why": "the procedure rejected it"}, vis="public")
 
     def open_ballot(self, question, electorate, options, rule, closes_in, on_result, weights, lid, proposal=None, gate_spec=None):
-        self.w["ballot_seq"] += 1
-        bid = f"B{self.w['ballot_seq']}"
-        self.w["ballots"][bid] = {"id": bid, "question": str(question), "electorate": electorate, "options": [str(o) for o in options],
-                                  "rule": rule, "weights": weights or {}, "closes": self.r + max(0, closes_in), "votes": {},
-                                  "on_result": on_result, "law": lid, "proposal": proposal, "gate": gate_spec, "status": "open"}
-        self.log("ballot_open", None, {"ballot": bid, "question": str(question), "electorate": electorate, "options": options,
-                                       "rule": rule, "closes_round": self.r + max(0, closes_in)}, vis="public")
+        """The open_ballot primitive (dispatch.do_open_ballot); lid is the law opening it (opened_by), proposal the law it decides."""
+        bid = f"B{self.w['ballot_seq'] + 1}"
+        self.apply("open_ballot", jurisdiction=D.jur_of(self, proposal or lid), ballot=bid, question=str(question), electorate=electorate,
+                   options=options, rule=rule, closes_round=self.r + max(0, closes_in), proposal=proposal, opened_by=lid,
+                   on_result=on_result, weights=weights, gate_spec=gate_spec)
         return bid
 
     def tally(self, b):
@@ -1008,11 +989,9 @@ class Kernel:
         for b in list(self.w["ballots"].values()):
             if b["status"] != "open" or b["closes"] > self.r:
                 continue
-            b["status"] = "closed"
-            res = self.tally(b)
-            b["result"] = res
-            vis = "public"
-            self.log("ballot_close", None, {"ballot": b["id"], "result": res, "votes": b["votes"]}, vis=vis)
+            res = self.tally(b)                                         # the close_ballot primitive (dispatch.do_close_ballot)
+            self.apply("close_ballot", jurisdiction=J.ballot_jur(self, b) if "jur" in self.w else None, ballot=b["id"], result=res,
+                       votes=b["votes"])
             if b["proposal"] and b["gate"]:
                 law = self.w["laws"][b["proposal"]]
                 if res == "yes":
@@ -1042,7 +1021,7 @@ class Kernel:
         law = self.w["laws"][lid]
         if law["cls"] == "ordinary":
             try:
-                self.enact(lid)
+                self.enact(lid, via="procedure")
             except L.LawError as e:
                 law["status"] = "failed"
                 self.log("proposal_failed", law["author"], {"law": lid, "why": f"error on enactment: {e}"}, vis="public")
@@ -1052,7 +1031,7 @@ class Kernel:
             self.log("veto_window", None, {"law": lid, "until": self.r + self.spec["veto_window"]}, vis="public")
         else:
             try:
-                self.enact(lid)
+                self.enact(lid, via="procedure")
             except L.LawError as e:
                 law["status"] = "failed"
                 self.log("proposal_failed", law["author"], {"law": lid, "why": f"error on enactment: {e}"}, vis="public")
@@ -1078,7 +1057,7 @@ class Kernel:
                 self.w["veto_queue"].remove(item)
                 if item["kind"] == "law":
                     try:
-                        self.enact(item["law"])
+                        self.enact(item["law"], via="veto_window")
                     except L.LawError as e:
                         self.w["laws"][item["law"]]["status"] = "failed"
                         self.log("proposal_failed", None, {"law": item["law"], "why": f"error on enactment: {e}"}, vis="public")
@@ -1086,24 +1065,12 @@ class Kernel:
                     self.apply_patch(item["law"], item["patch"])
 
     # ------------------------------------------------------------------ the Fixer
-    def apply_patch(self, lid, patch):
-        law = self.w["laws"][lid]
-        old = law["code"]
-        law["code"] = patch["code"]
-        law["patches"].append({**patch, "round": self.r, "old": old})
-        try:
-            ns = self._load(lid)
-            self._rebind(lid, ns)                                       # procedures, callbacks, penalties now run the patched code
-            if law["status"] == "suspended":
-                law["status"] = "active"
-        except L.LawError as e:
-            law["code"] = old
-            self._load(lid)
-            self.log("patch_failed", patch["by"], {"law": lid, "error": str(e)}, vis="public")
-            return
-        hidden = self.spec["conditions"]["fixer"] == "hidden"
-        self.log("patched", patch["by"], {"law": lid, "reason": patch["reason"], **({} if hidden else {"diff": patch["diff"]})}, vis="public")
-        self.log("patch_diff", patch["by"], {"law": lid, "diff": patch["diff"]}, vis="monitor")
+    def apply_patch(self, lid, patch, via=None):
+        """The amend primitive (dispatch.do_amend) for a patch record {code, reason, diff, by[, cls]}: the Fixer's (via "fixer",
+        after its veto window or at the next round start) or an intervention's."""
+        self.apply("amend", jurisdiction=D.jur_of(self, lid), law=lid, old_sha=D.sha(self.w["laws"][lid]["code"]),
+                   new_sha=D.sha(patch["code"]), diff=patch.get("diff"), via=via or D.via_of(self, "fixer"), by=patch.get("by"),
+                   patch=patch)
 
     # ------------------------------------------------------------------ round lifecycle
     def start_round(self):

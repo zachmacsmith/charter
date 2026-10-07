@@ -309,8 +309,8 @@ def _hooks(*hooks: Hook) -> dict:
 
 
 HOOKTABLE = _hooks(
-    Hook("on_enact", "()", "ignored", ("kernel.py:Kernel.enact",), None, note="also in every dry-run preview"),
-    Hook("on_repeal", "()", "ignored", ("kernel.py:Kernel.repeal",), True, note="a law's repeal(target) runs it too"),
+    Hook("on_enact", "()", "ignored", ("dispatch.py:do_enact",), None, note="also in every dry-run preview"),
+    Hook("on_repeal", "()", "ignored", ("dispatch.py:do_repeal",), True, note="a law's repeal(target) runs it too"),
     Hook("on_round_start", "(r)", "ignored", ("kernel.py:Kernel.start_round", "kernel.py:Kernel.dry_run"), None),
     Hook("on_round_end", "(r)", "ignored", ("kernel.py:Kernel.end_round", "kernel.py:Kernel.dry_run"), None),
     Hook("on_harvest", "(agent, camp, x, y)", "deduct",
@@ -318,11 +318,11 @@ HOOKTABLE = _hooks(
          note="agents' harvests only (laws cannot harvest); Kernel.probe calls it in previews"),
     Hook("on_transfer", "(src, dst, item, qty)", "block_or_tax", ("dispatch.py:legacy_hooks", "kernel.py:Kernel.probe"), False, jur="agent:0",
          note="agents' send only: move, fine, mint, burn and pay_tribute by law never run it"),
-    Hook("on_proposal", "(p)", "ignored", ("actions.py:_propose", "jurisdictions.py:propose"), False, note="p is always None"),
-    Hook("on_vote", "(ballot, agent, choice)", "ignored", ("actions.py:_vote",), False, jur="ballot"),
+    Hook("on_proposal", "(p)", "ignored", ("dispatch.py:legacy_hooks",), False, note="p is always None"),
+    Hook("on_vote", "(ballot, agent, choice)", "ignored", ("dispatch.py:legacy_hooks",), False, jur="ballot"),
     Hook("on_post", "(agent, text)", "ignored", ("dispatch.py:legacy_hooks",), False,
          jur="agent:0", note="agents' posts, anonymous posts and stories; gazette, notify and censure by law never run it"),
-    Hook("on_ruling", "(case, verdict, accuser, accused)", "ignored", ("actions.py:_rule",), False, jur="clause"),
+    Hook("on_ruling", "(case, verdict, accuser, accused)", "ignored", ("dispatch.py:legacy_hooks",), False, jur="clause"),
     Hook("on_dm", "(sender, recipient, text, encrypted)", "ignored", ("dispatch.py:legacy_hooks",), False, jur="agent:0",
          note="only in worlds where laws may read DMs"),
     Hook("on_admission", "(agent)", "admit_or_refuse", ("jurisdictions.py:act_join",), False, jur="own", module="jurisdictions",

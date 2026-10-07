@@ -254,6 +254,8 @@ def test_routed_rows_name_dispatch_functions():
     from charter import dispatch as D, primitives as PR
     want = {"move", "harvest", "mint", "burn", "create_currency", "grant_right", "revoke_right", "suspend_right", "limit_actions",
             "create_right", "post", "dm", "hide_post", "set_camp_rule", "set_dm_limit"}
+    want |= {"propose", "decide", "open_ballot", "cast_vote", "close_ballot", "veto", "enact", "repeal", "amend", "set_procedure", "rule",
+             "define_action"}                                          # P2.3
     assert set(D.ROUTED) == want
     for n in want:
         p = PR.get(n)
@@ -486,6 +488,38 @@ def test_legal_acts_scenario_is_identical_to_before_p2_3(legal_recorded, name):
     for t in ("proposal", "ballot_open", "vote", "ballot_close", "veto_window", "veto_vote", "enact", "repeal", "patched", "ruling",
               "proposal_failed"):
         assert t in kinds, (name, t)
+
+
+LEGAL = ("propose", "decide", "open_ballot", "cast_vote", "close_ballot", "veto", "enact", "repeal", "amend", "set_procedure", "rule",
+         "define_action")
+
+
+def test_legal_act_payloads_are_real_and_round_trip_through_json(monkeypatch):
+    """Every legal act of the scenario goes through Kernel.apply with its row's payload, and every payload is JSON."""
+    from charter import dispatch as D, primitives as PR
+    seen, real = [], D.apply
+
+    def spy(k, name, payload):
+        if name in LEGAL:
+            seen.append((name, {x: payload.get(x) for x in PR.get(name).params}, set(payload) - set(PR.get(name).params)))
+        return real(k, name, payload)
+    monkeypatch.setattr(D, "apply", spy)
+    legal_scenario()
+    assert {n for n, _, _ in seen} == set(LEGAL)
+    for name, p, opts in seen:
+        assert json.loads(json.dumps(p)) == p, name
+        assert opts <= D.OPTIONS[name], (name, opts)
+    first = {n: p for n, p, _ in reversed(seen)}
+    d = next(p for n, p, _ in seen if n == "propose" and p["draft"]["title"] == "Press Grant")["draft"]
+    assert set(d) == set(PR.DRAFT_SAMPLE) and d["cls"] == "structural" and d["rank"] == "statute"
+    assert d["calls"] == ["grant", "revoke"] and d["hooks"] == ["on_enact", "on_repeal"] and d["rights"]["grant"] == ["press"]
+    assert next(p for n, p, _ in seen if n == "propose" and p["draft"]["title"] == "Repeal Notice")["draft"]["repeals"] == "Notice Board"
+    assert first["enact"]["via"] == "start"
+    assert {p["via"] for n, p, _ in seen if n == "enact"} >= {"start", "preview", "procedure", "veto_window"}
+    assert {p["via"] for n, p, _ in seen if n == "repeal"} >= {"law", "procedure"}
+    amend = next(p for n, p, _ in seen if n == "amend")
+    assert amend["via"] == "fixer" and amend["old_sha"] != amend["new_sha"] and amend["diff"].startswith("---")
+    assert first["decide"]["procedure_law"] == "L1" and first["open_ballot"]["opened_by"] == "L2"
 
 
 if __name__ == "__main__":                                              # re-record (only on the pre-P2.1 / pre-P2.3 revision)

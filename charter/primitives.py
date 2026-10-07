@@ -3,7 +3,9 @@ named by WHAT changes, not by who changes it. P1.7 declared the metadata (the de
 hand list); P2.1 routes the first primitives through `Kernel.apply(name, **payload)` (charter/dispatch.py): a row whose `fn` is
 "dispatch:do_<name>" is routed (dispatch.ROUTED: move, harvest, mint, burn, create_currency, grant_right, revoke_right,
 suspend_right, limit_actions, create_right, post, dm, hide_post, set_camp_rule, set_dm_limit), and its legacy ALIASES are dispatched
-by dispatch.apply under exactly today's conditions; the other rows still name the function making the change today (P2.3, P2.4).
+by dispatch.apply under exactly today's conditions; P2.3 routes the legal acts (propose, decide, open_ballot, cast_vote,
+close_ballot, veto, enact, repeal, amend, set_procedure, rule, define_action; on_proposal still receives None); the other rows still
+name the function making the change today (P2.4).
 
 A row (`Primitive`) says:
   name, feature, effect   the change and its effect class (EFFECTS)
@@ -96,6 +98,12 @@ class Primitive:
         return {p: PARAM_SAMPLES[p] for p in self.params}
 
 
+# The `propose` payload's draft (review 09 §5; P2.3): the kernel computes the static fields from the AST (dispatch.draft), so a reviewing
+# law never parses code. rank is "statute" until P3.2; imports, exports and amends come with the linker (P3.3).
+DRAFT_SAMPLE = {"id": "L5", "title": "t", "intent": "i", "code": 'title = "t"\nintent = "i"\n', "cls": "ordinary", "rank": "statute",
+                "author": "a1", "calls": ["gazette"], "hooks": ["on_round_end"], "rights": {"grant": ["press"], "revoke": [], "suspend": []},
+                "repeals": None}
+
 # Every payload key, with a sample value: the payload vocabulary (a new key needs a sample, so payloads stay JSON-able).
 PARAM_SAMPLES = {
     "src": "a1", "dst": "a2", "item": "grain", "qty": 2.0, "why": "transfer", "agent": "a1", "camp": "camp1", "x": [3, 4],
@@ -108,12 +116,13 @@ PARAM_SAMPLES = {
     "readable": False, "event": "e12", "hide": True, "outlet": "O1", "on": True, "granted": True, "what": "subscription",
     "doc": "D1", "allow": True, "store": "files", "op": "write", "polity": "J1", "jurisdiction": "J1", "laws": ["L2"],
     "loan": "LN1", "lender": "a1", "borrower": "a2", "status": "repaid", "lease": "LS1", "lessor": "a1", "lessee": "a2",
-    "project": "P1", "threshold": 10.0, "draft": {"id": "L5", "title": "t", "cls": "ordinary"}, "law": "L5", "cls": "ordinary",
+    "project": "P1", "threshold": 10.0, "draft": DRAFT_SAMPLE, "law": "L5", "cls": "ordinary",
     "procedure_law": "L1", "ballot": "B1", "question": "Enact L5?", "electorate": ["a1", "a2"], "options": ["yes", "no"],
     "rule": "majority", "closes_round": 3, "choice": "yes", "result": "yes", "votes": {"a1": "yes"}, "member": "a1",
     "by_law": None, "old_sha": "9f1c", "new_sha": "0a2b", "case": "C1", "verdict": "guilty", "judge": "a4", "clause": "L5:c",
     "accuser": "a1", "accused": "a2", "action": "census", "args": [], "power": "quill", "error": "boom", "goal": {"name": "g"},
     "seat": "a5", "contract": "K1", "remedy": "fine", "level": 1,
+    "rank": "statute", "opened_by": "L1", "proposal": "L5", "diff": "--- L5 (before)\n+++ L5 (after)\n",      # P2.3 legal acts
 }
 
 
@@ -384,49 +393,61 @@ _ROWS = [
     P("use_power", "hidden", "status", ("agent", "power", "args"), "hidden:invoke", agent_params=("agent",), event="power_use",
       causes=("agent",), sites=("hidden:invoke",),
       why={"compel": "secret powers: no law knows them", "gate": "secret powers: no law can see their use"}),
-    # ------------------------------------------------------------------ legal acts (review 09 §5)
-    P("propose", "core", "legal", ("jurisdiction", "draft"), "actions:_propose", subject="jurisdiction", parties=("jurisdiction",),
+    # ------------------------------------------------------------------ legal acts (review 09 §5; routed by P2.3)
+    P("propose", "core", "legal", ("jurisdiction", "draft"), "dispatch:do_propose", subject="jurisdiction", parties=("jurisdiction",),
       legal=True, event="proposal", causes=("agent",), reads=("laws", "proposer"),
-      sites=("actions:_propose", "jurisdictions:propose", "kernel:Kernel.new_law"),
-      why={"compel": "P3.3: propose_law / propose_amendment"}),
-    P("decide", "core", "legal", ("jurisdiction", "law", "cls", "procedure_law"), "kernel:Kernel.decide", subject="jurisdiction",
+      sites=("dispatch:do_propose", "actions:_propose", "jurisdictions:propose", "kernel:Kernel.new_law", "dispatch:legacy_hooks"),
+      why={"compel": "P3.3: propose_law / propose_amendment"},
+      notes="draft: dispatch.draft (code, class, rank, calls, hooks, rights granted/revoked/suspended); the action checks the right, "
+            "the law level and the 3-round dry run before the act; then the procedure decides (decide)"),
+    P("decide", "core", "legal", ("jurisdiction", "law", "cls", "rank", "procedure_law"), "dispatch:do_decide", subject="jurisdiction",
       parties=("jurisdiction",), before=False, blockable=False, legal=True, event="proposal_failed", causes=("kernel",),
-      sites=("kernel:Kernel.decide", "jurisdictions:decide", "kernel:Kernel.passed", "jurisdictions:passed"),
+      sites=("dispatch:do_decide", "kernel:Kernel.decide", "kernel:Kernel._decide", "jurisdictions:decide", "kernel:Kernel.passed",
+             "jurisdictions:passed"),
       why={"gate": "internal: the procedure decides; review 09 §5"}),
-    P("open_ballot", "core", "legal", ("jurisdiction", "ballot", "question", "electorate", "options", "rule", "closes_round"),
-      "kernel:Kernel.open_ballot", subject="jurisdiction", parties=("jurisdiction",), legal=True, event="ballot_open",
-      causes=("law", "kernel"), compel_vis="public", sites=("kernel:Kernel.open_ballot",)),
-    P("cast_vote", "core", "legal", ("jurisdiction", "ballot", "agent", "choice"), "actions:_vote", subject="jurisdiction",
+    P("open_ballot", "core", "legal", ("jurisdiction", "ballot", "question", "electorate", "options", "rule", "closes_round", "proposal",
+                                       "opened_by"),
+      "dispatch:do_open_ballot", subject="jurisdiction", parties=("jurisdiction",), legal=True, event="ballot_open",
+      causes=("law", "kernel"), compel_vis="public", sites=("dispatch:do_open_ballot", "kernel:Kernel.open_ballot")),
+    P("cast_vote", "core", "legal", ("jurisdiction", "ballot", "agent", "choice"), "dispatch:do_cast_vote", subject="jurisdiction",
       parties=("jurisdiction", "agent"), agent_params=("agent",), legal=True, event="vote", causes=("agent", "world"),
-      sites=("actions:_vote", "conflict:discard_votes"), why={"compel": _LNA}),
-    P("close_ballot", "core", "legal", ("jurisdiction", "ballot", "result", "votes"), "kernel:Kernel.close_ballots", subject="jurisdiction",
+      sites=("dispatch:do_cast_vote", "actions:_vote", "conflict:discard_votes", "dispatch:legacy_hooks"), why={"compel": _LNA}),
+    P("close_ballot", "core", "legal", ("jurisdiction", "ballot", "result", "votes"), "dispatch:do_close_ballot", subject="jurisdiction",
       parties=("jurisdiction",), before=False, blockable=False, legal=True, event="ballot_close", causes=("kernel",),
-      sites=("kernel:Kernel.close_ballots",), why={"gate": "the kernel closes ballots on schedule"}),
-    P("veto", "core", "legal", ("jurisdiction", "law", "member"), "actions:_veto", subject="jurisdiction", parties=("jurisdiction", "member"),
+      sites=("dispatch:do_close_ballot", "kernel:Kernel.close_ballots"), why={"gate": "the kernel closes ballots on schedule"}),
+    P("veto", "core", "legal", ("jurisdiction", "law", "member"), "dispatch:do_veto", subject="jurisdiction", parties=("jurisdiction", "member"),
       agent_params=("member",), blockable=False, legal=True, entrenched=("board_veto",), event="veto_vote", causes=("agent", "kernel"),
-      sites=("actions:_veto", "kernel:Kernel.process_veto_queue"), why={"compel": "the Board's power", "gate": "entrenched: board_veto"}),
-    P("enact", "core", "legal", ("jurisdiction", "law", "via"), "kernel:Kernel.enact", subject="jurisdiction", parties=("jurisdiction",),
+      sites=("dispatch:do_veto", "actions:_veto", "kernel:Kernel.process_veto_queue"),
+      why={"compel": "the Board's power", "gate": "entrenched: board_veto"},
+      notes="a Board member's veto vote; the kernel resolves the window at round end (process_veto_queue: vetoed, or enact/amend)"),
+    P("enact", "core", "legal", ("jurisdiction", "law", "via"), "dispatch:do_enact", subject="jurisdiction", parties=("jurisdiction",),
       legal=True, event="enact", causes=("kernel",), reads=("laws",), preview=("laws",),
-      sites=("kernel:Kernel.enact", "jurisdictions:intercept_enact")),
-    P("repeal", "core", "legal", ("jurisdiction", "law", "by_law", "via"), "kernel:Kernel.repeal", subject="jurisdiction",
+      sites=("dispatch:do_enact", "kernel:Kernel.enact", "jurisdictions:intercept_enact"),
+      notes="via: procedure, veto_window, preview (dry run), start (setup), intervention, kernel (any other caller)"),
+    P("repeal", "core", "legal", ("jurisdiction", "law", "by_law", "via"), "dispatch:do_repeal", subject="jurisdiction",
       parties=("jurisdiction",), legal=True, event="repeal", causes=("law", "kernel"), reads=("laws",), preview=("laws",),
-      compel_vis="public", sites=("kernel:Kernel.repeal",)),
-    P("amend", "core", "legal", ("jurisdiction", "law", "old_sha", "new_sha", "via", "by"), "kernel:Kernel.apply_patch",
+      compel_vis="public", sites=("dispatch:do_repeal", "kernel:Kernel.repeal"),
+      notes="via: law (a law's repeal()), procedure (an enacted repeal law), intervention, kernel"),
+    P("amend", "core", "legal", ("jurisdiction", "law", "old_sha", "new_sha", "diff", "via", "by"), "dispatch:do_amend",
       subject="jurisdiction", parties=("jurisdiction",), legal=True, entrenched=("fixer_patch",), event="patched",
-      causes=("agent", "kernel"), sites=("actions:_patch", "kernel:Kernel.apply_patch"),
+      causes=("agent", "kernel"), sites=("dispatch:do_amend", "actions:_patch", "kernel:Kernel.apply_patch"),
       why={"compel": "P3.3: propose_amendment", "gate": "entrenched: fixer_patch (the Board's veto window reviews it)"},
-      notes="today only the Fixer's patch amends"),
+      notes="today only the Fixer's patch amends (via fixer; an intervention's via intervention); the patch action queues it"),
     P("suspend_law", "core", "legal", ("law", "error"), "kernel:Kernel.law_error", before=False, blockable=False, legal=True,
       event="law_error", causes=("kernel",), reads=("laws",), preview=("laws",), sites=("kernel:Kernel.law_error",),
       why={"gate": "a hook error: limited death of a law (review 09 §9)"}),
     P("request_fix", "core", "legal", ("law", "agent", "text"), "actions:_request_fix", parties=("agent",), agent_params=("agent",),
       legal=True, event="request_fix", causes=("agent",), sites=("actions:_request_fix",), why={"compel": _LNA}),
-    P("set_procedure", "core", "legal", ("jurisdiction", "cls", "procedure_law"), "kernel:Kernel.api_for.set_procedure",
+    P("set_procedure", "core", "legal", ("jurisdiction", "cls", "procedure_law"), "dispatch:do_set_procedure",
       subject="jurisdiction", parties=("jurisdiction",), legal=True, causes=("law", "kernel"),
-      preview=("procedures",), compel_vis="public", sites=("kernel:Kernel.api_for.set_procedure", "kernel:Kernel.repeal")),
-    P("rule", "core", "legal", ("jurisdiction", "case", "verdict", "judge", "clause", "accuser", "accused"), "actions:_rule",
+      preview=("procedures",), compel_vis="public",
+      sites=("dispatch:do_set_procedure", "kernel:Kernel.api_for.set_procedure", "jurisdictions:scope_api.set_procedure",
+             "dispatch:do_repeal")),
+    P("rule", "core", "legal", ("jurisdiction", "case", "verdict", "judge", "clause", "accuser", "accused"), "dispatch:do_rule",
       subject="jurisdiction", parties=("jurisdiction", "accuser", "accused"), agent_params=("judge", "accuser", "accused"), legal=True,
-      event="ruling", causes=("agent", "kernel"), sites=("actions:_rule", "kernel:Kernel._expire_cases"), why={"compel": _LNA}),
+      event="ruling", causes=("agent", "kernel"),
+      sites=("dispatch:do_rule", "actions:_rule", "kernel:Kernel._expire_cases", "dispatch:legacy_hooks"), why={"compel": _LNA},
+      notes="the ruling event and its gazette follow the act (actions._rule logs them after on_ruling, as before)"),
     P("open_case", "core", "legal", ("jurisdiction", "case", "accuser", "accused", "clause"), "actions:_accuse", subject="jurisdiction",
       parties=("accuser", "accused"), agent_params=("accuser", "accused"), legal=True, event="accuse", causes=("agent",),
       sites=("actions:_accuse",), why={"compel": _LNA}),
@@ -434,8 +455,8 @@ _ROWS = [
       event="respond", causes=("agent",), sites=("actions:_respond",), why={"compel": _LNA}),
     P("create_clause", "core", "legal", ("law", "clause"), "kernel:Kernel.api_for.clause", legal=True, causes=("law",),
       sites=("kernel:Kernel.api_for.clause",)),
-    P("define_action", "core", "legal", ("law", "action", "right"), "kernel:Kernel.api_for.define_action", legal=True, causes=("law",),
-      preview=("actions",), sites=("kernel:Kernel.api_for.define_action",)),
+    P("define_action", "core", "legal", ("law", "action", "right"), "dispatch:do_define_action", legal=True, causes=("law",),
+      preview=("actions",), sites=("dispatch:do_define_action", "kernel:Kernel.api_for.define_action")),
     P("set_conflict_rule", "core", "legal", ("jurisdiction", "rule", "law"), None, subject="jurisdiction", legal=True, causes=(),
       status="planned", why={"compel": "P3.6", "event": "P3.6"}),
     # ------------------------------------------------------------------ contracts (P4: planned)

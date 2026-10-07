@@ -17,6 +17,12 @@ outside any root frame sees the implicit root {"kind": "kernel", "id": "kernel:<
 `cause` is exactly what it was before P2.1 (no `primitive` frame yet; P3.1 adds it with the v2 golden).
 
 The gas meter (Meter, per-call/cascade/account budgets) is P2.2's part of this module.
+
+P2.3 routes the legal acts (the block at the end): propose (payload draft = dispatch.draft), decide, open_ballot, cast_vote,
+close_ballot, veto, enact, repeal, amend (the Fixer's patch), set_procedure, rule, define_action. Their callers keep their checks
+(ActionError/LawError as before) and Kernel.enact/repeal/decide/open_ballot/apply_patch keep their signatures (plus an optional `via`).
+Legacy aliases: on_proposal(None), on_vote and on_ruling after the act from an agent's action; on_enact/on_repeal are the law's own
+lifecycle hooks, run inside do_enact/do_repeal. No legal act has a before-alias, so none is gated yet (P3.1's before_<p>).
 """
 from __future__ import annotations
 
@@ -137,6 +143,13 @@ def legacy_hooks(k, name: str, args: tuple) -> list:
         return k.hooks("on_post", *args)
     if name == "on_dm":
         return k.hooks("on_dm", *args)
+    # P2.3: legal acts
+    if name == "on_proposal":
+        return k.hooks("on_proposal", *args)
+    if name == "on_vote":
+        return k.hooks("on_vote", *args)
+    if name == "on_ruling":
+        return k.hooks("on_ruling", *args)
     raise NotRouted(f"legacy hook {name} is not dispatched by k.apply yet")
 
 
@@ -253,6 +266,15 @@ OPTIONS = {
     "post": frozenset({"actor", "data", "vis"}), "dm": frozenset({"extra"}), "hide_post": frozenset({"lid"}),
     "set_camp_rule": frozenset(), "set_dm_limit": frozenset({"actor"}),
 }
+# P2.3 legal acts. actor = the proposer (the event's agent); preview = the dry run's diff; on_result/weights/gate_spec = a ballot's
+# callback key, vote weights and a chair's gate; patch = the Fixer's patch record (code, reason, diff, by, cls) as stored; reason = a
+# ruling's reasons; key = the fnreg key of a procedure or a defined action's function; own = a (non-legacy) jurisdiction's own table.
+OPTIONS.update({
+    "propose": frozenset({"actor", "preview"}), "decide": frozenset(), "open_ballot": frozenset({"on_result", "weights", "gate_spec"}),
+    "cast_vote": frozenset(), "close_ballot": frozenset(), "veto": frozenset(), "enact": frozenset(), "repeal": frozenset(),
+    "amend": frozenset({"patch"}), "set_procedure": frozenset({"key", "own"}), "rule": frozenset({"reason"}),
+    "define_action": frozenset({"key"}),
+})
 
 
 # ---------------------------------------------------------------------- physics checks (before any hook)
@@ -514,3 +536,212 @@ def do_set_dm_limit(k, agent, n, actor=None) -> dict:
         k.w["dm_limit"]["agents"][agent] = n
     k.log("dm_limit", actor, {"n": n, "agent": agent}, vis="public")
     return {"n": n}
+
+
+# ====================================================================== P2.3: legal acts (review 09 §5)
+# Routed exactly as today: the callers (actions._propose/_vote/_veto/_rule, jurisdictions.propose, the Kernel's decide, open_ballot,
+# close_ballots, enact, repeal, apply_patch, and the law API's set_procedure/define_action) keep their checks and build the payload;
+# the change below is today's code. Legacy aliases: on_proposal (None), on_vote and on_ruling after the act, from an agent's action
+# only; on_enact/on_repeal stay lifecycle hooks of the law itself (run inside do_enact/do_repeal). None of these primitives has a
+# CHECKS entry: their refusals are the callers' ActionError/LawError, unchanged.
+def jur_of(k, lid) -> str | None:
+    """A legal act's `jurisdiction`: the law's jurisdiction with jurisdictions on (J.law_jur), None when they are off."""
+    return J.law_jur(k, lid) if "jur" in k.w else None
+
+
+def via_of(k, default: str = "kernel") -> str:
+    """How a lifecycle act happens when its caller does not say: inside an intervention, "intervention"; during setup (the
+    constitution, regime statutes, start laws), "start"; else `default`."""
+    frames = k.current_cause()
+    if any("intervention" in f for f in frames):
+        return "intervention"
+    if any(f.get("phase") == "setup" for f in frames):
+        return "start"
+    return default
+
+
+def sha(code) -> str:
+    import hashlib
+    return hashlib.sha256(str(code).encode()).hexdigest()[:12]
+
+
+_RIGHT_CALLS = {"grant": "grant", "revoke": "revoke", "suspend": "suspend"}
+
+
+def draft(k, lid) -> dict:
+    """The `propose` payload's draft (review 09 §5): the record's fields plus static facts read from the AST, so a reviewing law
+    never parses code. calls: the law-API functions it calls (sorted); hooks: the hooks it defines; rights: constant rights it
+    grants, revokes or suspends; repeals: a repeal law's target. rank: "statute" until ranks exist (P3.2)."""
+    import ast
+    law = k.w["laws"][lid]
+    tree = ast.parse(law["code"])
+    rights = {x: set() for x in _RIGHT_CALLS.values()}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in _RIGHT_CALLS and len(n.args) >= 2 \
+                and isinstance(n.args[1], ast.Constant) and isinstance(n.args[1].value, str):
+            rights[_RIGHT_CALLS[n.func.id]].add(n.args[1].value)
+    hooks = sorted(n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in PR.HOOKS)
+    return {"id": lid, "title": law["title"], "intent": law["intent"], "code": law["code"], "cls": law["cls"],
+            "rank": law.get("rank") or "statute", "author": law["author"], "calls": sorted(L.calls(tree) & L.API), "hooks": hooks,
+            "rights": {x: sorted(v) for x, v in rights.items()}, "repeals": law["repeal_target"]}
+
+
+def do_propose(k, jurisdiction, draft, actor=None, preview=None) -> dict:
+    """A checked draft goes to the procedure: its dry-run preview is kept and the proposal is published (the preview inline, or
+    monitor-only when effect previews are off). The procedure runs next (Kernel.decide), after the on_proposal alias."""
+    lid = draft["id"]
+    law = k.w["laws"][lid]
+    law["preview"] = preview
+    shown = k.spec["conditions"]["effect_preview"]
+    k.log("proposal", actor, {"law": lid, "title": law["title"], "intent": law["intent"], "class": law["cls"], "code": law["code"],
+                              **({"jurisdiction": jurisdiction} if jurisdiction is not None else {}),
+                              **({"preview": preview[:40]} if shown else {})}, vis="public")
+    if not shown:
+        k.log("proposal_preview", actor, {"law": lid, "preview": preview[:40]}, vis="monitor")
+    return {"law": lid}
+
+
+def do_decide(k, jurisdiction, law, cls, rank, procedure_law) -> dict:
+    """The procedure of the law's class decides: pass (Kernel.passed), open a ballot (or a chair's gate), or fail."""
+    if "jur" in k.w:                                                   # jurisdictions: the procedure of the law's jurisdiction
+        J.decide(k, law)
+    else:
+        k._decide(law)
+    return {"status": k.w["laws"][law]["status"]}
+
+
+def do_open_ballot(k, jurisdiction, ballot, question, electorate, options, rule, closes_round, proposal, opened_by, on_result=None,
+                   weights=None, gate_spec=None) -> dict:
+    k.w["ballot_seq"] += 1
+    assert ballot == f"B{k.w['ballot_seq']}", ballot
+    k.w["ballots"][ballot] = {"id": ballot, "question": question, "electorate": electorate, "options": [str(o) for o in options],
+                              "rule": rule, "weights": weights or {}, "closes": closes_round, "votes": {}, "on_result": on_result,
+                              "law": opened_by, "proposal": proposal, "gate": gate_spec, "status": "open"}
+    k.log("ballot_open", None, {"ballot": ballot, "question": question, "electorate": electorate, "options": options, "rule": rule,
+                                "closes_round": closes_round}, vis="public")
+    return {"ballot": ballot}
+
+
+def do_cast_vote(k, jurisdiction, ballot, agent, choice) -> dict:
+    k.w["ballots"][ballot]["votes"][agent] = choice
+    k.log("vote", agent, {"ballot": ballot, "choice": choice}, vis="public")
+    return {"choice": choice}
+
+
+def do_close_ballot(k, jurisdiction, ballot, result, votes) -> dict:
+    """A ballot closes with its tally; the kernel then acts on the result (Kernel.close_ballots: pass, fail, gate, callback)."""
+    b = k.w["ballots"][ballot]
+    b["status"] = "closed"
+    b["result"] = result
+    k.log("ballot_close", None, {"ballot": ballot, "result": result, "votes": votes}, vis="public")
+    return {"result": result}
+
+
+def do_veto(k, jurisdiction, law, member) -> dict:
+    """A Board member's veto vote on a law or patch in its veto window (secret Board votes are monitor-only)."""
+    item = next(v for v in k.w["veto_queue"] if v["law"] == law)
+    if member not in item["vetoes"]:
+        item["vetoes"].append(member)
+    secret = k.spec["conditions"]["board_votes"] == "secret"
+    k.log("veto_vote", member, {"law": law, "kind": item["kind"]}, vis="monitor" if secret else "public")
+    return {"vetoes": len(item["vetoes"])}
+
+
+def do_enact(k, jurisdiction, law, via) -> dict:
+    """A law comes into force: loaded, appended to the enactment order, its on_enact run, published. With jurisdictions on, a law
+    of no existing jurisdiction is void and a hidden one's dormant (J.intercept_enact). A repeal law repeals its target instead."""
+    lid = law
+    if "jur" in k.w and J.intercept_enact(k, lid):                     # jurisdictions: void (no such jurisdiction) or dormant (hidden)
+        return {"status": k.w["laws"][lid]["status"]}
+    rec = k.w["laws"][lid]
+    if rec["repeal_target"]:
+        rec["status"] = "enacted_repeal"
+        rec["enacted_round"] = k.r
+        k.repeal(rec["repeal_target"], by_law=lid, via="procedure")
+        return {"status": rec["status"]}
+    ns = k._load(lid)
+    rec["status"] = "active"
+    rec["enacted_round"] = k.r
+    k.w["law_order"].append(lid)
+    if "on_enact" in ns:
+        k.call(lid, ns["on_enact"])
+    k.log("enact", rec["author"], {"law": lid, "title": rec["title"], "class": rec["cls"]}, vis="public")
+    return {"status": rec["status"]}
+
+
+def do_repeal(k, jurisdiction, law, by_law, via) -> dict:
+    """A law in force stops: its on_repeal runs, the procedures it set fall back to the ones they replaced (if their law is still in
+    force), the actions it defined go, and the repeal is published."""
+    rec = k.w["laws"][law]
+    ns = k.ns.get(law, {})
+    if "on_repeal" in ns:
+        k.call(law, ns["on_repeal"])
+    rec["status"] = "repealed"
+    for cl, key in list(k.w["procedures"].items()):
+        if key.split("#")[0] == law:
+            del k.w["procedures"][cl]
+            # fall back to the procedure this law replaced, if the law that set it is still in force (e.g. the constitution)
+            prev = next((h for h in reversed(k.w.get("procedure_history", [])) if h["cls"] == cl and h["law"] != law
+                         and k.w["laws"].get(h["law"], {}).get("status") == "active" and h["key"] in k.fnreg), None)
+            if prev:
+                k.w["procedures"][cl] = prev["key"]
+                k.log("procedure_restored", None, {"cls": cl, "law": prev["law"], "after_repeal_of": law}, vis="public")
+    for nm, act in list(k.w["actions"].items()):
+        if act["law"] == law:
+            del k.w["actions"][nm]
+    k.log("repeal", None, {"law": law, "by": by_law}, vis="public")
+    return {"status": rec["status"]}
+
+
+def do_amend(k, jurisdiction, law, old_sha, new_sha, diff, via, by, patch=None) -> dict:
+    """A law's code is replaced (the Fixer's patch): reloaded and re-bound (procedures, callbacks, penalties run the new code), a
+    suspended law back in force; a patch that fails to load is undone and logged. The diff is public unless the Fixer is hidden."""
+    rec = k.w["laws"][law]
+    old = rec["code"]
+    rec["code"] = patch["code"]
+    rec["patches"].append({**patch, "round": k.r, "old": old})
+    try:
+        ns = k._load(law)
+        k._rebind(law, ns)                                              # procedures, callbacks, penalties now run the patched code
+        if rec["status"] == "suspended":
+            rec["status"] = "active"
+    except L.LawError as e:
+        rec["code"] = old
+        k._load(law)
+        k.log("patch_failed", patch["by"], {"law": law, "error": str(e)}, vis="public")
+        return {"ok": False}
+    hidden = k.spec["conditions"]["fixer"] == "hidden"
+    k.log("patched", patch["by"], {"law": law, "reason": patch["reason"], **({} if hidden else {"diff": patch["diff"]})}, vis="public")
+    k.log("patch_diff", patch["by"], {"law": law, "diff": patch["diff"]}, vis="monitor")
+    return {"ok": True}
+
+
+def do_set_procedure(k, jurisdiction, cls, procedure_law, key=None, own=False) -> dict:
+    """The procedure for a class of laws: the world's table (and the legacy J0's), or with own=True a jurisdiction's own table."""
+    if own:
+        jj = J.jurs(k)[jurisdiction]                                    # looked up at call time: dry runs replace k.w
+        jj["procedures"][cls] = key
+        jj["procedure_history"].append({"cls": cls, "key": key, "law": procedure_law})
+    else:
+        k.w["procedures"][cls] = key
+        k.w.setdefault("procedure_history", []).append({"cls": cls, "key": key, "law": procedure_law})
+    return {"key": key}
+
+
+def do_rule(k, jurisdiction, case, verdict, judge, clause, accuser, accused, reason="") -> dict:
+    """A judge decides a case; a guilty verdict runs the clause's penalty on the accused (a penalty's error suspends its law)."""
+    c = k.w["cases"][case]
+    c.update({"status": "decided", "verdict": verdict, "reason": reason, "judge": judge})
+    if verdict == "guilty":
+        cl = k.w["clauses"][clause]
+        lid, fn = k.fnreg[cl["penalty"]]
+        try:
+            k.call(lid, fn, accused, accuser)
+        except L.LawError as e:
+            k.law_error(lid, str(e))
+    return {"verdict": verdict}
+
+
+def do_define_action(k, law, action, right, key=None) -> dict:
+    k.w["actions"][action] = {"right": right, "law": law, "fn": key}
+    return {"action": action}
