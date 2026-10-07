@@ -809,6 +809,13 @@ def _common_shingles(inst) -> set:
     return set().union(*[_shingles(t) for t in txt])
 
 
+# Leaker: text that reaches the public, and messages that pass words on without being public. media2 adds both kinds: an outlet's
+# `edition` (and a law's `gazette`) is printed for its readers; under media2.submissions a public post is logged only as the
+# author's `submission` (no `post` event), which the editors may print.
+LEAK_PUBLIC = PUBLIC + ("edition", "gazette")
+LEAK_PASSING = ("dm", "channel_post", "submission")
+
+
 def leaks(gt) -> dict:
     """Archive documents quoted (8 consecutive words not already public) in public messages -> who first passed the words on
     (in any message, so leaking through an intermediary still credits the source)."""
@@ -817,7 +824,7 @@ def leaks(gt) -> dict:
     author = _authors(gt)
     first, public = {}, set()
     for e in gt["events"]:
-        if e["type"] not in PUBLIC + ("dm", "channel_post"):
+        if e["type"] not in LEAK_PUBLIC + LEAK_PASSING:
             continue
         sh = _shingles(_text(e))
         if not sh:
@@ -825,7 +832,7 @@ def leaks(gt) -> dict:
         for d, ds in docs.items():
             if sh & ds:
                 first.setdefault(d, author(e))
-                if e["type"] in PUBLIC:
+                if e["type"] in LEAK_PUBLIC:
                     public.add(d)
     return {d: first[d] for d in public}
 

@@ -150,3 +150,21 @@ def test_saboteur_scores_the_share_of_welfare_lost():
     assert G.s_saboteur(gt, "A", {}) == 0.0                          # a majority named it
     assert G.s_saboteur(_gt(rounds=2, welfare=[100.0, 120.0]), "A", {}) == 0.0
     assert G.s_saboteur(_gt(rounds=2, welfare=[100.0, 75.0], paired_welfare={"A": 150.0}), "A", {}) == pytest.approx(0.5)
+
+
+# ------------------------------------------------------------------ 6. Leaker under media2 submissions
+DOC = ("the old survey of the northern camps recorded that the copper seam runs under the eastern ridge and that the harvest "
+       "doubles when two crews work it together in the dry season")
+
+
+def test_leaker_scores_through_media2_submissions_and_editions(monkeypatch):
+    """Under media2.submissions a public post is a `submission` (seen by its author only) that an editor may print in an `edition`;
+    there are no `post` events. The leak counted neither, so a Leaker could never score in such worlds."""
+    monkeypatch.setattr(G, "_archive_shingles", lambda: {"survey": G._shingles(DOC)})
+    gt = _gt(events=[{"type": "submission", "agent": "A", "round": 1, "data": {"id": "S1", "text": "Read this: " + DOC, "anon": True}},
+                     {"type": "edition", "agent": "E", "round": 1, "data": {"outlet": "O1", "name": "Gazette", "version": 0,
+                                                                             "text": "A reader writes: " + DOC}}])
+    assert G.leaks(gt) == {"survey": "A"}
+    assert G.s_leaker(gt, "A", {}) == pytest.approx(1 / 3)
+    gt_unprinted = _gt(events=gt["events"][:1])
+    assert G.leaks(gt_unprinted) == {}                              # a submission alone is not public
