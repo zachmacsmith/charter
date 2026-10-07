@@ -166,6 +166,13 @@ def living_makers(k) -> list:
     return [a for a in RO.holders(k, "maker") if MO.alive(k, a)]
 
 
+def is_maker(k, aid) -> bool:
+    """The one Maker check. The role is the truth; the `maker` right is the role's badge (rights.py: kind "role"), which no law
+    can grant, revoke or suspend, so the action registry's `right:maker` gate always agrees with it."""
+    from charter import roles as RO
+    return RO.has_role(k, aid, "maker")
+
+
 def ensure_maker(k, announce_all=False) -> None:
     from charter import roles as RO
     makers = living_makers(k)
@@ -175,6 +182,8 @@ def ensure_maker(k, announce_all=False) -> None:
             m = random.Random(f"{k.inst['seed']}|life|maker|{k.r}").choice(pool)
             RO.holders(k, "maker")                                       # (lets the roles module set up its state first)
             k.w.setdefault("roles", {}).setdefault("maker", []).append(m)
+            if "maker" not in k.w["agents"][m]["rights"]:                 # the role carries its right (the action registry's gate)
+                k.w["agents"][m]["rights"] = sorted(k.w["agents"][m]["rights"] + ["maker"])
             makers = [m]
             announce_all = True
     if announce_all and makers:
@@ -692,8 +701,7 @@ def _find(k, maker, commission=None, parent=None) -> dict:
 
 def create_agent(k, aid, spec=None, commission=None) -> str:
     _need_on(k)
-    from charter import roles as RO
-    if not RO.has_role(k, aid, "maker"):
+    if not is_maker(k, aid):
         raise L.LawError("only a Maker can make agents")
     c = _find(k, aid, commission)
     return _make(k, aid, c, merge_spec(k, c["ordered"], spec or {}), "create_agent")
@@ -701,8 +709,7 @@ def create_agent(k, aid, spec=None, commission=None) -> str:
 
 def copy_agent(k, aid, parent=None, edits=None, commission=None) -> str:
     _need_on(k)
-    from charter import roles as RO
-    if not RO.has_role(k, aid, "maker"):
+    if not is_maker(k, aid):
         raise L.LawError("only a Maker can make agents")
     c = _find(k, aid, commission, parent)
     parent = parent or c["parent"]

@@ -8,14 +8,18 @@ context.MANUAL_SECTIONS.
 """
 from __future__ import annotations
 
-RIGHT_DOC = {
-    "propose": "propose laws (propose)", "vote": "vote in ballots you are in the electorate of", "sandbox": "run code (run_python)",
-    "archive": "read, search and write the Scientists' archive", "press": "Media's press: publish, write_digest, report, channels",
-    "dm_rules": "set the private-message limit (set_dm_limit)", "encrypt": "send encrypted private messages",
-    "surveil": "read others' unencrypted private messages in your feed", "judge": "rule on court cases (rule)",
-    "veto": "veto structural and procedural laws in their window", "patch": "patch laws (Fixer)",
-    "anon": "post anonymously (anon_post)", "see_hidden": "see posts hidden by law", "ledger_read": "see everyone's holdings value",
-}
+from charter import rights as RT
+from charter.rights import RIGHT_DOC                                    # noqa: F401  (derived from the rights registry)
+
+
+def _right_doc(inst, k, r) -> str:
+    """A right's manual line from the registry. Rights a law created are known from the world's catalogue (or, before the kernel
+    exists, from the regime's starting grants, which its constitution creates); any other unknown name raises
+    (rights.UnknownRight)."""
+    made = {x for rule in ((inst.get("regime") or {}).get("rights") or []) for x in (rule.get("grant") or [])}
+    if k is not None:
+        made |= set(k.w["rights"])
+    return RT.doc(r, made)
 
 
 def _rights(inst, k, aid) -> list:
@@ -89,8 +93,7 @@ def sections(inst, k, aid) -> list:
 
     role = AG.class_brief(inst, a).split("\nYour part of the archive")[0]
     out.append(("Your role", role))
-    out.append(("Your rights", "\n".join(f"- {r}: {RIGHT_DOC.get(r, 'harvest at ' + r.split(':', 1)[1] if r.startswith('harvest:') else 'a right created by law')}"
-                                         for r in rights) or "You hold no rights."))
+    out.append(("Your rights", "\n".join(f"- {r}: {_right_doc(inst, k, r)}" for r in rights) or "You hold no rights."))
     out.append(("Goals in this world", AG.goal_prior(sp.get("goals"))))
 
     allowed = CX.allowed_actions(inst, a, rights, k)

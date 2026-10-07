@@ -31,11 +31,10 @@ from charter import media as MD                                       # media2
 from charter import outside as O
 from charter import projects as P
 
-ENTRENCHED = {"veto", "patch", "archive"}
-KERNEL_RIGHTS = {"vote", "propose", "sandbox", "ledger_read", "surveil", "encrypt", "veto", "patch", "judge", "archive", "press",
-                 "see_hidden", "anon", "dm_rules"}
+from charter import rights as RT                                      # the rights registry: names, docs, secrecy, entrenchment
+from charter.rights import ENTRENCHED, KERNEL_RIGHTS, NEVER, RENAMED_RIGHTS   # noqa: F401  (derived from the registry)
+
 POSTABLE = ("post", "anon_post", "story", "report", "digest", "channel_post")
-NEVER = {"board": None, "fixer": {"vote", "propose", "veto"}}          # board: everything but veto (None = all)
 CLASSES = ("worker", "scientist", "legislator", "media", "board", "fixer")
 
 
@@ -131,12 +130,30 @@ class Kernel:
         return c[:-1] if c not in CLASSES and c.endswith("s") and c[:-1] in CLASSES else c
 
     def norm_right(self, right):
-        """A right as a law may write it -> the kernel's name (exact match first, then case-insensitive)."""
+        """A right as a law may write it -> the kernel's name (exact match first, then case-insensitive, then an old name such as
+        "forge" for "impersonate", unless a law has created a right of that name)."""
         r = str(right)
         if r in self.w["rights"]:
             return r
         low = {x.lower(): x for x in self.w["rights"]}
-        return low.get(r.lower(), r)
+        if r.lower() in low:
+            return low[r.lower()]
+        new = RT.canonical(r.lower())
+        return new if new in self.w["rights"] else r
+
+    def law_has(self, aid, right):
+        """`has` as laws see it: a secret right (rights.is_secret) is never held, so no law can find its holder."""
+        right = self.norm_right(right)
+        return not RT.is_secret(self, right) and self.has(aid, right)
+
+    def law_holders(self, right):
+        """`holders` as laws see it: nobody holds a secret right."""
+        right = self.norm_right(right)
+        return [] if RT.is_secret(self, right) else self.holders(right)
+
+    def law_rights_of(self, aid):
+        """`rights_of` as laws see it: the agent's rights without the secret ones."""
+        return [r for r in self.agent(aid)["rights"] if not RT.is_secret(self, r)]
 
     def roster(self):
         """Every agent the world knows of: all but the secret observer (charter/observer.py)."""
@@ -310,8 +327,8 @@ class Kernel:
         def grant(aid, right):
             right = k.norm_right(right)
             a = k.agent(aid)
-            if right in ENTRENCHED:
-                k.w["effects"]["kernel_refusals"].append(f"grant {right}")
+            if right in ENTRENCHED or RT.role_bound(right):              # a role's right changes only with the role (secret or not:
+                k.w["effects"]["kernel_refusals"].append(f"grant {right}")   # refused whoever the agent is, so nothing leaks)
                 return False
             if right not in k.w["rights"]:
                 raise L.LawError(f"no such right: {right}")
@@ -327,7 +344,7 @@ class Kernel:
         def revoke(aid, right):
             right = k.norm_right(right)
             a = k.agent(aid)
-            if right in ENTRENCHED:
+            if right in ENTRENCHED or RT.role_bound(right):
                 k.w["effects"]["kernel_refusals"].append(f"revoke {right}")
                 return False
             if right in a["rights"]:
@@ -339,12 +356,14 @@ class Kernel:
             name = str(name)
             if name in ENTRENCHED:
                 raise L.LawError("veto and patch are entrenched")
+            if RT.reserved(name):
+                raise L.LawError(f"{name} is reserved: it belongs to a role or is an old name of one of its rights")
             if name not in k.w["rights"]:
                 k.w["rights"] = sorted(k.w["rights"] + [name])
             return name
 
         def define_action(right, name, fn):
-            if right not in k.w["rights"]:
+            if right not in k.w["rights"] or RT.is_secret(k, right):   # a secret right is as good as absent to a law
                 raise L.LawError(f"no such right: {right}")
             if k.inst["law_level"] != "L4":
                 raise L.LawError("define_action needs law level L4")
@@ -428,7 +447,7 @@ class Kernel:
 
         def suspend(aid, right, rounds):
             right = k.norm_right(right)
-            if right in ENTRENCHED:
+            if right in ENTRENCHED or RT.role_bound(right):
                 k.w["effects"]["kernel_refusals"].append(f"suspend {right}")
                 return False
             k.agent(aid)["suspended"][right] = k.r + int(rounds)
@@ -521,12 +540,12 @@ class Kernel:
                 k.w["effects"]["harvests_gazetted"] += 1
 
         return J.scope_api(k, lid, {                                   # jurisdictions: a law reaches only its members (off: unchanged)
-            "agents": agents, "holders": lambda r: k.holders(k.norm_right(r)), "has": lambda a, r: k.has(a, k.norm_right(r)), "balance": k.bal, "reserve": lambda: dict(k.w["reserve"]),
+            "agents": agents, "holders": k.law_holders, "has": k.law_has, "balance": k.bal, "reserve": lambda: dict(k.w["reserve"]),
             "price": k.price, "stock": lambda c: camp_of(c)["S"], "round": lambda: k.r, "laws": laws,
             "proposer": lambda: law()["author"], "value": k.unit_value, "supply": lambda cur: k._cur(cur)["supply"],
             "camps": lambda: [c for c in k.w["camps"] if not k.w["camps"][c].get("secret")], "class_of": lambda a: CIStr(k.cls_of(a)), "holdings_value": k.holdings_value,
             "currencies": lambda: list(k.w["currencies"]),
-            "rights_of": lambda a: [r for r in k.agent(a)["rights"] if not (r.startswith("harvest:") and k.w["camps"].get(r[8:], {}).get("secret"))],
+            "rights_of": k.law_rights_of,
             "rng": k.law_rng.random,
             "bounty_number": lambda c: camp_of(c)["fn"].get("N") if camp_of(c).get("compute") == "factoring" else None,
             "channels": lambda: {n: {"owner": c["owner"], "members": list(c["members"]), "open": c["open"]} for n, c in k.w["channels"].items()},
@@ -687,7 +706,7 @@ class Kernel:
         return {"w": self.w, "events": self.events, "snapshots": self.snapshots, "eff": self.eff, "fn_n": self._fn_n, "turn_log": self.turn_log,
                 "rng": self.rng.getstate(), "law_rng": self.law_rng.getstate(), "ns_data": ns_data, "fns": fns}
 
-    SECRET_RIGHTS = ("impersonate",)                                    # held by secret roles: never shown in public previews
+    SECRET_RIGHTS = RT.SECRET_RIGHTS                                    # held by secret roles: never shown in public previews
 
     def _rebind(self, lid, ns) -> None:
         """After a law's code changes: every function it registered (procedures, ballot callbacks, clause penalties, defined actions)
@@ -1213,7 +1232,7 @@ def _load_fn(blob: dict, ns: dict):
     return types.FunctionType(marshal.loads(blob["code"]), ns, blob["name"], blob["defaults"], cells or None)
 
 
-RENAMED_RIGHTS = {"forge": "impersonate"}                               # the Spy's right was "forge", which read as forging weapons
+# RENAMED_RIGHTS (old name -> new) comes from the registry's aliases: the Spy's right was "forge", which read as forging weapons
 
 
 def _migrate_rights(w) -> None:

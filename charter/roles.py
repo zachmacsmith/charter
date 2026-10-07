@@ -50,9 +50,11 @@ import random
 import re
 from pathlib import Path
 
+from charter import rights as RT
+
 ROLES = ("spy", "assassin", "scholar", "maker", "media")
 SECRET = ("spy", "assassin")
-RIGHTS = {"scholar": "scholar", "maker": "maker", "media": "press"}         # rights-bearing (public) roles
+RIGHTS = RT.PUBLIC_ROLE_RIGHTS                    # rights-bearing (public) roles: {role: right}, from the rights registry
 NO_BOARD = ("scholar", "maker", "media", "spy")    # rights the Board cannot hold; the member Spy holds `impersonate` (coordinator: not Board)
 DEFAULTS = {"enabled": False, "counts": {"spy": 1, "assassin": 0.5, "scholar": 1, "maker": 1, "media": 2},
             "reference_population": 28, "scaling": "proportional", "explicit": {}}
@@ -147,7 +149,7 @@ def assign(sp: dict, seed: int, agents: list[dict]) -> dict | None:
         holders[r] = [x for x in [a["id"] for a in agents] if x in picked]
     for r, xs in holders.items():
         for x in xs:
-            right = RIGHTS.get(r) or ("impersonate" if r == "spy" else None)
+            right = RT.RIGHT_OF_ROLE.get(r)
             if right and right not in ids[x]["rights"]:
                 ids[x]["rights"].append(right)
             if (r == "media" and (sp.get("dm_step") or {}).get("controller", "media") == "media"
@@ -193,7 +195,7 @@ def init_state(k) -> None:
         return
     k.w["roles"] = copy.deepcopy(r["holders"])
     k.w["roles_state"] = {"seen": {}, "reads": {}, "passed": []}
-    k.w["rights"] = sorted(set(k.w["rights"]) | {"scholar", "maker", "impersonate"})
+    k.w["rights"] = sorted(set(k.w["rights"]) | RT.ROLE_RIGHTS)
 
 
 def _alive(k, aid) -> bool:
@@ -296,8 +298,8 @@ def pass_on(k, role, from_aid) -> None:
     lst.append(new)
     if role == "spy":
         rights = k.w["agents"][new]["rights"]
-        if "impersonate" not in rights:
-            rights.append("impersonate")
+        if RT.RIGHT_OF_ROLE["spy"] not in rights:
+            rights.append(RT.RIGHT_OF_ROLE["spy"])
             rights.sort()
         st["reads"].pop(new, None)
     st["passed"].append({"round": k.r, "role": role, "from": from_aid, "to": new})
