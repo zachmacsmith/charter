@@ -756,6 +756,7 @@ class Kernel:
                  "powers_disclosed": (w.get("hidden_caps") or {}).get("disclose")}   # who holds powers is never previewed
         if "leases" in w:                                              # camps: lease rules show in previews
             rules["lease_rules"] = dict(w["leases"]["rules"])
+        rules.update(self._module_rules(ag))
         return {"holdings": {a: dict(v["holdings"]) for a, v in ag.items()},
                 "rights": {a: [r for r in v["rights"] if r not in self.SECRET_RIGHTS] for a, v in ag.items()}, "rules": rules,
                 "reserve": dict(w["reserve"]), "currencies": {c: dict(v) for c, v in w["currencies"].items()},
@@ -767,6 +768,76 @@ class Kernel:
                 "dm_limit": {"all": w["dm_limit"]["all"], **{a: n for a, n in w["dm_limit"]["agents"].items() if a in ag}},
                 "suspended": {a: dict(v["suspended"]) for a, v in ag.items() if v["suspended"]},
                 "projects": P.view(self)}
+
+    def _module_rules(self, ag) -> dict:
+        """Preview rules of the feature modules (life, mortality, conflict, media2, jurisdictions), one key per rule so a diff line
+        reads like the others ("rules: birth_rules L5: None -> {...}"). Only what laws set and anyone may know: never private
+        subscriptions, hidden jurisdictions or who holds secret powers. A module that is off adds nothing (old previews unchanged)."""
+        w, out = self.w, {}
+        laws = w["laws"]
+
+        def live(lid):                                                 # rules of laws that were repealed stop counting
+            return laws.get(lid, {}).get("status") == "active"
+
+        life = w.get("life")
+        if life is not None:
+            for lid, r in (life.get("rules") or {}).items():
+                if live(lid):
+                    out[f"birth_rules {lid}"] = {x: v for x, v in r.items() if v is not None}
+            for what, lids in (life.get("public") or {}).items():
+                if lids:
+                    out[f"{what}_public"] = sorted(lids)
+        mort = w.get("mortality")
+        if mort is not None and mort.get("succession_public"):
+            out["succession_public"] = True
+        cf = w.get("conflict")
+        if cf is not None:
+            for lid, on in (cf.get("forge_ban") or {}).items():
+                if on and live(lid):
+                    out[f"forge_ban {lid}"] = True
+            for lid, pairs in (cf.get("obligations") or {}).items():
+                if pairs and live(lid):
+                    out[f"guard_obligations {lid}"] = [f"{g} guards {a}" for g, a in pairs]
+        md = w.get("media")
+        if md is not None:
+            for key in ("open_board", "press_freedom", "sponsor_label"):
+                out[key] = md.get(key)
+            for stat, on in (md.get("stats") or {}).items():
+                out[f"public_stat {stat}"] = bool(on)
+            for jid, o in (md.get("official") or {}).items():
+                if not self._hidden_jur(jid):
+                    out[f"official_editor {jid}"] = o.get("editor")
+            for lid, ms in (md.get("streams") or {}).items():
+                if live(lid):
+                    out[f"official_stream {lid}"] = list(ms)
+            for oid, o in (md.get("outlets") or {}).items():
+                if o.get("suspended_until") is not None:
+                    out[f"outlet {oid} suspended until round"] = o["suspended_until"] + 1
+            n = {}
+            for a, outs in (md.get("compelled") or {}).items():
+                for oid in outs:
+                    n[oid] = n.get(oid, 0) + 1
+            for oid, c in n.items():                                   # how many, not who: subscriptions are private
+                out[f"compelled_subscribers {oid}"] = c
+        js = w.get("jurisdictions")
+        if js is not None and "jur" in w:
+            for jid, j in js.items():
+                if j["status"] != "declared":                          # hidden jurisdictions are secret; dissolved ones have no rules
+                    continue
+                if not j.get("legacy"):                                # J0's procedures, reserve and camps are in the view already
+                    out[f"{jid} procedures"] = {c: key.split("#")[0] for c, key in j["procedures"].items()}
+                    out[f"{jid} camp_rules"] = {c: dict(v) for c, v in j["camp_rules"].items() if any(x is not None for x in v.values())}
+                    out[f"{jid} reserve"] = {i: q for i, q in j["reserve"].items() if abs(q) > 1e-9}
+            pend = w["jur"].get("pending") or {}
+            for what, d in (("joining", pend.get("join")), ("leaving", pend.get("leave"))):
+                for a, jid in (d or {}).items():
+                    if a in ag and not self._hidden_jur(jid):
+                        out[f"{a} {what}"] = jid
+        return out
+
+    def _hidden_jur(self, jid) -> bool:
+        j = (self.w.get("jurisdictions") or {}).get(jid)
+        return bool(j and j["status"] == "hidden")
 
     @staticmethod
     def diff(a, b):

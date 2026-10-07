@@ -277,6 +277,65 @@ def test_j1_law_cannot_repeal_or_touch_j0():
         law(k, code("Raid", f'def on_enact():\n    move("reserve:J0", "{a}", "timber", 1)'), jid)
 
 
+def _refused(k):
+    return {(e["data"]["fn"], e["data"]["agent"]) for e in k.events if e["type"] == "jur_out_of_scope"}
+
+
+def test_oblige_guard_reaches_only_members():
+    inst, k = world(extra=("conflict.enabled=true",))
+    a, b, x, y = citizens(k)[:4]
+    jid = declared(k, a, b)
+    law(k, code("Levy of guards", f'def on_enact():\n    oblige_guard("{x}", "{y}")\n    oblige_guard("{a}", "{x}")\n'
+                                  f'    oblige_guard("{x}", "{a}")\n    oblige_guard("{a}", "{b}")'), jid)
+    pairs = [p for ps in k.w["conflict"]["obligations"].values() for p in ps]
+    assert pairs == [[a, b]]                                           # outsiders neither guard nor are guarded
+    assert {("oblige_guard", x)} <= _refused(k)
+
+
+def test_compel_subscription_reaches_only_members():
+    inst, k = world(extra=("media2.enabled=true",))
+    editor = k.w["media"]["outlets"]["O1"]["editor"]
+    a, x = [c for c in citizens(k) if c != editor][:2]
+    jid = declared(k, a)
+    law(k, code("Read the paper", f'def on_enact():\n    compel_subscription("{x}", "O1")\n    compel_subscription("{a}", "O1")'), jid)
+    assert "O1" in k.w["media"]["subs"].get(a, []) and a in k.w["media"]["compelled"]
+    assert x not in k.w["media"]["compelled"]
+    assert ("compel_subscription", x) in _refused(k)
+
+
+def test_lend_from_reserve_reaches_only_members():
+    inst, k = world()
+    a, x = citizens(k)[:2]
+    declared(k, a)                                                     # a leaves J0 for J1
+    k.w["reserve"]["timber"] = 50.0
+    law(k, code("Credit", f'def on_enact():\n    enable_loans(True)\n    lend_from_reserve("{a}", "timber", 5)\n'
+                          f'    lend_from_reserve("{x}", "timber", 5)'))
+    borrowers = [ln["borrower"] for ln in k.w["loans"].values()]
+    assert borrowers == [x]                                            # J0's reserve does not lend to J1's members
+    assert ("lend_from_reserve", a) in _refused(k)
+
+
+def test_scoping_is_generated_from_the_law_api_metadata():
+    """Every law function with a parameter that can name an agent is declared in lawapi, at the positions its signature has."""
+    import inspect
+    from charter import lawapi as LA
+    from charter import lawlang as LL
+    inst = generator.generate(S.apply_overrides(make_spec(), ["jurisdictions.enabled=false", "conflict.enabled=true",
+                                                              "media2.enabled=true", "life.enabled=true"]), 1)
+    api = Kernel(inst).api_for("_")
+    assert set(api) == LL.API and set(LA.LAWFNS) <= LL.API
+    undeclared = []
+    for name, fn in api.items():
+        params = list(inspect.signature(fn).parameters)
+        if set(params) & LA.AGENTISH and name not in LA.LAWFNS:
+            undeclared.append((name, params))
+        for pos, pname in LA.LAWFNS.get(name, LA.LawFn(name)).agents:
+            assert params[pos] == pname, (name, pos, pname, params)
+    assert not undeclared, f"declare these law functions' agent parameters in charter/lawapi.py: {undeclared}"
+    assert J.AGENT_ARGS == LA.AGENT_ARGS and {"oblige_guard", "compel_subscription", "lend_from_reserve"} <= set(J.AGENT_ARGS)
+    assert all(f.why for f in LA.LAWFNS.values() if f.scope == "none")
+
+
 def test_judges_and_cases_stay_in_their_jurisdiction():
     inst, k = world()
     a, b, x = citizens(k)[:3]
@@ -342,6 +401,61 @@ def test_lawful_force_spends_the_armory():
     J.reserve_of(k, jid)["weapons"] = 5.0
     res = conflict.attack(k, a, citizens(k)[1], 3, lawful=True, armory=jid)
     assert J.reserve_of(k, jid)["weapons"] == 2.0 and res["lawful"]
+
+
+# ------------------------------------------------------------------ previews show the newer modules' rules (R6)
+def preview(k, src, jid="J0", author="constitution"):
+    lid = k.new_law(src, author)
+    if jid != "J0":
+        k.w["laws"][lid]["jurisdiction"] = jid
+    return lid, k.dry_run(lid)
+
+
+@pytest.mark.parametrize("name, line", [("Press Freedom", "rules: press_freedom: False -> True"),
+                                        ("Open Board", "rules: open_board: False -> True"),
+                                        ("Open Statistics", "rules: public_stat holdings: False -> True"),
+                                        ("Official Stream", "rules: official_stream {lid}: None -> ['board', 'legislator']")])
+def test_previews_show_media_rules(name, line):
+    from charter import library as LB
+    inst, k = world(extra=("media2.enabled=true",))
+    before = copy.deepcopy(k.w["media"])
+    lid, diff = preview(k, LB.LIB[name]["code"])
+    assert line.format(lid=lid) in diff, diff
+    assert k.w["media"] == before
+
+
+def test_preview_of_compulsory_subscription_counts_readers_without_naming_them():
+    from charter import library as LB
+    inst, k = world(extra=("media2.enabled=true",))
+    editor = k.w["media"]["outlets"]["O1"]["editor"]
+    lid, diff = preview(k, LB.LIB["Compulsory Subscription"]["code"], author=editor)
+    n = len([a for a in k.api_for(lid)["agents"]() if a != editor])
+    assert f"rules: compelled_subscribers O1: None -> {n}" in diff, diff
+    assert not any(a in line for line in diff if "compelled" in line for a in k.roster() if a != editor)
+
+
+def test_previews_show_conflict_rules():
+    inst, k = world(extra=("conflict.enabled=true",))
+    a, b = citizens(k)[:2]
+    lid, diff = preview(k, code("Order", f'def on_enact():\n    ban_forging(True)\n    oblige_guard("{a}", "{b}")'))
+    assert f"rules: forge_ban {lid}: None -> True" in diff, diff
+    assert f"rules: guard_obligations {lid}: None -> ['{a} guards {b}']" in diff, diff
+    assert k.w["conflict"]["forge_ban"] == {} and k.w["conflict"]["obligations"] == {}
+
+
+def test_previews_show_jurisdiction_rules_but_never_hidden_ones():
+    inst, k = world()
+    a, b, x, y = citizens(k)[:4]
+    jid = declared(k, a, b)
+    camp = sorted(k.w["camps"])[0]
+    lid, diff = preview(k, code("Toll", f'def on_enact():\n    set_fee("{camp}", "timber", 2)\n    admit("{x}")\n'
+                                        f'    set_procedure("ordinary", lambda p: True)'), jid)
+    assert f"rules: {jid} camp_rules: {{}} -> {{'{camp}': {{'fee': {{'item': 'timber', 'qty': 2.0}}}}}}" in diff, diff
+    assert f"rules: {x} joining: None -> {jid}" in diff and any(l.startswith(f"rules: {jid} procedures: {{}} -> {{'ordinary'") for l in diff)
+    secret = re.search(r"J\d+", act(k, y, "found", name="Cabal")).group()
+    lid2, diff2 = preview(k, code("Plot", f'def on_enact():\n    set_procedure("ordinary", lambda p: True)'), secret)
+    assert not any(secret in line for line in diff2), diff2
+    assert not any(secret in line for line in preview(k, code("Hi", 'def on_enact():\n    gazette("hi")'))[1])
 
 
 # ------------------------------------------------------------------ birth
