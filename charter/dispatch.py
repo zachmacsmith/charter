@@ -927,3 +927,88 @@ def do_rule(k, jurisdiction, case, verdict, judge, clause, accuser, accused, rea
 def do_define_action(k, law, action, right, key=None) -> dict:
     k.w["actions"][action] = {"right": right, "law": law, "fn": key}
     return {"action": action}
+
+
+# ====================================================================== P2.4a: conflict (attack, fortify, convert, guards)
+# Rows routed by P2.4a: attack, fortify, convert, guard_bind, guard_release. conflict.py keeps its checks (an action's ActionError,
+# attack()'s {"ok": False, "error"}, a law function's False) and builds the payload; the changes are conflict.py's (commit, pledge,
+# fort_change, guard_bind, guard_release), and its other writes go through primitives: committed weapons, spent initiative and
+# destroyed spoils are `destroy` (coins: `burn`, via "spoils"), spoils taken are `move`, deaths by attack, assassin, accident and
+# lawful force are `end_life` (mortality.announce conceals an unnamed attacker: Kernel.concealing). Deferred attacks resolve in
+# world root frames ({"world": "attack"}); an accident's {"world": "accident"} frame joins its harvest's root. No legacy alias
+# touches these rows, so nothing is gated yet (P3.1's before_<p>).
+#
+# attack(attacker, target, units, covert, disguise, lawful)   an attack order: weapons committed (used up) and the order recorded;
+#     it resolves now (immediate timing) or at round end. Options: armory (lawful force's armory: an owner key or a law's armory
+#     dict), allies ({agent: units}, used up too), bonus, named (False: the success is announced without the attacker), ally (a
+#     join_attack: the ally's weapons go into the pledge's escrow instead; it joins attacker's attack on target this round).
+#     Result: the attack record ({"ok": True, ...}), or {"ok": True, "pledge": {...}} for a pledge.
+# fortify(agent, qty)   stone and a fort. Options: op ("lock" default | "unlock" | "release" | "raze"), to (raze: the attacker).
+# convert(agent, src_item, dst_item, qty, via)   goods of one kind become another in agent's holdings. Routed for via "forge"
+#     (copper -> weapons); deposits and redemptions still make it in actions.py. Option: out (what dst_item gains; default qty).
+# guard_bind(guard, agent, fee) / guard_release(guard, agent)   guard's fort also defends agent (or stops). Options: lid (a law's
+#     obligation), why (release: "stop" | "lapse" | "law").
+OPTIONS.update({"attack": frozenset({"armory", "allies", "bonus", "named", "ally"}), "fortify": frozenset({"op", "to"}),
+                "convert": frozenset({"out"}), "guard_bind": frozenset({"lid"}), "guard_release": frozenset({"lid", "why"})})
+
+
+def _nonneg(p, key="qty"):
+    try:
+        q = float(p[key])
+    except (TypeError, ValueError):
+        raise L.LawError(f"{key} must be a number")
+    if q < 0 or q != q:
+        raise L.LawError(f"{key} must be non-negative")
+    return {**p, key: q}
+
+
+def check_attack(k, p):
+    return {**_nonneg(p, "units"), "covert": bool(p["covert"]), "disguise": bool(p["disguise"]), "lawful": bool(p["lawful"])}
+
+
+def check_fortify(k, p):
+    return _nonneg(p)
+
+
+def check_convert(k, p):
+    p = _nonneg(p)
+    if p["qty"] == 0:
+        raise _Noop({"converted": 0.0})
+    if k.bal(p["agent"], p["src_item"]) + 1e-9 < p["qty"]:
+        raise PhysicsError("insufficient")
+    return p
+
+
+CHECKS.update({"attack": check_attack, "fortify": check_fortify, "convert": check_convert})
+
+
+def do_attack(k, attacker, target, units, covert, disguise, lawful, armory=None, allies=None, bonus=0.0, named=True,
+              ally=None) -> dict:
+    from charter import conflict as CF
+    if ally is not None:
+        return CF.pledge(k, ally, attacker, target, units)
+    return CF.commit(k, attacker, target, units, lawful=lawful, armory=armory, allies=allies, bonus=bonus, named=named,
+                     covert=covert, disguise=disguise)
+
+
+def do_fortify(k, agent, qty, op="lock", to=None) -> dict:
+    from charter import conflict as CF
+    return CF.fort_change(k, agent, qty, op, to)
+
+
+def do_convert(k, agent, src_item, dst_item, qty, via, out=None) -> dict:
+    """Goods change kind in one agent's holdings (forge: copper -> weapons at weapons_per_copper)."""
+    got = qty if out is None else out
+    k._add(agent, src_item, -qty)
+    k._add(agent, dst_item, got)
+    return {"converted": qty, "out": got}
+
+
+def do_guard_bind(k, guard, agent, fee, lid=None) -> dict:
+    from charter import conflict as CF
+    return CF.guard_bind(k, guard, agent, fee, lid)
+
+
+def do_guard_release(k, guard, agent, lid=None, why="stop") -> dict:
+    from charter import conflict as CF
+    return CF.guard_release(k, guard, agent, lid, why)

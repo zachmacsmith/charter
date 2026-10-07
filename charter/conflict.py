@@ -156,19 +156,18 @@ def start_round(k) -> None:
             st["unlocking"].remove(u)
             q = min(u["qty"], st["forts"].get(u["agent"], 0.0))
             if q > 0 and alive(k, u["agent"]):
-                st["forts"][u["agent"]] = round(st["forts"][u["agent"]] - q, 6)
-                k._add(u["agent"], "stone", q / float(_cfg(k)["fort_per_stone"]))
+                k.apply("fortify", agent=u["agent"], qty=q, op="release")
                 k.notify(u["agent"], f"{q:g} stone has left your fort and is back in your holdings.")
     for g, rel in sorted(st["guards"].items()):
         if not (alive(k, g) and alive(k, rel["protects"])):
-            del st["guards"][g]
+            k.apply("guard_release", guard=g, agent=rel["protects"], why="lapse")
             continue
         fee = rel.get("fee")
         if fee and rel.get("paid_round") != k.r:
             if k.move(rel["protects"], g, fee["item"], fee["qty"], why="guard_fee", by=rel["protects"]):
                 rel["paid_round"] = k.r
             else:
-                del st["guards"][g]
+                k.apply("guard_release", guard=g, agent=rel["protects"], why="lapse")
                 for x in (g, rel["protects"]):
                     k.notify(x, f"{rel['protects']} could not pay {g}'s guard fee ({fee['qty']:g} {fee['item']}): the guard has lapsed.")
     for g, off in list(st["guard_offers"].items()):
@@ -263,20 +262,31 @@ def chance(A: float, D: float, delta: float) -> float:
     return A / den if den > 0 else 0.0
 
 
-def _take(k, owner, qty, armory=None):
-    """Take weapons from an agent, an owner key ("reserve", a jurisdiction's armory owner) or an armory dict."""
+def _armory_owner(k, armory):
+    """An armory given by jurisdiction id is that jurisdiction's reserve; owner keys and armory dicts are themselves."""
     if isinstance(armory, str) and armory != "reserve" and not armory.startswith("reserve:") and armory not in k.w["agents"]:
         from charter import jurisdictions as _J                       # a jurisdiction id: its reserve is its armory
         armory = _J.reserve_of(k, armory)
+    return armory
+
+
+def _can_take(k, owner, qty, armory=None) -> bool:
     if isinstance(armory, dict):
-        if armory.get(WEAPONS, 0.0) + 1e-9 < qty:
-            return False
+        return armory.get(WEAPONS, 0.0) + 1e-9 >= qty
+    return k.bal(armory if armory is not None else owner, WEAPONS) + 1e-9 >= qty
+
+
+def _take(k, owner, qty, armory=None):
+    """Weapons committed to an attack are used up (the destroy primitive), from an agent, an owner key ("reserve", a jurisdiction's
+    armory owner) or an armory dict (a law's own armory: a record, not a kernel owner)."""
+    armory = _armory_owner(k, armory)
+    if not _can_take(k, owner, qty, armory):
+        return False
+    if isinstance(armory, dict):
         armory[WEAPONS] = round(armory.get(WEAPONS, 0.0) - qty, 6)
         return True
     src = armory if armory is not None else owner
-    if k.bal(src, WEAPONS) + 1e-9 < qty:
-        return False
-    k._add(src, WEAPONS, -qty)
+    k.apply("destroy", owner=src, item=WEAPONS, qty=qty, cause="attack")
     k.log("weapons_committed", owner, {"from": src, "qty": qty}, vis="monitor")
     return True
 
@@ -322,12 +332,26 @@ def attack(k, attacker, target, units, lawful=False, armory=None, allies=None, b
     for a, u in al.items():
         if not alive(k, a) or float(u) <= 0 or k.bal(a, WEAPONS) + 1e-9 < float(u):
             return {"ok": False, "error": f"ally {a} cannot commit {u} weapons"}
-    if isinstance(armory, str) and armory != "reserve" and not armory.startswith("reserve:") and armory not in k.w["agents"]:
-        from charter import jurisdictions as _J                       # jurisdictions: an armory given by jurisdiction id
-        armory_label, armory = armory, _J.reserve_of(k, armory)
-    if units > 0 and not _take(k, attacker, units, armory):
+    armory = _armory_owner(k, armory)                                  # jurisdictions: an armory given by jurisdiction id
+    if units > 0 and not _can_take(k, attacker, units, armory):
         have = armory.get(WEAPONS, 0.0) if isinstance(armory, dict) else k.bal(armory if armory is not None else attacker, WEAPONS)
         return {"ok": False, "error": f"you have only {have:g} weapons"}
+    from charter import dispatch as _D
+    try:                                                               # the attack primitive (dispatch.do_attack -> commit)
+        return k.apply("attack", attacker=attacker, target=target, units=units, covert=bool(covert), disguise=bool(disguise),
+                       lawful=bool(lawful), armory=armory, allies=al, bonus=bonus, named=named).result
+    except _D.PhysicsError as e:
+        return {"ok": False, "error": e.reason}
+
+
+def commit(k, attacker, target, units, lawful=False, armory=None, allies=None, bonus=0.0, named=True, covert=False,
+           disguise=False) -> dict:
+    """The attack primitive's change (dispatch.do_attack), after attack()'s checks: the weapons are committed (used up: destroy), the
+    order is recorded, and it resolves now (immediate timing) or at the end of the round (resolve_attacks)."""
+    c, st = _cfg(k), k.w["conflict"]
+    al = dict(allies or {})
+    if units > 0:
+        _take(k, attacker, units, armory)
     for a, u in al.items():
         _take(k, a, float(u))
     st["seq"] += 1
@@ -345,6 +369,94 @@ def attack(k, attacker, target, units, lawful=False, armory=None, allies=None, b
     return {"ok": True, **rec}
 
 
+def pledge(k, ally, attacker, target, units) -> dict:
+    """The attack primitive's change for a join_attack (dispatch.do_attack with `ally`): the ally's weapons go into the pledge's
+    escrow (its record in st["pledges"]; an internal write until accounts, P4.1) for attacker's attack on target this round."""
+    k._add(ally, WEAPONS, -units)
+    k.log("weapons_committed", ally, {"from": ally, "qty": units}, vis="monitor")
+    p = {"ally": ally, "attacker": attacker, "target": target, "units": units, "round": k.r}
+    k.w["conflict"]["pledges"].append(p)
+    return {"ok": True, "pledge": p}
+
+
+def _release_pledge(k, p) -> None:
+    """An unused pledge's escrow goes back to the ally at the end of the round: the escrow's internal write, as in pledge()
+    (P4.1 makes the escrow an account and this a move)."""
+    k._add(p["ally"], WEAPONS, p["units"])
+
+
+# ------------------------------------------------------------------ the changes of fortify, guard_bind and guard_release (dispatch)
+def fort_change(k, agent, qty, op="lock", to=None) -> dict:
+    """The fortify primitive's change (dispatch.do_fortify). op: lock (stone into the fort), unlock (the stone is scheduled to come
+    back after fort_unlock_rounds; it defends until then), release (an unlock falls due: the stone is back in agent's holdings),
+    raze (a successful attack takes the fort apart: the attacker `to` gets its spoils share of the stone, the destroyed share is
+    gone, the rest stays with agent for its bequest; pending unlocks lapse)."""
+    st, c = k.w["conflict"], _cfg(k)
+    fps = float(c["fort_per_stone"])
+    if op == "lock":
+        k._add(agent, "stone", -qty)
+        st["forts"][agent] = round(st["forts"].get(agent, 0.0) + qty * fps, 6)
+        k.log("arms", agent, {"kind": "fortify", "stone": qty, "fort": st["forts"][agent]}, vis=[agent])
+        return {"fort": st["forts"][agent]}
+    if op == "unlock":
+        due = k.r + int(c["fort_unlock_rounds"])
+        st["unlocking"].append({"agent": agent, "qty": qty, "due": due})
+        k.log("arms", agent, {"kind": "unlock", "qty": qty, "due": due}, vis=[agent])
+        return {"due": due}
+    if op == "release":
+        st["forts"][agent] = round(st["forts"][agent] - qty, 6)
+        k._add(agent, "stone", qty / fps)
+        return {"stone": qty / fps}
+    if op == "raze":
+        fa, fd = float(c["spoils"]["attacker"]), float(c["spoils"]["destroyed"])
+        f = st["forts"].pop(agent, 0.0)
+        st["unlocking"] = [u for u in st["unlocking"] if u["agent"] != agent]
+        out = {"to": 0.0}
+        if f > 0:
+            stone = f / fps
+            if stone * fa > 0:
+                k._add(to, "stone", round(stone * fa, 6))
+                out["to"] = stone * fa
+            if stone * (1 - fa - fd) > 0:
+                k._add(agent, "stone", round(stone * (1 - fa - fd), 6))
+        return out
+    raise ValueError(f"fortify op must be lock, unlock, release or raze, not {op!r}")
+
+
+def guard_bind(k, guard, agent, fee, lid=None) -> dict:
+    """The guard_bind primitive's change (dispatch.do_guard_bind): guard's fort also defends agent. A law's obligation (lid) lasts
+    while the law is in force; an agent's guard is free (fee None) or an accepted offer (its first fee paid by the caller)."""
+    st = k.w["conflict"]
+    if lid is not None:
+        pairs = st["obligations"].setdefault(lid, [])
+        if [guard, agent] not in pairs:
+            pairs.append([guard, agent])
+        return {"obligation": lid}
+    if fee:
+        del st["guard_offers"][guard]
+        st["guards"][guard] = {"protects": agent, "fee": fee, "since": k.r, "paid_round": k.r}
+        k.log("guard", guard, {"guard": guard, "agent": agent, "change": "start", "fee": fee}, vis=[agent, guard])
+    else:
+        st["guards"][guard] = {"protects": agent, "fee": None, "since": k.r}
+        k.log("guard", guard, {"guard": guard, "agent": agent, "change": "start"}, vis=[guard, agent])
+    return {"guard": guard, "agent": agent}
+
+
+def guard_release(k, guard, agent, lid=None, why="stop") -> dict:
+    """The guard_release primitive's change (dispatch.do_guard_release). why: stop (the guard's own choice: its offer lapses too,
+    logged to both), lapse (a party is gone or the fee went unpaid: unlogged, as today), law (a law clears its obligations)."""
+    st = k.w["conflict"]
+    if why == "law":
+        st["obligations"].pop(lid, None)
+        return {"released": None}
+    rel = st["guards"].pop(guard, None)
+    if why == "stop":
+        st["guard_offers"].pop(guard, None)
+        if rel:
+            k.log("guard", guard, {"guard": guard, "agent": rel["protects"], "change": "stop"}, vis=[guard, rel["protects"]])
+    return {"released": rel}
+
+
 def _spoils(k, attacker, target, c) -> dict:
     """Split the target's holdings and fort: a share to the attacker, a share destroyed, the rest left for its bequest."""
     fa, fd = float(c["spoils"]["attacker"]), float(c["spoils"]["destroyed"])
@@ -357,21 +469,15 @@ def _spoils(k, attacker, target, c) -> dict:
             k.move(target, attacker, item, give, why="spoils", by=attacker)
             got[item] = give
         if gone > 0:
-            k._add(target, item, -gone)
-            if item in k.w["currencies"]:
-                cur = k.w["currencies"][item]
-                cur["supply"] = max(0.0, cur["supply"] - gone)
+            left = min(gone, k.bal(target, item))                    # rounding never takes more than is left
+            if item in k.w["currencies"]:                              # destroyed coins leave the supply (burn); goods: destroy
+                k.apply("burn", currency=item, qty=left, frm=target, via="spoils")
+            else:
+                k.apply("destroy", owner=target, item=item, qty=left, cause="spoils")
             k.log("spoils_destroyed", attacker, {"target": target, "item": item, "qty": gone}, vis="monitor")
-    st = k.w["conflict"]
-    f = st["forts"].pop(target, 0.0)
-    st["unlocking"] = [u for u in st["unlocking"] if u["agent"] != target]
-    if f > 0:
-        stone = f / float(c["fort_per_stone"])
-        if stone * fa > 0:
-            k._add(attacker, "stone", round(stone * fa, 6))
-            got["stone"] = round(got.get("stone", 0.0) + stone * fa, 6)
-        if stone * (1 - fa - fd) > 0:
-            k._add(target, "stone", round(stone * (1 - fa - fd), 6))
+    res = k.apply("fortify", agent=target, qty=fort(k, target), op="raze", to=attacker).result   # the fort is taken apart
+    if res.get("to", 0) > 0:
+        got["stone"] = round(got.get("stone", 0.0) + res["to"], 6)
     return got
 
 
@@ -402,8 +508,8 @@ def _resolve(k, rec) -> dict:
         cause = "law" if rec["lawful"] else "accident" if rec["disguise"] else "assassin" if rec["covert"] else "attack"
         rec["spoils"] = {} if rec["disguise"] else _spoils(k, a, t, c)
         for g in [g for g, rel in st["guards"].items() if g == t or rel["protects"] == t]:
-            del st["guards"][g]
-        rec["disabled"] = M.disable(k, t, cause, by=a, public=True, named=named)
+            k.apply("guard_release", guard=g, agent=st["guards"][g]["protects"], why="lapse")
+        rec["disabled"] = k.apply("end_life", agent=t, cause=cause, by=a, public=True, named=named).result["ended"]
         rec["cause"] = cause
         for ct in st["contracts"].values():
             if ct["to"] == a and ct["target"] == t and ct.get("fulfilled") is None:
@@ -447,11 +553,11 @@ def resolve_attacks(k) -> None:
     pending, st["pending"] = st["pending"], []
     for rec in sorted(pending, key=lambda r: (pos.get(r["attacker"], len(pos)), int(r["id"][1:]))):
         rec["deferred"] = True
-        with k.cause("world", "attack", attack=rec["id"], attacker=rec["attacker"]):   # provenance: a deferred attack resolves
+        with k.cause("world", "attack", root=True, attack=rec["id"], attacker=rec["attacker"]):   # a deferred attack resolves
             _resolve(k, rec)
     for p in st["pledges"]:
         if not p.get("used") and alive(k, p["ally"]):
-            k._add(p["ally"], WEAPONS, p["units"])
+            _release_pledge(k, p)
             k.notify(p["ally"], f"{p['attacker']} made no attack on {p['target']} this round: your {p['units']:g} pledged weapons are back.")
     st["pledges"] = []
     if st.get("bought"):
@@ -491,11 +597,11 @@ def after_harvest(k, aid, camp_id) -> bool:
     roll = _rng(k, "accident", aid, camp_id, st["harvests"]).random()
     if roll >= p:
         return False
-    with k.cause("world", "accident", agent=aid, camp=camp_id):      # provenance: chance, inside the harvest that risked it
-        k.log("accident_truth", aid, {"agent": aid, "camp": camp_id, "p": p, "roll": round(roll, 6), "low_stock": low,
-                                      "safety": bool(c.get("safety"))}, vis="monitor")
+    with k.cause("world", "accident", root=True, agent=aid, camp=camp_id):   # chance, inside the harvest that risked it (whose
+        k.log("accident_truth", aid, {"agent": aid, "camp": camp_id, "p": p, "roll": round(roll, 6), "low_stock": low,   # root
+                                      "safety": bool(c.get("safety"))}, vis="monitor")                                  # it joins)
         st["log"].append({"id": f"X{st['harvests']}", "round": k.r, "attacker": None, "target": aid, "status": "accident", "camp": camp_id})
-        return M.disable(k, aid, "accident", by=None, public=True, named=False)
+        return k.apply("end_life", agent=aid, cause="accident", by=None, public=True, named=False).result["ended"]
 
 
 # ------------------------------------------------------------------ actions (actions.py delegates here)
@@ -521,8 +627,7 @@ def act_join_attack(k, aid, attacker, target, units):
         raise _err(f"no agent {target} in play")
     if units <= 0 or k.bal(aid, WEAPONS) + 1e-9 < units:
         raise _err(f"you have only {k.bal(aid, WEAPONS):g} weapons")
-    _take(k, aid, units)
-    k.w["conflict"]["pledges"].append({"ally": aid, "attacker": attacker, "target": target, "units": units, "round": k.r})
+    k.apply("attack", attacker=attacker, target=target, units=units, covert=False, disguise=False, lawful=False, ally=aid)
     k.notify(attacker, f"{aid} has pledged {units:g} weapons to your attack on {target} this round (they join it if you attack "
                        f"{target} this round{' after this' if _cfg(k)['timing'] == 'immediate' else ''}).")
     return (f"Pledged {units:g} weapons to {attacker}'s attack on {target} this round; they are used up if that attack happens, and "
@@ -539,15 +644,14 @@ def act_forge(k, aid, qty):
     if qty <= 0 or k.bal(aid, "copper") + 1e-9 < qty:
         raise _err(f"forging uses copper 1 for 1, and you have {k.bal(aid, 'copper'):g} copper")
     w = qty * float(_cfg(k)["weapons_per_copper"])
-    k._add(aid, "copper", -qty)
-    k._add(aid, WEAPONS, w)
+    k.apply("convert", agent=aid, src_item="copper", dst_item=WEAPONS, qty=qty, via="forge", out=w)
     k.log("arms", aid, {"kind": "forge", "copper": qty, "weapons": w}, vis=[aid])
     return f"Forged {w:g} weapons from {qty:g} copper (you now have {k.bal(aid, WEAPONS):g})."
 
 
 def act_fortify(k, aid, qty, unlock=False):
     _need_on(k)
-    st, c = k.w["conflict"], _cfg(k)
+    st = k.w["conflict"]
     qty = float(qty)
     if qty <= 0:
         raise _err("qty must be positive")
@@ -556,15 +660,11 @@ def act_fortify(k, aid, qty, unlock=False):
         free = st["forts"].get(aid, 0.0) - pending
         if qty > free + 1e-9:
             raise _err(f"your fort holds {free:g} that is not already being unlocked")
-        due = k.r + int(c["fort_unlock_rounds"])
-        st["unlocking"].append({"agent": aid, "qty": qty, "due": due})
-        k.log("arms", aid, {"kind": "unlock", "qty": qty, "due": due}, vis=[aid])
+        due = k.apply("fortify", agent=aid, qty=qty, op="unlock").result["due"]
         return f"Unlocking {qty:g} from your fort: it keeps defending you until it returns to your holdings at the start of round {due + 1}."
     if k.bal(aid, "stone") + 1e-9 < qty:
         raise _err(f"you have only {k.bal(aid, 'stone'):g} stone")
-    k._add(aid, "stone", -qty)
-    st["forts"][aid] = round(st["forts"].get(aid, 0.0) + qty * float(c["fort_per_stone"]), 6)
-    k.log("arms", aid, {"kind": "fortify", "stone": qty, "fort": st["forts"][aid]}, vis=[aid])
+    k.apply("fortify", agent=aid, qty=qty)
     return f"Locked {qty:g} stone into your fort (fort {st['forts'][aid]:g}; your defense is now {defense(k, aid):g})."
 
 
@@ -572,10 +672,9 @@ def act_guard(k, aid, agent=None, item=None, qty=None, accept=None, stop=False):
     _need_on(k)
     st = k.w["conflict"]
     if stop:
-        rel = st["guards"].pop(aid, None)
-        st["guard_offers"].pop(aid, None)
+        rel = st["guards"].get(aid)
+        k.apply("guard_release", guard=aid, agent=rel["protects"] if rel else None, why="stop")
         if rel:
-            k.log("guard", aid, {"guard": aid, "agent": rel["protects"], "change": "stop"}, vis=[aid, rel["protects"]])
             return f"You no longer guard {rel['protects']}."
         return "You were not guarding anyone."
     if accept is not None:
@@ -587,9 +686,7 @@ def act_guard(k, aid, agent=None, item=None, qty=None, accept=None, stop=False):
             raise _err(f"{g} is not in play")
         if not k.move(aid, g, fee["item"], fee["qty"], why="guard_fee", by=aid):
             raise _err(f"you cannot pay the fee ({fee['qty']:g} {fee['item']})")
-        del st["guard_offers"][g]
-        st["guards"][g] = {"protects": aid, "fee": fee, "since": k.r, "paid_round": k.r}
-        k.log("guard", g, {"guard": g, "agent": aid, "change": "start", "fee": fee}, vis=[aid, g])
+        k.apply("guard_bind", guard=g, agent=aid, fee=fee)               # an accepted offer, its first fee paid
         return f"{g} now guards you for {fee['qty']:g} {fee['item']} per round (paid at the start of each round; the guard lapses if you cannot pay)."
     if agent is None:
         raise _err('guard needs "agent", "accept" or "stop"')
@@ -603,8 +700,7 @@ def act_guard(k, aid, agent=None, item=None, qty=None, accept=None, stop=False):
                         f'Accept with guard {{"accept": "{aid}"}}.')
         return f"Offered to guard {agent} for {fee['qty']:g} {fee['item']} per round; it starts when they accept."
     prev = st["guards"].get(aid)
-    st["guards"][aid] = {"protects": agent, "fee": None, "since": k.r}
-    k.log("guard", aid, {"guard": aid, "agent": agent, "change": "start"}, vis=[aid, agent])
+    k.apply("guard_bind", guard=aid, agent=agent, fee=None)
     return (f"Your fort ({fort(k, aid):g}) now also defends {agent}" + (f" instead of {prev['protects']}" if prev else "") + ".")
 
 
@@ -617,7 +713,7 @@ def act_buy_initiative(k, aid, n):
     item = c["initiative"]["item"]
     if n < 1 or k.bal(aid, item) + 1e-9 < n:
         raise _err(f"initiative costs 1 {item} per place, and you have {k.bal(aid, item):g}")
-    k._add(aid, item, -float(n))
+    k.apply("destroy", owner=aid, item=item, qty=float(n), cause="initiative")   # spent: paid to nobody
     st = k.w["conflict"]
     st["initiative"][aid] = st["initiative"].get(aid, 0) + n
     k.log("initiative_bought", aid, {"n": n, "item": item, "total": st["initiative"][aid]}, vis="monitor")
@@ -767,14 +863,12 @@ def law_api(k, lid) -> dict:
         k.agent(guard), k.agent(agent)
         if guard == agent:
             return False
-        pairs = k.w["conflict"]["obligations"].setdefault(lid, [])
-        if [guard, agent] not in pairs:
-            pairs.append([guard, agent])
+        k.apply("guard_bind", guard=guard, agent=agent, fee=None, lid=lid)
         return True
 
     def clear_obligations():
         if on(k):
-            k.w["conflict"]["obligations"].pop(lid, None)
+            k.apply("guard_release", guard=None, agent=None, lid=lid, why="law")
         return True
 
     return {"forts": forts, "weapons_of": weapons_of, "defense_of": defense_of, "guards": guards, "attacks": attacks,
