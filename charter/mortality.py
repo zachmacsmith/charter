@@ -37,6 +37,7 @@ State lives in k.w["mortality"] (created on first use, so worlds that never use 
 """
 from __future__ import annotations
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
 
 CAUSES = ("attack", "assassin", "accident", "old_age", "law")
@@ -398,7 +399,7 @@ def law_api(k, lid) -> dict:
     return {"set_succession_public": set_succession_public}
 
 
-EVENT_TYPES = ("disabled", "succession", "seat_empty", "successor_named", "succession_rule", "bequest")
+EVENT_TYPES = ET.rendered_by("mortality")                            # this module renders them; "disabled" is conflict's
 
 
 def render_event(e, tag) -> str | None:

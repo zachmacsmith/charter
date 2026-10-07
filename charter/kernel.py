@@ -33,8 +33,10 @@ from charter import projects as P
 
 from charter import rights as RT                                      # the rights registry: names, docs, secrecy, entrenchment
 from charter.rights import ENTRENCHED, KERNEL_RIGHTS, NEVER, RENAMED_RIGHTS   # noqa: F401  (derived from the registry)
+from charter import eventtypes as ET                                  # the event-type registry: the post family, feeds, renderers
 
-POSTABLE = ("post", "anon_post", "story", "report", "digest", "channel_post")
+POSTABLE = ET.names("post")                                           # public posts (hide_post, annotations); channel posts included
+LAW_POSTS = ET.names("lawpost")                                       # the law API's posts(): channel posts left out
 CLASSES = ("worker", "scientist", "legislator", "media", "board", "fixer")
 
 
@@ -526,7 +528,7 @@ class Kernel:
         def posts(n=20):
             out = []
             for x in reversed(k.events):
-                if x["type"] in ("post", "anon_post", "story", "report", "digest") and x["vis"] == "public":
+                if x["type"] in LAW_POSTS and x["vis"] == "public":
                     out.append({"id": x["id"], "author": x["agent"] or "anonymous", "text": x["data"].get("text", ""), "round": x["round"],
                                 "hidden": x["id"] in k.w["hidden"], "kind": x["type"]})
                     if len(out) >= int(n):

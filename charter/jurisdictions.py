@@ -55,10 +55,12 @@ import json
 import random
 import re
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawapi as LA
 from charter import lawlang as L
 
 KEY = "jurisdictions"
+EVENT_TYPES = ET.rendered_by("jurisdictions")                          # this module renders them (agents.render_event)
 DEFAULTS = {"enabled": False, "start": "j0", "board_scope": "founding", "admission": "ballot", "j0_name": "the Commonwealth",
             "scripted_founder": None,
             "declare_cost": 0,          # value the hidden jurisdiction's treasury must hold before it can be declared (members fund it)
@@ -1031,6 +1033,31 @@ def assign_arrival(k, aid):
     if jid:
         k.log("jur_joined", aid, {"jurisdiction": jid, "why": "arrival"}, vis="public")
     return jid
+
+
+# ---------------------------------------------------------------------- feed lines (agents.render_event)
+_JOIN_WHY = {"arrival": " on arriving", "declaration": " as it was declared", "admitted": " (admitted)"}
+
+
+def render_event(e, tag) -> str | None:
+    """Public joins, leaves, admissions and declarations (the hidden stages are told by notify or the action's result)."""
+    d, t, who = e["data"], e["type"], e["agent"]
+    jid = d.get("jurisdiction")
+    if t == "jur_joined":
+        return f"{tag} {who} joined {jid}{_JOIN_WHY.get(d.get('why'), '')}"
+    if t == "jur_left":
+        return f"{tag} {who} left {jid}"
+    if t == "jur_declared":
+        return f"{tag} {who} declared {jid} '{d['name']}' with members {', '.join(d['members']) or 'none'}"
+    if t == "jur_join_accepted":
+        return f"{tag} {jid} admitted {who}" + (" by law" if d.get("by") == "law" else "") + "; they move there at the end of the round"
+    if t == "jur_join_refused":
+        return f"{tag} {jid} refused to admit {who}" + (" by law" if d.get("by") == "law" else " (it admits nobody without a law)")
+    if t == "jur_leave_pending":
+        return f"{tag} {who} leaves {jid} at the end of the round"
+    if t == "jur_born_into":
+        return f"{tag} {who} was born into " + (jid or "no jurisdiction") + f" (parent {d['parent']})"
+    return None
 
 
 # ---------------------------------------------------------------------- prompts and state view

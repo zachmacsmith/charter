@@ -31,12 +31,12 @@ Par currencies and fractional reserves
 """
 from __future__ import annotations
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
 
 CONSEQUENCES = ("seize", "sanction", "seize_sanction", "none")
 OPEN = ("offered", "active", "defaulted")
-EVENTS = ("loan_extended", "loan_refinanced", "loan_restructured", "loan_bought", "loan_rate_capped", "par_set", "redemption_suspended",
-          "redemption_resumed", "bank_run", "interest_cap", "default_consequence")
+EVENTS = ET.rendered_by("credit")                                    # this module renders them (the other loan_* in agents)
 
 
 # ---------------------------------------------------------------------- config and state

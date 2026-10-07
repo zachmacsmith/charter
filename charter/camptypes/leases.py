@@ -12,6 +12,7 @@ On when camps.model is types, or when camps.leases.enabled is true (works with l
 """
 from __future__ import annotations
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
 
 DEFAULTS = {"enabled": None, "offer_lapse": 2, "max_rounds": 20}
@@ -206,7 +207,7 @@ def render(e, tag) -> str | None:
     return None
 
 
-EVENT_TYPES = ("lease_offer", "lease_start", "lease_end", "lease_rules")
+EVENT_TYPES = ET.rendered_by("leases")                               # this module renders them (via camptypes)
 
 
 def snapshot(k) -> dict:

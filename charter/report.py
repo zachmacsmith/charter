@@ -16,6 +16,7 @@ from pathlib import Path
 
 import yaml
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import observer as OBS
 from charter import outside as O
 from charter import projects as P
@@ -329,8 +330,7 @@ def agent_docs(d, inst, ev, rs, gt):
                 f"| {e['round'] + 1} | {e['data']['camp']} | {e['data']['x']} | {e['data']['yield']:.3f} | {e['data']['efficiency']} |" for e in hv) + "\n")
 
 
-MESSAGE_TYPES = ("post", "anon_post", "dm", "channel_post", "story", "digest", "report", "gazette", "notify", "channel_created",
-                 "post_hidden", "post_revealed", "world_event", "edition", "annotation", "leak")
+MESSAGE_TYPES = ET.names("messages")                                 # messages.md: every message, post and notice
 
 
 def messages(d, inst, ev):

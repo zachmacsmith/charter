@@ -12,6 +12,7 @@ import statistics
 
 from charter import library as LB
 from charter import rights as _RT
+from charter import eventtypes as _ET                                 # the event-type registry
 
 ORDER = ["L0", "L1", "L2", "L3", "L4"]
 TITLE_WORDS = ["Archon", "Lord", "Consul", "Steward", "Magister", "Prefect", "Warden"]
@@ -743,7 +744,7 @@ def s_gatekeeper(gt, a, p):
     return _relative(c, a)
 
 
-PUBLIC = ("post", "anon_post", "story", "report", "digest")
+PUBLIC = _ET.names("goalpub")                                         # public speech (the event-type registry)
 
 
 def _authors(gt):
@@ -821,8 +822,8 @@ def _common_shingles(inst) -> set:
 # Leaker: text that reaches the public, and messages that pass words on without being public. media2 adds both kinds: an outlet's
 # `edition` (and a law's `gazette`) is printed for its readers; under media2.submissions a public post is logged only as the
 # author's `submission` (no `post` event), which the editors may print.
-LEAK_PUBLIC = PUBLIC + ("edition", "gazette")
-LEAK_PASSING = ("dm", "channel_post", "submission")
+LEAK_PUBLIC = _ET.names("leak:public")                                # PUBLIC, editions and the gazette
+LEAK_PASSING = _ET.names("leak:passing")                              # DMs, channel posts and media2 submissions
 
 
 def leaks(gt) -> dict:

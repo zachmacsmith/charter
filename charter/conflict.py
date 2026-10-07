@@ -36,6 +36,7 @@ import random
 import re
 from pathlib import Path
 
+from charter import eventtypes as ET                                  # the event-type registry
 from charter import mortality as M
 from charter import roles as R
 
@@ -43,7 +44,7 @@ ARTICLES_DIR = Path(__file__).parent / "archive" / "codex" / "conflict"
 ASSASSIN_DOC = "codex/conflict/the-quiet-blade"
 DISGUISE_DOC = "codex/conflict/the-borrowed-accident"
 ACTIONS = ("attack", "join_attack", "forge", "fortify", "guard", "buy_initiative", "contract")
-EVENT_TYPES = ("disabled", "attack_failed", "order_revealed", "guard", "forge_ban")
+EVENT_TYPES = ET.rendered_by("conflict")                             # this module renders them (agents.render_event)
 WEAPONS = "weapons"
 
 DEFAULTS = {
