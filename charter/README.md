@@ -40,7 +40,15 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   auth or CLI errors), the round is abandoned, also mid-round in sequential mode: the logs are cut back to the last checkpoint (a
   checkpoint is also written before round 1), `STOPPED.md` gives the round, the counts and sample errors, and the run stops with exit
   code 2. Run the same command again (or `resume`) later to replay that round. Writes to the shared archive in the abandoned round
-  are not undone. Runs from before checkpoints existed cannot be resumed.
+  are not undone. Runs from before checkpoints existed cannot be resumed. The abandoned round's model calls are moved to
+  `abandoned_calls.jsonl`, not deleted.
+- `run.json` (charter/provenance.py) records how the run was made: git sha, dirty flag and a sha of `git diff HEAD`, Python version,
+  policy (dry or not), backend, models and the `llm` config (never keys), spec and instance sha, seed, and a `code` block (a sha per
+  charter module and subpackage, plus `state_schema` (kernel.STATE_SCHEMA), `law_api` (lawlang.LAW_API_VERSION) and `scoring`
+  (scorer.SCORING_VERSION)). Every start and resume appends a `segments` entry with its first round, the code it ran under, the
+  modules whose hash changed since the previous segment, and how it ended (`complete` or `stopped`). `resume` reads the dry flag from
+  it (older runs: from the directory name).
+- Every append-only file (`provenance.APPEND_ONLY`: events, reasoning, observer, calls) is covered by the checkpoint offsets.
 
 ## What a run produces (`charter/out/<spec>/<run>/`, git-ignored)
 - `story.html`: the run as a story you scroll through (`python -m charter view RUN_DIR --open` rebuilds it; it also updates every
@@ -59,6 +67,10 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
 - `agents/<Name>/working/`: notes over time, sandbox code and output, law drafts and their fate, archive use, messages, harvests.
 - Raw data for analysis: `instance.json`, `events.jsonl` (the monitors' full log, incl. encrypted DMs), `reasoning.jsonl`,
   `snapshots.json` (per-round state), `ground_truth.json`, `score.json` (goal scores and metrics), `summary.json`, `prompts/`.
+- `calls.jsonl`: one row per model call (`call` id `r<round>:<agent>:<n>`, also in the reasoning row's `usage.call`), with phase,
+  model, backend, latency, usage, `system_sha`/`user_sha`, and every attempt (raw reply text, error of a failed attempt or retry);
+  scripted bots store their parsed reply instead. `prompts/system/<sha>.txt` holds each distinct system prompt actually sent, once
+  (with context on it is rebuilt every turn; `prompts/<id>.system.md` is only the first).
 
 ## Layout
 | Module | Role |

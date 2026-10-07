@@ -699,11 +699,16 @@ class LLMPolicy:
         self.llm, self.backend, self.cfg = llm, backend, llm_cfg
 
     def act(self, k, a, system, user, n_actions, final):
+        return self.act_recorded(k, a, system, user, n_actions, final)[:3]
+
+    def act_recorded(self, k, a, system, user, n_actions, final):
+        """act, plus every attempt's record (raw reply text, error, latency, backend) for provenance.Recorder (calls.jsonl)."""
         schema = __import__("charter.observer", fromlist=["SCHEMA"]).SCHEMA if a["cls"] == "observer" and a.get("phase") != "step" else SCHEMA
         if a["cls"] != "observer" and CX.enabled(k):                    # context: "lookups" replaces "notes" (the scratchpad does)
             schema = CX.SCHEMA
         schema = R.schema_for(k, a, schema)                             # roles: a member Spy also returns next_reads, assessments
         backend = (self.cfg.get("backend_overrides") or {}).get(a["model"], self.backend)   # e.g. one model through the API
-        out, reasoning, usage = self.llm.call(backend, a["model"], system, user, schema,
-                                              thinking_budget=self.cfg.get("thinking_budget", 0), max_tokens=self.cfg.get("max_tokens", 6000))
-        return out, reasoning, usage
+        attempts = []
+        out, reasoning, usage = self.llm.call(backend, a["model"], system, user, schema, thinking_budget=self.cfg.get("thinking_budget", 0),
+                                              max_tokens=self.cfg.get("max_tokens", 6000), attempts=attempts)
+        return out, reasoning, usage, attempts

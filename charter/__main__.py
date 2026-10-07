@@ -138,10 +138,19 @@ def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fr
 def _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live=None, notices=()):
     try:
         runner.run(inst, policy_for(inst["spec"], dry, seed), out, sandbox_for(dry, sandbox_mode),
-                   log=(lambda *a: None) if quiet else print, resume=resume, live=live, notices=notices)
+                   log=(lambda *a: None) if quiet else print, resume=resume, live=live, notices=notices, dry=dry)
     except runner.RunStopped as e:
         print(f"[{out.name}] stopped: {e}\nContinue later with the same command, or: python -m charter resume {out}")
         raise SystemExit(2)
+
+
+def run_mode_dry(out: Path) -> bool:
+    """Whether a run used scripted bots: from run.json (provenance.py); runs from before run.json fall back to the directory name."""
+    from charter import provenance
+    meta = provenance.read(out)
+    if meta is not None and meta.get("dry") is not None:
+        return bool(meta["dry"])
+    return "_dry" in out.name
 
 
 def cmd_resume(a):
@@ -153,7 +162,7 @@ def cmd_resume(a):
     inst["run_id"] = saved.get("run_id", out.name)
     if not _same_instance(out, inst):
         raise SystemExit(f"{out}: the world generated now differs from instance.json (spec or code changed); cannot resume")
-    dry = "_dry" in out.name
+    dry = run_mode_dry(out)
     _play(inst, out, dry, saved["seed"], a.sandbox, False, resume=True)
     res = scorer.score(out)
     from charter import report

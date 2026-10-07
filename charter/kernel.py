@@ -1277,6 +1277,11 @@ class Kernel:
 
 
 # ---------------------------------------------------------------------- callbacks across a checkpoint
+# Version of the checkpointed state (Kernel.checkpoint_state + the runner's checkpoint.pkl). Bump it when their shape changes in a
+# way an older checkpoint cannot be restored from as is (and add a migration, as _migrate_rights does); run.json records it.
+STATE_SCHEMA = 1
+
+
 def _dump_fn(fn, ns: dict):
     """A law function as data: by name if it is a module-level function or an API function, else (lambda, nested function) by its
     compiled code, defaults and closure values."""
