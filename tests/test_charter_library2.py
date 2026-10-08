@@ -146,27 +146,35 @@ def test_loan_registry_seizure_that_covers_the_debt_matches():
                 "defaults": CR.record(k, b)["defaults"], "types": types(k, start)}
     out = both(run)
     assert {x: out[1][x] for x in ("a", "b", "status")} == {x: out[2][x] for x in ("a", "b", "status")} == {"a": 21.0, "b": 19.0, "status": "repaid"}
-    # GAPS: the edition-2 record shows the default the law then settled; the seizure is gazetted
-    assert out[1]["defaults"] == 0 and out[2]["defaults"] == 1
-    assert "loan_repaid" in out[1]["types"] and "loan_restructured" not in out[1]["types"]
-    assert {"loan_defaulted", "loan_restructured", "gazette"} <= set(out[2]["types"])
+    # before_default_loan seizes and settle_loan records it: no default on the record in either edition (GAPS: the event names the law)
+    assert out[1]["defaults"] == out[2]["defaults"] == 0
+    for ed in (1, 2):
+        assert "loan_repaid" in out[ed]["types"] and not {"loan_defaulted", "loan_restructured"} & set(out[ed]["types"]), ed
 
 
-def test_loan_registry_partial_seizure_documented_difference():
+def test_loan_registry_partial_seizure_matches():
     def run(k, ed):
         a, b, _ = workers(k)
         enact(k, "Loan Registry", ed)
         n = _loan(k, a, b, qty=5, repay=6)
         k.agent(b)["holdings"]["timber"] = 2.0
-        nxt(k)                                                           # due: 2 of 6 seized
-        first = (k.bal(a, "timber"), k.w["loans"][n]["status"])
+        start = len(k.events)
+        nxt(k)                                                           # due: 2 of 6 seized, the rest in default
+        ln = k.w["loans"][n]
+        first = (k.bal(a, "timber"), ln["status"], ln["repaid"], CR.record(k, b)["defaults"])
+        ts = types(k, start)
         k.agent(b)["holdings"]["timber"] = 3.0
         nxt(k)
-        return first, k.bal(a, "timber"), k.bal(b, "timber"), k.w["loans"][n]["status"]
+        return first, k.bal(a, "timber"), k.bal(b, "timber"), k.w["loans"][n]["status"], ts
     out = both(run)
-    assert out[1][0] == (17.0, "defaulted") and out[2][0] == (17.0, "active")
-    assert out[1][1:] == (17.0, 3.0, "defaulted")                         # edition 1 seizes once
-    assert out[2][1:] == (20.0, 0.0, "active")                            # edition 2 seizes again each round until paid
+    assert out[1][:4] == out[2][:4] == ((17.0, "defaulted", 2.0, 1), 17.0, 3.0, "defaulted")   # seized once, in both editions
+    assert "loan_payment" not in out[1][4] and out[2][4].index("loan_payment") < out[2][4].index("loan_defaulted")   # GAPS (1)
+
+
+def test_loan_registry_v2_is_built_from_the_loan_hooks():
+    calls = L.calls(L.check(LB.LIB2["Loan Registry"]["code"], v2=True))
+    assert "settle_loan" in calls and "restructure_loan" not in calls
+    assert "before_default_loan" in LB.LIB2["Loan Registry"]["code"]
 
 
 def test_handshake_loans_match_and_keep_a_public_register():
@@ -185,38 +193,52 @@ def test_handshake_loans_match_and_keep_a_public_register():
 
 def test_debtor_sanctions_limit_the_defaulter_in_both_editions():
     def run(k, ed):
-        a, b, _ = workers(k)
+        a, b, c = workers(k)
         enact(k, "Debtor Sanctions", ed)
         _loan(k, a, b)
         k.agent(b)["holdings"]["timber"] = 0.0
         nxt(k)
         barred = CR.barred(k, b)
-        return k.agent(b).get("limit"), k.bal(a, "timber"), barred
+        A.act(k, c, "lend", {"to": b, "item": "timber", "qty": 1, "repay_qty": 1, "due_in": 2})
+        try:
+            A.act(k, b, "accept_loan", {"loan": f"N{k.w['loan_seq']}"})
+            bar = None
+        except A.ActionError as e:
+            bar = str(e)
+        return k.agent(b).get("limit"), k.bal(a, "timber"), barred, bar
     out = both(run)
     assert out[1][0] == out[2][0] == {"n": 2, "until": out[1][0]["until"]} and out[1][1] == out[2][1] == 15.0
-    assert out[1][2] is True and out[2][2] is False                       # GAPS: edition 2 cannot bar new borrowing
+    assert "in default" in out[1][3] and "in default" in out[2][3]      # both editions bar new borrowing while in default
+    assert out[1][2] is True and out[2][2] is False                       # GAPS: edition 2's bar is the law's block, not credit.barred
 
 
-def test_usury_law_refuses_in_edition_1_and_rewrites_in_edition_2():
+def test_usury_law_refuses_offers_and_acceptances_in_both_editions():
+    def run(k, ed):
+        enact(k, "Handshake Loans", 1)                                   # loans exist
+        a, b, c = workers(k)
+        A.act(k, a, "lend", {"to": c, "item": "timber", "qty": 5, "repay_qty": 10, "due_in": 2})   # offered before the law
+        early = f"N{k.w['loan_seq']}"
+        old = _loan(k, a, b, qty=10, repay=10, due_in=3, rate=0.2)       # taken before the law: 20% per round
+        enact(k, "Usury Law", ed)
+        errs = []
+        for actor, act, args in ((a, "lend", {"to": b, "item": "timber", "qty": 5, "repay_qty": 10, "due_in": 2}),   # premium 50%
+                                 (a, "lend", {"to": b, "item": "timber", "qty": 10, "repay_qty": 10, "due_in": 3, "rate": 0.2}),
+                                 (c, "accept_loan", {"loan": early})):
+            with pytest.raises(A.ActionError) as e:
+                A.act(k, actor, act, args)
+            errs.append(str(e.value))
+        fair = _loan(k, a, c, qty=10, repay=10, due_in=3, rate=0.05)     # at the cap: allowed
+        offers = sum(1 for ln in k.w["loans"].values() if ln["status"] in ("offered", "active"))
+        nxt(k)
+        nxt(k)
+        return errs, k.w["loans"][old]["rate"], k.w["loans"][fair]["status"], offers, types(k)
+    out = both(run)
+    assert all("interest cap" in e for e in out[1][0]) and all("Usury Law caps interest" in e for e in out[2][0])
+    assert out[1][1:4] == out[2][1:4] == (0.05, "active", 3)             # the old loan's rate is cut to the cap in both editions
+    assert "loan_rate_capped" in out[1][4] and "loan_restructured" in out[2][4]   # GAPS (1): when and how it is cut
     k1, k2 = make(edition=1), make(edition=2)
     for k, ed in ((k1, 1), (k2, 2)):
-        enact(k, "Handshake Loans", 1)                                   # loans exist
         enact(k, "Usury Law", ed)
-    a, b, c = workers(k1)
-    with pytest.raises(A.ActionError, match="interest cap"):
-        A.act(k1, a, "lend", {"to": b, "item": "timber", "qty": 5, "repay_qty": 10, "due_in": 2})
-    a, b, c = workers(k2)
-    n1 = _loan(k2, a, b, qty=5, repay=10, due_in=2)                       # premium 50% per round
-    n2 = _loan(k2, a, c, qty=10, repay=10, due_in=3, rate=0.2)            # rate 20% per round
-    k2.end_round(None)                                                    # rewritten before any interest accrues
-    l1, l2 = k2.w["loans"][n1], k2.w["loans"][n2]
-    assert l1["repay_qty"] == pytest.approx(5 * 1.1) and l1["rate"] == 0
-    assert l2["rate"] == pytest.approx(0.05) and l2["repay_qty"] == 10
-    k2.start_round()
-    k2.end_round(None)
-    k2.start_round()
-    assert k2.w["loans"][n2]["repay_qty"] == pytest.approx(11.0)          # two accruals at 5% of 10 (at 20% it would be 14)
-    assert [e["type"] for e in k2.events].count("loan_restructured") == 2
     lid = next(l for l in k2.w["laws"] if k2.w["laws"][l]["title"] == "Usury Law")
     assert k2.w["laws"][lid]["public"]["interest_cap"] == 0.05
     assert LB.PREDICATES["Usury Law"](k2, None) and LB.PREDICATES["Usury Law"](k1, None)   # the predicate reads the published cap

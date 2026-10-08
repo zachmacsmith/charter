@@ -1214,6 +1214,62 @@ def do_guard_release(k, guard, agent, lid=None, why="stop") -> dict:
     return CF.guard_release(k, guard, agent, lid, why)
 
 
+# ====================================================================== loans: the credit lifecycle (credit.py)
+# offer_loan, accept_loan, repay_loan, extend_loan, default_loan, settle_loan. Their callers keep their checks (credit.lend, accept,
+# repay, extend; credit.settle at the due round; the law API's forgive_loan, restructure_loan and, under law.v2, settle_loan), so
+# without law.v2 every loan event, state and refusal is what it was. The changes live in credit.change_*. Under law.v2 each one gets
+# before_/after_ hooks: a law can refuse an offer (before_offer_loan) or an acceptance (before_accept_loan), collect a debt before it
+# defaults (before_default_loan: settle_loan or extend first and nothing defaults) and record repayments (after_settle_loan).
+# Options: data = the due-round event data (seized, consequence) of default_loan and settle_loan; lid = the law settling a loan.
+OPTIONS.update({"offer_loan": frozenset(), "accept_loan": frozenset(), "repay_loan": frozenset(), "extend_loan": frozenset(),
+                "default_loan": frozenset({"data"}), "settle_loan": frozenset({"lid", "data"})})
+
+
+def check_settle_loan(k, p):
+    from charter import credit as CR
+    if str(p["loan"]) not in k.w["loans"]:
+        raise L.LawError(f"no loan {p['loan']}")
+    if p["how"] not in CR.SETTLE_HOWS:
+        raise L.LawError(f"how must be one of {', '.join(CR.SETTLE_HOWS)}, not {p['how']!r}")
+    paid = float(p["paid"] or 0.0)
+    if paid < 0 or paid != paid:
+        raise L.LawError("paid must be non-negative")
+    return {**p, "loan": str(p["loan"]), "paid": paid}
+
+
+CHECKS["settle_loan"] = check_settle_loan
+
+
+def do_offer_loan(k, lender, borrower, terms) -> dict:
+    from charter import credit as CR
+    return CR.change_offer(k, lender, borrower, terms)
+
+
+def do_accept_loan(k, loan, lender, borrower, terms) -> dict:
+    from charter import credit as CR
+    return CR.change_accept(k, loan, lender, borrower)
+
+
+def do_repay_loan(k, loan, borrower, lender, item, qty) -> dict:
+    from charter import credit as CR
+    return CR.change_repay(k, loan, borrower, lender, item, qty)
+
+
+def do_extend_loan(k, loan, lender, borrower, rounds, rate) -> dict:
+    from charter import credit as CR
+    return CR.change_extend(k, loan, lender, borrower, rounds, rate)
+
+
+def do_default_loan(k, loan, lender, borrower, owed, data=None) -> dict:
+    from charter import credit as CR
+    return CR.change_default(k, loan, lender, borrower, owed, data)
+
+
+def do_settle_loan(k, loan, paid, how, lid=None, data=None) -> dict:
+    from charter import credit as CR
+    return CR.change_settle(k, loan, paid, how, lid, data)
+
+
 # ====================================================================== P3.1: law.v2 -- primitive hooks from any cause, cascades, limited death
 # Behind spec `law.v2` (default false: nothing below runs, and apply is the P2.x code above). Review 09 §4, §9; ARCHITECTURE §5, §6.
 #

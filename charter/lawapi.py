@@ -198,6 +198,7 @@ LAWFNS = _fns(
         F("restructure_loan", "money", power="legacy_reserve", primitive="loan_terms"),
         F("lend_from_reserve", "money", ((0, "borrower"),), power="legacy_reserve", primitive="offer_loan"),
         F("buy_loan", "money", power="legacy_reserve", primitive="loan_assign"),
+        F("settle_loan", "money", power="legacy_reserve", primitive="settle_loan", docs="requires", v2=True),   # a law-run registry
         F("credit_record", "read", ((0, "a"),), scope="read"),
         F("reserve_ratio", "read"),
         F("redemption_open", "read"),
@@ -295,7 +296,7 @@ LAWFNS = _fns(
         F("law_id", "read", scope="none", why="the calling law's own id", docs="requires", v2=True),
         F("treasury", "read", scope="none", why="the owner key of the calling law's own treasury", docs="requires", v2=True),
         F("set_conflict_rule", "governance", scope="none", why="sets the conflict rule of the calling law's own polity (P3.2; only "
-          "a constitution-rank law may)", docs="requires", v2=True),
+          "a constitution-rank law may)", docs="requires", v2=True, primitive="set_conflict_rule"),
     ),
     _module(
         "amendment",                                                    # law.v2 (P3.4): laws propose laws and amendments (D-16: L3)

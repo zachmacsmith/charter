@@ -302,6 +302,155 @@ def test_restructure_loan_by_law():
     assert ln["status"] == "active" and ln["repay_qty"] == pytest.approx(2) and ln["due"] == k.r + 5
 
 
+# ------------------------------------------------------------------ the loan primitives (Kernel.apply; law.v2 hooks)
+def loan_scenario() -> dict:
+    """Every path of the credit lifecycle without law.v2, scripted: offers, acceptances, partial, full and late repayment, interest
+    (simple and compounding), defaults under each consequence (partial seizure, sanction and the bar on borrowing), rollover,
+    refinancing, the interest cap (a refused offer, a refused acceptance, a rate capped at accrual), restructuring to nothing owed,
+    forgiveness, a reserve loan and a bailout. Returns everything the loans left behind; LOAN_SCENARIO pins it to the run before the
+    lifecycle was routed through Kernel.apply (dbd8c95), so routing changed nothing."""
+    k = make()
+    a, b, c = workers(k)
+    out = []
+
+    def act(who, name, args):
+        try:
+            out.append(A.act(k, who, name, args))
+        except A.ActionError as e:
+            out.append("ERR " + str(e))
+
+    def last():
+        return f"N{k.w['loan_seq']}"
+
+    lib(k, "Loan Registry")
+    act(a, "lend", {"to": b, "item": "stone", "qty": 4, "repay_qty": 30, "due_in": 1})                         # N1
+    act(c, "lend", {"to": b, "item": "timber", "qty": 6, "due_in": 3, "rate": 0.1, "compound": True})            # N2
+    act(a, "lend", {"to": c, "item": "timber", "qty": 5, "repay_qty": 6, "due_in": 4, "rate": 0.05})            # N3
+    act(b, "accept_loan", {"loan": "N1"})
+    act(b, "accept_loan", {"loan": "N2"})
+    act(c, "accept_loan", {"loan": "N3"})
+    act(c, "repay_loan", {"loan": "N3", "qty": 2})
+    act(b, "repay_loan", {"loan": "N9"})
+    nxt(k)                                                             # N1 due: partial seizure, default
+    law(k, 'title="Default rule"\nintent="i"\ndef on_enact():\n    set_default_consequence("seize_sanction")\n')
+    act(c, "lend", {"to": b, "item": "timber", "qty": 1, "due_in": 2})                                           # N4
+    act(b, "accept_loan", {"loan": "N4"})                              # barred while in default
+    act(a, "extend_loan", {"loan": "N1", "rounds": 2, "rate": 0})      # revives N1
+    act(a, "extend_loan", {"loan": "N1", "rounds": 1, "rate": 0.5})
+    act(b, "lend", {"to": c, "item": "timber", "qty": 8, "repay_qty": 9, "due_in": 4, "refinance": "N3"})      # N5 pays a off
+    act(c, "accept_loan", {"loan": "N5"})
+    act(a, "lend", {"to": b, "item": "timber", "qty": 2, "repay_qty": 9, "due_in": 1})                          # N6
+    lib(k, "Usury Law")
+    act(a, "lend", {"to": b, "item": "timber", "qty": 2, "repay_qty": 9, "due_in": 1})                          # refused
+    act(b, "accept_loan", {"loan": "N6"})                              # refused at acceptance
+    nxt(k)                                                             # N2's rate capped at accrual
+    k.agent(b)["holdings"]["stone"] = 50.0
+    act(b, "repay_loan", {"loan": "N1"})
+    law(k, 'title="Haircut"\nintent="i"\ndef on_enact():\n    restructure_loan("N2", 0)\n    restructure_loan("N5", 3, 2, 0)\n')
+    law(k, 'title="Reserve"\nintent="i"\ndef on_enact():\n    lend_from_reserve("' + b + '", "timber", 2, 2, 1)\n')
+    k.w["reserve"]["timber"] = k.w["reserve"].get("timber", 0) + 10
+    act(b, "accept_loan", {"loan": last()})
+    act(c, "lend", {"to": b, "item": "timber", "qty": 3, "repay_qty": 3, "due_in": 1})
+    act(b, "accept_loan", {"loan": last()})
+    k.agent(b)["holdings"] = {}
+    nxt(k)                                                             # defaults: nothing to seize, sanctioned
+    lib(k, "Bailout Act")
+    nxt(k)                                                             # the reserve bought the defaulted loans
+    k.agent(c)["holdings"]["timber"] = 1.0
+    act(c, "repay_loan", {"loan": "N5", "qty": 0.5})
+    lib(k, "Debt Jubilee")
+    nxt(k)
+    keep = ("loan", "move", "sanction", "rights")
+    return {"out": out, "loans": k.w["loans"], "records": {x: CR.record(k, x) for x in (a, b, c, "reserve")},
+            "holdings": {x: k.agent(x)["holdings"] for x in (a, b, c)}, "limit": k.agent(b).get("limit"),
+            "events": [(e["type"], e["agent"], e["data"], e["vis"]) for e in k.events if e["type"].startswith(keep)],
+            "metrics": CR.metrics({"snapshots": [{"round": k.r, "loans": k.w["loans"], "prices": {}}], "events": k.events,
+                                   "unit": k.w["unit"]})}
+
+
+LOAN_SCENARIO = "a09daebf238217b8"                                     # sha256 of loan_scenario() at dbd8c95 (before routing)
+
+
+def test_loan_scenario_is_unchanged_by_routing():
+    import hashlib
+    got = hashlib.sha256(json.dumps(loan_scenario(), sort_keys=True, default=str).encode()).hexdigest()[:16]
+    assert got == LOAN_SCENARIO
+
+
+
+def test_the_loan_lifecycle_is_routed_through_kernel_apply(monkeypatch):
+    from charter import dispatch as D
+    k = make()
+    a, b, _ = workers(k)
+    lib(k, "Loan Registry")
+    seen = []
+    real = D.apply
+    monkeypatch.setattr(D, "apply", lambda k_, name, payload: (seen.append(name), real(k_, name, payload))[1])
+    A.act(k, a, "lend", {"to": b, "item": "timber", "qty": 5, "repay_qty": 6, "due_in": 1, "rate": 0.1})
+    A.act(k, b, "accept_loan", {"loan": "N1"})
+    A.act(k, b, "repay_loan", {"loan": "N1", "qty": 1})
+    A.act(k, a, "extend_loan", {"loan": "N1", "rounds": 1})
+    k.agent(b)["holdings"]["timber"] = 0.0
+    nxt(k)
+    nxt(k)                                                             # due: nothing to seize, in default
+    for p in ("offer_loan", "accept_loan", "repay_loan", "settle_loan", "extend_loan", "default_loan"):
+        assert p in seen, p
+    assert k.w["loans"]["N1"]["status"] == "defaulted"
+    law(k, 'title="Jubilee"\nintent="i"\ndef on_enact():\n    forgive_loan("N1")\n')
+    assert seen[-1] == "settle_loan" and k.w["loans"]["N1"]["status"] == "forgiven"
+
+
+def test_settle_loan_is_a_law_v2_function_only():
+    k = make()
+    assert "settle_loan" not in k.api_for("constitution")
+    k2 = make(law__v2=True)
+    assert "settle_loan" in k2.api_for("constitution")
+
+
+def _v2_world():
+    k = make(law__v2=True)
+    a, b, c = workers(k)
+    lib(k, "Handshake Loans")
+    return k, a, b, c
+
+
+def test_v2_hooks_refuse_an_offer_and_an_acceptance():
+    k, a, b, c = _v2_world()
+    law(k, 'title="No big loans"\nintent="i"\n'
+           'def before_offer_loan(p, chain):\n    if p["terms"]["qty"] > 5:\n        return {"block": True, "reason": "too big"}\n'
+           'def before_accept_loan(p, chain):\n    if p["borrower"] == "' + c + '":\n        return False\n')
+    with pytest.raises(A.ActionError, match="too big"):
+        A.act(k, a, "lend", {"to": b, "item": "timber", "qty": 6})
+    assert not any(ln["status"] == "offered" for ln in k.w["loans"].values()) and k.bal(a, "timber") == 20
+    A.act(k, a, "lend", {"to": c, "item": "timber", "qty": 2})
+    with pytest.raises(A.ActionError, match="blocked"):
+        A.act(k, c, "accept_loan", {"loan": f"N{k.w['loan_seq']}"})
+    assert k.w["loans"][f"N{k.w['loan_seq']}"]["status"] == "offered" and k.bal(c, "timber") == 20
+
+
+def test_v2_a_law_run_registry_collects_before_default_and_records_repayments():
+    k, a, b, c = _v2_world()
+    lid = law(k, 'title="Collector"\nintent="i"\n'
+                 'def before_default_loan(p, chain):\n'
+                 '    ln = loans()[p["loan"]]\n'
+                 '    got = min(balance(p["borrower"], ln["repay_item"]), p["owed"])\n'
+                 '    if got > 0 and move(p["borrower"], p["lender"], ln["repay_item"], got):\n'
+                 '        settle_loan(p["loan"], got, "seize")\n'
+                 'def after_settle_loan(p, chain):\n'
+                 '    state.setdefault("paid", []).append([p["loan"], p["paid"], p["how"], p["result"]["status"]])\n')
+    A.act(k, a, "lend", {"to": b, "item": "timber", "qty": 5, "repay_qty": 6, "due_in": 1})
+    A.act(k, b, "accept_loan", {"loan": "N1"})
+    A.act(k, b, "repay_loan", {"loan": "N1", "qty": 1})
+    nxt(k)                                                             # due: the law collects the other 5 first; nothing defaults
+    ln = k.w["loans"]["N1"]
+    assert ln["status"] == "repaid" and "defaulted_round" not in ln and CR.record(k, b)["defaults"] == 0
+    assert k.bal(a, "timber") == 21 and k.bal(b, "timber") == 19
+    assert k.w["laws"][lid]["state"]["paid"] == [["N1", 1.0, "repay", "active"], ["N1", 5.0, "seize", "repaid"]]
+    assert not [e for e in k.events if e["type"] == "loan_defaulted"]
+    rep = [e for e in k.events if e["type"] == "loan_repaid"][-1]
+    assert rep["data"]["law"] == lid and rep["data"]["seized"] is True
+
+
 def test_scripted_run_with_credit_laws_in_force(tmp_path):
     from charter import agents, runner, scorer
     sp = spec.load("E6")

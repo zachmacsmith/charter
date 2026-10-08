@@ -47,7 +47,7 @@ LIVE = [p for p in PR.PRIMITIVES.values() if p.status == "live"]
 #     the `lawful_force` record is monitor-only.
 #   - ARCHITECTURE §3.3 catalogue lacks loans (credit), leases, projects, the outside power, Scholars' libraries, files/notes,
 #     hidden powers, law-defined actions (invoke), courts (accuse/respond), request_fix, roles and goals; they are declared here as
-#     offer_loan/open_loan/settle_loan/loan_terms/loan_assign, offer_lease/lease, start_project/contribute/settle_project/
+#     offer_loan/accept_loan/repay_loan/extend_loan/default_loan/settle_loan/loan_terms/loan_assign, offer_lease/lease, start_project/contribute/settle_project/
 #     create_camp, demand_tribute/destroy, library_doc/library_permit/set_capacity, write_note/share_note, use_power, invoke,
 #     open_case/answer_case, request_fix, set_role, set_goal, plus set_money_rule, set_media_rule, set_outlet_rule, set_price,
 #     set_arms_rule, set_succession_rule, set_project_rule, set_power_rule, appoint, set_initiative, hire_assassin, set_will,
@@ -77,8 +77,8 @@ KNOWN_GAPS = frozenset({
     ("gate", "mint"), ("gate", "burn"), ("gate", "destroy"), ("gate", "set_dm_limit"), ("gate", "set_initiative"),
     ("gate", "set_will"), ("gate", "name_successor"), ("gate", "subscribe"), ("gate", "licence"), ("gate", "set_price"),
     ("gate", "library_doc"), ("gate", "library_permit"), ("gate", "set_capacity"), ("gate", "found"), ("gate", "invite"),
-    ("gate", "admit"), ("gate", "expel"), ("gate", "declare"), ("gate", "dissolve"), ("gate", "offer_loan"),
-    ("gate", "open_loan"), ("gate", "settle_loan"), ("gate", "loan_terms"), ("gate", "improve_camp"), ("gate", "contribute"),
+    ("gate", "admit"), ("gate", "expel"), ("gate", "declare"), ("gate", "dissolve"),
+    ("gate", "improve_camp"), ("gate", "contribute"),
     ("gate", "invoke"), ("gate", "request_fix"), ("gate", "open_case"), ("gate", "answer_case"),
 })
 KNOWN_GAPS_FROZEN = KNOWN_GAPS                                          # the P1.7 copy: never add to it

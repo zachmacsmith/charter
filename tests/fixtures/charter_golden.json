@@ -1,27 +1,27 @@
 {
  "E2_library2_6": {
-  "events.jsonl": "5090f6cdfc48b0a9",
-  "instance.json": "f73a738653110494",
+  "events.jsonl": "7a66d21715ffff65",
+  "instance.json": "70572cee8fff2234",
   "score": {
-   "activity_mix": "3c100a18e670cde0",
-   "agents": "cc2212d12640d3d0",
+   "activity_mix": "9fdaaf5d858fb12c",
+   "agents": "b78155935098a188",
    "goal_scores": {
-    "Bruna": 0.1433,
-    "Iris": 0.8909,
-    "Maya": 0.2098,
-    "Oda": 0.3924,
-    "Petra": 0.0659,
-    "Rakel": 0.4454,
-    "Siv": 0.3086,
+    "Bruna": 0.1174,
+    "Iris": 0.8899,
+    "Maya": 0.1726,
+    "Oda": 0.3316,
+    "Petra": 0.0763,
+    "Rakel": 0.443,
+    "Siv": 0.3036,
     "Valter": 0.3,
     "Wanda": 0.0,
-    "Yuri": 0.0395
+    "Yuri": 0.8698
    },
-   "goals": "6b8ea89a6bbafb34",
+   "goals": "9e92059fb47d0a32",
    "lineage": "74234e98afe7498f",
-   "summary": "50e35b9d55d9c677"
+   "summary": "9a7d095ee6237cd4"
   },
-  "snapshots.json": "9a10a8d695f05a96"
+  "snapshots.json": "9fd23a1f91a8c4eb"
  },
  "E2_rng2_drift_5": {
   "events.jsonl": "0421a67ee62680a5",
@@ -469,7 +469,7 @@
  },
  "society_law_v2": {
   "events.jsonl": "545d98d23ce64f45",
-  "instance.json": "56f097f634118161",
+  "instance.json": "9bc39313fb9fe59a",
   "score": {
    "activity_mix": "0d7447567b6170cc",
    "agents": "09986d88c5feda81",
