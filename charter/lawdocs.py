@@ -316,6 +316,19 @@ E += [
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2")))
                  for n in ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")})
+# proposals by law (charter/amendment.py, P3.4): documented only in law.v2 worlds (REQUIRES); procedural, so from law level L3 (D-16)
+E += [
+    ("propose_law", "governance", "Governance", "propose_law(code, intent=None)", "proposes a new law (complete code) in this "
+     "law's jurisdiction, written by \"law:<this law's id>\"; it goes through the procedure like an agent's proposal (no dry run). "
+     "Returns {\"ok\": True, \"law\": \"L9\"} or {\"ok\": False, \"reason\": \"...\"}; the procedure decides after this call ends. "
+     "At most one proposal per law per round. Procedural: law level L3 and up.", "prompt", "common"),
+    ("propose_amendment", "governance", "Governance", "propose_amendment(target, code, reason=\"\")", "proposes new code for a "
+     "law in force of this jurisdiction and rank at most this law's; when it passes, the target keeps its id, state, public data and "
+     "place, and laws importing it follow the new version (or are pinned to the old one if it drops what they use). The procedure "
+     "of the highest class among the new code and those importers decides. Returns as propose_law (a refusal names its reason: an "
+     "import cycle, a higher rank, ...). Procedural: law level L3 and up.", "prompt", "common"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("propose_law", "propose_amendment")})
 ENTRIES ={e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers",
                "Jurisdictions", "Media", "Life"]

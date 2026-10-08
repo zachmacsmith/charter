@@ -852,10 +852,13 @@ _RIGHT_CALLS = {"grant": "grant", "revoke": "revoke", "suspend": "suspend"}
 def draft(k, lid) -> dict:
     """The `propose` payload's draft (review 09 §5): the record's fields plus static facts read from the AST, so a reviewing law
     never parses code. calls: the law-API functions it calls (sorted); hooks: the hooks it defines; rights: constant rights it
-    grants, revokes or suspends; repeals: a repeal law's target. rank: "statute" until ranks exist (P3.2)."""
+    grants, revokes or suspends; repeals: a repeal law's target. rank: the record's (an amendment's: max of its target's and its
+    own, P3.4), else "statute" (P3.2). imports ([{alias, ref}]) and exports (names) from lawlang.static_info; amends: the law an
+    amendment draft amends (None), and for one its reason and dependents (linker.preview_amend at proposal)."""
     import ast
     law = k.w["laws"][lid]
     tree = ast.parse(law["code"])
+    info = L.static_info(tree)
     rights = {x: set() for x in _RIGHT_CALLS.values()}
     for n in ast.walk(tree):
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in _RIGHT_CALLS and len(n.args) >= 2 \
@@ -864,7 +867,10 @@ def draft(k, lid) -> dict:
     hooks = sorted(n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in PR.HOOKS)
     return {"id": lid, "title": law["title"], "intent": law["intent"], "code": law["code"], "cls": law["cls"],
             "rank": law.get("rank") or "statute", "author": law["author"], "calls": sorted(L.calls(tree) & L.API), "hooks": hooks,
-            "rights": {x: sorted(v) for x, v in rights.items()}, "repeals": law["repeal_target"]}
+            "rights": {x: sorted(v) for x, v in rights.items()}, "imports": info["imports"], "exports": info["exports"],
+            "amends": law.get("amends"), "repeals": law["repeal_target"],
+            **({"reason": law.get("amend_reason") or "", "dependents": [dict(x) for x in law.get("dependents") or ()]}
+               if law.get("amends") else {})}
 
 
 def do_propose(k, jurisdiction, draft, actor=None, preview=None) -> dict:
@@ -875,8 +881,14 @@ def do_propose(k, jurisdiction, draft, actor=None, preview=None) -> dict:
     lid = draft["id"]
     law = k.w["laws"][lid]
     shown = k.spec["conditions"]["effect_preview"]
+    extra = {}
+    if law.get("amends"):                                              # P3.4: an amendment draft (agent amend, propose_amendment)
+        extra.update({"amends": law["amends"], "rank": law.get("rank"), "reason": law.get("amend_reason") or ""})
+    if str(law["author"]).startswith("law:"):                          # P3.4: proposed by a law; it has no dry run
+        extra["by_law"] = law["author"][4:]
+        preview = preview if preview is not None else []
     k.log("proposal", actor, {"law": lid, "title": law["title"], "intent": law["intent"], "class": law["cls"], "code": law["code"],
-                              **({"jurisdiction": jurisdiction} if jurisdiction is not None else {}),
+                              **({"jurisdiction": jurisdiction} if jurisdiction is not None else {}), **extra,
                               **({"preview": preview[:40]} if shown else {})}, vis="public")
     if not shown:
         k.log("proposal_preview", actor, {"law": lid, "preview": preview[:40]}, vis="monitor")
@@ -989,9 +1001,21 @@ def do_amend(k, jurisdiction, law, old_sha, new_sha, diff, via, by, patch=None) 
             rec["status"] = "active"
     except L.LawError as e:
         rec["code"] = old
+        if via == "procedure":
+            rec["patches"].pop()
         k._load(law)
+        if via == "procedure":                                          # P3.4: the caller fails the amendment draft
+            return {"ok": False, "error": str(e)}
         k.log("patch_failed", patch["by"], {"law": law, "error": str(e)}, vis="public")
         return {"ok": False}
+    if via == "procedure":                                              # P3.4: an amendment passed by the procedure (law.v2)
+        from charter import linker as LK
+        vs = rec.get("versions") or []
+        if vs and vs[-1]["sha"] == LK.sha(rec["code"]) and vs[-1]["round"] == k.r:
+            vs[-1].update({"via": "procedure", "by": by})
+        k.log("amended", None, {"law": law, "proposal": patch.get("proposal"), "by": by, "reason": patch.get("reason", ""),
+                                "version": rec.get("version"), "diff": patch.get("diff") or ""}, vis="public")
+        return {"ok": True}
     hidden = k.spec["conditions"]["fixer"] == "hidden"
     k.log("patched", patch["by"], {"law": law, "reason": patch["reason"], **({} if hidden else {"diff": patch["diff"]})}, vis="public")
     k.log("patch_diff", patch["by"], {"law": law, "diff": patch["diff"]}, vis="monitor")
@@ -1774,8 +1798,9 @@ def _blocked_vis(k, P, p):
 
 def on_block(k, cas, P, p, d: DecisionV2, chain):
     """A block that stands (D-18: the affected agents see the blocking laws and the reason): logged, then delivered to its cause:
-    move, enact and repeal return Outcome(ok=False) (an enactment is struck down, a repeal leaves the law in force); a proposal is
-    marked blocked; a refusable cause gets Blocked. None: the cause cannot be refused and the change goes ahead (logged, monitor)."""
+    move, enact, repeal and an amend via procedure (P3.4) return Outcome(ok=False) (an enactment or amendment is struck down, a
+    repeal leaves the law in force); a proposal is marked blocked; a refusable cause gets Blocked. None: the cause cannot be refused
+    and the change goes ahead (logged, monitor)."""
     name = P.name
     data = {"primitive": name, "by": list(d.blocked_by), **({"reason": d.reason} if d.reason else {})}
     if name == "propose":
@@ -1784,7 +1809,7 @@ def on_block(k, cas, P, p, d: DecisionV2, chain):
         k.log("proposal_blocked", None, {"law": lid, "by": list(d.blocked_by), **({"reason": d.reason} if d.reason else {})},
               vis="public")
         raise Blocked(name, d.blocked_by, d.reason)
-    if name in ("enact", "repeal"):
+    if name in ("enact", "repeal") or (name == "amend" and p.get("via") == "procedure"):   # P3.4: an amendment is struck down
         if name == "enact":
             k.w["laws"][p["law"]]["status"] = "struck_down"
         k.log("primitive_blocked", None, {**data, "law": p["law"]}, vis="public")

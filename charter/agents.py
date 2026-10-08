@@ -346,6 +346,8 @@ def legacy_actions(inst: dict, a: dict) -> list:
     if not (sp.get("projects") or P.DEFAULTS).get("enabled", True) and lvl < 2:
         absent |= {"contribute"}                                         # no random projects and no law can start one
     absent |= set(CX.ACTIONS)                                            # context: its actions exist only when it is on
+    if not (sp.get("law") or {}).get("v2") or lvl == 0:
+        absent |= {"amend"}                                              # law.v2 (P3.4): amend exists only in law.v2 worlds
     from charter import life as LF
     absent |= LF.absent_actions(inst, a)                               # life: only where Life (or mortality) is on
     return [k for k in ACTION_DOC if k not in absent] + {
@@ -443,6 +445,12 @@ def render_event(k, e, viewer=None) -> str | None:
         return None
     if t == "proposal":
         pv = ("\n  Effect preview (3-round dry run): " + "; ".join(d["preview"][:20])) if "preview" in d else ""
+        if "amends" in d or "by_law" in d:                              # law.v2 (P3.4): amendments and proposals by law
+            by = who or f"law {d['by_law']}"
+            what = f"{d['law']}, an amendment of {d['amends']} ({d['class']}, rank {d.get('rank')}; reason: {d.get('reason') or '-'})" \
+                if "amends" in d else f"{d['law']} '{d['title']}' ({d['class']})"
+            return f"{tag} {by} proposed {what}. Intent: {d['intent']}\n  Code:\n" + "\n".join(
+                "    " + ln for ln in d["code"].splitlines()[:60]) + pv
         return f"{tag} {who} proposed {d['law']} '{d['title']}' ({d['class']}). Intent: {d['intent']}\n  Code:\n" + "\n".join(
             "    " + ln for ln in d["code"].splitlines()[:60]) + pv
     if t == "ballot_open":
@@ -451,7 +459,8 @@ def render_event(k, e, viewer=None) -> str | None:
         return f"{tag} ballot {d['ballot']} closed: {d['result']} (votes {d['votes']})"
     if t == "vote":
         return f"{tag} {who} voted {d['choice']} on {d['ballot']}"
-    if t in ("enact", "repeal", "vetoed", "veto_window", "proposal_failed", "law_error", "patched", "patch_submitted", "patch_failed", "request_fix"):
+    if t in ("enact", "repeal", "vetoed", "veto_window", "proposal_failed", "law_error", "patched", "patch_submitted", "patch_failed", "request_fix",
+             "amended"):
         return f"{tag} {t}: " + json.dumps({x: y for x, y in d.items() if x != 'diff'} | ({"diff": d['diff'][:1500]} if 'diff' in d else {}))
     if t == "procedure_restored":
         return f"{tag} the {d['cls']} procedure set by law {d['law']} applies again, after the repeal of {d['after_repeal_of']}"

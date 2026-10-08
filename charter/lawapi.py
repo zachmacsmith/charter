@@ -44,7 +44,7 @@ AGENTISH = {"a", "aid", "agent", "guard", "borrower", "attacker", "target", "src
 GROUPS = ("read", "rights", "money", "camps", "governance", "output", "names", "sanctions", "text", "meta", "projects", "projects_read")
 STRUCTURAL_GROUPS = ("rights", "money", "sanctions", "projects")     # a call in these makes a law structural
 STRUCTURAL_EXTRA = ("open_ballot", "repeal")                       # governance and meta, but structural (repeal: review F1, P1.4)
-PROCEDURAL = ("set_procedure",)                                     # governance; makes a law procedural
+PROCEDURAL = ("set_procedure", "propose_law", "propose_amendment")   # governance; makes a law procedural (P3.4: law.v2, from L3)
 
 # Documentation mechanisms (where a function's or hook's text lives, and when it is shown):
 DOCS = {
@@ -294,6 +294,13 @@ LAWFNS = _fns(
         F("chain_laws", "read", scope="none", why="reads the chain it is given, binds nobody", docs="requires", v2=True),
         F("law_id", "read", scope="none", why="the calling law's own id", docs="requires", v2=True),
         F("treasury", "read", scope="none", why="the owner key of the calling law's own treasury", docs="requires", v2=True),
+    ),
+    _module(
+        "amendment",                                                    # law.v2 (P3.4): laws propose laws and amendments (D-16: L3)
+        F("propose_law", "governance", scope="none", why="a draft of the calling law's own jurisdiction, decided by its procedure",
+          docs="requires", primitive="propose", v2=True),
+        F("propose_amendment", "governance", scope="none", why="target is a law of the calling law's own jurisdiction (checked: "
+          "same jurisdiction, rank at most the caller's); decided by its procedure", docs="requires", primitive="propose", v2=True),
     ),
 )
 # P4.2: the power column of the rows every polity may call today (charter/powers.py; the legacy_reserve rows carry it on their own
