@@ -862,6 +862,11 @@ contracts: P2.1 → P4.1 → P4.2 → P4.3 (needs P3.1). Critical path to forks 
 | D-22 | `publish` and `set_dm_limit` dropped from the edge in the registry wiring (README) | Confirm as wired |
 | D-23 | Maker access: role or right | The role is the source of truth; `maker` and `scholar` stay role-bound rights (not grantable by law), as `rights.py` now encodes |
 | D-24 | Can a contract (association) hook its members' legal acts in their polity? | No: associations hook only their own legal acts and their members' non-legal primitives |
+| D-25 | Kernel scope (review 12) | The kernel holds only physics (P), epistemics (E) and the experimental contract (X); every rule two real legal systems differ on (L) becomes a default law ("default code") each regime seeds, readable and amendable; existing presets seed today's behaviour and stay byte-identical (user, 8 Oct) |
+| D-26 | Exit from a polity | Law, with no kernel bound: a Nationality Act sets it (free, taxed, delayed, permitted, banned); post-exit sanctions only through agents (laws may pay bounties, never act). Supersedes review 12's "bounded" default (user, 8 Oct). Exit from a contract stays guaranteed (proposed; awaiting confirmation) |
+| D-27 | Contract defaults in the kernel (W7a/P4.3-4.5) | Move to law: share valuation (Kernel.price NAV branch), wind-up order (shareholders pro rata, then members), the built-in procedures (become library procedures), per-contract limits, the contract column beyond physics, the enforcement dial, breach visibility, member liability, the agency action list (except "never votes"). Kernel keeps accounts, escrow, allowances, atomic swap, exit, "laws never act for an agent" (user, 8 Oct) |
+| D-28 | Incorporation | Proposed: contracts may be founded under a polity (`parent`); the parent's company law outranks the contract's code and grants benefits (courts, recognition of offices, liability rules); unincorporated contracts remain. Wave 8, with the Board port (shared nesting machinery) |
+| D-29 | V18: what new-style hooks may read | A law never reads a DM's text unless conditions.law_reads_dms and the DM is unencrypted, nor a private channel post's text (dispatch.hook_payload); metadata (who, to whom, where) stays visible pending the publication layer (review 12) |
 
 ---
 
