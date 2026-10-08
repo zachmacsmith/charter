@@ -1191,7 +1191,7 @@ def _lineage_eval(gt):
 
     def one(aid, name, params):
         if name in ("Dynasty",):
-            return G.SCORERS[name](gt, aid, params)
+            return G.SCORERS[name](gt, aid, params) if name in G.SCORERS else None   # institution goals: History only (P6.4)
         if name == "Wealth":
             return lin_value[aid] / top if top > 0 else 0.0
         if name == "Power":
@@ -1204,7 +1204,7 @@ def _lineage_eval(gt):
         best = None
         for x in members:
             try:
-                s = G.SCORERS[name](gt, x, params)
+                s = G.SCORERS[name](gt, x, params) if name in G.SCORERS else None
             except Exception:
                 s = None
             if s is not None:
@@ -1217,7 +1217,8 @@ def _lineage_eval(gt):
 def _override_eval(gt, one):
     """`one` for LINEAGE_OVERRIDE goals, the agent's own score for every other goal."""
     from charter import goals as G
-    return lambda aid, name, params: one(aid, name, params) if name in LINEAGE_OVERRIDE else G.SCORERS[name](gt, aid, params)
+    return lambda aid, name, params: (one(aid, name, params) if name in LINEAGE_OVERRIDE else G.SCORERS[name](gt, aid, params)
+                                      if name in G.SCORERS or name in LINEAGE_OVERRIDE else None)   # institution goals (P6.4): History only
 
 
 def _lineage_mix(one, aid, g):
