@@ -135,6 +135,10 @@ CALLS = {
     "set_birth_rules": "set_birth_rules(max_children=1)",
     "publish_commissions": "publish_commissions(True)",
     "publish_births": "publish_births(True)",
+    "set_conflict_rule": "set_conflict_rule('posterior')",
+    "propose_law": "propose_law(PROPOSAL)",
+    "propose_amendment": "propose_amendment('{other}', PROPOSAL, 'tidy')",
+    "settle_loan": "enable_loans()\n    settle_loan(lend_from_reserve('{a}', 'timber', 2), paid=1)",
 }
 CALL_MODULE = '''
 def tinker(agent, *args):
@@ -145,6 +149,10 @@ def proc(p):
 
 def penalty(guilty, accuser):
     fine(guilty, "timber", 1)
+
+PROPOSAL = """title = "Proposed"
+intent = "test"
+"""
 '''
 JUR_ONLY = {"admit", "expel", "lawful_attack"}
 WRITERS = sorted(n for n, f in LA.LAWFNS.items() if f.primitive)
@@ -177,7 +185,8 @@ def _writer_law(k, name, dies):
     body = CALLS[name].format(**_setup(k, name))
     code = law(f"Writer {name}", CALL_MODULE + "\ndef after_post(p, chain):\n    state['ran'] = 1\n    " + body + "\n    state['done'] = 1\n"
                + "    public_note.append(1)\n" + (LOOP if dies else ""))
-    code = code.replace('intent = "test"\n', 'intent = "test"\npublic_note = []\n')
+    code = code.replace('intent = "test"\n', 'intent = "test"\npublic_note = []\n'
+                        + ('rank = "constitution"\n' if name == "set_conflict_rule" else ""))   # only a constitution may set it
     lid = enact(k, code)
     if name == "clear_obligations":                                  # an obligation of this law's to clear
         a, b, _ = workers(k)
@@ -198,7 +207,7 @@ def test_a_killed_invocation_leaves_no_trace_whatever_it_wrote(name):
     assert ab is None and out is None
     after = image(k)
     assert k.w["laws"][lid]["state"].get("done") == 1, (name, k.w["laws"][lid]["status"], events(k, "law_error")[-1:])
-    changed = {x for x in before["w"] if before["w"][x] != after["w"].get(x)} - {"laws"}
+    changed = {x for x in set(before["w"]) | set(after["w"]) if before["w"].get(x) != after["w"].get(x)} - {"laws"}   # new keys count
     assert changed or len(after["events"]) > len(before["events"]) or after["fnreg"] != before["fnreg"], name
     # killed
     k = world(jur=jur)
@@ -275,10 +284,11 @@ def test_a_runtime_error_rolls_back_in_place_and_suspends_the_law():
     ta = k.bal(a, "timber")
     lid = enact(k, law("Oops", f"def after_post(p, chain):\n    move('{a}', '{b}', 'timber', 1)\n    public['n'] = 1\n"
                                "    state['n'] = 1\n    x = 1 / 0\n"))
+    # P3.7: under law.v2 a law's move also notifies the party it moved goods from (a `compelled` event), undone with it
     pub = k.w["laws"][lid]["public"]
     agent = k.w["agents"][a]
     out, ab = run_hook(k, lid)
-    assert out is D.DEAD and ab["kind"] == "error" and ab["dropped"] == {"move": 1}
+    assert out is D.DEAD and ab["kind"] == "error" and ab["dropped"] == {"move": 1, "compelled": 1}
     assert k.bal(a, "timber") == ta and k.w["laws"][lid]["state"] == {} and pub == {}
     assert k.w["laws"][lid]["public"] is pub and k.ns[lid]["public"] is pub and k.ns[lid]["state"] is k.w["laws"][lid]["state"]
     assert k.w["agents"][a] is agent                                     # restored in place: references stay valid
@@ -312,7 +322,7 @@ def test_a_dying_after_hook_through_the_cascade():
     assert (k.bal(a, "timber"), k.bal(b, "timber"), k.bal(c, "timber")) == (ta - 1, tb + 1, tc)
     assert k.w["laws"][spin]["state"] == {} and k.w["laws"][ledger]["state"]["n"] == 1
     ab = events(k, "hook_aborted")[-1]
-    assert ab["vis"] == "monitor" and ab["data"]["law"] == spin and ab["data"]["dropped"] == {"move": 1}
+    assert ab["vis"] == "monitor" and ab["data"]["law"] == spin and ab["data"]["dropped"] == {"move": 1, "compelled": 1}
     assert events(k, "cascade_halted")[-1]["data"]["dropped"] == 1
 
 
@@ -354,7 +364,7 @@ def test_determinism_and_replay_with_aborted_invocations(tmp_path, monkeypatch, 
         assert (a / f).read_bytes() == (b / f).read_bytes(), f
     evs = [json.loads(x) for x in (a / "events.jsonl").read_text().splitlines()]
     aborted = [e for e in evs if e["type"] == "hook_aborted"]
-    assert aborted and all(e["data"]["dropped"] == {"move": 1} and e["vis"] == "monitor" for e in aborted)
+    assert aborted and all(e["data"]["dropped"] == {"move": 1, "compelled": 1} and e["vis"] == "monitor" for e in aborted)
     monkeypatch.setattr(M, "load_env", lambda: None)
     M.main(["replay", str(a), "--out", str(tmp_path / "rep")])
     for f in ("events.jsonl", "snapshots.json"):

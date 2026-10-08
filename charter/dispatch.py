@@ -2471,6 +2471,7 @@ NOTIFY = tuple(n for n, p in PR.PRIMITIVES.items() if p.status == "live" and p.c
 NOTIFY_SITES = {"set_title": "kernel:Kernel.api_for.title calls compel_note/compelled itself",
                 "offer_loan": "its own loan_offer event reaches the lender and the borrower",
                 "create_clause": "no party: a clause is the law's own record"}
+OWN_EVENT = ("offer_loan",)          # routed through apply since loans became primitives, but its own event already tells the parties
 
 
 def notify_on(k) -> bool:
@@ -2495,7 +2496,7 @@ DONE = {"move": lambda r: bool(r) and (r.get("moved") or 0) > 0}       # did the
 
 def compel_note(k, name, p, opts=None) -> dict | None:
     """Before a change: the note compelled() logs after it, or None (notification off, not law-caused, no agent party)."""
-    if name not in NOTIFY or k.dry or not notify_on(k):
+    if name not in NOTIFY or name in OWN_EVENT or k.dry or not notify_on(k):
         return None
     f = next((f for f in reversed(k._causes) if next(iter(f)) == "law"), None)
     if f is None or f.get("charge"):
