@@ -242,6 +242,33 @@ def test_v17_laws_see_only_registered_channels():
     assert set(k.api_for(lid)["channels"]()) == {"cell"}
 
 
+def test_with_jurisdictions_the_polity_is_the_actors_and_members_are_its_members():
+    k = world("law.v2=true", "law.publication=true", "law.publication_seed=none", "jurisdictions.enabled=true", preset="society")
+    assert "jur" in k.w
+    lid = k.new_law(LAW, "constitution")
+    k.enact(lid)
+    a, b, c = agents(k)
+    pol = PUB.polity(k, a, {"to": b})
+    assert pol == k.w["jur"]["member"][a]
+    vis, extra = PUB.publish(k, "transfer", a, {"to": b}, [a, b])
+    from charter import jurisdictions as J
+    assert set(vis) == {a, b} | set(J.members(k, pol)) and extra == {"pub": {"polity": pol, "audience": "members"}}
+
+
+def test_hook_payload_text_and_publication_share_one_ceiling():
+    """What a law's hook may read of a message's text (dispatch.hook_payload, D-29) and whether a publication rule may widen the
+    message agree: an unencrypted DM where laws may read DMs, nothing else (channel posts never)."""
+    from charter import dispatch as D
+    from charter import primitives as PR
+    for reads in (False, True):
+        k = world("law.publication=true", f"conditions.law_reads_dms={str(reads).lower()}")
+        for enc in (False, True):
+            p = D.hook_payload(k, PR.get("dm"), {"text": "x", "encrypted": enc, "readable": reads}, None)
+            assert (p["text"] is None) == PUB._sealed(k, "dm", {"encrypted": enc}), (reads, enc)
+        p = D.hook_payload(k, PR.get("post"), {"text": "x", "kind": "channel_post"}, None)
+        assert p["text"] is None and PUB._sealed(k, "channel_post", {})
+
+
 # ------------------------------------------------------------------ the golden reproduction (slow)
 def _sha(b) -> str:
     return hashlib.sha256(b).hexdigest()[:16]
