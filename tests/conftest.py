@@ -19,8 +19,17 @@ import charter_golden_cases as GC
 
 
 def pytest_configure(config):
-    if config.pluginmanager.hasplugin("xdist") and getattr(config.option, "dist", "no") == "load":
+    winput = getattr(config, "workerinput", None)
+    if winput is not None:                             # an xdist worker: it re-parses the command line, so it is told here
+        if winput.get("charter_loadgroup"):
+            config.option.loadgroup = True             # (xdist tags grouped test ids with "@group" when this is set)
+    elif config.pluginmanager.hasplugin("xdist") and getattr(config.option, "dist", "no") == "load":
         config.option.dist = "loadgroup"
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_configure_node(node):                       # xdist hook (controller side): pass the scheduling choice on
+    node.workerinput["charter_loadgroup"] = node.config.getoption("dist") == "loadgroup"
 
 
 @pytest.fixture(scope="session")
