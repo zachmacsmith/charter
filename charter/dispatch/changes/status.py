@@ -1,5 +1,6 @@
-"""Rights and sanctions (P2.1, P2.4c, P2.4d): grant_right, revoke_right, suspend_right, limit_actions, create_right. The only
-writers of an agent's rights list and the rights catalogue outside the kernel (tests/test_charter_rights_writes.py). Call options:
+"""Rights and sanctions (P2.1, P2.4c, P2.4d): grant_right, revoke_right, suspend_right, limit_actions, create_right (the only
+writers of an agent's rights list and the rights catalogue outside the kernel, tests/test_charter_rights_writes.py); W8b: a law's
+titles and names (set_title, rename). Call options:
 via (grant/revoke: "law", or the module whose own change carries the right: "lease", "role", "hidden"), quiet (a new camp's harvest
 right, granted without a `rights` event, as today), why (a loan default's sanction says why)."""
 from __future__ import annotations

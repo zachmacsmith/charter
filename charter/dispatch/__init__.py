@@ -28,7 +28,10 @@ Layout (module -> contents):
   api           the dispatcher's law-API functions (law_api, is_number, is_text)
   changes/      the primitives' changes (the rows' `fn`), by domain: economy, status (rights and sanctions), speech, world (camps
                 and leases), lifecycle, legal (legal acts and the propose draft), membership, press (media2), force (conflict),
-                loans, associations (contracts, swap, funds), cases (courts v2), agency
+                loans, associations (contracts, swap, funds), cases (courts v2), agency. W8b (review 12 WP1): a primitive one
+                owner module makes is routed to that module's change_<...> directly (actions:change_invoke, media:change_licence,
+                credit:change_money_rule, ...); changes/ keeps those several owners share (membership: found, dissolve; press:
+                set_price) and the kernel's (status: set_title, rename; legal: create_clause)
 Imports run one way (tests/test_charter_dispatch_layout.py checks the layers): base, options, chains <- ranks, legacy, journal,
 billing, changes.* <- changes.legal, checks, api <- validity <- hooks <- cascade, notify <- routing <- this package."""
 from __future__ import annotations
@@ -58,7 +61,7 @@ from charter.dispatch.legacy import (_after_context, ALIASES_AFTER, ALIASES_BEFO
 from charter.dispatch.routing import (_accepts, apply, _apply_charges, _apply_v2, apply_v2, _blocked_vis, _check,
     ENTRENCHED_WHEN, _fail_closed, _fn, _FNS, _law_caused, on_block, _refusable, _run_before, _unhooked)
 from charter.dispatch.hooks import (_binds_value, bound_laws, DecisionV2, hidden_agents, HIDE, _hook_fn, _hook_index,
-    hook_payload, hooked, normalise, resolve_v2, _rule_function, _scrub, _specificity, Verdict)
+    hook_payload, hooked, normalise, resolve_v2, _rule_function, _scrub, SECRET, _specificity, Verdict)
 from charter.dispatch.ranks import (check_procedure_rank, check_propose, CLASSES, conflict_rule, _conflict_rule_arg,
     declared_rank, do_set_conflict_rule, law_rank, law_set_conflict_rule, may_change, _polity, procedure_lookup, rank_of,
     RankRefused, set_conflict_rule, _targets)

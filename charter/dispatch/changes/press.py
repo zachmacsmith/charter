@@ -1,6 +1,7 @@
-"""Media (P2.4d; media2): subscribe, set_outlet_rule, set_media_rule, appoint. The changes are media.py's (change_*). Call options:
-lid = the law causing it; via (subscribe) = which of today's paths: agent (subscribe/unsubscribe), law (compel_subscription), lapse
-(a fee not paid), birth (a newcomer's subscriptions)."""
+"""Media (P2.4d; media2): subscribe, set_outlet_rule, set_media_rule, appoint; W8b: set_price (an outlet's fee or a Scholar's price
+of memory). The changes are media.py's (change_*) and scholars.py's. Call options: lid = the law causing it; via (subscribe) =
+which of today's paths: agent (subscribe/unsubscribe), law (compel_subscription), lapse (a fee not paid), birth (a newcomer's
+subscriptions); outlet (set_price) = the outlet whose fee it is."""
 from __future__ import annotations
 
 

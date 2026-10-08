@@ -10,9 +10,15 @@ settle_project; P2.4d's membership, media, typed camps and leases: join, leave, 
 set_media_rule, appoint, lease, improve_camp; P2.4a's conflict: attack, fortify, convert, guard_bind, guard_release; the credit
 lifecycle: offer_loan, accept_loan, repay_loan, extend_loan, default_loan, settle_loan; courts v2: open_case, answer_case, appeal,
 set_court_rule; P3.2: set_conflict_rule; contracts: create_contract, deposit_escrow, set_allowance, pull, breach, swap, open_fund;
-agency: authorize, deauthorize, act_for), and its legacy ALIASES are dispatched by dispatch.apply under exactly today's
-conditions; the other rows still name the function making the change today. Every row has a review 12 tier (TIER_OF;
-charter/tiers.py).
+agency: authorize, deauthorize, act_for; W8b, review 12 WP1: the 31 L-route rows of review 12 §2.14, whose `fn` is the owner
+module's change_<...> where one owner makes the change (actions:change_invoke, media:change_licence, ...) and a dispatch.changes
+do_<name> where several do (found, dissolve, set_price) or the kernel does (set_title, rename, create_clause): found, invite,
+declare, set_charter, dissolve, invoke, commission, set_will, name_successor, licence, set_price, library_doc, library_permit,
+set_capacity, share_note, offer_lease, set_initiative, hire_assassin and the laws' rule setters set_money_rule, set_title, rename,
+set_arms_rule, set_lease_rules, set_birth_rules, set_succession_rule, set_project_rule, set_power_rule, loan_terms, loan_assign,
+create_clause, start_project), and its legacy ALIASES are dispatched by dispatch.apply under exactly today's conditions; the other
+rows (demand_tribute, write_note, use_power, set_role, set_goal, suspend_law, request_fix: P, E and X) still name the function
+making the change today. Every row has a review 12 tier (TIER_OF; charter/tiers.py).
 
 A row (`Primitive`) says:
   name, feature, effect   the change and its effect class (EFFECTS)

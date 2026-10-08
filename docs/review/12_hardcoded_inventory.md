@@ -257,6 +257,11 @@ Act that reproduces today. **Cost**: S is under a day, M is 1-3 days, L is a wee
 
 Counts: 31 L, 1 P, 2 E, 4 X.
 
+*Status (W8b, WP1): the 31 L-route rows are routed through `Kernel.apply` (tier L in `primitives.TIER_OF`); channels go through
+`found`/`admit`/`expel`/`dissolve` with `kind="channel"`. A hidden jurisdiction's founding, invitations and charter bind only its
+own laws (`dispatch.hooks.SECRET`); `hire_assassin` hides the hirer and the hired (`HIDE`); a blocked `declare` keeps the
+jurisdiction hidden. Not routed yet: a contract's dissolution, `demand_tribute` (P), `use_power` (E).*
+
 ### 2.15 Counts
 
 | Tier | Rows | of which already law |

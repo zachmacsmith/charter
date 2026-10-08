@@ -1,9 +1,9 @@
 """New-style hooks (P3.1, P3.2, W6a): which laws a change binds and in what order, what payload they see, and how their
 before-verdicts become a decision.
 
-bound_laws: the active laws in force whose account binds the payload (review 09 §4.5), in canonical order (§8.1); hooked: the hook
-index (a primitive no law hooks skips the binding work); hook_payload: the payload a law may see (V18 redaction, the row's `redact`,
-hidden agents as None); normalise: a before-hook's value -> a Verdict; resolve_v2: the verdicts -> a DecisionV2 by the polity's
+bound_laws: the active laws in force whose account binds the payload (review 09 §4.5; W8b: a hidden jurisdiction's own doings bind
+its laws only, SECRET), in canonical order (§8.1); hooked: the hook index (a primitive no law hooks skips the binding work);
+hook_payload: the payload a law may see (V18 redaction, the row's `redact`, hidden agents as None: HIDE); normalise: a before-hook's value -> a Verdict; resolve_v2: the verdicts -> a DecisionV2 by the polity's
 conflict rule (ranks.conflict_rule: any_block, superior, posterior, specialis, a constitution's function)."""
 from __future__ import annotations
 
