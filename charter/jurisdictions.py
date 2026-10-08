@@ -18,8 +18,8 @@ Where the law reaches (enforced in the law API, `scope_api`)
   jurisdiction. Reads (agents, holders, laws, currencies, reserve, balance("reserve")) see only the law's own jurisdiction.
 
 Separate institutions (state under k.w["jurisdictions"][jid])
-  {"id", "name", "status": hidden|declared|dissolved, "founder", "founded_round", "declared_round", "declare_pending",
-   "hidden_members", "dormant": [laws passed in secret], "procedures", "procedure_history", "reserve", "camp_rules", "legacy"}
+  {"id", "kind": "polity" (an account, accounts.py), "treasury": "reserve"|"reserve:<jid>", "name",
+   "status": hidden|declared|dissolved, "founder", "founded_round", "declared_round", "declare_pending", "hidden_members", "dormant": [laws passed in secret], "procedures", "procedure_history", "reserve", "camp_rules", "legacy"}
   J0 is "legacy": its procedures, reserve, currencies and camp rules stay where they always were (k.w["procedures"],
   k.w["reserve"], top-level currencies, the camp dicts), so existing code and the legacy path work unchanged. Any other
   jurisdiction keeps its own procedures (a new one starts with a built-in rule: its members vote, majority of those voting),
@@ -116,8 +116,11 @@ def install(k) -> None:
         k.w["jur"]["member"][aid] = None if nature else "J0"
 
 
-def _new_j(jid, name, status, founder, r, legacy=False):
-    return {"id": jid, "name": str(name)[:60], "status": status, "founder": founder, "founded_round": r, "declared_round": None,
+def _new_j(jid, name, status, founder, r, legacy=False, kind="polity"):
+    """A jurisdiction record: an account (accounts.py) of `kind` "polity" ("association"/"personal" are reserved for P4.3) whose
+    treasury is the owner key "reserve" (J0, legacy, forever) or "reserve:<jid>"."""
+    return {"id": jid, "kind": kind, "treasury": "reserve" if legacy else f"reserve:{jid}",
+            "name": str(name)[:60], "status": status, "founder": founder, "founded_round": r, "declared_round": None,
             "declare_pending": False, "hidden_members": [], "dormant": [], "procedures": {}, "procedure_history": [],
             "reserve": {}, "camp_rules": {}, "legacy": legacy}
 
@@ -189,7 +192,8 @@ def reserve_of(k, jid) -> dict:
 
 
 def home_reserve(k, aid) -> str:
-    """Where deductions and taxes on this agent go: its jurisdiction's reserve ("reserve" when off)."""
+    """This agent's jurisdiction's reserve ("reserve" when off). Taxes and deductions go to the charging law's own treasury
+    (accounts.charge_destination), which is this reserve for every law that binds the agent."""
     if not enabled(k):
         return "reserve"
     return reserve_key(k, member_of(k, aid))
@@ -268,15 +272,14 @@ def law_api(k, lid) -> dict:
         j = jurs(k).get(jid())
         if not j or j["status"] != "declared" or agent not in k.w["agents"]:
             return False
-        k.w["jur"]["pending"]["join"][agent] = jid()
-        k.w["jur"]["pending"]["leave"].pop(agent, None)
+        k.apply("admit", polity=jid(), agent=agent, lid=lid)           # P2.4d: bypasses on_admission, as it always has
         return True
 
     def expel(agent):
         _need_on()
         if not binds(k, lid, agent):
             return False
-        k.w["jur"]["pending"]["leave"][agent] = jid()
+        k.apply("expel", polity=jid(), agent=agent, lid=lid)
         return True
 
     def lawful_attack(attacker, target, units):
@@ -864,13 +867,7 @@ def act_join(k, aid, jurisdiction):
     jid = str(jurisdiction)
     j = jurs(k).get(jid)
     if j and j["status"] == "hidden" and aid in (j.get("invited") or []):  # a pledge to a hidden jurisdiction one was invited to
-        if aid not in j["hidden_members"]:
-            j["hidden_members"].append(aid)
-        j["invited"].remove(aid)
-        k.log("jur_pledged", aid, {"jurisdiction": jid}, vis=list(j["hidden_members"]))
-        for m in j["hidden_members"]:
-            if m != aid:
-                k.notify(m, f"{aid} has pledged to {jid} '{j['name']}' and is now a secret member.")
+        k.apply("join", agent=aid, polity=jid, via="pledge")
         return (f"You pledged to {jid} '{j['name']}': you are a secret member, can propose and vote on its draft laws (propose with "
                 f"\"jurisdiction\": \"{jid}\"), and move into it when it is declared. Leave it with leave {{\"jurisdiction\": \"{jid}\"}}.")
     if not j or j["status"] != "declared":
@@ -878,56 +875,120 @@ def act_join(k, aid, jurisdiction):
                                                              if j and j["status"] == "hidden" else ""))
     if member_of(k, aid) == jid:
         raise L.LawError(f"you are already a member of {jid}")
-    answers = [v for _, v in hooks_of(k, jid, "on_admission", aid) if isinstance(v, bool)]
-    if False in answers:
+    out = k.apply("join", agent=aid, polity=jid, via="join")         # on_admission: any False refuses, any True admits
+    if not out.ok:
         k.log("jur_join_refused", aid, {"jurisdiction": jid, "by": "law"}, vis="public")
         return f"{jid}'s admission law refused you."
-    rule = cfg(k)["admission"]
-    if True in answers or rule == "open" or not members(k, jid):
-        k.w["jur"]["pending"]["join"][aid] = jid
-        k.log("jur_join_accepted", aid, {"jurisdiction": jid, "by": "law" if True in answers else rule}, vis="public")
+    st = out.result["status"]
+    if st == "accepted":
         return f"Admitted to {jid}: you become a member at the end of this round" + (
             f" (and leave {member_of(k, aid)})." if member_of(k, aid) else ".")
-    if rule == "closed":
-        k.log("jur_join_refused", aid, {"jurisdiction": jid, "by": "closed"}, vis="public")
+    if st == "closed":
         return f"{jid} admits nobody without an admission law."
-    bid = k.open_ballot(f"Admit {aid} to {jid} '{j['name']}'?", members(k, jid), ["yes", "no"], "majority_voting", 0, None, None, None)
-    k.w["ballots"][bid]["jurisdiction"] = jid
-    k.w["jur"]["admission"][bid] = {"agent": aid, "jurisdiction": jid}
-    return f"{jid}'s members vote on admitting you ({bid}, closes at the end of this round)."
+    return f"{jid}'s members vote on admitting you ({out.result['ballot']}, closes at the end of this round)."
 
 
 def act_leave(k, aid, jurisdiction=None):
     _on(k)
     if jurisdiction is not None and str(jurisdiction) in hidden_of(k, aid):
         j = jurs(k)[str(jurisdiction)]
-        j["hidden_members"].remove(aid)
-        k.log("jur_left_hidden", aid, {"jurisdiction": j["id"]}, vis=list(j["hidden_members"]) + [aid])
-        if not j["hidden_members"]:
-            j["status"] = "dissolved"
-            _refund(k, j)
+        k.apply("leave", agent=aid, polity=j["id"], via="unpledge")
         return f"You left hidden {j['id']}."
     jid = member_of(k, aid)
     if jid is None or (jurisdiction is not None and str(jurisdiction) != jid):
         raise L.LawError("you are not a member of that jurisdiction")
-    k.w["jur"]["pending"]["leave"][aid] = jid
-    k.w["jur"]["pending"]["join"].pop(aid, None)
-    k.log("jur_leave_pending", aid, {"jurisdiction": jid}, vis="public")
+    k.apply("leave", agent=aid, polity=jid, via="leave")               # a request: the member leaves at the end of the round
     return f"You leave {jid} at the end of this round, after its laws on leaving (if any) apply to you."
+
+
+# ---------------------------------------------------------------------- membership changes (P2.4d: made by Kernel.apply)
+# The primitives join, leave, admit and expel (charter/primitives.py) make their changes here, through dispatch.do_<name>. `via` says
+# which of today's paths it is: join "join" (an application: on_admission has answered), "pledge" (to a hidden jurisdiction one was
+# invited to), "born" (on_birth has answered), "arrival", "admitted", "declaration" (the member moves in); leave "leave" (a request),
+# "unpledge" (from a hidden one), "left", "admitted", "declaration" (the member moves out: on_exit has run, while still a member).
+def change_join(k, agent, polity, via, parent=None, **directives) -> dict:
+    """directives (set by the before-verdicts, dispatch.resolve): admit (on_admission's True), jurisdiction (on_birth's answer)."""
+    jr = k.w["jur"]
+    admit = directives.get("admit")
+    if via == "born" and "jurisdiction" in directives:
+        polity = directives["jurisdiction"]
+    if via == "join":
+        rule = cfg(k)["admission"]
+        if admit or rule == "open" or not members(k, polity):
+            jr["pending"]["join"][agent] = polity
+            k.log("jur_join_accepted", agent, {"jurisdiction": polity, "by": "law" if admit else rule}, vis="public")
+            return {"status": "accepted"}
+        if rule == "closed":
+            k.log("jur_join_refused", agent, {"jurisdiction": polity, "by": "closed"}, vis="public")
+            return {"status": "closed"}
+        j = jurs(k)[polity]
+        bid = k.open_ballot(f"Admit {agent} to {polity} '{j['name']}'?", members(k, polity), ["yes", "no"], "majority_voting", 0,
+                            None, None, None)
+        k.w["ballots"][bid]["jurisdiction"] = polity
+        jr["admission"][bid] = {"agent": agent, "jurisdiction": polity}
+        return {"status": "ballot", "ballot": bid}
+    if via == "pledge":
+        j = jurs(k)[polity]
+        if agent not in j["hidden_members"]:
+            j["hidden_members"].append(agent)
+        j["invited"].remove(agent)
+        k.log("jur_pledged", agent, {"jurisdiction": polity}, vis=list(j["hidden_members"]))
+        for m in j["hidden_members"]:
+            if m != agent:
+                k.notify(m, f"{agent} has pledged to {polity} '{j['name']}' and is now a secret member.")
+        return {"status": "pledged"}
+    jr["member"][agent] = polity
+    if via == "born":
+        k.log("jur_born_into", agent, {"jurisdiction": polity, "parent": parent}, vis="public")
+    elif polity is not None:
+        k.log("jur_joined", agent, {"jurisdiction": polity, "why": via}, vis="public")
+    return {"polity": polity}
+
+
+def change_leave(k, agent, polity, via) -> dict:
+    jr = k.w["jur"]
+    if via == "leave":
+        jr["pending"]["leave"][agent] = polity
+        jr["pending"]["join"].pop(agent, None)
+        k.log("jur_leave_pending", agent, {"jurisdiction": polity}, vis="public")
+        return {"status": "pending"}
+    if via == "unpledge":
+        j = jurs(k)[polity]
+        j["hidden_members"].remove(agent)
+        k.log("jur_left_hidden", agent, {"jurisdiction": j["id"]}, vis=list(j["hidden_members"]) + [agent])
+        if not j["hidden_members"]:
+            j["status"] = "dissolved"
+            _refund(k, j)
+        return {"status": "unpledged"}
+    jr["member"][agent] = None
+    k.log("jur_left", agent, {"jurisdiction": polity, "why": via}, vis="public")
+    return {"status": "left"}
+
+
+def change_admit(k, polity, agent) -> dict:
+    """A law's admit(): the agent moves in at the end of the round (bypassing on_admission)."""
+    k.w["jur"]["pending"]["join"][agent] = polity
+    k.w["jur"]["pending"]["leave"].pop(agent, None)
+    return {"pending": polity}
+
+
+def change_expel(k, polity, agent) -> dict:
+    """A law's expel(): the member moves out at the end of the round (its on_exit hooks run then)."""
+    k.w["jur"]["pending"]["leave"][agent] = polity
+    return {"pending": polity}
 
 
 # ---------------------------------------------------------------------- end of round (step 4, after the laws' on_round_end)
 def _set_member(k, aid, jid, why):
+    """A member moves: out of its old jurisdiction (leave: its on_exit hooks first, laws can tax or seize from those leaving, who
+    are still members), then into the new one (join). Events and order as before P2.4d (on_exit, jur_left, jur_joined)."""
     old = k.w["jur"]["member"].get(aid)
     if old == jid:
         return
     if old is not None:
-        hooks_of(k, old, "on_exit", aid)                              # laws can tax or seize from those leaving
-    k.w["jur"]["member"][aid] = jid
-    if old is not None:
-        k.log("jur_left", aid, {"jurisdiction": old, "why": why}, vis="public")
+        k.apply("leave", agent=aid, polity=old, via=why)
     if jid is not None:
-        k.log("jur_joined", aid, {"jurisdiction": jid, "why": why}, vis="public")
+        k.apply("join", agent=aid, polity=jid, via=why)
 
 
 def end_round(k):
@@ -998,15 +1059,7 @@ def assign_newborn(k, child, parent):
     declared jurisdiction id (or False: none). Returns the jurisdiction (None: none). Off: "J0", nothing recorded."""
     if not enabled(k):
         return "J0"
-    jid = member_of(k, parent)
-    for _, v in (hooks_of(k, jid, "on_birth", child, parent) if jid else []):
-        if v is False:
-            jid = None
-        elif isinstance(v, str) and jurs(k).get(v, {}).get("status") == "declared":
-            jid = v
-    k.w["jur"]["member"][child] = jid
-    k.log("jur_born_into", child, {"jurisdiction": jid, "parent": parent}, vis="public")
-    return jid
+    return k.apply("join", agent=child, polity=member_of(k, parent), via="born", parent=parent).result["polity"]   # on_birth decides
 
 
 def assign_arrival(k, aid):
@@ -1014,11 +1067,7 @@ def assign_arrival(k, aid):
     in a state of nature. Returns the jurisdiction."""
     if not enabled(k):
         return "J0"
-    jid = k.w["jur"].get("founding")
-    k.w["jur"]["member"][aid] = jid
-    if jid:
-        k.log("jur_joined", aid, {"jurisdiction": jid, "why": "arrival"}, vis="public")
-    return jid
+    return k.apply("join", agent=aid, polity=k.w["jur"].get("founding"), via="arrival").result["polity"]
 
 
 # ---------------------------------------------------------------------- feed lines (agents.render_event)

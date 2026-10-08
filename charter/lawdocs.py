@@ -18,6 +18,8 @@ TIERS = ("common", "uncommon", "rare", "legendary")
 
 TOPICS = {
     "hooks": ("Hooks: when a law runs", "A law runs only through the hooks it defines; the kernel calls them, in order of enactment."),
+    "chains": ("Causes of a change (law.v2)", "A new-style hook gets the change and its chain of causes, first cause first; these read "
+               "the chain and name the law itself."),
     "social-hooks": ("Hooks on posts, votes, proposals and rulings",
                      "Beyond the round and economic hooks, a law can react to public speech, votes, new proposals and court rulings."),
     "dm-hook": ("Reading private messages: on_dm", "A law can be told about private messages, but only in worlds that allow it."),
@@ -285,7 +287,36 @@ E += [
      "model, timing, stats, payment); return False to refuse it. With move(...) it can charge a fee.", "prompt", "common"),
 ]
 OPTIONAL.update({e[0]: "life" for e in E if e[1] == "life"})
-ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
+# linker (charter/linker.py, P3.3): documented only in law.v2 worlds (REQUIRES), so every other world's prompt and codex are unchanged
+E += [
+    ("use", "linker", "Meta", "use(ref)", "links another law's exports into this law, as a read-only mapping: at the top level only, "
+     "tax = use(\"L3\") follows L3's current version, use(\"L3@<sha>\") pins one version, use(\"lib:<name>@<sha>\") a library entry; "
+     "then tax[\"tax_due\"](qty). The imported code runs as this law's own (its powers, its jurisdiction, its gas), and counts in its "
+     "class. A law offers names with exports = [\"RATE\", \"tax_due\"] (defs and constants, a declarative top level; exported code may "
+     "not use state or public). If L3 is repealed or stops exporting what you use, a following import is pinned to its last good version.",
+     "prompt", "common"),
+    ("public_of", "linker", "Read", "public_of(law_id)", "a copy of another law's public dict. Every law has `public` (JSON data only) "
+     "next to `state`: what it writes there others can read.", "prompt", "common"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("use", "public_of")})
+# chain reads and the law's own id and treasury (charter/dispatch.py, P3.1): documented only in law.v2 worlds (REQUIRES), next to
+# the new-style hooks (V2_PROMPT, codex/law/v2-hooks)
+E += [
+    ("root_kind", "chains", "Read", "root_kind(chain)", "the kind of the change's first cause: \"action\" (an agent), \"law\", "
+     "\"world\" (nature, events, deaths of old age, interventions), \"kernel\" (the round's own steps) or \"phase\".", "common", "uncommon"),
+    ("caused_by_agent", "chains", "Read", "caused_by_agent(chain)", "the agent whose action the change comes from (the innermost action), "
+     "or None (no agent, or one who acted unseen).", "common", "uncommon"),
+    ("caused_by_law", "chains", "Read", "caused_by_law(chain, law_id)", "True if that law's hook or function is among the change's causes.",
+     "common", "uncommon"),
+    ("chain_laws", "chains", "Read", "chain_laws(chain)", "the ids of the laws among the change's causes, first cause first.", "common",
+     "uncommon"),
+    ("law_id", "chains", "Read", "law_id()", "this law's own id (\"L7\").", "common", "uncommon"),
+    ("treasury", "chains", "Read", "treasury()", "the owner key of this law's treasury (\"reserve\", or \"reserve:J2\" in a jurisdiction), "
+     "where its charges go: move(treasury(), a, \"grain\", 1).", "common", "uncommon"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2")))
+                 for n in ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")})
+ENTRIES ={e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers",
                "Jurisdictions", "Media", "Life"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
@@ -369,7 +400,7 @@ def v2_article() -> dict:
                                  ("a change to the rule system: hooking it makes a law procedural", P.legal)) if on]
         lines.append(f"- `{n}`: {what}" + (f" ({'; '.join(notes)})" if notes else ""))
     lines += ["", "These work in any law of a world with law.v2, whether or not the rules you were given mention them."]
-    return {"tier": "common", "title": "Hooks on any change (law.v2)", "text": "\n".join(lines) + "\n", "documents": list(D.HELPERS)}
+    return {"tier": "common", "title": "Hooks on any change (law.v2)", "text": "\n".join(lines) + "\n", "documents": []}
 
 
 def api_doc(resolved: dict, original: str) -> str:

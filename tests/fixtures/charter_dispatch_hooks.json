@@ -1567,8 +1567,8 @@
 "phase": "turns"
 },
 {
-"call": "r0:Sena:0",
-"turn": "Sena"
+"call": null,
+"turn": null
 },
 {
 "action": "anon_post"
@@ -1618,8 +1618,8 @@
 "phase": "turns"
 },
 {
-"call": "r0:Sena:0",
-"turn": "Sena"
+"call": null,
+"turn": null
 },
 {
 "action": "anon_post"

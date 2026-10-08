@@ -670,12 +670,14 @@ def apply_due(k, inst, rs, phase, agent=None, round_=None, log=None) -> list[str
     done = applied(k)
     due = [e for e in sched if e["id"] not in done and _due(e, r, phase, agent)]
     ids = []
+    from charter import dispatch as D
     for e in due:
         o = OPS[e["op"]]
         before = copy.deepcopy(k.w)
         rec = {"id": e["id"], "round": r, "phase": phase, **({"agent": agent} if agent is not None else {}), "op": e["op"],
                "args": copy.deepcopy(e["args"]), **({"note": e["note"]} if e.get("note") else {})}
-        with k.cause("intervention", e["id"], op=e["op"]):
+        with k.cause("intervention", e["id"], op=e["op"], root=True,       # a root frame: its changes form one cascade (P3.1)
+                     announce=True if e.get("announce") and D.v2(k) else None):   # law.v2: an announced one is shown to laws
             try:
                 kw = dict(e["args"])
                 if "_id" in o.fn.__code__.co_varnames:

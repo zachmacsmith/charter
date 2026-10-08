@@ -41,6 +41,7 @@ State lives in k.w["mortality"] (created on first use, so worlds that never use 
 """
 from __future__ import annotations
 
+from charter import accounts as AC                                     # accounts: the estate:<aid> owner key (P4.1)
 from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
@@ -100,42 +101,32 @@ def end(k, aid, cause, by=None, public=True, named=True) -> dict:
 # ---------------------------------------------------------------------- the estate account
 # A dead agent's goods are held in its estate (k.w["mortality"]["estates"][aid]) from the change (the death phase's mark step) to
 # probate (its bequest step). Writes to it are internal: no `move` events (old goldens keep their bytes), each one journaled in the
-# estate record. Until accounts (P4.1) make "estate:<aid>" a kernel owner key, probate pays out through the deceased's frozen
-# holdings (`_release`), so its `move` events keep today's src (the deceased). P3.x: after_end_life hooks run between the two and
-# may move from the estate (power estate_access; review 09 §13.3).
+# estate record. The estate is a kernel account (accounts.py, P4.1): owner key "estate:<aid>" (kind "estate"), so k.bal and
+# k.move/k.apply("move") reach it while it is open (laws' moves may not name it: power estate_access, later). Probate still pays
+# out through the deceased's frozen holdings (`_release`), so its `move` events keep today's src (the deceased). P3.x:
+# after_end_life hooks run between the two and may move from the estate (power estate_access; review 09 §13.3).
 def estate(k, aid) -> dict:
     """The goods in aid's estate account now ({} if it has none)."""
-    e = (k.w.get("mortality") or {}).get("estates", {}).get(aid)
-    return dict(e["holdings"]) if e else {}
+    return dict(AC.holdings(k, AC.estate_key(aid)))
 
 
 def estate_bal(k, aid, item) -> float:
-    e = (k.w.get("mortality") or {}).get("estates", {}).get(aid)
-    return e["holdings"].get(item, 0.0) if e else 0.0
+    return AC.bal(k, AC.estate_key(aid), item)
 
 
 def estate_take(k, aid, item, qty, why) -> float:
     """An internal write: qty of item leaves aid's estate (for `why`, e.g. "commission:C1"); the caller puts it where it goes.
     Returns the quantity taken (at most what the estate holds)."""
     e = state(k)["estates"][aid]
-    take = min(float(qty), e["holdings"].get(item, 0.0))
+    key = AC.estate_key(aid)
+    take = min(float(qty), AC.bal(k, key, item))
     if take > 0:
-        _ledger(e["holdings"], item, -take)
+        AC.add(k, key, item, -take)                                       # Kernel._add's arithmetic on the estate account
         e["journal"].append({"op": "take", "item": item, "qty": take, "why": why})
     return take
 
 
-def estate_add(k, aid, item, qty) -> None:
-    """law.v2: the owner key "estate:<aid>" in Kernel._add (a move into or out of an open estate, e.g. an inheritance law's
-    after_end_life): a journaled internal write. Refused (LawError) once the estate is probated or if there is none."""
-    e = (k.w.get("mortality") or {}).get("estates", {}).get(aid)
-    if not e or e["status"] != "open":
-        raise L.LawError(f"no open estate for {aid}")
-    _ledger(e["holdings"], item, qty)
-    e["journal"].append({"op": "move", "item": item, "qty": qty})
-
-
-def _ledger(h, item, qty) -> None:                                    # Kernel._add's arithmetic, on an estate's goods
+def _ledger(h, item, qty) -> None:                                     # Kernel._add's arithmetic, on an estate's goods
     h[item] = round(h.get(item, 0.0) + qty, 6)
     if abs(h[item]) < 1e-9:
         del h[item]
@@ -147,7 +138,8 @@ def _open_estate(k, aid, cause) -> dict:
     goods = {i: q for i, q in h.items() if q > 0}
     for i in goods:
         del h[i]
-    state(k).setdefault("estates", {})[aid] = {"round": k.r, "cause": cause, "holdings": dict(goods), "status": "open",
+    state(k).setdefault("estates", {})[aid] = {"kind": "estate", "key": AC.estate_key(aid), "round": k.r, "cause": cause,
+                                               "holdings": dict(goods), "status": "open",
                                                "journal": [{"op": "open", "holdings": dict(goods)}]}
     return goods
 
@@ -324,15 +316,15 @@ def _reserve_dst(k, aid):
         return "reserve", None
     jid = J.member_of(k, aid)
     pool = J.reserve_of(k, jid)
-    return ("reserve" if pool is k.w["reserve"] else pool), jid
+    return ("reserve" if pool is k.w["reserve"] else J.reserve_key(k, jid)), jid     # an owner key (accounts.py)
 
 
 def _give(k, src, dst, item, qty, why):
     if qty <= 1e-9:
         return
-    if isinstance(dst, dict):                                             # a jurisdiction's own reserve
+    if str(dst).startswith("reserve:"):                                   # a jurisdiction's own reserve: an internal write, as before
         k._add(src, item, -qty)
-        dst[item] = round(dst.get(item, 0.0) + qty, 6)
+        k._add(dst, item, qty)
         k.log("move", None, {"src": src, "dst": "jurisdiction_reserve", "item": item, "qty": qty, "why": why}, vis="monitor")
     else:
         k.move(src, dst, item, qty, why=why)

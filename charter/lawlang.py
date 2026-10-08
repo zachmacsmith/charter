@@ -16,6 +16,7 @@ Static class (by which API calls appear, so it cannot be misstated):
 from __future__ import annotations
 
 import ast
+import re
 
 from charter import gas as G
 from charter import lawapi as LA
@@ -50,8 +51,9 @@ MAX_STEPS, MAX_DEPTH = G.MAX_STEPS, G.MAX_DEPTH
 LawError, StepLimit = G.LawError, G.StepLimit                          # defined in charter/gas.py (the meter raises them)
 
 
-def check(code: str) -> ast.Module:
-    """Parse and validate against the whitelist. Raises LawError with a readable reason."""
+def check(code: str, v2: bool = False) -> ast.Module:
+    """Parse and validate against the whitelist. Raises LawError with a readable reason. v2 (spec law.v2): also the linker's static
+    rules (check_v2: exports, use, public)."""
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
@@ -75,6 +77,8 @@ def check(code: str) -> ast.Module:
     for req in ("title", "intent"):
         if req not in names or not isinstance(names[req].value, ast.Constant) or not isinstance(names[req].value.value, str):
             raise LawError(f"a law must set {req} = \"...\" as a plain string")
+    if v2:
+        check_v2(tree, code)
     return tree
 
 
@@ -97,7 +101,16 @@ def moves_holdings_by_return(tree: ast.AST) -> bool:
     return False
 
 
-def classify(tree: ast.AST) -> str:
+def classify(tree: ast.AST, imported=()) -> str:
+    """The law's class from its calls and hooks, and (law.v2, transitive) from the exported closures it imports (`imported`: the
+    closures as AST modules, linker.import_closures): importing a function that calls fine() makes the importer structural."""
+    out = _classify_one(tree)
+    for t in imported:
+        out = max(out, _classify_one(t), key=CLASS_RANK.get)
+    return out
+
+
+def _classify_one(tree: ast.AST) -> str:
     c = calls(tree)
     hc = hooks_class(tree)                                             # law.v2 hooks (none in any law without law.v2: R5)
     if c & PROCEDURAL_CALLS or hc == "procedural":
@@ -212,3 +225,219 @@ def load_module(code: str, law_id: str, api: dict, state: dict, limited: Limited
     ns = {"__builtins__": {}, **SAFE_BUILTINS, **limited.meter.builtins, **api, "state": state, **limited.meter.runtime}
     limited(exec, compiled, ns)
     return ns
+
+
+# ====================================================================== law.v2: exports, use, public (P3.3; review 09 §6.1)
+# Static rules, checked by check(code, v2=True) for every law in a law.v2 world (off: none of this runs and nothing changes):
+#  * use(ref) appears only as a top-level `alias = use("<ref>")` with a constant ref: "L3" (follow the current version), "L3@<8-16 hex>"
+#    (pinned to a code version) or "lib:<name>@<8-16 hex>" (a library entry by hash). `use` is never passed around or called elsewhere,
+#    so the kernel knows every dependency before proposal and linking happens only when a module is loaded.
+#  * `exports = [...]` is one top-level assignment of a constant list of strings; each name is a top-level def or a top-level
+#    assignment of a constant expression (literals and arithmetic on literals).
+#  * a law with exports has a declarative top level: only constant assignments, defs, use(...) assignments, title, intent, rank and
+#    exports, so linking it runs no API call.
+#  * exported functions, and every function they reach in their module, never name `state` or `public` (an exporter's data is
+#    reachable only through public_of(lid)); `public` is never rebound.
+#  * one module is at most MAX_LINKED_BYTES; the import graph (check_graph, run by the linker with the kernel's resolver) is a DAG at
+#    most MAX_IMPORT_DEPTH deep whose linked code is at most MAX_LINKED_BYTES in all.
+REF_RE = re.compile(r"^(?:(L\d+)(?:@([0-9a-f]{8,16}))?|lib:([a-z0-9_]+)@([0-9a-f]{8,16}))$")
+MAX_IMPORT_DEPTH = 6
+MAX_LINKED_BYTES = 64 * 1024
+NOT_EXPORTABLE = {"title", "intent", "rank", "exports", "state", "public", "use"}
+
+
+def _single(n) -> str | None:
+    """The name a top-level `name = value` statement assigns, else None."""
+    if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+        return n.targets[0].id
+    return None
+
+
+def _is_use(v) -> bool:
+    return isinstance(v, ast.Call) and isinstance(v.func, ast.Name) and v.func.id == "use"
+
+
+def use_refs(tree: ast.Module) -> dict:
+    """alias -> ref of every top-level `alias = use("<ref>")` (check_v2 guarantees there are no other uses)."""
+    return {_single(n): n.value.args[0].value for n in tree.body if _single(n) and _is_use(n.value) and n.value.args
+            and isinstance(n.value.args[0], ast.Constant)}
+
+
+def exports_of(tree: ast.Module) -> list | None:
+    """The names in `exports = [...]`, or None when the law exports nothing."""
+    for n in tree.body:
+        if _single(n) == "exports" and isinstance(n.value, (ast.List, ast.Tuple)):
+            return [e.value for e in n.value.elts if isinstance(e, ast.Constant)]
+    return None
+
+
+def const_expr(v) -> bool:
+    """Literals and arithmetic on literals (no names, no calls)."""
+    if isinstance(v, ast.Constant):
+        return True
+    if isinstance(v, ast.UnaryOp):
+        return const_expr(v.operand)
+    if isinstance(v, ast.BinOp):
+        return const_expr(v.left) and const_expr(v.right)
+    if isinstance(v, (ast.List, ast.Tuple, ast.Set)):
+        return all(const_expr(e) for e in v.elts)
+    if isinstance(v, ast.Dict):
+        return all(k is not None and const_expr(k) for k in v.keys) and all(const_expr(x) for x in v.values)
+    return False
+
+
+def used_exports(tree: ast.Module) -> dict:
+    """alias -> the export names the law reads from it (`tax["tax_due"]`, `tax.get("RATE")`), or None when it uses the alias any
+    other way (passes it around, iterates it, indexes it with a variable): then it depends on every name it was linked with."""
+    aliases = set(use_refs(tree))
+    out: dict = {a: set() for a in aliases}
+    ok = {id(n.targets[0]) for n in tree.body if _single(n) in aliases and _is_use(n.value)}
+    for n in ast.walk(tree):
+        base = key = None
+        if isinstance(n, ast.Subscript) and isinstance(n.value, ast.Name) and n.value.id in aliases:
+            base, key = n.value, n.slice
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and isinstance(n.func.value, ast.Name) \
+                and n.func.value.id in aliases and n.func.attr == "get":
+            base, key = n.func.value, (n.args[0] if n.args else None)
+        if base is None:
+            continue
+        ok.add(id(base))
+        if isinstance(key, ast.Constant) and isinstance(key.value, str) and out[base.id] is not None:
+            out[base.id].add(key.value)
+        else:
+            out[base.id] = None
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name) and n.id in aliases and id(n) not in ok:
+            out[n.id] = None
+    return {a: (None if v is None else sorted(v)) for a, v in out.items()}
+
+
+def export_closure(tree: ast.Module, names=None) -> tuple:
+    """The top-level defs the exports `names` (default: all exports) reach through name references, as one module (for classify),
+    and the use-aliases those defs name (their own imports, which the linker classifies transitively)."""
+    defs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    aliases = set(use_refs(tree))
+    todo = [x for x in ((exports_of(tree) or []) if names is None else names) if x in defs]
+    seen, used = set(), set()
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        for x in ast.walk(defs[name]):
+            if isinstance(x, ast.Name):
+                if x.id in defs and x.id not in seen:
+                    todo.append(x.id)
+                elif x.id in aliases:
+                    used.add(x.id)
+    return ast.Module(body=[defs[n] for n in defs if n in seen], type_ignores=[]), used
+
+
+def check_v2(tree: ast.Module, code: str) -> None:
+    """The linker's per-module static rules (see above). Raises LawError."""
+    if len(code.encode()) > MAX_LINKED_BYTES:
+        raise LawError(f"a law may be at most {MAX_LINKED_BYTES // 1024} KB")
+    use_stmts = [n for n in tree.body if _single(n) and _is_use(n.value)]
+    use_calls = {id(n.value) for n in use_stmts}
+    use_funcs = {id(n.value.func) for n in use_stmts}
+    seen_alias: set = set()
+    for n in use_stmts:
+        c = n.value
+        if len(c.args) != 1 or c.keywords or not isinstance(c.args[0], ast.Constant) or not isinstance(c.args[0].value, str):
+            raise LawError(f"use(...) takes one constant string (line {n.lineno})")
+        if not REF_RE.match(c.args[0].value):
+            raise LawError(f"use({c.args[0].value!r}): a reference is \"L3\", \"L3@<8-16 hex digits>\" or \"lib:<name>@<8-16 hex digits>\"")
+        alias = _single(n)
+        if alias in seen_alias or alias in NOT_EXPORTABLE or alias in API:
+            raise LawError(f"use(...) alias {alias!r} is reserved or assigned twice (line {n.lineno})")
+        seen_alias.add(alias)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _is_use(node) and id(node) not in use_calls:
+            raise LawError(f"use(...) is allowed only as a top-level assignment: name = use(\"L3\") (line {node.lineno})")
+        if isinstance(node, ast.Name) and node.id == "use" and id(node) not in use_funcs:
+            raise LawError(f"use may only be called, as name = use(\"L3\") at the top level (line {node.lineno})")
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)) and node.id == "public":
+            raise LawError(f"public is the law's public dict: change its keys, never rebind it (line {node.lineno})")
+        if isinstance(node, ast.arg) and node.arg in ("public", "use"):
+            raise LawError(f"a parameter may not be called {node.arg}")
+    top_ex = [n for n in tree.body if _single(n) == "exports"]
+    all_ex = [n for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == "exports" and isinstance(n.ctx, (ast.Store, ast.Del))]
+    if len(top_ex) > 1 or len(all_ex) != len(top_ex):
+        raise LawError("exports is set once, at the top level: exports = [\"name\", ...]")
+    if not top_ex:
+        return
+    v = top_ex[0].value
+    if not isinstance(v, (ast.List, ast.Tuple)) or not all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in v.elts):
+        raise LawError("exports must be a constant list of names: exports = [\"RATE\", \"tax_due\"]")
+    names = [e.value for e in v.elts]
+    if len(set(names)) != len(names):
+        raise LawError("exports names a name twice")
+    defs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef)]
+    consts: dict = {}
+    for n in tree.body:                                            # declarative top level
+        nm = _single(n)
+        if isinstance(n, ast.FunctionDef) or (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant)):
+            continue
+        if nm in ("title", "intent", "rank") and isinstance(n.value, ast.Constant):
+            continue
+        if nm == "exports" or (nm and _is_use(n.value)):
+            continue
+        if nm and const_expr(n.value):
+            consts[nm] = consts.get(nm, 0) + 1
+            continue
+        raise LawError(f"a law with exports has a declarative top level (constants, defs, use, title, intent, rank): line {n.lineno}")
+    for x in names:
+        if x in NOT_EXPORTABLE:
+            raise LawError(f"{x} cannot be exported")
+        if (defs.count(x), consts.get(x, 0)) not in ((1, 0), (0, 1)):
+            raise LawError(f"export {x!r} must be one top-level def or one top-level constant assignment")
+    closure, _ = export_closure(tree, names)
+    for fn in closure.body:
+        for x in ast.walk(fn):
+            if isinstance(x, ast.Name) and x.id in ("state", "public"):
+                raise LawError(f"exported function {fn.name} (or a function it calls) uses {x.id}: exported code reads other laws' "
+                               f"data only through public_of(id) (line {x.lineno})")
+
+
+def check_graph(root: str, code: str, resolve) -> list:
+    """The import graph from one module: a DAG at most MAX_IMPORT_DEPTH deep whose distinct linked code (the root's included) is at
+    most MAX_LINKED_BYTES. resolve(declarer_key, ref) -> (key, code) names and returns each import's code (raising LawError when it
+    cannot). Every imported module must pass check_v2 and export something. Returns the keys of the modules reached, in DFS order."""
+    sizes = {root: len(code.encode())}
+    order: list = []
+
+    def walk(key, src, stack):
+        for ref in use_refs(check(src, v2=True)).values():
+            sub, sub_code = resolve(key, ref)
+            path = " -> ".join(stack + [key, sub])
+            if sub in stack or sub == key:
+                raise LawError(f"import cycle: {path}")
+            if len(stack) + 1 >= MAX_IMPORT_DEPTH:
+                raise LawError(f"imports nest deeper than {MAX_IMPORT_DEPTH}: {path}")
+            if not exports_of(check(sub_code, v2=True)):
+                raise LawError(f"{ref} exports nothing")
+            if sub not in sizes:
+                sizes[sub] = len(sub_code.encode())
+                order.append(sub)
+                if sum(sizes.values()) > MAX_LINKED_BYTES:
+                    raise LawError(f"the code a law links (its own and its imports) may be at most {MAX_LINKED_BYTES // 1024} KB")
+            walk(sub, sub_code, stack + [key])
+
+    walk(root, code, [])
+    return order
+
+
+def static_info(tree: ast.Module) -> dict:
+    """Static facts of a checked module (I-9): API calls, hooks, constant rights granted/revoked/suspended, imports, exports, rank,
+    title, intent."""
+    from charter import primitives as PR
+    rights: dict = {"grant": set(), "revoke": set(), "suspend": set()}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in rights and len(n.args) >= 2 \
+                and isinstance(n.args[1], ast.Constant) and isinstance(n.args[1].value, str):
+            rights[n.func.id].add(n.args[1].value)
+    consts = {_single(n): n.value.value for n in tree.body if _single(n) in ("title", "intent", "rank") and isinstance(n.value, ast.Constant)}
+    return {"calls": sorted(calls(tree) & API),
+            "hooks": sorted(n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in PR.HOOKS),
+            "rights": {x: sorted(v) for x, v in rights.items()}, "imports": [{"alias": a, "ref": r} for a, r in use_refs(tree).items()],
+            "exports": exports_of(tree) or [], "rank": consts.get("rank"), "title": consts.get("title"), "intent": consts.get("intent")}

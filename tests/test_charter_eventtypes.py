@@ -93,6 +93,7 @@ def test_derived_constants_keep_the_old_members(path):
 DYNAMIC = {                                                                    # non-literal first arguments, handled explicitly
     ("credit.py", "'loan_' + ln['status']"): {"loan_repaid", "loan_defaulted"},   # settle: status is repaid or defaulted
     ("jurisdictions.py", "kind"): None,                                       # _log_scope(k, kind, ...): its literal callers below
+    ("dispatch.py", "kind"): {"post", "anon_post", "story", "report", "channel_post"},   # do_post (P2.1): the post's own event type
 }
 
 

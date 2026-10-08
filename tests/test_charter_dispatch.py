@@ -256,8 +256,11 @@ def test_routed_rows_name_dispatch_functions():
             "create_right", "post", "dm", "hide_post", "set_camp_rule", "set_dm_limit",
             "begin_life", "end_life"}                                                          # P2.4b
     want |= {"regrow", "drift", "destroy", "set_camp_state", "create_camp", "contribute", "settle_project"}       # P2.4c: world causes
+    want |= {"attack", "fortify", "convert", "guard_bind", "guard_release"}                                        # P2.4a: conflict
     want |= {"propose", "decide", "open_ballot", "cast_vote", "close_ballot", "veto", "enact", "repeal", "amend", "set_procedure", "rule",
              "define_action"}                                          # P2.3
+    want |= {"join", "leave", "admit", "expel", "subscribe", "set_outlet_rule", "set_media_rule", "appoint", "lease",
+             "improve_camp"}                                           # P2.4d: membership, media, typed camps and leases
     assert set(D.ROUTED) == want
     for n in want:
         p = PR.get(n)
@@ -282,7 +285,7 @@ def test_apply_returns_an_outcome_and_refuses_with_physics_errors(k):
     with pytest.raises(TypeError, match="unexpected payload keys: colour"):
         k.apply("move", src=a, dst=b, item="timber", qty=1, why="gift", colour="red")
     with pytest.raises(D.NotRouted):
-        k.apply("attack", attacker=a, target=b, units=1, covert=False, disguise=False, lawful=False)
+        k.apply("hire_assassin", agent=a, assassin=b, target=a, terms={})
     with pytest.raises(D.PR.UnknownPrimitive):
         k.apply("teleport", agent=a)
 
@@ -492,6 +495,8 @@ def test_legal_acts_scenario_is_identical_to_before_p2_3(legal_recorded, name):
     A.act(k, leg, "propose", {"code": ORDINARY.replace("Notice Board", "Preview Probe")})
     assert k.w["laws"] and all(l.get("preview") is None for l in k.w["laws"].values())   # as before P2.3 (dispatch.do_propose)
     assert next(e for e in k.events if e["type"] == "proposal")["data"]["preview"]        # the event carries it
+    for j in ((now.get("state") or {}).get("jurisdictions") or {}).values():   # P4.1: records gained their account kind and treasury key
+        j.pop("kind", None), j.pop("treasury", None)
     assert not _first_diff(legal_recorded[name], now), _first_diff(legal_recorded[name], now)
     for hook in ("on_proposal", "on_vote", "on_ruling", "on_enact", "on_repeal", "tally", "penalty", "act_census"):
         assert any(f'"{hook}"' in c for c in now["calls"]), (name, hook)

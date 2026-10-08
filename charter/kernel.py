@@ -19,6 +19,7 @@ import types
 from contextlib import contextmanager
 
 from charter import context as CX                                     # context: files and scratchpads (charter/context.py)
+from charter import accounts as AC                                     # accounts: owner keys -> holder records (P4.1)
 from charter import conflict as CF                                  # conflict: attacks, forts, assassin (off by default)
 from charter import credit as CR
 from charter import dispatch as D                                     # Kernel.apply: primitives, legacy hook aliases (P2.1)
@@ -26,6 +27,7 @@ from charter.camptypes import framework as CT                    # camps: typed 
 from charter import hidden as H
 from charter import jurisdictions as J
 from charter import lawlang as L
+from charter import linker as LK                                      # law.v2: exports, use, public, versions (off: never called)
 from charter import mortality as MO                                   # life: the mortality contract (disable, succession)
 from charter import media as MD                                       # media2
 from charter import outside as O
@@ -76,6 +78,7 @@ class Kernel:
         self.snapshots: list[dict] = []
         self.fnreg: dict = {}
         self.ns: dict = {}
+        self.links: dict = {}                                          # law.v2: importer -> [linker.Link] (rebuilt on load)
         self.dry = False
         self._fn_n = 0
         self.current_post = None                                       # the post being processed by on_post hooks
@@ -261,22 +264,11 @@ class Kernel:
                          for k, q in self.agent(aid)["holdings"].items()), 4)
 
     def bal(self, owner, item):
-        if owner == "reserve":
-            return self.w["reserve"].get(item, 0.0)
-        if isinstance(owner, str) and owner.startswith("estate:"):           # law.v2: a deceased's estate account until probate
-            return MO.estate_bal(self, owner.split(":", 1)[1], item)
-        if isinstance(owner, str) and owner.startswith("reserve:"):         # jurisdictions: another jurisdiction's reserve
-            return J.pool(self, owner).get(item, 0.0)
-        return self.agent(owner)["holdings"].get(item, 0.0)
+        """Balance of any registered account (accounts.py: an agent, "reserve", "reserve:<jid>", "estate:<aid>")."""
+        return AC.bal(self, owner, item)
 
     def _add(self, owner, item, qty):
-        if isinstance(owner, str) and owner.startswith("estate:"):           # law.v2: an estate account (journaled internal write)
-            return MO.estate_add(self, owner.split(":", 1)[1], item, qty)
-        tgt = self.w["reserve"] if owner == "reserve" else J.pool(self, owner) if isinstance(owner, str) and owner.startswith("reserve:") \
-            else self.agent(owner)["holdings"]                           # jurisdictions: "reserve:<jid>"
-        tgt[item] = round(tgt.get(item, 0.0) + qty, 6)
-        if abs(tgt[item]) < 1e-9:
-            del tgt[item]
+        AC.add(self, owner, item, qty)                                 # accounts.py: any registered owner key
 
     def move(self, src, dst, item, qty, why="move", by=None):
         """The move primitive as a yes/no (every module's moves): False when the balance is short or a law blocks it."""
@@ -395,6 +387,8 @@ class Kernel:
         cas = self.cascade()
         if cas is None:
             return ()
+        if viewer is None and not cas.implicit:                         # the kernel's own view (legacy aliases' filters): as P2.1
+            return tuple(D.frame_view(f) for f in self._causes[cas.index:])
         return D.chain_view(self, self._causes[cas.index:], viewer, implicit_root=cas.root if cas.implicit else None,
                             concealed=tuple(getattr(self, "_concealed", None) or ()), turn_agent=self.current_turn_agent())
 
@@ -449,10 +443,13 @@ class Kernel:
     def call(self, lid, fn, *args):
         with self.cause("law", lid, hook=getattr(fn, "__name__", None)):
             try:
-                return self.limited(fn, *args)
+                out = self.limited(fn, *args)
             except D.Blocked as e:                                     # law.v2: a change the law asked for was blocked by another
                 self.w["effects"]["kernel_refusals"].append(e.reason)  # law: its call ends there, without fault (never raised
-                return None                                            # without law.v2)
+                out = None                                             # without law.v2)
+        if LK.enabled(self):                                           # law.v2: a law's public dict stays JSON data
+            LK.check_public(self, lid)
+        return out
 
     def api_for(self, lid):
         k = self
@@ -616,7 +613,7 @@ class Kernel:
             if "harvest" in str(text).lower():
                 k.w["effects"]["harvests_gazetted"] += 1
 
-        return J.scope_api(k, lid, {                                   # jurisdictions: a law reaches only its members (off: unchanged)
+        api = J.scope_api(k, lid, {                                    # jurisdictions: a law reaches only its members (off: unchanged)
             "agents": agents, "holders": k.law_holders, "has": k.law_has, "balance": k.bal, "reserve": lambda: dict(k.w["reserve"]),
             "price": k.price, "stock": lambda c: camp_of(c)["S"], "round": lambda: k.r, "laws": laws,
             "proposer": lambda: law()["author"], "value": k.unit_value, "supply": lambda cur: k._cur(cur)["supply"],
@@ -642,39 +639,47 @@ class Kernel:
             "lower": lambda t: str(t).lower(), "repeal": repeal,
             **FT.law_api(k, lid),                                          # every feature's law functions (features.TAILS order)
         })
+        if LK.enabled(k):                                              # law.v2: use(ref), public_of(lid) (charter/linker.py)
+            api.update(LK.law_api(k, lid))
+            api.update(D.law_api(k, lid))                              # law.v2 (P3.1): root_kind(chain) etc., law_id(), treasury()
+        return api
 
     # ------------------------------------------------------------------ laws
     def active_laws(self):
         return [self.w["laws"][i] for i in self.w["law_order"] if self.w["laws"][i]["status"] == "active"]
 
     def new_law(self, code, author, intent_override=None):
-        tree = L.check(code)
-        self._check_hooks(code)
+        v2 = LK.enabled(self)
+        tree = L.check(code, v2=v2)
+        L.check_hooks(tree, v2, D.ROUTED)                              # R5: new-style hooks need law.v2 (P3.1)
         title, intent = L.header(code)
-        cls = L.classify(tree)
+        cls = LK.new_law_class(self, code) if v2 else L.classify(tree)   # law.v2: with what it imports (transitive)
         self.w["law_seq"] += 1
         lid = f"L{self.w['law_seq']}"
         self.w["laws"][lid] = {"id": lid, "title": title, "intent": intent_override or intent, "code": code, "cls": cls, "author": author,
                                "status": "draft", "proposed_round": self.r, "enacted_round": None, "state": {}, "patches": [],
                                "repeal_target": L.is_repeal(tree), "defines_action": L.uses_define_action(tree), "preview": None}
+        if v2:
+            LK.on_new_law(self, lid)                                   # version 1, code store, public, import records
         return lid
 
-    def _api(self, lid) -> dict:
-        """A law's namespace API: api_for, plus under law.v2 the chain helpers, law_id() and treasury() (dispatch.law_helpers)."""
+    def _exec(self, lid):
+        """Execute a law's module in a fresh namespace bound to its API and `state` (law.v2: and its `public` dict)."""
+        law = self.w["laws"][lid]
+        if "before_" in law["code"] or "after_" in law["code"]:        # R5 (P3.1): new-style hooks need law.v2
+            L.check_hooks(L.check(law["code"]), LK.enabled(self), D.ROUTED)
         api = self.api_for(lid)
-        return {**api, **D.law_helpers(self, lid)} if D.v2(self) else api
-
-    def _check_hooks(self, code) -> None:
-        """R5: new-style before_<p>/after_<p> hooks need law.v2 (and a routed primitive with that phase)."""
-        if "before_" in code or "after_" in code:
-            L.check_hooks(L.check(code), D.v2(self), D.ROUTED)
+        if "public" in law:
+            api = {**api, "public": law["public"]}
+        ns = L.load_module(law["code"], lid, api, law["state"], self.limited)
+        ns["title"] = ns["intent"] = None
+        ns.update({"title": api["title"]})                             # the API function, not the module's title string
+        return ns
 
     def _load(self, lid):
-        law = self.w["laws"][lid]
-        self._check_hooks(law["code"])
-        ns = L.load_module(law["code"], lid, self._api(lid), law["state"], self.limited)
-        ns["title"] = ns["intent"] = None
-        ns.update({"title": self.api_for(lid)["title"]})               # the API function, not the module's title string
+        # law.v2: the linker checks the import graph, relinks the module's imports and, when the code changed (an amendment),
+        # records the new version and relinks or auto-pins its dependents (linker.load)
+        ns = LK.load(self, lid) if LK.enabled(self) else self._exec(lid)
         self.ns[lid] = ns
         return ns
 
@@ -690,10 +695,16 @@ class Kernel:
         if by_law is not None:                                          # law-caused: never a law of a stricter class (review F1)
             rank = self.w["laws"].get(by_law, {}).get("cls")
             hit = [l for l in hit if L.CLASS_RANK.get(l["cls"], 0) <= L.CLASS_RANK.get(rank, 0)]
+        done = False
         for law in hit:
-            self.apply("repeal", jurisdiction=D.jur_of(self, law["id"]), law=law["id"], by_law=by_law,
-                       via=via or ("law" if by_law is not None else D.via_of(self)))
-        return bool(hit)
+            out = self.apply("repeal", jurisdiction=D.jur_of(self, law["id"]), law=law["id"], by_law=by_law,
+                             via=via or ("law" if by_law is not None else D.via_of(self)))
+            if not out.ok:                                             # law.v2: a before_repeal hook kept the law in force
+                continue
+            done = True
+            if LK.enabled(self):                                       # law.v2: following importers auto-pin (D-8)
+                LK.on_repeal(self, law["id"])
+        return done
 
     def hooks(self, hook, *args):
         """Run a hook on every active law, in enactment order. Errors suspend the law and call the Fixer."""
@@ -725,16 +736,17 @@ class Kernel:
     def _module_data(self):
         """Laws' module-level data (lists, dicts, counters a law keeps outside `state`): copied by dry runs so a preview, probe or
         procedure check cannot leave changes in laws already in force."""
-        skip = L.API | set(L.SAFE_BUILTINS) | {"__builtins__", "title", "intent", "state"}
+        skip = L.API | set(L.SAFE_BUILTINS) | {"__builtins__", "title", "intent", "state"} | ({"public"} if LK.enabled(self) else set())
         return {lid: {n: copy.deepcopy(v) for n, v in ns.items() if n not in skip and not callable(v)} for lid, ns in self.ns.items()}
 
     def _snapshot(self):
         return (copy.deepcopy(self.w), dict(self.fnreg), dict(self.ns),
                 {lid: copy.deepcopy(l["state"]) for lid, l in self.w["laws"].items()}, self.rng.getstate(), self._law_rng_state(),
-                copy.deepcopy(self.eff), self._module_data())
+                copy.deepcopy(self.eff), self._module_data(), LK.snapshot_links(self))
 
     def _restore(self, snap):
-        self.w, self.fnreg, self.ns, states, rs, ls, self.eff, mdata = snap
+        self.w, self.fnreg, self.ns, states, rs, ls, self.eff, mdata, links = snap
+        LK.restore_links(self, links)
         for lid, data in mdata.items():
             if lid in self.ns:
                 self.ns[lid].update(copy.deepcopy(data))
@@ -743,6 +755,8 @@ class Kernel:
             if lid in self.w["laws"]:
                 self.w["laws"][lid]["state"] = states.get(lid, {})
                 ns["state"] = self.w["laws"][lid]["state"]
+                if "public" in self.w["laws"][lid]:                    # law.v2: the module's public is the record's
+                    ns["public"] = self.w["laws"][lid]["public"]
         self.rng.setstate(rs)
         self._set_law_rng_state(ls)
 
@@ -759,8 +773,8 @@ class Kernel:
         for lid, ns in self.ns.items():
             keep = {}
             for name, v in ns.items():
-                if name in api_names or callable(v) or name in ("title", "intent"):
-                    continue
+                if name in api_names or callable(v) or name in ("title", "intent") or isinstance(v, LK.Link):
+                    continue                                           # law.v2: links are relinked when the module loads again
                 keep[name] = v
             ns_data[lid] = keep
         fns = {key: (lid, _dump_fn(fn, self.ns.get(lid, {}))) for key, (lid, fn) in self.fnreg.items()}
@@ -798,11 +812,9 @@ class Kernel:
         if "law_rngs" in st:
             self._set_law_rng_state(st["law_rngs"])
         self.ns = {}
+        self.links = {}                                                # law.v2: modules relink their imports as they load
         for lid, data in st["ns_data"].items():
-            law = self.w["laws"][lid]
-            ns = L.load_module(law["code"], lid, self._api(lid), law["state"], self.limited)
-            ns["title"] = ns["intent"] = None
-            ns.update({"title": self.api_for(lid)["title"]})
+            ns = self._exec(lid)
             ns.update(data)
             self.ns[lid] = ns
         self.fnreg = {key: (lid, _load_fn(blob, self.ns.get(lid) or self._load(lid))) for key, (lid, blob) in st["fns"].items()}
@@ -1216,47 +1228,45 @@ class Kernel:
             return None
         plid, fn = self.fnreg[key]
         snap = self._snapshot()
-        self.dry = self.quiet = True                                    # R4: no new-style hook runs in an internal probe
+        self.dry = True
         try:
-            with D.isolated(self):
+            with D.quiet(self), D.isolated(self):                       # R4: no new-style hook runs in an internal probe
                 return self.call(plid, fn, Proposal("probe", author, "probe", "probe", cls, self.r))
         except L.LawError:
             return None
         finally:
-            self.dry = self.quiet = False
+            self.dry = False
             self._restore(snap)
 
     def probe(self, kind):
         """What active laws would do to a test harvest or transfer (effect-based, rolled back): used by effect predicates."""
         snap = self._snapshot()
-        self.dry = self.quiet = True                                    # R4: no new-style hook runs in an internal probe
-        iso = D.isolated(self)
-        iso.__enter__()
-        try:
-            self._reset_effects()
-            agents = [a for a, v in self.w["agents"].items() if v["cls"] not in ("board", "fixer")] or list(self.w["agents"])
-            a0, a1 = agents[0], (agents[1] if len(agents) > 1 else agents[0])
-            out = {"deduction_frac": 0.0, "tax_frac": 0.0, "gazetted": 0}
-            if kind == "harvest":
-                c = next(iter(self.w["camps"].values()))
-                ded = sum(v for _, v in self.hooks("on_harvest", a0, c["id"], [0] * c["dials"], 100.0)
-                          if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0)
-                out["deduction_frac"] = min(1.0, ded / 100.0)
-            elif kind in ("transfer", "transfer_to_official"):
-                dst = a1
-                if kind == "transfer_to_official":
-                    dst = (self.holders("vote") + self.board() + self.fixer() + [a1])[0]
-                tax = sum(v for _, v in self.hooks("on_transfer", a0, dst, "timber", 100.0)
-                          if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0)
-                out["tax_frac"] = min(1.0, tax / 100.0)
-            out["gazetted"] = self.w["effects"]["gazette_calls"]
-            return out
-        except L.LawError:
-            return {"deduction_frac": 0.0, "tax_frac": 0.0, "gazetted": 0}
-        finally:
-            iso.__exit__(None, None, None)
-            self.dry = self.quiet = False
-            self._restore(snap)
+        self.dry = True
+        with D.quiet(self), D.isolated(self):                           # R4: no new-style hook runs in an internal probe
+            try:
+                self._reset_effects()
+                agents = [a for a, v in self.w["agents"].items() if v["cls"] not in ("board", "fixer")] or list(self.w["agents"])
+                a0, a1 = agents[0], (agents[1] if len(agents) > 1 else agents[0])
+                out = {"deduction_frac": 0.0, "tax_frac": 0.0, "gazetted": 0}
+                if kind == "harvest":
+                    c = next(iter(self.w["camps"].values()))
+                    ded = sum(v for _, v in self.hooks("on_harvest", a0, c["id"], [0] * c["dials"], 100.0)
+                              if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0)
+                    out["deduction_frac"] = min(1.0, ded / 100.0)
+                elif kind in ("transfer", "transfer_to_official"):
+                    dst = a1
+                    if kind == "transfer_to_official":
+                        dst = (self.holders("vote") + self.board() + self.fixer() + [a1])[0]
+                    tax = sum(v for _, v in self.hooks("on_transfer", a0, dst, "timber", 100.0)
+                              if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0)
+                    out["tax_frac"] = min(1.0, tax / 100.0)
+                out["gazetted"] = self.w["effects"]["gazette_calls"]
+                return out
+            except L.LawError:
+                return {"deduction_frac": 0.0, "tax_frac": 0.0, "gazetted": 0}
+            finally:
+                self.dry = False
+                self._restore(snap)
 
     def decisive_set(self, cls="procedural"):
         """Smallest set of agents whose yes votes pass a law of this class under the current procedure."""
@@ -1331,13 +1341,13 @@ class Kernel:
             if a not in roster:
                 snap["observer"] = {"id": a, "value": self.holdings_value(a), "holdings": dict(w["agents"][a]["holdings"]),
                                     "rights": list(w["agents"][a]["rights"])}
-        if effect_predicates:
-            snap["predicates"] = {}
-            for name, pred in effect_predicates.items():
+        if effect_predicates:                                           # goal probes (P6.2): {key: fn(k, snap) -> JSON}, see runner.probes
+            snap["probes"] = {}
+            for name, probe in effect_predicates.items():
                 try:
-                    snap["predicates"][name] = bool(pred(self, snap))
+                    snap["probes"][name] = probe(self, snap)
                 except Exception:
-                    snap["predicates"][name] = False
+                    snap["probes"][name] = None
         self.snapshots.append(json.loads(json.dumps(snap, default=list)))
 
     # ------------------------------------------------------------------ courts

@@ -64,7 +64,7 @@ def test_r5_new_style_hooks_are_a_check_error_without_law_v2():
     with pytest.raises(L.LawError, match="cannot be hooked before"):
         new.new_law(law("X", "def before_regrow(p, chain):\n    return False\n"), "a")
     with pytest.raises(L.LawError, match="not routed"):
-        new.new_law(law("X", "def after_attack(p, chain):\n    return None\n"), "a")
+        new.new_law(law("X", "def after_commission(p, chain):\n    return None\n"), "a")
     with pytest.raises(L.LawError, match=r"\(p, chain\)"):
         new.new_law(law("X", "def after_move(p):\n    return None\n"), "a")
     # a helper named like no primitive is just a function, in either world
@@ -464,3 +464,72 @@ def test_determinism_and_replay_with_law_v2(tmp_path, monkeypatch):
         for f in ("events.jsonl", "snapshots.json"):
             assert (tmp_path / "rep" / f).read_bytes() == (a / f).read_bytes(), f
     shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+# ------------------------------------------------------------------ more halting points, R3, imports, redaction, typed harvests
+def test_python_depth_is_a_per_call_limit(k):
+    a, b, _ = agents(k)
+    deep = enact(k, law("Deep", "def down(n):\n    return down(n + 1)\ndef after_move(p, chain):\n    down(0)\n"))
+    c = enact(k, COUNTER)
+    A.act(k, a, "transfer", {"to": b, "item": "timber", "qty": 1})
+    assert k.w["laws"][c]["state"]["n"] == 1 and k.w["laws"][deep]["status"] == "active"
+    assert k.w["laws"][deep]["flags"][0]["kind"] == "gas_call"
+
+
+def test_a_dead_invocations_queued_reactions_are_dropped(k):
+    a, b, _ = agents(k)
+    pay = enact(k, law("Pay Then Spin", f"def after_move(p, chain):\n    if p['why'] == 'transfer':\n"
+                                       f"        move('{a}', '{b}', 'timber', 0.5)\n        while True:\n            pass\n"))
+    c = enact(k, COUNTER)
+    A.act(k, a, "transfer", {"to": b, "item": "timber", "qty": 1})
+    assert k.w["laws"][c]["state"]["whys"] == ["transfer"]           # its reaction to the 0.5 move died with the invocation
+    assert events(k, "cascade_halted")[-1]["data"] == {"root": "action:transfer", "by": None, "dropped": 1}
+    assert [f["kind"] for f in k.w["laws"][pay]["flags"]] == ["gas_call"]
+
+
+def test_r3_on_enact_runs_inside_the_enact_change(k):
+    a, b, _ = agents(k)
+    c = enact(k, law("Chains", "def after_move(p, chain):\n    state['ids'] = [f['id'] for f in chain]\n"
+                               "    state['law'] = chain_laws(chain)\n"))
+    pay = enact(k, law("Pay On Enact", f"def on_enact():\n    move('{a}', '{b}', 'timber', 1)\n"))
+    ids = k.w["laws"][c]["state"]["ids"]
+    assert ids[0] == "kernel:enact" and ids[1] == "primitive:enact" and k.w["laws"][c]["state"]["law"] == [pay]
+
+
+def test_imported_functions_run_under_the_importers_gas(k):
+    a, b, _ = agents(k)
+    lib = enact(k, law("Spinner", 'exports = ["spin"]\ndef spin():\n    n = 0\n    while True:\n        n += 1\n'))
+    imp = enact(k, law("Importer", f'sp = use("{lib}")\ndef after_move(p, chain):\n    sp["spin"]()\n'))
+    A.act(k, a, "transfer", {"to": b, "item": "timber", "qty": 1})
+    assert [f["kind"] for f in k.w["laws"][imp].get("flags", [])] == ["gas_call"]
+    assert not k.w["laws"][lib].get("flags") and k.w["law_v2"]["law_gas"][imp] >= D.GAS["per_call"] - 1   # the importer paid
+
+
+def test_typed_harvest_deductions_go_to_the_taxing_laws_treasury_only_under_v2():
+    for v2 in (False, True):
+        k = world(v2=v2)
+        a, t, _ = agents(k)
+        to = t if v2 else "reserve"                                   # charge_to stands for the taxing law's treasury
+        before = k.bal(to, "grain")
+        D.do_harvest(k, a, "c0", [0], "grain", 4.0, via="typed", charged=1.0, charge_to=t)
+        assert k.bal(to, "grain") == before + 1.0, v2
+
+
+def test_a_covert_killer_is_never_named_to_laws():
+    k = _life_world()
+    spy = enact(k, law("Spy", "def after_end_life(p, chain):\n    state['p'] = p\n    state['by'] = caused_by_agent(chain)\n"))
+    pool = [x for x in k.roster() if k.cls_of(x) == "worker"]
+    killer, victim = pool[:2]
+    from charter import mortality as MO
+    with k.cause("action", "attack", agent=killer, root=True):
+        MO.disable(k, victim, "assassin", by=killer, named=False)
+    st = k.w["laws"][spy]["state"]
+    assert st["p"]["agent"] == victim and st["p"]["by"] is None and st["p"]["result"]["by"] is None
+    assert killer not in json.dumps(st["p"])
+
+
+def test_law_gas_is_a_spec_key():
+    from charter import schema as SC
+    assert SC.validate(S.apply_overrides(S.load("E4"), ["law.v2=true", "law.gas.per_cascade=3000"])) == []
+    k = world(gas={"per_cascade": 3000})
+    assert D.gas_cfg(k)["per_cascade"] == 3000 and D.gas_cfg(k)["per_call"] == 10_000

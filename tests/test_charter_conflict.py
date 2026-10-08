@@ -625,3 +625,43 @@ def test_dry_run_resumes_from_a_checkpoint(tmp_path):
     b = runner.run(generator.generate(sp, 3), AG.ScriptedPolicy(3), tmp_path / "b", log=lambda *x: None, resume=True)
     assert (b / "events.jsonl").read_text() == (a / "events.jsonl").read_text()
     assert json.loads((b / "ground_truth.json").read_text())["conflict"] == json.loads((a / "ground_truth.json").read_text())["conflict"]
+
+
+def test_conflict_changes_route_through_kernel_apply(monkeypatch):
+    """P2.4a: forge, fortify, guards, attacks, pledges, spoils and deaths are primitives applied through Kernel.apply."""
+    from charter import dispatch as D
+    seen = []
+    real = D.apply
+
+    def spy(k_, name, payload):
+        seen.append(name)
+        return real(k_, name, payload)
+
+    monkeypatch.setattr(D, "apply", spy)
+    k = make(["conflict.timing=immediate"])
+    a, t = pair(k)
+    ally, g = cls(k, "worker")[2], cls(k, "worker")[3]
+    k.w["agents"][a]["holdings"].update({"copper": 3.0, "stone": 2.0})
+    seen.clear()
+    A.act(k, a, "forge", {"qty": 2})
+    A.act(k, a, "fortify", {"qty": 1})
+    A.act(k, g, "guard", {"agent": t})
+    A.act(k, g, "guard", {"stop": True})
+    assert seen == ["convert", "fortify", "guard_bind", "guard_release"]
+    arm(k, ally, 1)
+    A.act(k, ally, "join_attack", {"attacker": a, "target": t, "units": 1})
+    k.w["agents"][t]["holdings"] = {"timber": 4.0}
+    seen.clear()
+    r = CF.attack(k, a, t, 2)
+    assert r["status"] == "success" and r["A"] == 3
+    assert seen[:2] == ["attack", "destroy"] and {"move", "fortify", "end_life"} <= set(seen)
+    assert k.bal(a, "copper") == 1 and k.bal(a, "weapons") == 0 and k.bal(ally, "weapons") == 0
+
+
+def test_an_unnamed_disable_does_not_name_the_attacker_in_its_chain():
+    k, s, t, u = _assassin()
+    arm(k, s, 1)
+    n = len(k.events)
+    A.act(k, s, "attack", {"target": t, "units": 1, "covert": True})
+    dis = next(e for e in k.events[n:] if e["type"] == "disabled")
+    assert "by" not in dis["data"] and s not in json.dumps(dis["cause"])

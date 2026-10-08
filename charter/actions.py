@@ -9,6 +9,7 @@ import json
 
 import difflib
 
+from charter import accounts as AC                                     # accounts: balance caps (P4.1)
 from charter import action_registry as AR                             # every action's row: handler, doc, category
 from charter import camps as C
 from charter import context as CX                                     # context: lookups and files (charter/context.py)
@@ -220,8 +221,8 @@ def _harvest(k, aid, camp, x=None, **extra):
     if cr["fee"]:
         if not k.move(aid, cr["reserve"], cr["fee"]["item"], cr["fee"]["qty"], why="harvest_fee", by=aid):
             raise ActionError(f"cannot pay the harvest fee ({cr['fee']['qty']} {cr['fee']['item']})")
-    for item, q in c.get("consumes", {}).items():
-        if k.bal(aid, item) + 1e-9 < q:
+    for item, q in c.get("consumes", {}).items():                      # accounts: the harvester's account pays the camp's inputs
+        if not AC.can_pay(k, aid, item, q):
             raise ActionError(f"this camp consumes {q} {item} per harvest, and you have {k.bal(aid, item):g}")
         k._add(aid, item, -q)
     k.w["harvest_count"][key] = k.w["harvest_count"].get(key, 0) + 1
@@ -236,7 +237,7 @@ def _harvest(k, aid, camp, x=None, **extra):
     else:
         y, eff, noise = C.harvest(c, x, hrng)
         y = P.granary_cap(k, c, y)                                     # a funded granary keeps seed stock out of reach
-    item = c["resource"]                                               # on_harvest deductions go to the harvester's home reserve
+    item = c["resource"]                                               # on_harvest deductions go to each law's treasury (accounts)
     ded = k.apply("harvest", agent=aid, camp=camp, x=x, item=item, qty=y).result["deducted"]
     k.eff.setdefault(aid, {}).setdefault(camp, []).append((k.r, eff))
     k.log("harvest", aid, {"camp": camp, "x": x, "yield": y, "deducted": ded, "efficiency": round(eff, 4), "noise": round(noise, 4),
@@ -481,14 +482,14 @@ def _send(k, aid, to, item, qty, extra=None):
         raise ActionError(f"unknown recipient {to}")
     if qty <= 0:
         raise ActionError("qty must be positive")
-    if k.bal(aid, item) + 1e-9 < qty:
+    if not AC.can_pay(k, aid, item, qty):                              # accounts: the sender's balance cap
         raise ActionError(f"you have only {k.bal(aid, item):g} {item}")
     out = k.apply("move", src=aid, dst=to, item=item, qty=qty, why="transfer", actor=aid)   # on_transfer may block or tax it
     if not out.ok:
         k.w["effects"]["blocked_transfers"] += 1
         k.log("transfer_blocked", aid, {"to": to, "item": item, "qty": qty, **(extra or {})}, vis=[aid, to])
         raise ActionError("a law blocked this transfer")
-    tax = out.result["charged"]                                        # paid to the payer's home reserve ("reserve" when off)
+    tax = out.result["charged"]                                        # paid to each taxing law's treasury (accounts; "reserve" when off)
     v = k._v(item)
     k.w["effects"]["transfer_qty"] += qty * v
     k.w["effects"]["transfer_taxed"] += tax * v

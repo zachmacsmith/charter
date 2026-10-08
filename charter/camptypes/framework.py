@@ -373,19 +373,9 @@ def pay_yield(k, aid, cid, x, y, eff=0.0, noise=0.0, note=None) -> tuple:
     y = round(max(0.0, min(float(y), max(0.0, c["S"] - c["harvested_this_round"]))), 3)
     c["harvested_this_round"] += y
     y = P.granary_cap(k, c, y)
-    ded = 0.0
-    for _, out in k.hooks("on_harvest", aid, cid, list(x), y):
-        if isinstance(out, (int, float)) and not isinstance(out, bool) and out > 0:
-            ded += float(out)
-    ded = min(ded, y)
-    item = c["resource"]
-    if y - ded > 0:
-        k._add(aid, item, y - ded)
-    if ded > 0:
-        k._add("reserve", item, ded)
+    item = c["resource"]                                               # P2.4d: the harvest primitive (on_harvest deducts, in
+    ded = k.apply("harvest", agent=aid, camp=cid, x=list(x), item=item, qty=y, via="typed").result["deducted"]   # any cause)
     v = k.w["unit"].get(item, RS.VALUE.get(item, 0.0))
-    k.w["effects"]["harvest_yield"] += y * v
-    k.w["effects"]["harvest_deducted"] += ded * v
     k.eff.setdefault(aid, {}).setdefault(cid, []).append((k.r, float(eff)))
     k.log("harvest", aid, {"camp": cid, "x": list(x), "yield": y, "deducted": ded, "efficiency": round(float(eff), 4),
                            "noise": round(float(noise), 4), "stock_before": round(stock_before, 3), "type": c["type"],
@@ -434,11 +424,20 @@ def invest_action(k, aid, cid, qty) -> str:
         raise _err("qty must be positive")
     if not RS.pay(k, aid, {item: qty}, to=None, why=f"infrastructure:{cid}"):
         raise _err(f"you have only {k.bal(aid, item):g} {item}")
-    out = M.invest(k, aid, c, qty)
-    k.log("camp_invest", aid, {"camp": cid, "item": item, "qty": qty, **out,
-                               "text": f"{aid} invested {qty:g} {item} in {cid} (capacity {out['K']:.4g}, regrowth {out['r']:.3g}, safety {out['safety']:.0%})"},
-          vis="public")
+    out = k.apply("improve_camp", agent=aid, camp=cid, qty=qty).result
     return f"Invested {qty:g} {item} in {cid}: capacity {out['K']:.4g}, regrowth {out['r']:.3g}, safety {out['safety']:.0%}."
+
+
+def change_improve(k, agent, camp, qty) -> dict:
+    """The improve_camp primitive (P2.4d, through dispatch.do_improve_camp): the paid investment raises the camp's capacity,
+    regrowth and safety (modifiers.invest); a public camp_invest event."""
+    c = k.w["camps"][camp]
+    item = c["mods"]["infrastructure"]["item"]
+    out = M.invest(k, agent, c, qty)
+    k.log("camp_invest", agent, {"camp": camp, "item": item, "qty": qty, **out,
+                                 "text": f"{agent} invested {qty:g} {item} in {camp} (capacity {out['K']:.4g}, regrowth {out['r']:.3g}, safety {out['safety']:.0%})"},
+          vis="public")
+    return out
 
 
 # ------------------------------------------------------------------ end of round (step 2) and world update (step 5)
