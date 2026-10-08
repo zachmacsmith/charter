@@ -353,6 +353,8 @@ def scope_api(k, lid, api: dict) -> dict:
             return rk, True
         if isinstance(x, str) and x.startswith("estate:"):              # law.v2: a deceased member's estate (review 09 §13.3)
             return x, bound(x.split(":", 1)[1])
+        if isinstance(x, str) and x.startswith("fund:"):                # P4.4: the law's own funds only (contracts.open_fund)
+            return x, x.startswith(f"fund:{lid}:")
         return x, bound(x)
 
     for name, specs in AGENT_ARGS.items():

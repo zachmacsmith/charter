@@ -332,6 +332,14 @@ LAWFNS = _fns(
         F("contract_state", "read", docs="contracts"),
         F("contracts", "read", docs="contracts"),
         F("breaches", "read", docs="contracts"),
+        # P4.4: atomic exchange, per-law funds, the enforcement dial and reputation
+        F("swap", "money", ((0, "a"), (1, "b")), scope="none", why="only an association's own law may call it: between two of its "
+          "members' escrows", docs="contracts", power="take_deposits", primitive="swap"),
+        F("open_fund", "money", scope="none", why="the calling law's own fund (an account of its own account), binds nobody",
+          docs="contracts", primitive="open_fund"),
+        F("funds", "read", docs="contracts"),
+        F("enforcement", "read", docs="contracts"),
+        F("reputation", "read", ((0, "agent"),), scope="read", docs="contracts"),
     ),
 )
 # P4.2: the power column of the rows every polity may call today (charter/powers.py; the legacy_reserve rows carry it on their own
@@ -354,9 +362,11 @@ CONTRACT_COLUMN = {
     **{f.name: "allow" for f in LAWFNS.values() if f.group in CONTRACT_ALLOW_GROUPS},
     **{n: "allow" for n in ("name", "gazette", "notify", "open_ballot", "set_procedure", "repeal", "breach", "admit", "expel", "use",
                             "public_of", "root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury",
-                            "refuse")},                                 # W6a: a contract's law may refuse too
-    **{n: "escrow" for n in ("move", "fine", "pull", "forfeit", "refund")},
+                            "refuse", "open_fund")},                    # W6a: a contract's law may refuse too; P4.4 funds
+    **{n: "escrow" for n in ("move", "fine", "pull", "forfeit", "refund", "swap")},
 }
+# P4.4: the enforcement dial (contracts.enforcement) narrows the escrow column: under "word" every escrow function refuses what
+# touches an escrow or an allowance (move still pays out of the treasury and the law's own funds); contracts.scope_api applies it.
 LAWFNS.update({n: replace(f, contract=CONTRACT_COLUMN.get(n, "deny")) for n, f in LAWFNS.items()})
 CONTRACT_DENIED = frozenset(n for n, f in LAWFNS.items() if f.contract == "deny")
 V2_ONLY = {f.name for f in LAWFNS.values() if f.v2}                    # law.v2 names: off, Kernel.api_for has none of them

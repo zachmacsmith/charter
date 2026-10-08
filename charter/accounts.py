@@ -10,6 +10,8 @@ Owner keys (what `Kernel.bal`, `Kernel._add`, `Kernel.move` / `k.apply("move")` 
                          open from the death phase's mark step to probate (mortality.py)                kind "estate"
     "assoc:<cid>"        an association's (contract's) treasury (k.w["contracts"]["assoc"][cid]["reserve"], P4.3)  kind "association"
     "escrow:<cid>:<aid>" a member's deposit held by association cid (its record's ["escrow"][aid], P4.3)   kind "escrow"
+    "fund:<lid>:<name>"  a per-law fund (k.w["contracts"]["funds"][key]["holdings"], P4.4; contracts on): opened by law lid's
+                         open_fund(name); only lid (and its amendments, which keep the id) moves goods out of it  kind "fund"
     "world"              reserved: the sink/source of interventions and gas (P3.8, P5.1)              kind "world"
 
 Account ids (what a law belongs to): a jurisdiction id ("J0" when jurisdictions are off) or an association id ("A<n>", P4.3: a
@@ -18,7 +20,11 @@ k.w["contracts"]["assoc"] so jurisdiction listings are unchanged; "personal" is 
 
 `resolve(k, key)` is the one function from an owner key to its account: `Account(key, kind, account, holdings)`. Unknown keys raise
 the same LawError the kernel always raised for them ("no such agent: <key>", "no such reserve: <key>"). New kinds register a
-resolver for their key prefix in RESOLVERS (P4.3: "escrow").
+resolver for their key prefix in RESOLVERS (P4.3: "escrow"; P4.4: "fund").
+
+Funds (P4.4, contracts.py): a fund belongs to the account of the law that opened it (`funds_of(k, account)` lists a polity's or an
+association's funds); `check_fund_move` is the one rule: goods leave a fund only by a move whose why is "law:<its law>". A fund
+whose law is no longer in force is closed at the end of the round and its goods go to the account's treasury (contracts.end_round).
 
 Charges (dispatch.resolve): a law's tax or deduction is credited to the law's own treasury (`charge_destination`). Today a hook
 that concerns an agent runs only for laws that bind that agent (jurisdictions.hooks), so the law's jurisdiction is the payer's
@@ -35,12 +41,13 @@ from dataclasses import dataclass
 from charter import jurisdictions as J
 from charter import lawlang as L
 
-KINDS = ("agent", "polity", "estate", "association", "personal", "escrow", "world")
+KINDS = ("agent", "polity", "estate", "association", "personal", "escrow", "world", "fund")
 RESERVED_KINDS = ("personal", "world")                           # named now, registered by later packages (P3.8, P5.1)
 J0_KEY = "reserve"                                                # J0's owner key forever (review 06 §9)
 ESTATE = "estate:"
 ASSOC = "assoc:"                                                  # P4.3: an association's treasury
 ESCROW = "escrow:"                                                # P4.3: a member's deposit held by an association
+FUND = "fund:"                                                    # P4.4: a per-law fund (contracts.open_fund)
 
 # Where totals of an item may change: the explicit sources and sinks, as "module.function" of their Kernel._add call sites. Every
 # other change is a move between accounts, or into or out of a held escrow (`escrows`); a child's endowment comes from its parent
@@ -115,7 +122,38 @@ def _escrow(k, key):
     return Account(key, "escrow", cid, rec["escrow"].get(aid) or {})        # written through `add` (created on first deposit)
 
 
-RESOLVERS = {"reserve:": _reserve, ESTATE: _estate, ASSOC: _assoc, ESCROW: _escrow}   # key prefix -> resolver
+def fund_key(lid, name) -> str:
+    return f"{FUND}{lid}:{name}"
+
+
+def funds(k) -> dict:
+    """The per-law fund records (P4.4): {key: {"key", "law", "name", "account", "holdings", "opened", "status"}}; {} when none."""
+    c = k.w.get("contracts")
+    return (c or {}).get("funds") or {}
+
+
+def _fund(k, key):
+    rec = funds(k).get(key)
+    if rec is None:
+        raise L.LawError(f"no such fund: {key}")
+    return Account(key, "fund", rec["account"], rec["holdings"])
+
+
+def funds_of(k, account) -> dict:
+    """An account's open funds: {key: holdings}."""
+    return {key: dict(f["holdings"]) for key, f in funds(k).items() if f["account"] == account and f["status"] == "open"}
+
+
+def check_fund_move(k, src, why) -> None:
+    """Goods leave a fund only by its own law's move (why "law:<lid>"; an amended law keeps its id). Anything else is refused."""
+    f = funds(k).get(src)
+    if f is None:
+        raise L.LawError(f"no such fund: {src}")
+    if str(why) != f"law:{f['law']}":
+        raise L.LawError(f"only law {f['law']} moves goods out of its fund {src}")
+
+
+RESOLVERS = {"reserve:": _reserve, ESTATE: _estate, ASSOC: _assoc, ESCROW: _escrow, FUND: _fund}   # key prefix -> resolver
 
 
 def resolve(k, key) -> Account:
@@ -240,7 +278,8 @@ def payouts(charge_to, charged):
 
 # ---------------------------------------------------------------------- conservation
 def keys(k) -> list:
-    """Every registered owner key now: agents, J0's reserve, other treasuries, open or past estates."""
+    """Every registered owner key now: agents, J0's reserve, other treasuries, open or past estates, associations' treasuries
+    and escrows, per-law funds."""
     out = list(k.w["agents"]) + [J0_KEY]
     for jid, j in (k.w.get("jurisdictions") or {}).items():
         if not j.get("legacy"):
@@ -250,6 +289,7 @@ def keys(k) -> list:
     for cid, rec in assocs(k).items():                                 # P4.3: associations' treasuries and their members' escrows
         out.append(f"{ASSOC}{cid}")
         out += [escrow_key(cid, aid) for aid in rec["escrow"]]
+    out += list(funds(k))                                              # P4.4: per-law funds (a closed one is empty)
     return out
 
 

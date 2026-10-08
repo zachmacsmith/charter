@@ -1168,6 +1168,56 @@ def on_round_end(r):
             move("reserve", x["attacker"], "timber", min(10, reserve().get("timber", 0)))
 ''')
 
+# ------------------------------------------------------------------ contracts (P4.4): a polity law over its members' contracts. Category
+# "contracts" exists only in worlds with contracts on (GATED_CATEGORIES); breaches() is a contracts law function. It sanctions only
+# breaches the world lets courts hear (contracts.enforcement escrow_court: breaches()[i]["actionable"]), each one once.
+GATED_CATEGORIES["contracts"] = "contracts"
+law("Contract Enforcement Act", "contracts", '''
+title = "Contract Enforcement Act"
+intent = "The polity enforces the contracts its members join. A breach a contract records against a member (where courts may hear contract breaches) is sanctioned once: when a judge finds the member guilty under this law's clause breach_of_contract (MODE court), or at the end of the round it was recorded (MODE auto). The sanction (SANCTION fine, suspend or both) is a fine of FINE ITEM per breach to the reserve and/or the suspension of RIGHT for ROUNDS rounds."
+MODE = "court"
+SANCTION = "fine"
+ITEM = "grain"
+FINE = 2
+RIGHT = "propose"
+ROUNDS = 2
+
+def open_breaches(member):
+    done = state.setdefault("done", [])
+    return [b for b in breaches() if b["actionable"] and b["member"] == member and b["id"] not in done]
+
+def sanction(member):
+    if member not in agents():
+        return 0
+    hits = open_breaches(member)
+    if len(hits) == 0:
+        return 0
+    for b in hits:
+        state["done"].append(b["id"])
+    if SANCTION == "fine" or SANCTION == "both":
+        fine(member, ITEM, FINE * len(hits))
+    if SANCTION == "suspend" or SANCTION == "both":
+        suspend(member, RIGHT, ROUNDS)
+    gazette("Contract Enforcement Act: " + member + " sanctioned for " + str(len(hits)) + " breach(es) of contract")
+    return len(hits)
+
+def penalty(accused, accuser):
+    if sanction(accused) == 0:
+        gazette("Contract Enforcement Act: no breach of contract on record against " + accused + " that a court may hear")
+
+def on_enact():
+    clause("breach_of_contract", "A member who breaks a contract it joined, as that contract recorded it, is sanctioned when a judge finds it guilty.", penalty)
+
+def on_round_end(r):
+    if MODE != "auto":
+        return
+    seen = []
+    for b in breaches():
+        if b["actionable"] and b["member"] not in seen:
+            seen.append(b["member"])
+            sanction(b["member"])
+''')
+
 
 # ====================================================================== edition 2 (P3.9): building blocks and readable implementations
 # Spec `law.library: {edition: 1|2, access: none|catalogue|instantiate}` (schema.py; the top-level `library` key is the category

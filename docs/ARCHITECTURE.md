@@ -486,7 +486,18 @@ Associations v1 (P4.3) follow review 06 §3-§4 with the changes below:
   their own rights among members, define offices, expel and admit, run member ballots, and hook members' primitives (charges go to
   the association's treasury). They may not touch kernel rights, fine beyond escrow, sanction, attack, or set camp rules.
 - Contract law errors suspend the law and notify members; they never go to the Fixer.
-- Enforcement dial `contracts.enforcement: escrow | escrow_court | word` (P4.4).
+- Enforcement dial `contracts.enforcement: escrow | escrow_court | word` (P4.4). `escrow`: a contract enforces itself through
+  escrow and allowances, `breach()` only records. `escrow_court`: also, `breaches()` marks records `actionable` and the polity
+  library law "Contract Enforcement Act" sanctions them (a judge's ruling on its clause `breach_of_contract`, or automatically);
+  `contracts.court_breaches(k, member)` is the seam courts v2 builds on. `word`: no escrow at all (the escrow column refuses,
+  `deposit_escrow`/`set_allowance` are refused), breaches are public (`reputation(agent)`).
+- Atomic exchange (P4.4, review 10 §6 #7): primitive `swap(contract, a, b, give, get)` (both legs between two members' escrows or
+  neither; hookable as `before_swap`/`after_swap`) and the `exchange` template.
+- Per-law funds (P4.4, review 10 §6 #8): owner key `fund:<lid>:<name>` from `open_fund(name)`, an account of the law's account
+  (`accounts.funds_of`); only law `lid` moves goods out (`accounts.check_fund_move`; an amendment keeps the id); a fund whose law
+  is out of force closes into the account's treasury at the end of the round. Contracts on only.
+- Dissolution (P4.4): when the last members leave, the laws' `on_dissolve(heirs)` runs, then the treasury is shared equally among
+  those last members; a dead member's escrow or share follows its estate or bequest (`mortality.settle_late`).
 - Standing orders, scripts and registries are contract templates, not kernel features (review 07).
 - Exit: a member can always leave at round end; `on_exit` keeps at most the member's escrow.
 

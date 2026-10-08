@@ -392,6 +392,7 @@ def _ann():
         "contracts.max_laws": dict(types=("int",), range=(1, None)),
         "contracts.templates": dict(types=("bool",)),
         "contracts.scripted": dict(types=("bool",)),
+        "contracts.enforcement": dict(types=("str",), enum=("escrow", "escrow_court", "word")),     # P4.4: the enforcement dial
         "resources.placement": dict(types=("str",), enum=_placements),
         "prompts.core": dict(types=("dict",)),
         "prompts.manual": dict(types=("dict",)),
@@ -704,6 +705,9 @@ DOCS = {
     "jurisdictions": "jurisdictions: laws bind members only; secret founding and declaration (charter/jurisdictions.py)",
     "contracts": "contracts (P4.3): associations anyone may found, with their own treasury, escrow, allowances and code, binding "
                  "only members who join; needs law.v2 (charter/contracts.py)",
+    "contracts.enforcement": "P4.4 dial: escrow (contracts enforce themselves through escrow), escrow_court (and a polity's "
+                             "courts hear breaches: the Contract Enforcement Act) or word (no escrow at all: breach records and "
+                             "reputation only)",
     "resources": "resource placement and upkeep (charter/resources.py)",
     "resources.placement": "default | copper_solo | gold_solo: which resource the solo-science camp makes (types only)",
     "resources.upkeep": "each agent consumes `qty` of `item` every `every` rounds or loses an action until paid",
