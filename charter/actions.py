@@ -1036,8 +1036,10 @@ def _rule(k, aid, case, verdict, reason, remedy=_NO_REMEDY):
     v2 = D.v2(k)
     if remedy is not _NO_REMEDY and not v2:                             # courts v2: a remedy exists only under law.v2
         raise TypeError("_rule() got an unexpected keyword argument 'remedy'")
-    _need(k, aid, "judge", "rule on cases")
+    from charter import courts as CO
     c = k.w["cases"].get(case)
+    if not (v2 and not k.has(aid, "judge") and CO.may_rule_without_judge(k, aid, c)):   # W7e: an appellate office
+        _need(k, aid, "judge", "rule on cases")
     if not c or c["status"] != "open":
         raise ActionError(f"no open case {case}")
     stage, decides, panel = 1, True, 1
@@ -1056,8 +1058,9 @@ def _rule(k, aid, case, verdict, reason, remedy=_NO_REMEDY):
         except ValueError as e:
             raise ActionError(str(e))
     n = k.w["rulings_this_round"].get(aid, 0)
-    if n >= 3:
-        raise ActionError("a judge rules on at most 3 cases per round")
+    cap = int(CO.rules(k, CO.polity_of(k, c))["rulings_per_round"]) if v2 else 3     # W7e: a court rule (default 3)
+    if n >= cap:
+        raise ActionError(f"a judge rules on at most {cap} cases per round")
     k.w["rulings_this_round"][aid] = n + 1
     guilty = str(verdict).lower().startswith("guilty")
     verdict = "guilty" if guilty else "not guilty"

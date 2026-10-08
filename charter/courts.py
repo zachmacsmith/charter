@@ -21,8 +21,11 @@ A rule holds while the law that set it is in force; otherwise its default applie
   appeal_judges  the higher office: a right an appellate judge must hold besides `judge` (None: no appeals)        default None
   appeal_window  rounds after a ruling in which a party may appeal                                                 default 2
   appeal_panel   the appeal bench's panel size                                                                     default 1
-Everyone who rules holds `judge` (so the `rule` action is listed for them); the court rules choose among the judges. A law gives an
-office the bench by granting it both rights.
+  rulings_per_round  rulings (and panel votes) a judge may give per round, counted across courts (W7e)            default 3
+At first instance everyone who rules holds `judge` (so the `rule` action is listed for them); the court rules choose among the
+judges. A law gives an office the first-instance bench by granting it both rights. W7e: the appellate office named by
+appeal_judges sits on the appeal bench by that right alone (it need not also hold `judge`): appellate_office() lists `rule` for it
+(action_registry's `alt` check) and it rules on appeals only.
 
 Deferred penalties: when the case's polity hears appeals (appeal_judges set and appeal_window > 0) a guilty ruling at first instance
 does not run its penalty at once: the case records penalty "pending" and appealable_until. At the end of the window (the kernel's
@@ -45,8 +48,9 @@ from charter import dispatch as D
 from charter import jurisdictions as J
 from charter import lawlang as L
 
-DEFAULTS = {"deadline": 3, "panel": 1, "judges": None, "appeal_judges": None, "appeal_window": 2, "appeal_panel": 1}
-BOUNDS = {"deadline": (1, 20), "panel": (1, 9), "appeal_window": (0, 10), "appeal_panel": (1, 9)}
+DEFAULTS = {"deadline": 3, "panel": 1, "judges": None, "appeal_judges": None, "appeal_window": 2, "appeal_panel": 1,
+            "rulings_per_round": 3}                                     # W7e: the per-judge cap (before W7e a fixed 3)
+BOUNDS = {"deadline": (1, 20), "panel": (1, 9), "appeal_window": (0, 10), "appeal_panel": (1, 9), "rulings_per_round": (1, 20)}
 RIGHT_KEYS = ("judges", "appeal_judges")
 STATUSES = ("open", "decided", "dismissed")
 REMEDY_CHARS = 80
@@ -111,10 +115,34 @@ def bench(k, c) -> tuple:
 
 
 def judges_for(k, c, right, exclude=()) -> list:
-    """Judges who may hear a case: holders of judge (bound by the clause's law, with jurisdictions on) who also hold `right`."""
+    """Judges who may hear a case: holders of judge (bound by the clause's law, with jurisdictions on) who also hold `right`; on
+    appeal (W7e) also holders of the appellate right who do not hold judge (after the judges, in holder order)."""
     lid = clause_law(k, c)
-    return [a for a in k.holders("judge") if (not J.enabled(k) or J.binds(k, lid, a)) and (right is None or k.has(a, right))
+    pool = list(k.holders("judge"))
+    if c.get("stage", 1) == 2 and right is not None:
+        pool += [a for a in k.holders(right) if a not in pool]
+    return [a for a in pool if (not J.enabled(k) or J.binds(k, lid, a)) and (right is None or k.has(a, right))
             and a not in exclude]
+
+
+def appellate_office(k, aid) -> bool:
+    """W7e (law.v2): does aid hold the appellate right a polity's court rules name (appeal_judges, with appeals heard) in some
+    polity whose laws bind it? Such an office sees the `rule` action without `judge` (action_registry: rule's alt check)."""
+    if not enabled(k):
+        return False
+    for pol in sorted(k.w.get("court_rules") or {}):
+        r = rules(k, pol)
+        if appeals_heard(r) and k.has(aid, r["appeal_judges"]):
+            return True
+    return False
+
+
+def may_rule_without_judge(k, aid, c) -> bool:
+    """W7e: a case on appeal whose bench right aid holds: it may rule though it does not hold judge."""
+    if not enabled(k) or c is None or c.get("stage", 1) != 2:
+        return False
+    right, _ = bench(k, c)
+    return bool(right) and k.has(aid, right)
 
 
 def first_judges(c) -> set:
@@ -123,14 +151,23 @@ def first_judges(c) -> set:
 
 
 # ---------------------------------------------------------------------- filing and answering (routed: open_case, answer_case)
-def change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited=None) -> dict:
-    """A case is filed: numbered, its judges found and told, the accusation published (with the evidence as the accuser saw it)."""
+SOURCES = ("agent", "law", "contest", "contract")                  # W7e (review 11 §4.1): who opened a case
+
+
+def change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited=None, source="agent") -> dict:
+    """A case is filed: numbered, its judges found and told, the accusation published (with the evidence as the accuser saw it).
+    W7e: source (SOURCES), stored on the case only when it is not "agent" (so agent-opened cases are as before); a contract's
+    breach case (contracts.file_breach_case) has source "contract" and may have no accuser."""
+    source = source or "agent"                                         # (the routed payload's None: an agent's accuse)
+    assert source in SOURCES, source
     k.w["case_seq"] += 1
     assert case == f"C{k.w['case_seq']}", case
     rec = {"id": case, "accuser": accuser, "accused": accused, "clause": clause, "evidence": list(evidence or []),
            "counter": [], "status": "open", "filed": k.r, "deadline": k.r + 3, "judges": k.holders("judge")}
     if J.enabled(k):                                                   # jurisdictions: judges of the clause's jurisdiction only
         rec["judges"] = J.judges(k, rec)
+    if source != "agent":                                              # W7e: only a non-default source is recorded
+        rec["source"] = source
     if enabled(k):                                                     # law.v2: the polity's deadline and first-instance bench
         r = rules(k, polity_of(k, rec))
         rec["deadline"] = k.r + int(r["deadline"])
@@ -138,8 +175,9 @@ def change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, 
             rec["judges"] = [a for a in rec["judges"] if k.has(a, r["judges"])]
     k.w["cases"][case] = rec
     for j in rec["judges"]:
-        k.notify(j, f"New case {case}: {accuser} accuses {accused} under {clause}.")
-    k.log("accuse", accuser, {"case": case, "accused": accused, "clause": clause, "evidence": cited or []}, vis="public")
+        k.notify(j, f"New case {case}: {accuser if accuser is not None else 'a contract'} accuses {accused} under {clause}.")
+    k.log("accuse", accuser, {"case": case, "accused": accused, "clause": clause, "evidence": cited or [],
+                              **({"source": source} if source != "agent" else {})}, vis="public")
     return {"case": case, "judges": len(rec["judges"])}
 
 
@@ -317,7 +355,8 @@ def view(k, c) -> dict:
            "reason": c.get("reason"), "judge": c.get("judge"), "votes": {j: v["verdict"] for j, v in (c.get("votes") or {}).items()},
            "appealable_until": c.get("appealable_until"),
            "final": c["status"] in ("decided", "dismissed") and c.get("appealable_until") is None, "penalty": c.get("penalty"),
-           "appeal": c.get("appeal"), "first": {x: v for x, v in (c.get("first") or {}).items() if x != "votes"} or None}
+           "appeal": c.get("appeal"), "first": {x: v for x, v in (c.get("first") or {}).items() if x != "votes"} or None,
+           "source": c.get("source", "agent")}                        # W7e: agent | law | contest | contract
     return json.loads(json.dumps(out))
 
 

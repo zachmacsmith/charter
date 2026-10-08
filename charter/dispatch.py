@@ -874,7 +874,8 @@ def draft(k, lid) -> dict:
     never parses code. calls: the law-API functions it calls (sorted); hooks: the hooks it defines; rights: constant rights it
     grants, revokes or suspends; repeals: a repeal law's target. rank: the record's (an amendment's: max of its target's and its
     own, P3.4), else "statute" (P3.2). imports ([{alias, ref}]) and exports (names) from lawlang.static_info; amends: the law an
-    amendment draft amends (None), and for one its reason and dependents (linker.preview_amend at proposal)."""
+    amendment draft amends (None), and for one its reason and dependents (linker.preview_amend at proposal). W7e (law.v2):
+    in_force_from / in_force_until, the draft's declared validity window (W6a; None: open on that side)."""
     import ast
     law = k.w["laws"][lid]
     tree = ast.parse(law["code"])
@@ -888,7 +889,8 @@ def draft(k, lid) -> dict:
     return {"id": lid, "title": law["title"], "intent": law["intent"], "code": law["code"], "cls": law["cls"],
             "rank": law.get("rank") or (L.declared(tree, "rank") if v2(k) else None) or "statute", "author": law["author"], "calls": sorted(L.calls(tree) & L.API), "hooks": hooks,
             "rights": {x: sorted(v) for x, v in rights.items()}, "repeals": law["repeal_target"],
-            **({"imports": info["imports"], "exports": info["exports"], "amends": law.get("amends")} if v2(k) else {}),   # law.v2 only
+            **({"imports": info["imports"], "exports": info["exports"], "amends": law.get("amends"),               # law.v2 only
+                "in_force_from": L.window(tree)[0], "in_force_until": L.window(tree)[1]} if v2(k) else {}),   # W7e: W6a's window
             **({"reason": law.get("amend_reason") or "", "dependents": [dict(x) for x in law.get("dependents") or ()]}
                if law.get("amends") else {})}
 
@@ -1548,7 +1550,19 @@ def law_api(k, lid) -> dict:
     return {"root_kind": root_kind, "caused_by_agent": caused_by_agent, "caused_by_law": caused_by_law, "chain_laws": chain_laws,
             "law_id": lambda: lid, "treasury": lambda: treasury_of(k, lid),
             "set_conflict_rule": lambda rule: law_set_conflict_rule(k, lid, rule),             # P3.2
-            "refuse": refuse}                                                                  # W6a
+            "refuse": refuse,                                                                  # W6a
+            "is_number": is_number, "is_text": is_text}                                        # W7e
+
+
+def is_number(x) -> bool:
+    """Law API is_number(x) (law.v2, W7e): is x a number (an int or a float; True/False are not)? Law code has no isinstance, so
+    this is how a penalty tells numeric damages from a named remedy."""
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
+def is_text(x) -> bool:
+    """Law API is_text(x) (law.v2, W7e): is x a string?"""
+    return isinstance(x, str)
 
 
 # ---------------------------------------------------------------------- W6a: clean refusal (review 10 §4 "Clean failure", roadmap #3)
@@ -1558,7 +1572,8 @@ def law_api(k, lid) -> dict:
 #   - in a before_<p> hook (invoke, _run_before): the refusal is the verdict {"block": True, "reason": reason}, so the change is
 #     blocked under the polity's conflict rule like any block, and the actor is told the reason (an agent's action fails with it;
 #     a transfer's error names it; a law's call ends, its move returns False);
-#   - anywhere else run through invoke (after_<p> hooks): the invocation is rolled back, nothing more;
+#   - anywhere else run through invoke (after_<p> hooks): the invocation is rolled back; W7e: when an agent's action caused the
+#     change, that agent is told (law_refused {law, hook, primitive, reason}, dispatch.after_refused);
 #   - in code the kernel calls through Kernel.call (old hooks, on_round_start/end, offices, ballot callbacks, procedures, penalties):
 #     that call is rolled back and returns None; an office (define_action) fails the agent's invoke with the reason
 #     (actions._invoke uses Kernel.call_refusable). Kernel.call journals only laws whose code names refuse (refuses), so others pay
@@ -1636,6 +1651,23 @@ def window_of(k, lid) -> tuple:
     """W6a: (in_force_from, in_force_until) of a law's current code (None: open on that side)."""
     code = (k.w["laws"].get(lid) or {}).get("code")
     return code_window(code) if isinstance(code, str) and "in_force_" in code else (None, None)
+
+
+def window_note(k, lid) -> str:
+    """W7e: a law's declared window for agents' text (law list, read_law, previews): "" when it declares none or law.v2 is off, else
+    e.g. " [in force while round() is 3-9; out of force now]". The numbers are the law's own (round(), in_force_*), which an
+    agent's "Round N" header shows as N = round() + 1."""
+    if not v2(k):
+        return ""
+    lo, hi = window_of(k, lid)
+    return window_text(lo, hi, in_force(k, lid))
+
+
+def window_text(lo, hi, now=True) -> str:
+    if lo is None and hi is None:
+        return ""
+    span = f"is {lo}-{hi}" if lo is not None and hi is not None else (f">= {lo}" if lo is not None else f"<= {hi}")
+    return f" [in force while round() {span}{'' if now else '; out of force now'}]"
 
 
 def in_force(k, lid) -> bool:
@@ -2470,7 +2502,9 @@ def drain_v2(k, cas: Cascade) -> None:
                 P = PR.get(it.primitive)
                 chain = chain_view(k, it.causes[cas.index:], it.law, implicit_root=cas.root if cas.implicit else None,
                                    concealed=it.hide, turn_agent=it.turn_agent)
-                invoke(k, cas, it.law, it.hook, hook_payload(k, P, it.payload, it.law, it.hide), chain, it.depth, it.parent)
+                out = invoke(k, cas, it.law, it.hook, hook_payload(k, P, it.payload, it.law, it.hide), chain, it.depth, it.parent)
+                if isinstance(out, Refused):                         # W7e: the acting agent hears of an after-hook's refusal
+                    after_refused(k, it, out.reason)
             finally:
                 k._causes = saved
         if cas.halted and cas.queue:
@@ -2488,6 +2522,30 @@ def drain_v2(k, cas: Cascade) -> None:
     if cas.halted or cas.dropped:
         k.log("cascade_halted", None, {"root": cas.root["id"], "by": cas.halted, "dropped": cas.dropped}, vis="monitor")
         cas.dropped = 0
+
+
+def acting_agent(k, causes, turn_agent=None) -> str | None:
+    """W7e: the agent whose action is the innermost action frame of a cause stack (its turn's agent when the frame leaves it out),
+    or None (a world, kernel or intervention cause, or a round phase)."""
+    for f in reversed(causes):
+        if next(iter(f)) == "action":
+            a = f.get("agent") or turn_agent
+            return a if a in k.w["agents"] else None
+    return None
+
+
+def after_refused(k, it, reason) -> None:
+    """W7e: an after-hook called refuse(reason): besides the monitor's hook_aborted, tell the acting agent (when an agent's action
+    caused the change) with a `law_refused` event {law, hook, primitive, reason}; a law of a hidden jurisdiction the agent does not
+    belong to reads as "hidden" (as compelled does)."""
+    aid = acting_agent(k, it.causes, it.turn_agent)
+    if aid is None:
+        return
+    data = {"law": it.law, "hook": it.hook, "primitive": it.primitive, "reason": reason}
+    lj = J.law_jur(k, it.law)
+    if "jur" in k.w and k._hidden_jur(lj) and aid not in set(J.members(k, lj)):
+        data = {**data, "law": "hidden", "hook": None}
+    k.log("law_refused", None, {x: v for x, v in data.items() if v is not None}, vis=[aid])
 
 
 # ---------------------------------------------------------------------- blocks
@@ -2670,6 +2728,7 @@ def _apply_v2(k, cas, P, fn, p, opts) -> Outcome:
     extra = _extra(P, d)
     extra.update({x: v for x, v in v2d.directives.items() if _accepts(fn, x)})   # a new-style directive overrides a legacy one
     note = compel_note(k, name, p, opts)                              # P3.7: who a law-caused change concerns (before it)
+    n_ev = len(k.events)                                               # W7e: the change's own events (law.after_visibility)
     with k.cause("primitive", name):
         with _unhooked(k, unhooked):
             result = fn(k, **p, **opts, **extra)
@@ -2680,14 +2739,27 @@ def _apply_v2(k, cas, P, fn, p, opts) -> Outcome:
         prim_causes = list(k._causes)
     _legacy_after(k, P, p, chain, result)
     if P.after and not unhooked:
-        _enqueue(k, cas, P, {**p, "result": result}, depth, prim_causes, inv, hidden_agents(k, name, p, opts))
+        _enqueue(k, cas, P, {**p, "result": result}, depth, prim_causes, inv, hidden_agents(k, name, p, opts),
+                 own=[e for e in k.events[n_ev:] if e["type"] == P.event] if after_visibility(k) == "evidence" else None)
     return Outcome(ok=True, result=result, charges=d.charges + charged)
 
 
-def _enqueue(k, cas, P, payload, depth, causes, inv, hide) -> None:
+def after_visibility(k) -> str:
+    """W7e (review 11 §4.1): spec law.after_visibility, "all" (None, the default: as before) or "evidence"."""
+    return (k.spec.get("law") or {}).get("after_visibility") or "all"
+
+
+def _enqueue(k, cas, P, payload, depth, causes, inv, hide, own=None) -> None:
     """Queue (L, after_p) for every bound law with that hook, in canonical order, except accounts out of gas and R2: not when the
     change was made directly by (L, after_p) itself (the innermost law frame of its cause stack), so a hook never feeds itself; every
-    longer cycle (L reacts to M reacts to L) is legal, bounded by the depth cap and gas."""
+    longer cycle (L reacts to M reacts to L) is legal, bounded by the depth cap and gas.
+    Visibility gap (W7e, review 11 §4.1): by default a bound law's after-hook reacts to the change whatever the law could read of it
+    (evidence.law_can_see): it learns of a private DM through after_dm, of a member-only change of another account, and so on;
+    before-hooks are the same. Spec law.after_visibility "evidence" closes it for after-hooks: `own` is then the change's own events
+    (type P.event, logged by it) and a law is queued only if it may read one of them (a change that logged none is delivered as
+    before)."""
+    if own:
+        from charter import evidence as EV
     hook = f"after_{P.name}"
     if not hooked(k, hook):
         return
@@ -2697,6 +2769,8 @@ def _enqueue(k, cas, P, payload, depth, causes, inv, hide) -> None:
     for law in bound_laws(k, P, payload, "after"):
         lid = law["id"]
         if inner == (lid, hook) or _hook_fn(k, lid, hook) is None or account_of(k, lid) in st["out_of_gas"]:   # R2
+            continue
+        if own and not any(EV.law_can_see(k, lid, e) for e in own):    # W7e: law.after_visibility "evidence"
             continue
         snap = snap if snap is not None else _copy.deepcopy(payload)
         cas.queue.append(AfterItem(cas.next(), depth, lid, hook, P.name, snap, causes, hide, k.current_turn_agent(), inv))
@@ -2755,6 +2829,8 @@ def compel_note(k, name, p, opts=None) -> dict | None:
     change, who = got if got is not None else (dict(p), [p.get(x) for x in P.parties])
     if name == "move" and change.get("memo") is None:                 # W6a: a move without a memo reads as before
         change.pop("memo", None)
+    if name == "breach" and change.get("victim") is None:             # W7e: a breach without a victim reads as before
+        change.pop("victim", None)
     who = [a for a in dict.fromkeys(who) if isinstance(a, str) and a in k.w["agents"]]
     if not who:
         return None
@@ -2900,9 +2976,9 @@ def do_pull(k, contract, member, item, qty, lid=None) -> dict:
     return CT.change_pull(k, contract, member, item, qty, lid)
 
 
-def do_breach(k, contract, member, clause, remedy, lid=None) -> dict:
+def do_breach(k, contract, member, clause, remedy, lid=None, victim=None) -> dict:
     from charter import contracts as CT
-    return CT.change_breach(k, contract, member, clause, remedy, lid)
+    return CT.change_breach(k, contract, member, clause, remedy, lid, victim)
 
 
 # ---------------------------------------------------------------------- courts v2 (charter/courts.py; review 10 §6 item 5)
@@ -2914,9 +2990,9 @@ OPTIONS.update({"open_case": frozenset({"cited"}), "answer_case": frozenset({"ci
                 "set_court_rule": frozenset({"lid"})})
 
 
-def do_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited=None) -> dict:
+def do_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited=None, source="agent") -> dict:
     from charter import courts as CO
-    return CO.change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited)
+    return CO.change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited, source)
 
 
 def do_answer_case(k, jurisdiction, case, accused, evidence, cited=None) -> dict:

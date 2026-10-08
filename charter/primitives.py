@@ -131,7 +131,7 @@ PARAM_SAMPLES = {
     "rule": "majority", "closes_round": 3, "choice": "yes", "result": "yes", "votes": {"a1": "yes"}, "member": "a1",
     "by_law": None, "old_sha": "9f1c", "new_sha": "0a2b", "case": "C1", "verdict": "guilty", "judge": "a4", "clause": "L5:c",
     "accuser": "a1", "accused": "a2", "action": "census", "args": [], "power": "quill", "error": "boom", "goal": {"name": "g"},
-    "seat": "a5", "contract": "K1", "remedy": "fine", "level": 1, "template": "club",
+    "seat": "a5", "contract": "K1", "remedy": "fine", "level": 1, "template": "club", "victim": "a2", "source": "contract",   # W7e
     "paid": 2.0, "owed": 4.0, "rate": 0.05,                                                              # loans (routed)
     "evidence": ["e12"], "appellant": "a2", "decides": True, "stage": 1,                                 # courts v2
     "rank": "statute", "opened_by": "L1", "proposal": "L5", "diff": "--- L5 (before)\n+++ L5 (after)\n",      # P2.3 legal acts
@@ -582,12 +582,15 @@ _ROWS = [
       notes="the ruling event and its gazette follow the act (actions._rule logs them after on_ruling, as before). law.v2 (courts "
             "v2): remedy (damages or a name) reaches the clause's penalty; with a panel each judge's vote is a rule (decides: "
             "whether it decides the case); stage 2 is an appeal; a penalty waits for the appeal window (courts.expire_cases)"),
-    P("open_case", "core", "legal", ("jurisdiction", "case", "accuser", "accused", "clause", "evidence"), "dispatch:do_open_case",
+    P("open_case", "core", "legal", ("jurisdiction", "case", "accuser", "accused", "clause", "evidence", "source"),
+      "dispatch:do_open_case",
       subject="jurisdiction", parties=("jurisdiction", "accuser", "accused"), agent_params=("accuser", "accused"), legal=True,
       event="accuse", causes=("agent",), reads=("cases", "case", "court_rules"),
       sites=("dispatch:do_open_case", "courts:change_open_case", "actions:_accuse"), why={"compel": _LNA, "gate": _V2GATE},
       notes="routed (courts v2): before_open_case can refuse standing, after_open_case can charge a filing fee; law.v2: the "
-            "polity's court rules set the deadline and the bench"),
+            "polity's court rules set the deadline and the bench. W7e: source (agent, or contract: a breach a contract's law "
+            "records under contracts.breach_cases: the kernel opens it inside that law's breach() call, no law function opens a "
+            "case, so it has no compel face; then in the payload, with accuser the victim or None)"),
     P("answer_case", "core", "legal", ("jurisdiction", "case", "accused", "evidence"), "dispatch:do_answer_case",
       subject="jurisdiction", parties=("jurisdiction", "accused"), agent_params=("accused",), legal=True, event="respond",
       causes=("agent",), reads=("cases", "case"), sites=("dispatch:do_answer_case", "courts:change_answer_case", "actions:_respond"),
@@ -633,10 +636,11 @@ _ROWS = [
       agent_params=("member",), event="contract_pull", causes=("law",),
       sites=("dispatch:do_pull", "contracts:change_pull", "contracts:law_api.pull"),
       notes="only an association's own law, only from a member, only within the allowance left this round and what the member holds"),
-    P("breach", "contracts", "status", ("contract", "member", "clause", "remedy"), "dispatch:do_breach", subject="member",
-      parties=("member",), agent_params=("member",), event="contract_breach", causes=("law",),
+    P("breach", "contracts", "status", ("contract", "member", "clause", "remedy", "victim"), "dispatch:do_breach", subject="member",
+      parties=("member",), agent_params=("member", "victim"), event="contract_breach", causes=("law",),
       sites=("dispatch:do_breach", "contracts:change_breach", "contracts:law_api.breach"),
-      notes="a record (shown to the members): the remedy is what the code itself did within escrow (forfeit, expel) or a text"),
+      notes="a record (shown to the members): the remedy is what the code itself did within escrow (forfeit, expel) or a text. "
+            "W7e: victim, the injured agent where the code knows it (in the payload and the record only when given)"),
     # P4.4: atomic exchange and per-law funds (charter/contracts.py)
     P("swap", "contracts", "move", ("contract", "a", "b", "give", "get"), "dispatch:do_swap", subject="a", parties=("a", "b"),
       agent_params=("a", "b"), event="contract_swap", causes=("law",),

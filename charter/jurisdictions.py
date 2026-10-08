@@ -1291,8 +1291,35 @@ def _procedure_spec(k, jid, cls, author):
         k._restore(snap)
 
 
+def _yes_set(res, mem):
+    """The smallest set of members' yes votes that carries one ballot spec (heaviest first); None for no weight."""
+    el = [x for x in res.get("electorate", []) if x in mem]           # majority_voting counts like majority (as the kernel does)
+    wts = {x: float((res.get("weights") or {}).get(x, 1.0)) for x in el}
+    total = sum(wts.values())
+    if total <= 0:
+        return None
+    need = 2 * total / 3 if res.get("rule") == "two_thirds" else total / 2
+    chosen, acc = [], 0.0
+    for x in sorted(el, key=lambda x: -wts[x]):
+        chosen.append(x)
+        acc += wts[x]
+        if (acc >= need - 1e-9) if res.get("rule") == "two_thirds" else (acc > need):
+            break
+    return chosen
+
+
+def _first_ballot(k, res):
+    """A procedure's answer as one ballot spec: a stage plan (law.v2, W6c) reads as its first stage (as Kernel.vote_weights)."""
+    from charter import stages as ST
+    if isinstance(res, dict) and ST.staged(k, res):
+        return next((s for s in res["stages"] if isinstance(s, dict)), {})
+    return res
+
+
 def decisive_set(k, jid, cls="procedural") -> list:
-    """Kernel.decisive_set for one jurisdiction: its members, its procedure, electorates limited to its members."""
+    """Kernel.decisive_set for one jurisdiction: its members, its procedure, electorates limited to its members. W7e: a stage plan
+    (law.v2) needs every stage's smallest yes set and its assent (stages.decisive), as Kernel.decisive_set."""
+    from charter import stages as ST
     mem = members(k, jid)
     best = None
     for a in mem:
@@ -1300,18 +1327,9 @@ def decisive_set(k, jid, cls="procedural") -> list:
         if res is True:
             return [a]
         if isinstance(res, dict):
-            el = [x for x in res.get("electorate", []) if x in mem]   # majority_voting counts like majority (as the kernel does)
-            wts = {x: float((res.get("weights") or {}).get(x, 1.0)) for x in el}
-            total = sum(wts.values())
-            if total <= 0:
+            chosen = ST.decisive(res, lambda s: _yes_set(s, mem)) if ST.staged(k, res) else _yes_set(res, mem)
+            if chosen is None:
                 continue
-            need = 2 * total / 3 if res.get("rule") == "two_thirds" else total / 2
-            chosen, acc = [], 0.0
-            for x in sorted(el, key=lambda x: -wts[x]):
-                chosen.append(x)
-                acc += wts[x]
-                if (acc >= need - 1e-9) if res.get("rule") == "two_thirds" else (acc > need):
-                    break
             if res.get("gate") and res["gate"] not in chosen:
                 chosen = [res["gate"]] + chosen
             if best is None or len(chosen) < len(best):
@@ -1321,7 +1339,7 @@ def decisive_set(k, jid, cls="procedural") -> list:
 
 def franchise_share(k, jid) -> float:
     mem = [a for a in members(k, jid) if k.w["agents"][a]["cls"] not in ("board", "fixer", "observer")]
-    res = _procedure_spec(k, jid, "ordinary", mem[0]) if mem else None
+    res = _first_ballot(k, _procedure_spec(k, jid, "ordinary", mem[0]) if mem else None)          # W7e: a stage plan's first
     voters = set(res.get("electorate", [])) if isinstance(res, dict) else set()
     voters |= {a for a in mem if k.has(a, "elector")}
     return len([a for a in mem if a in voters]) / max(1, len(mem))
@@ -1330,7 +1348,7 @@ def franchise_share(k, jid) -> float:
 def vote_weights(k, jid) -> dict:
     """Kernel.vote_weights for one jurisdiction: each member's share of ballot weight under its ordinary procedure (goals: Power)."""
     mem = members(k, jid)
-    res = _procedure_spec(k, jid, "ordinary", mem[0]) if mem else None
+    res = _first_ballot(k, _procedure_spec(k, jid, "ordinary", mem[0]) if mem else None)          # W7e: a stage plan's first
     if not isinstance(res, dict):
         return {}
     el = [x for x in res.get("electorate", []) if x in mem]

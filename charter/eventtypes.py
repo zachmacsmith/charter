@@ -211,6 +211,9 @@ E("gas_billed", "dispatch", "record", "monitor", "silent", None, primitive="move
   note="P3.8 (law.gas_price): an account's gas for the round billed to its treasury (owed, paid); the move to the reserve is logged too")
 E("hook_aborted", "dispatch", "record", "monitor", "silent", None,
   note="law.atomic (P3.6): a dead invocation was rolled back; its events were dropped and this records what was undone")
+E("law_refused", "dispatch", "summary", "parties", "event", "agents",
+  note="W7e (law.v2): an after-hook refused (refuse(reason)) after a change an agent's action caused; told to that agent "
+       "({law, hook, primitive, reason}; a hidden jurisdiction's law reads as \"hidden\")")
 E("patch_submitted", "actions", "legal_act", "public", "official", "agents", act="patch", primitive="amend")
 E("patched", "kernel", "legal_act", "public", "official", "agents", primitive="amend")
 E("patch_failed", "kernel", "legal_act", "public", "official", "agents", primitive="amend")

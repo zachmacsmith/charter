@@ -301,6 +301,8 @@ LAWFNS = _fns(
         F("set_conflict_rule", "governance", scope="none", why="sets the conflict rule of the calling law's own polity (P3.2; only "
           "a constitution-rank law may)", docs="requires", v2=True, primitive="set_conflict_rule"),
         F("refuse", "meta", scope="none", why="ends the calling law's own invocation (W6a), binds nobody", docs="requires", v2=True),
+        F("is_number", "read", scope="none", why="a type test on a value (W7e), binds nobody", docs="requires", v2=True),
+        F("is_text", "read", scope="none", why="a type test on a value (W7e), binds nobody", docs="requires", v2=True),
     ),
     _module(
         "evidence",                                                     # law.v2 (review 10 #10): the event log as evidence

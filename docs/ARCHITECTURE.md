@@ -457,6 +457,14 @@ Review 09 is the normative design. Summary of the target:
   primitive family they hook, from static facts (hooks, verdict shapes, calls, rank, class, exports, overlaps), in the core prompt
   (a clip row, `law.digest_tokens`) and the `legal_position` look-up; visible laws only. Hooks are indexed by name
   (`dispatch.hooked`): a primitive no law in force hooks skips the binding and ordering work.
+- **W7e follow-ups** (law.v2): a law's `in_force_from/until` is shown in the draft payload, previews, the law list and `read_law`
+  (`dispatch.window_note`); an after-hook's `refuse(reason)` is told to the acting agent (`law_refused`); type tests `is_number`,
+  `is_text`; court rules `rulings_per_round` and an appellate office that rules on appeals without `judge` (`action_registry`
+  `alt`); contracts' procedures may answer with stage plans (`stages.begin(contract=)`, `contracts.stage_done`); `history(about=)`;
+  cases carry `source` (agent | law | contest | contract; stored only when not agent); `evidence.law_can_see` is the one visibility
+  predicate for laws, also gating after-hook delivery under spec `law.after_visibility: evidence` (default `all`: after-hooks
+  still see changes whose events the law cannot read, a documented gap); with `contracts.breach_cases` an escrow_court breach
+  opens a courts v2 case (source contract, accuser the breach's `victim`).
 - **Classes and levels**: class derived transitively (calls, imports, hooks); rank orthogonal; levels are power-table presets.
 - **Bug F1**: an ordinary law can repeal the constitution today; fixed in P1.4.
 

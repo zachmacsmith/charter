@@ -25,7 +25,8 @@ jurisdictions' rules, and diff lines naming a set-aside law are dropped.
 Report shape (JSON-able):
     {"ok": bool, "error": str | None, "agent", "jurisdiction",
      "static":    {"title", "intent", "cls", "rank", "calls", "hooks", "rights": {grant, revoke, suspend}, "repeals", "defines_action",
-                   "imports": [{ref, alias, target, mode, sha}], "exports": [...], "dependents": [...], "overlaps": [{law, title, rank, hooks}]},
+                   "imports": [{ref, alias, target, mode, sha}], "exports": [...], "dependents": [...], "overlaps": [{law, title, rank, hooks}],
+                   "in_force": [from, until]},                  # W7e: the declared window (W6a; None: open on that side)
      "procedure": {"proposed": bool, "outcome": pass|ballot|gate|stages|veto_window|dormant|fail|blocked|refused, "status", "reason",
                    "blocked_by": [...], "decides": lid | None, "ballot": {id, rule, electorate, closes_round, gate} | None,
                    "refusal": str | None, "as_holder": bool},    # as_holder: the agent may not propose (refusal); proposed by one who may
@@ -180,7 +181,8 @@ def _static(k, lid, system, amends=None) -> dict:
     st = {"title": rec["title"], "intent": rec["intent"], "cls": rec["cls"], "rank": _rank(k, lid), "calls": dr["calls"],
           "hooks": dr["hooks"], "rights": dr["rights"], "repeals": dr["repeals"], "defines_action": bool(rec.get("defines_action")),
           "imports": [{x: i.get(x) for x in ("ref", "alias", "target", "mode", "sha")} for i in rec.get("imports") or ()],
-          "exports": top["exports"], "dependents": [], "overlaps": []}
+          "exports": top["exports"], "dependents": [], "overlaps": [],
+          "in_force": [dr.get("in_force_from"), dr.get("in_force_until")]}                # W7e (law.v2 drafts carry it)
     from charter import linker as LK
     if LK.enabled(k):
         if amends and amends in k.w["laws"]:
@@ -539,6 +541,9 @@ def render(rep: dict, budget: int = TOKENS) -> str:
         facts.append("exports " + ", ".join(st["exports"]))
     if st["defines_action"]:
         facts.append("defines an action")
+    win = D.window_text(*(st.get("in_force") or (None, None)))                       # W7e: its declared window
+    if win:
+        facts.append(win.strip(" []"))
     lines.append("Static: " + "; ".join(facts) + ".")
     if st["overlaps"]:
         lines.append("Also hooking the same: " + "; ".join(f"{o['law']} '{o['title']}' ({o['rank']}): {', '.join(o['hooks'])}"

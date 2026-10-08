@@ -431,8 +431,10 @@ def read_law(k, aid, ref) -> str:
     if (k.spec.get("jurisdictions") or {}).get("enabled") and law.get("status") in ("dormant", "hidden_draft") and not _J.binds(k, law["id"], aid):
         raise _error(f"{law['id']} is a draft of a hidden jurisdiction you do not belong to")
     patches = law.get("patches") or []
+    from charter import dispatch as _D
     head = (f"{law['id']} '{law['title']}' ({law.get('cls')}, {law.get('status')}), proposed by {law.get('author')}"
-            + (f", enacted in round {law['enacted_round'] + 1}" if law.get("enacted_round") is not None else "") + f".\nIntent: {law.get('intent', '')}")
+            + (f", enacted in round {law['enacted_round'] + 1}" if law.get("enacted_round") is not None else "")
+            + f"{_D.window_note(k, law['id'])}.\nIntent: {law.get('intent', '')}")        # W7e: its declared window (law.v2)
     hist = ("\nPatches: " + "; ".join(f"round {p.get('round', 0) + 1} by {p.get('by')}: {str(p.get('reason', ''))[:120]}" for p in patches)) if patches else ""
     from charter import stages as _ST
     return f"{head}{_ST.describe(law)}{hist}\nCode:\n{law['code']}"           # law.v2 (W6c): a multi-stage procedure's state
@@ -631,11 +633,12 @@ def lookup(k, aid, name, args: dict) -> str:
     if name == "legal_position":                                        # law.v2 with law.digest (charter/digest.py)
         from charter import digest as DG
         return DG.act_legal_position(k, aid)
-    raise _error(f"no lookup {name!r}; lookups: {', '.join(_lookups(k))}")
+    raise _error(f"no lookup {name!r}; lookups: {', '.join(lookup_names(k))}")
 
 
-def _lookups(k) -> tuple:
-    """The lookups of this world (preview_law only under law.v2)."""
+def lookup_names(k) -> tuple:
+    """The lookups of this world (preview_law only under law.v2). W7e: named lookup_names, not _lookups: the prompt section
+    _lookups(v) below used to shadow it, so the error above called the section with a kernel."""
     from charter import lawpreview as LP
     from charter import digest as DG
     return tuple(n for n in LOOKUPS if (n != "preview_law" or LP.enabled(k)) and (n != "legal_position" or DG.enabled(k)))
