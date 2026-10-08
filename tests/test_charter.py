@@ -506,8 +506,9 @@ def test_dm_limit_is_set_by_media_and_can_be_taken_over_by_law():
     with pytest.raises(A.ActionError):
         A.act(k, w1, "set_dm_limit", {"n": 9})                                   # only holders of dm_rules
     A.act(k, media, "set_dm_limit", {"n": 1, "agent": w1})
-    A.act(k, w1, "dm", {"to": w2, "text": "one"})
-    with pytest.raises(A.ActionError):
+    out = A.act(k, w1, "dm", {"to": w2, "text": "one"})
+    assert "last private message this round (0 left)" in out                     # said when the last one is used
+    with pytest.raises(A.ActionError, match="0 left, so every further dm or reply this round will fail"):
         A.act(k, w1, "dm", {"to": w2, "text": "two"})
     A.act(k, media, "set_dm_limit", {"n": 99})
     assert k.dm_limit(w2) == k.dm_cap() == 10                                    # hard ceiling
