@@ -18,6 +18,7 @@ An entry:  register(name, purpose, section, core=False, pre=False, msg=False, ne
               "right:<r>"     the agent holds right r ("right:harvest:*" any harvest right)
               "cls:<c>"       the agent's class (or second class) is c; "notcls:<c>" it is not
               "level:<n>"     law level at least Ln
+              "law:<key>"     spec law.<key> is true (e.g. "law:v2": the legal system v2)
               "any:<a>|<b>"   at least one of the requirements a, b, ... (e.g. "any:mod:hidden|level:4")
   edge      rights that make a core action part of the holder's edge though it does not require them ("harvest:*" any harvest
             right): open camps let anyone harvest, but the rights holders are the ones it is an edge for
@@ -148,6 +149,8 @@ def _need(inst, a, rights, n) -> bool:
         return v in _classes(a)
     if kind == "notcls":
         return v not in _classes(a)
+    if kind == "law":
+        return bool((inst["spec"].get("law") or {}).get(v))
     if kind == "level":
         return ["L0", "L1", "L2", "L3", "L4"].index(inst["law_level"]) >= int(v)
     raise ValueError(f"unknown requirement {n!r}")
@@ -273,6 +276,15 @@ R("search_dms", "search your messages", "INFORMATION", core=True, pre=True, need
 R("read_law", "read a law's full code, intent, status and patches", "INFORMATION", core=True, pre=True, needs=("level:1",), args='{"law": "L5"}',
   handler="actions:_read_law", module="context", category="productive", legacy=False,
   doc='read_law {"law": "L5"}: any law proposed in this world (by id or title): its title, intent, class, status, author, full code and patch history')
+R("preview_law", "try a draft law or contract against the legal system you can see", "INFORMATION", core=True, pre=True,
+  needs=("mod:context", "level:1", "law:v2"), args='{"code": "...", "scenario": "default"}',
+  handler="lawpreview:act_preview_law", module="context", category="political", legacy=False,
+  aliases={"law": "code", "text": "code", "draft": "code", "scenarios": "scenario"},
+  doc='preview_law {"code": "...", "scenario": "default", "jurisdiction": null}: run a draft (a law or a contract; anyone may write one) '
+      'against every law in force you can see, without proposing it or changing anything: its class, rank, calls, hooks, imports and '
+      'rights granted or revoked; whether the constitution\'s reviews would block it and what the procedure would do; the draft in force '
+      'against your own transfer, harvest, post, message and an empty proposal ("scenario": "none", one of those names, or your own '
+      '{"action": "...", "args": {...}}); each of the next 3 round ends; and the gas its laws use (at most 3 previews per round)')
 R("read_file", "read a file", "INFORMATION", core=True, pre=True, needs=("mod:context",), args='{"name": "..."}',
   handler="actions:_read_file", module="context", category="productive", legacy=False,
   doc='read_file {"name": "..."}: read one of your files')
@@ -554,6 +566,7 @@ ACTIONS_ORDER = (
     "create_channel", "channel_post", "add_member", "remove_member", "close_channel", "anon_post", "set_dm_limit", "lend",
     "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute", "reply", "forge_dm", "bequest", "name_successor",
     "commission", "create_agent", "copy_agent", "manual", "manual_search", "search_board", "search_dms", "recent", "read_law",
+    "preview_law",
     "read_file", "write_scratchpad", "write_file", "rename_file", "share_file", "delete_file", "pin", "unpin", "lease",
     "accept_lease", "survey", "invest", "attack", "join_attack", "forge", "fortify", "guard", "buy_initiative", "contract", "found",
     "invite", "join", "leave", "declare", "fund", "set_charter", "write_edition", "run_placement", "poll", "set_subscription_fee",
@@ -566,7 +579,7 @@ DOC_ORDER = (
     "request_fix", "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive", "publish",
     "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel", "anon_post", "lend",
     "accept_loan", "repay_loan", "extend_loan", "set_dm_limit", "contribute", "pay_tribute", "manual", "manual_search",
-    "search_board", "read_law", "recent", "search_dms", "read_file", "write_scratchpad", "write_file", "rename_file", "share_file",
+    "search_board", "read_law", "preview_law", "recent", "search_dms", "read_file", "write_scratchpad", "write_file", "rename_file", "share_file",
     "delete_file", "pin", "unpin", "lease", "accept_lease", "survey", "invest", "bequest", "name_successor", "commission",
     "create_agent", "copy_agent", "attack", "join_attack", "forge", "fortify", "guard", "buy_initiative", "contract", "found",
     "fund", "set_charter", "invite", "join", "leave", "declare", "subscribe", "unsubscribe", "set_subscription_fee",

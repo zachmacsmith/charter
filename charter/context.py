@@ -65,10 +65,11 @@ DEFAULTS = {
     "free_scratchpad_writes": 1,      # write_scratchpad actions per turn that use no action
 }
 LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file", "read_archive", "search_archive",
-           "run_python")
+           "run_python", "preview_law")
 DM_ONLY_LOOKUPS = ("search_archive", "run_python")                    # usable as lookups in the DM step (as actions they are actions)
 FILE_ACTIONS = ("write_scratchpad", "write_file", "rename_file", "share_file", "delete_file", "pin", "unpin")
-ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file") + FILE_ACTIONS   # agent actions this module adds
+ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file") + FILE_ACTIONS \
+    + ("preview_law",)                                                  # agent actions this module adds (preview_law: law.v2 only)
 BOARD_TYPES = ET.names("board")                                       # what search_board searches (posts and the gazette)
 FETCHED_HEADER = "## Lookups (fetched this turn)"
 
@@ -622,7 +623,16 @@ def lookup(k, aid, name, args: dict) -> str:
     if name == "run_python":                                            # the sandbox, answered before acting (DM step)
         from charter import actions as A
         return A.act(k, aid, "run_python", {"code": args.get("code", first)})
-    raise _error(f"no lookup {name!r}; lookups: {', '.join(LOOKUPS)}")
+    if name == "preview_law":                                           # P3.5: law.v2 worlds only (lawpreview.lookup refuses otherwise)
+        from charter import lawpreview as LP
+        return LP.lookup(k, aid, args)
+    raise _error(f"no lookup {name!r}; lookups: {', '.join(_lookups(k))}")
+
+
+def _lookups(k) -> tuple:
+    """The lookups of this world (preview_law only under law.v2)."""
+    from charter import lawpreview as LP
+    return LOOKUPS if LP.enabled(k) else tuple(n for n in LOOKUPS if n != "preview_law")
 
 
 def dm_step_lookup(k, aid, q) -> str:
