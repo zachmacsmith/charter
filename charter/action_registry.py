@@ -706,7 +706,7 @@ CORE_SURFACE = (
     "patch", "rule")                                                    # the Fixer's patch; judges' rule (an office a law creates)
 NO_TEMPLATE_PURPOSE = {"create_contract": "found a contract: an association that runs on code you write"}
 NO_TEMPLATE_PHRASE = {"contracts": "found, join or leave contracts (associations that run on code their members write)"}
-CORE_ONLY_PHRASE = {"files": "save files"}
+CORE_ONLY_PHRASE = {"files": "save files", "powers": "use an action a law or contract defined"}
 NO_TEMPLATE_DOC = {
     "create_contract": 'create_contract {"name": "...", "code": "<law code>"} (or a list of up to three codes): found an '
                        'association; you are its first member. Its code is in force at once and binds only members who join: it '
