@@ -10,6 +10,7 @@ import copy
 import random
 
 from charter import camps as C
+from charter import code as DC                                        # the default code (code.enabled; review 12 WP3)
 from charter.camptypes import framework as CT                    # camps: typed camps (camps.model: types)
 from charter import goals as G
 from charter import goal_registry as GR
@@ -210,6 +211,7 @@ def generate(spec: dict, seed: int, check: bool = True) -> dict:
     sp = resolve_instance_level(spec, rng)
     sp["seed"] = seed
     RG.finish(sp, reg)                                               # starting statutes the law level allows
+    code_rec = DC.resolve(sp)                                        # the default code (code.enabled; off: None, nothing changes)
     counts = {c: int(sp["agents"].get(c, 0)) for c in ("worker", "scientist", "legislator", "media", "board", "fixer")}
     combos = {k: int(n) for k, n in sp["agents"].items() if "+" in str(k)}          # multi-class agents: "legislator+scientist": 2
     for key in combos:
@@ -230,6 +232,7 @@ def generate(spec: dict, seed: int, check: bool = True) -> dict:
             a["rights"] = list(dict.fromkeys(a["rights"]))
         agents.append(a)
     ctl = (sp.get("dm_step") or {}).get("controller", "media")                # who sets the DM limit at the start (laws can move it)
+    ctl = DC.start_rule(code_rec, "Communications Act", "office", ctl)        # code.enabled: the Act's OFFICE (none without it)
     for a in agents:
         if has_cls(a, ctl) and "dm_rules" not in a["rights"]:
             a["rights"].append("dm_rules")
@@ -463,6 +466,8 @@ def generate(spec: dict, seed: int, check: bool = True) -> dict:
     inst["hidden"] = _hidden.generate(sp, seed, agents)                # codex articles, hidden powers, secret camps (own RNG stream)
     if reg:
         inst["regime"] = reg
+    if code_rec is not None:                                           # code.enabled: the selected Acts, ids and parameters
+        inst["code"] = code_rec
     from charter import events as _events                                  # hidden world-event schedule (no-op unless events.enabled)
     inst = _events.attach_schedule(validate(inst, rng))
     inst["spec_source"] = source                                     # resume regenerates from this (inst["spec"] would draw differently)

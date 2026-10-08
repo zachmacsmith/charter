@@ -41,6 +41,7 @@ from pathlib import Path
 from charter import actions as A
 from charter import agents as AG
 from charter import archive
+from charter import code as DC                                        # the default code (code.enabled; review 12 WP3)
 from charter import context as CX                                     # context: fixed-layer prompts and lookups (charter/context.py)
 from charter import conflict as CF
 from charter import failstop as FS
@@ -267,6 +268,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         k.begin_round_cause(phase="setup")                              # provenance: constitution, statutes, start laws
         (out / "instance.json").write_text(json.dumps(inst, indent=1, default=str))
         freeze_common_text(out, inst)                                   # Leaker's common text as the agents see it (P6.2)
+        DC.seed(k, inst)                                                # the default code (code.enabled): Acts A1.., before the constitution
         const = k.new_law(inst["constitution_code"], "constitution")
         k.enact(const)
         RG.enact_statutes(k, inst)                                     # a regime's starting statutes (none without a regime)

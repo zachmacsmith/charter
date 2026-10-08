@@ -24,6 +24,7 @@ from charter import amendment as AM                                    # law.v2 
 from charter import conflict as CF                                  # conflict: attacks, forts, assassin (off by default)
 from charter import credit as CR
 from charter import courts as CO                                      # law.v2 (courts v2): cases, court rules, appeals
+from charter import code as DC                                        # the default code (code.enabled; review 12 WP3)
 from charter import dispatch as D                                     # Kernel.apply: primitives, legacy hook aliases (P2.1)
 from charter import evidence as EVD                                   # law.v2 (review 10 #10): law-readable evidence
 from charter.camptypes import framework as CT                    # camps: typed camps, modifiers and leases (no-op under legacy)
@@ -104,7 +105,8 @@ class Kernel:
             "names": {}, "clauses": {}, "cases": {}, "fixer_queue": [], "fixes_this_round": 0, "rulings_this_round": {},
             "harvest_count": {}, "quota_used": {}, "effects": {}, "law_seq": 0, "ballot_seq": 0, "case_seq": 0,
             "channels": {}, "digest": {}, "hidden": [],
-            "dm_limit": {"all": int((self.spec.get("dm_step") or {}).get("dms_per_round", 5)), "agents": {}}, "dm_sent": {},
+            "dm_limit": {"all": None if DC.enabled(self) else int((self.spec.get("dm_step") or {}).get("dms_per_round", 5)),
+                         "agents": {}}, "dm_sent": {},                    # code.enabled: None = the Communications Act's limit
             "dm_extra": {a["id"]: int(a.get("dm_extra", 0)) for a in instance["agents"]},   # each agent's drawn extra DMs
             "loans": {}, "loan_seq": 0, "loan_law": None, "loan_enforce": False,
         }
@@ -215,7 +217,15 @@ class Kernel:
         if aid in lim["agents"]:                                        # a limit set for this agent (dm_rules or a law) is exact
             return max(0, min(self.dm_cap(), int(lim["agents"][aid])))
         extra = int((self.w.get("dm_extra") or {}).get(aid, 0))        # its own drawn extra on top of the general limit
-        return max(0, min(self.dm_cap(), int(lim["all"]) + extra))
+        return max(0, min(self.dm_cap(), int(self.dm_general()) + extra))
+
+    def dm_general(self) -> int:
+        """The general DM limit: the one set for everyone (dm_rules or a law), else (code.enabled, nobody set one) the Communications
+        Act's LIMIT (the seam: default code), or the hard cap without the Act (its residual: no rationing)."""
+        n = self.w["dm_limit"]["all"]
+        if n is None:
+            n = DC.rule(self, DC.ROOT, "Communications Act", "limit", int((self.spec.get("dm_step") or {}).get("dms_per_round", 5)))
+        return self.dm_cap() if n is None else n
 
     def set_dm_limit(self, n, agent=None, by=None):
         """The set_dm_limit primitive (dispatch.do_set_dm_limit); returns the limit set. Board and Fixer: PhysicsError."""
@@ -769,7 +779,7 @@ class Kernel:
         """Repeal the active laws named `target` (an id or a title), one repeal primitive each (dispatch.do_repeal). A law-caused
         repeal never reaches a law of a stricter class (review F1), nor (law.v2, P3.2: lex superior) a law of a higher rank. True if
         any was repealed."""
-        hit = [l for l in self.active_laws() if l["id"] == target or l["title"].lower() == target.lower()]
+        hit = [l for l in DC.laws_in_force(self) if l["id"] == target or l["title"].lower() == target.lower()]   # native Acts too
         if "contracts" in self.w:                                       # P4.3: associations' laws end only by their own procedure
             hit = [l for l in hit if J.association(self, J.law_jur(self, l["id"])) is None]
         if by_law is not None:                                          # law-caused: never a law of a stricter class (review F1)
@@ -923,6 +933,7 @@ class Kernel:
         if "leases" in w:                                              # camps: lease rules show in previews
             rules["lease_rules"] = dict(w["leases"]["rules"])
         rules.update(self._module_rules(ag))
+        rules.update(DC.view_rules(self))                              # code.enabled: the default code's store (off: nothing)
         return {"holdings": {a: dict(v["holdings"]) for a, v in ag.items()},
                 "rights": {a: [r for r in v["rights"] if r not in self.SECRET_RIGHTS] for a, v in ag.items()}, "rules": rules,
                 "reserve": dict(w["reserve"]), "currencies": {c: dict(v) for c, v in w["currencies"].items()},
@@ -931,7 +942,7 @@ class Kernel:
                 "names": dict(w["names"]), "titles": {a: v["title"] for a, v in ag.items() if v["title"]},
                 "actions": {n: a["right"] for n, a in w["actions"].items()}, "rights_catalog": list(w["rights"]),
                 "laws": {l: v["status"] for l, v in w["laws"].items()}, "limits": {a: v["limit"] for a, v in ag.items() if v["limit"]},
-                "dm_limit": {"all": w["dm_limit"]["all"], **{a: n for a, n in w["dm_limit"]["agents"].items() if a in ag}},
+                "dm_limit": {"all": self.dm_general(), **{a: n for a, n in w["dm_limit"]["agents"].items() if a in ag}},
                 "suspended": {a: dict(v["suspended"]) for a, v in ag.items() if v["suspended"]},
                 "projects": P.view(self)}
 
@@ -1308,7 +1319,7 @@ class Kernel:
 
     def round_summary(self):
         w = self.w
-        enacted = [l["title"] for l in w["laws"].values() if l["enacted_round"] == self.r]
+        enacted = [l["title"] for l in w["laws"].values() if l["enacted_round"] == self.r and l["author"] != DC.AUTHOR]
         cur = ", ".join(f"{c} P={self.price(c):.3f} supply={v['supply']:.1f}" for c, v in w["currencies"].items()) or "none"
         stocks = ", ".join(f"{self.name_of('camp:' + c)}({v['resource']}) {10 * round(v['S'] / v['K'] * 10)}%"
                            + (f" N={v['fn']['N']}" if v.get("compute") == "factoring" else "") for c, v in w["camps"].items()

@@ -12,6 +12,7 @@ import difflib
 from charter import accounts as AC                                     # accounts: balance caps (P4.1)
 from charter import action_registry as AR                             # every action's row: handler, doc, category
 from charter import camps as C
+from charter import code as DC                                         # the default code (code.enabled): Acts as repeal targets
 from charter import context as CX                                     # context: lookups and files (charter/context.py)
 from charter import conflict as CF
 from charter import credit as CR
@@ -590,7 +591,7 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
         raise ActionError(f"your law was rejected by the check: {e}. " + (LAW_TEMPLATE if "syntax" in str(e) or "title" in str(e) else ""))
     law = k.w["laws"][lid]
     if law["repeal_target"]:
-        tgt = next((l for l in k.active_laws() if l["id"] == law["repeal_target"] or l["title"].lower() == law["repeal_target"].lower()), None)
+        tgt = next((l for l in DC.laws_in_force(k) if l["id"] == law["repeal_target"] or l["title"].lower() == law["repeal_target"].lower()), None)
         if not tgt:
             law["status"] = "failed_check"
             raise ActionError(f"no active law {law['repeal_target']!r} to repeal")
@@ -1058,7 +1059,8 @@ def _rule(k, aid, case, verdict, reason, remedy=_NO_REMEDY):
         except ValueError as e:
             raise ActionError(str(e))
     n = k.w["rulings_this_round"].get(aid, 0)
-    cap = int(CO.rules(k, CO.polity_of(k, c))["rulings_per_round"]) if v2 else 3     # W7e: a court rule (default 3)
+    cap = (int(CO.rules(k, CO.polity_of(k, c))["rulings_per_round"]) if v2     # W7e: a court rule (default 3)
+           else int(DC.rule(k, CO.polity_of(k, c), CO.ACT, "rulings_per_round", 3)))   # v1: the Court Rules Act (code off: 3)
     if n >= cap:
         raise ActionError(f"a judge rules on at most {cap} cases per round")
     k.w["rulings_this_round"][aid] = n + 1

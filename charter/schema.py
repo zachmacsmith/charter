@@ -224,6 +224,8 @@ def _ann():
         "turns": dict(types=("str",), enum=("sequential", "simultaneous")),
         "rng_version": dict(types=("int",), enum=(1, 2)),
         "law.v2": dict(types=("bool",)),
+        "code.enabled": dict(types=("bool",)),                          # the default code (charter/code; review 12 WP3)
+        "code.select": dict(types=("str", "dict", "null"), check=_check_code),
         "law.notify_parties": dict(types=("bool", "null")),
         "law.gas_price": dict(kind="leaf", types=("dict", "null"), check=_check_gas_price),
         "law.atomic": dict(types=("bool", "null")),
@@ -447,6 +449,8 @@ EXTRA = {
     "law.gas.preview": 300_000, "law.previews_per_turn": 3, "law.preview_tokens": 1500,             # the law previewer (P3.5)
     "law.digest": False, "law.digest_tokens": 300,                    # the per-agent legal digest (charter/digest.py)
     "law.library.edition": 1,
+    "code.enabled": False,                                            # the default code (charter/code): off = byte-identical
+    "code.select": None,                                              # None: the regime's `code`, else today
     "law.library.access": "none",
     "law.library.toolkit": "none",
 }
@@ -668,6 +672,10 @@ DOCS = {
     "law.gas.preview": "law.v2: steps one preview_law may run (charter/lawpreview.py)",
     "law.previews_per_turn": "law.v2: preview_law lookups each agent may make per round",
     "law.preview_tokens": "law.v2: token budget of a rendered preview report",
+    "code.enabled": "the default code (charter/code; review 12 WP3): today's hard-coded social rules (the DM limit, court rules, ...) "
+                    "become Acts A1.. enacted at round 0 that agents can read, amend and repeal; off (the default): nothing changes",
+    "code.select": "code.enabled: which default code, when the regime has no `code`: today (every Act, today's parameters; null "
+                   "means today), none (no Act: residual rules), or {Act: {CONSTANT: value} | null}",
     "law.digest": "law.v2: true shows each agent a digest of the laws that bind it, grouped by what they act on, in its core "
                   "prompt, and adds the legal_position look-up (charter/digest.py; default off)",
     "law.digest_tokens": "law.v2: token budget of the digest in the core prompt (the look-up gets four times as much)",
@@ -909,6 +917,12 @@ def _check_law_set(p, x) -> list:
     return errs
 
 
+def _check_code(path, v) -> list:
+    """A default-code selection (spec code.select, a regime's `code`): today | none | {Act: {CONSTANT: value} | null}."""
+    from charter import code as DC
+    return DC.check_selection(path, v)
+
+
 def _check_regime(path, v) -> list:
     """null / regime name / distribution over names / inline {base?, constitution, laws?, drop?, amend?, ...}"""
     names = _regimes()
@@ -929,7 +943,8 @@ def _check_regime(path, v) -> list:
                 return [f"{p}.constitution: unknown constitution {c!r}{_close(c, _constitutions())}"]
             from charter import regimes as RG
             fields = RG.FIELDS + ("base", "name", "cantons_text")
-            return [f"{p}.{k}: unknown regime field{_close(k, fields)}" for k in x if k not in fields] + _check_law_set(p, x)
+            return ([f"{p}.{k}: unknown regime field{_close(k, fields)}" for k in x if k not in fields] + _check_law_set(p, x)
+                    + (_check_code(f"{p}.code", x["code"]) if "code" in x else []))
         return [f"{p}: expected a regime name, a distribution over names, an inline definition or null, got {x!r}"]
     return _values(path, v, one)
 

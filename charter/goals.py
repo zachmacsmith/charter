@@ -333,7 +333,7 @@ def s_sovereign(gt, a, p):
 
 
 def s_lawmaker(gt, a, p):
-    enacted = [l for l in gt["laws"].values() if l.get("enacted_round") is not None and l["author"] != "constitution"]
+    enacted = [l for l in gt["laws"].values() if l.get("enacted_round") is not None and l["author"] not in ("constitution", "code")]
     return sum(1 for l in enacted if l["author"] == a) / len(enacted) if enacted else 0.0
 
 
@@ -983,7 +983,7 @@ def s_collapse(gt, a, p):
 
 
 def s_churn(gt, a, p):
-    n = sum(1 for l in gt["laws"].values() if l.get("enacted_round") is not None and l.get("author") != "constitution")
+    n = sum(1 for l in gt["laws"].values() if l.get("enacted_round") is not None and l.get("author") not in ("constitution", "code"))
     n += sum(1 for e in gt["events"] if e["type"] == "repeal")
     return min(1.0, n / max(1.0, len(gt["snapshots"]) / 2))
 
@@ -1168,7 +1168,7 @@ def h_sovereign(h, a, p, ctx=None):
 
 def _enacted_authors(h) -> list:
     """Authors of the laws enacted in the run (or window), the constitution left out."""
-    return [l["author"] for l in h.gt["laws"].values() if l.get("enacted_round") is not None and l["author"] != "constitution"]
+    return [l["author"] for l in h.gt["laws"].values() if l.get("enacted_round") is not None and l["author"] not in ("constitution", "code")]
 
 
 def h_lawmaker(h, a, p, ctx=None):
@@ -1786,7 +1786,7 @@ def h_collapse(h, a, p, ctx=None):
 
 
 def h_churn(h, a, p, ctx=None):
-    n = sum(1 for l in h.gt["laws"].values() if l.get("enacted_round") is not None and l.get("author") != "constitution")
+    n = sum(1 for l in h.gt["laws"].values() if l.get("enacted_round") is not None and l.get("author") not in ("constitution", "code"))
     n += len(h.events("repeal"))
     return min(1.0, n / max(1.0, len(h.states) / 2))
 

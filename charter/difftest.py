@@ -2,7 +2,7 @@
 
     python -m charter difftest --base main --head WORKTREE --presets E0,E1,E2,E3,E4,E5,E6,E7,society --seeds 1,2 --rounds 3
         [--set key=value ...] [--head-set key=value ...] [--ignore-field cause --ignore-field id] [--ignore-type new_event]
-        [--rename old_key=new_key] [--rename-type old_type=new_type] [--json report.json] [--keep DIR] [--jobs N]
+        [--rename old_key=new_key] [--rename-type old_type=new_type] [--ignore-code-acts] [--json report.json] [--keep DIR] [--jobs N]
 
 Each revision runs from its own tree: a git revision is checked out into a temporary `git worktree` (removed afterwards); WORKTREE
 means the current checkout, uncommitted changes included. Every preset/seed runs in its own subprocess whose cwd and PYTHONPATH are
@@ -19,6 +19,12 @@ Normalisation, applied to both sides before comparing:
   --rename OLD=NEW      rename dict keys OLD -> NEW on the base side (a renamed field)
   --rename-type OLD=NEW rename event types OLD -> NEW on the base side
   --float-tol X         numbers within X compare equal (default 0: exact)
+  --ignore-code-acts    the default code (charter/code, spec code.enabled): drop the monitor-only `code_act` records and renumber
+                        the remaining events' ids (whole strings and ids inside text, in every file but instance.json, which is
+                        written before any event), drop the Acts' law records
+                        (ground_truth laws A1, A2, ...) and the instance's `code` record and spec `code` keys. Use it with
+                        `--head-set code.enabled=true` (an override for the head side only: an older base rejects the key) to check
+                        that `code: today` reproduces the code-off world.
 Exit status: 0 when no case diverges, 1 otherwise.
 """
 from __future__ import annotations
@@ -123,7 +129,8 @@ def run_case(root: Path, preset: str, seed: int, sets: list[str], out: Path, tim
 # ---------------------------------------------------------------------------------------------------------------- normalising
 
 class Norm:
-    def __init__(self, ignore_fields=(), ignore_types=(), renames=None, type_renames=None, float_tol=0.0):
+    def __init__(self, ignore_fields=(), ignore_types=(), renames=None, type_renames=None, float_tol=0.0, code_acts=False):
+        self.code_acts = bool(code_acts)                                # --ignore-code-acts (strip_code_acts)
         self.names = {f for f in ignore_fields if "." not in f}
         self.paths = {tuple(f.split(".")) for f in ignore_fields if "." in f}
         self.ignore_types = set(ignore_types)
@@ -278,13 +285,58 @@ def compare_plain(a, b, norm: Norm) -> dict:
     return {"identical": n == 0, "count": n, "paths": _paths(d)}
 
 
+CODE_EVENT = "code_act"
+ACT_ID = re.compile(r"^A[1-9]\d*$")
+
+
+EVENT_ID = re.compile(r"\be[1-9]\d*\b")
+
+
+def _remap(x, m: dict):
+    """Old event ids -> new ones in x: whole strings, and ids inside text (an action result's "Posted (e5)")."""
+    if isinstance(x, str):
+        return m[x] if x in m else EVENT_ID.sub(lambda g: m.get(g.group(0), g.group(0)), x) if "e" in x else x
+    if isinstance(x, dict):
+        return {m.get(k, k) if isinstance(k, str) else k: _remap(v, m) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_remap(v, m) for v in x]
+    return x
+
+
+def strip_code_acts(files: dict) -> dict:
+    """--ignore-code-acts on one side's loaded files ({name: data}): see the module docstring."""
+    files = dict(files)
+    evs = files.get("events.jsonl")
+    if evs is not None:
+        kept = [e for e in evs if not (isinstance(e, dict) and e.get("type") == CODE_EVENT)]
+        m = {e["id"]: f"e{i}" for i, e in enumerate(kept, 1) if isinstance(e, dict) and e.get("id") not in (None, f"e{i}")}
+        files["events.jsonl"] = kept
+        if m:
+            files = {n: (_remap(v, m) if v is not None and n != "instance.json" else v) for n, v in files.items()}   # the
+            # instance is written before any event (its texts' "e12" are examples, not ids)
+    inst = files.get("instance.json")
+    if isinstance(inst, dict):
+        inst = {k: v for k, v in inst.items() if k != "code"}
+        for key in ("spec", "spec_source"):
+            if isinstance(inst.get(key), dict):
+                inst[key] = {k: v for k, v in inst[key].items() if k != "code"}
+        files["instance.json"] = inst
+    gt = files.get("ground_truth.json")
+    if isinstance(gt, dict) and isinstance(gt.get("laws"), dict):
+        files["ground_truth.json"] = {**gt, "laws": {k: v for k, v in gt["laws"].items() if not ACT_ID.match(k)}}
+    return files
+
+
 def compare_dirs(base: Path, head: Path, norm: Norm | None = None) -> dict:
     """Compare two run directories file by file."""
     norm = norm or Norm()
     base, head = Path(base), Path(head)
+    side = {"base": {n: _load(base, n) for n in FILES}, "head": {n: _load(head, n) for n in FILES}}
+    if norm.code_acts:
+        side = {s: strip_code_acts(f) for s, f in side.items()}
     files = {}
     for name in FILES:
-        a, b = _load(base, name), _load(head, name)
+        a, b = side["base"][name], side["head"][name]
         if a is None or b is None:
             files[name] = {"identical": a is None and b is None, "missing": [s for s, x in (("base", a), ("head", b)) if x is None]}
         elif name == "events.jsonl":
@@ -322,13 +374,13 @@ def difftest(base: str, head: str, presets, seeds, rounds=None, sets=(), norm: N
                     out = work / rv.label / f"{p}_s{s}"
                     if out.exists():
                         shutil.rmtree(out)
-                    extra = list(head_sets) if rv.label == "head" else []
-                    futs[(p, s, rv.label)] = ex.submit(run_case, rv.root, p, s, sets + extra, out)
+                    futs[(p, s, rv.label)] = ex.submit(run_case, rv.root, p, s,
+                                                       sets + (list(head_sets) if rv.label == "head" else []), out)
             results = {k: f.result() for k, f in futs.items()}
         report = {"base": revs[0].desc, "head": revs[1].desc, "sets": sets, "head_sets": list(head_sets),
                   "normalise": {"ignore_fields": sorted(norm.names | {".".join(p) for p in norm.paths}),
                                 "ignore_types": sorted(norm.ignore_types), "renames": norm.renames,
-                                "type_renames": norm.type_renames, "float_tol": norm.tol},
+                                "type_renames": norm.type_renames, "float_tol": norm.tol, "code_acts": norm.code_acts},
                   "cases": []}
         for p, s in cases:
             ra, rb = results[(p, s, "base")], results[(p, s, "head")]
@@ -360,8 +412,10 @@ def _short(x, n=160) -> str:
 
 def text_report(rep: dict) -> str:
     L = [f"Charter difftest: base {rep['base']}  vs  head {rep['head']}", f"overrides: {' '.join(rep['sets']) or '(none)'}"]
+    if rep.get("head_sets"):
+        L.append(f"head-only overrides: {' '.join(rep['head_sets'])}")
     nm = rep["normalise"]
-    if any(nm[k] for k in ("ignore_fields", "ignore_types", "renames", "type_renames", "float_tol")):
+    if any(nm.get(k) for k in ("ignore_fields", "ignore_types", "renames", "type_renames", "float_tol", "code_acts")):
         L.append("normalised: " + "; ".join(f"{k}={v}" for k, v in nm.items() if v))
     n_div = sum(not c["identical"] for c in rep["cases"])
     verdict = "no divergence" if rep["identical"] else f"{n_div} of {len(rep['cases'])} case(s) diverge"
@@ -443,8 +497,10 @@ def add_arguments(p: argparse.ArgumentParser):
     p.add_argument("--seeds", default="1,2", help="comma-separated seeds")
     p.add_argument("--rounds", type=int, default=None, help="rounds per run (default: the preset's)")
     p.add_argument("--set", action="append", default=[], help="spec override for both sides, e.g. turns=simultaneous (repeatable)")
-    p.add_argument("--head-set", action="append", default=[], help="spec override for the head side only, e.g. a new flag the "
-                   "base does not know (repeatable; add --ignore-field for its key in instance.json)")
+    p.add_argument("--head-set", action="append", default=[], help="spec override for the head side only, e.g. code.enabled=true "
+                   "(repeatable)")
+    p.add_argument("--ignore-code-acts", action="store_true", help="drop the default code's code_act records (renumbering event "
+                   "ids), its Act law records and the instance's code record")
     p.add_argument("--ignore-field", action="append", default=[], help="key name (any depth) or dotted path to drop (repeatable)")
     p.add_argument("--ignore-type", action="append", default=[], help="event type to drop (repeatable)")
     p.add_argument("--rename", action="append", default=[], help="OLD=NEW key rename applied to the base side (repeatable)")
@@ -457,10 +513,11 @@ def add_arguments(p: argparse.ArgumentParser):
 
 
 def cmd(a) -> int:
-    norm = Norm(a.ignore_field, a.ignore_type, _pairs(a.rename, "--rename"), _pairs(a.rename_type, "--rename-type"), a.float_tol)
+    norm = Norm(a.ignore_field, a.ignore_type, _pairs(a.rename, "--rename"), _pairs(a.rename_type, "--rename-type"), a.float_tol,
+                code_acts=getattr(a, "ignore_code_acts", False))
     rep = difftest(a.base, a.head, [p for p in a.presets.split(",") if p], [int(s) for s in a.seeds.split(",") if s],
                    a.rounds, a.set, norm, keep=a.keep, jobs=a.jobs, log=lambda *x: print(*x, file=sys.stderr),
-                   head_sets=a.head_set)
+                   head_sets=getattr(a, "head_set", []) or [])
     txt = text_report(rep)
     print(txt, end="")
     if a.json:

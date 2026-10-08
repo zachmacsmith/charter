@@ -581,12 +581,14 @@ def state_view(k, aid: str) -> str:
     curs = "; ".join(f"{c}: P={k.price(c):.4g}, supply {v['supply']:.4g}, {'backed' if v['backed'] else 'UNBACKED'}"
                      + (", convertible" if v.get("convertible") else "") + CR.currency_note(k, c, v) for c, v in w["currencies"].items()) or "none"
     from charter import dispatch as D                                  # W7e: a law's declared window (law.v2)
-    laws = "; ".join(f"{l['id']} '{l['title']}' ({l['cls']}){D.window_note(k, l['id'])}" for l in k.active_laws()) or "none"
+    from charter import code as DC                                     # code.enabled: the default code's Acts (off: nothing)
+    laws = "; ".join(DC.law_list(k) + [f"{l['id']} '{l['title']}' ({l['cls']}){D.window_note(k, l['id'])}"
+                                       for l in k.active_laws()]) or "none"
     ballots = "; ".join(f"{b['id']}: {b['question']} {b['options']}" for b in w["ballots"].values()
                         if b["status"] == "open" and aid in b["electorate"]) or "none"
     lines = [f"Your holdings: {hold} (value {k.holdings_value(aid):.4g}). Your rights: {rights}.",
              f"Camps: {camps}.", f"Reserve: " + (", ".join(f"{q:.3g} {i}" for i, q in w["reserve"].items()) or "empty") + f". Currencies: {curs}.",
-             f"Laws in force: {laws}.", f"Open ballots you can vote in: {ballots}."]
+             f"Laws in force: {laws}.", *DC.prompt_lines(k), f"Open ballots you can vote in: {ballots}."]   # D7: one line per Act
     if a["title"]:
         lines.append(f"Your title: {a['title']}.")
     if a["limit"] and a["limit"]["until"] >= k.r:

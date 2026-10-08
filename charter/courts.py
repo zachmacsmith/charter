@@ -44,6 +44,7 @@ import json
 import math
 
 from charter import accounts as AC
+from charter import code as DC                                        # the default code: the Court Rules Act (code.enabled)
 from charter import dispatch as D
 from charter import jurisdictions as J
 from charter import lawlang as L
@@ -52,6 +53,8 @@ DEFAULTS = {"deadline": 3, "panel": 1, "judges": None, "appeal_judges": None, "a
             "rulings_per_round": 3}                                     # W7e: the per-judge cap (before W7e a fixed 3)
 BOUNDS = {"deadline": (1, 20), "panel": (1, 9), "appeal_window": (0, 10), "appeal_panel": (1, 9), "rulings_per_round": (1, 20)}
 RIGHT_KEYS = ("judges", "appeal_judges")
+ACT = "Court Rules Act"                                                # code.enabled: its rows replace these DEFAULTS (charter/code)
+ACT_KEYS = ("deadline", "panel", "rulings_per_round")
 STATUSES = ("open", "decided", "dismissed")
 REMEDY_CHARS = 80
 
@@ -71,8 +74,11 @@ def polity_of(k, c) -> str:
 
 
 def rules(k, polity) -> dict:
-    """The court rules in force in a polity: the defaults, overridden by rules whose law is still in force."""
+    """The court rules in force in a polity: the defaults (code.enabled: the Court Rules Act's rows, or its residual without it),
+    overridden by rules whose law is still in force."""
     out = dict(DEFAULTS)
+    if "default_code" in k.w:
+        out.update({key: DC.rule(k, polity, ACT, key, DEFAULTS[key]) for key in ACT_KEYS})
     for key, e in ((k.w.get("court_rules") or {}).get(polity) or {}).items():
         if (k.w["laws"].get(e.get("law")) or {}).get("status") == "active":
             out[key] = e["value"]
@@ -164,6 +170,8 @@ def change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, 
     assert case == f"C{k.w['case_seq']}", case
     rec = {"id": case, "accuser": accuser, "accused": accused, "clause": clause, "evidence": list(evidence or []),
            "counter": [], "status": "open", "filed": k.r, "deadline": k.r + 3, "judges": k.holders("judge")}
+    if "default_code" in k.w and not enabled(k):                       # law.v1 under the default code: the Act's deadline
+        rec["deadline"] = k.r + int(DC.rule(k, polity_of(k, rec), ACT, "deadline", DEFAULTS["deadline"]))
     if J.enabled(k):                                                   # jurisdictions: judges of the clause's jurisdiction only
         rec["judges"] = J.judges(k, rec)
     if source != "agent":                                              # W7e: only a non-default source is recorded

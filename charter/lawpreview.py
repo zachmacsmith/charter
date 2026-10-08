@@ -47,6 +47,7 @@ import json
 import re
 from contextlib import contextmanager
 
+from charter import code as DC
 from charter import dispatch as D
 from charter import lawlang as L
 from charter import primitives as PR
@@ -191,7 +192,7 @@ def _static(k, lid, system, amends=None) -> dict:
             except L.LawError as e:
                 st["dependents"] = [{"error": str(e)}]
         elif rec.get("repeal_target"):
-            tgt = next((l["id"] for l in k.active_laws() if l["id"] == rec["repeal_target"]
+            tgt = next((l["id"] for l in DC.laws_in_force(k) if l["id"] == rec["repeal_target"]
                         or l["title"].lower() == str(rec["repeal_target"]).lower()), None)
             if tgt:
                 st["dependents"] = LK.dependents(k, tgt)

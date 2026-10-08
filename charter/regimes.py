@@ -36,6 +36,10 @@ toolkit template, library.TOOLKIT; any library law; a regimes.STATUTES law), res
   drop           names of inherited statutes (or templates) to leave out
   amend          {name: {CONSTANT: value}}: change a parameter of an inherited statute or of a law in the set (by template name or
                  by title)
+  code           the default code (review 12 WP3, charter/code; read only with spec code.enabled): today (every Act with today's
+                 parameters, the default), none (no Act: the residual rules; state_of_nature), or {Act: params | null} (today's
+                 code with an Act's constants changed, or dropped). Checked by schema (code.check_selection); resolved at
+                 generation into inst["code"] (code.resolve), never into the regime record, so worlds with code off are unchanged.
 The resolved set is checked for composability (lawset.check: static rules, level, rank, import DAG, a law that can never fire is an
 error, overlaps recorded) and its dimensions are derived from the laws (lawset.dimensions), recorded beside the declared `expect`.
 Each law made from a template records its provenance (template, params, rank) on its law record (k.w["laws"][lid]["template"]).
@@ -517,7 +521,7 @@ REGIMES: dict[str, dict] = {
     },
     # jurisdictions (charter/jurisdictions.py): the lawless start. The constitution named here is void (never in force).
     "state_of_nature": {
-        "constitution": "anarchy", "expect": "anarchy", "no_vote_needed": True,
+        "constitution": "anarchy", "expect": "anarchy", "no_vote_needed": True, "code": "none",   # code.enabled: no default code
         "spec": {"jurisdictions.enabled": True, "jurisdictions.start": "nature", "conflict.enabled": True},
         "summary": "No constitution, no jurisdiction, no laws; anyone can attack anyone. The only way out is to found a jurisdiction "
                    "and declare it.",
@@ -602,7 +606,8 @@ LAW_SET_REGIMES: dict[str, dict] = {
     },
 }
 
-FIELDS = ("constitution", "statutes", "rights", "spec", "no_vote_needed", "expect", "summary", "description", "laws", "drop", "amend")
+FIELDS = ("constitution", "statutes", "rights", "spec", "no_vote_needed", "expect", "summary", "description", "laws", "drop", "amend",
+          "code")
 LAW_ENTRY_KEYS = ("template", "rank", "params")
 
 

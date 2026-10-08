@@ -229,6 +229,8 @@ def lines(k, aid) -> list:
         for ref in st["imports"][:4]:
             links.append(f"{lid} uses {ref}")
     out = [f"Laws that bind you: {len(laws)} in force" + (", by what they act on (read_law for the code):" if laws else ".")]
+    from charter import code as DC                                     # code.enabled: the default code's Acts (off: no line)
+    out += [x for x in (DC.digest_line(k),) if x]
     for f in ORDER:
         if f not in fam:
             continue
