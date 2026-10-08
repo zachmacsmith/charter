@@ -22,11 +22,13 @@ EV_FNS = ("event", "history")                                                   
 AM_FNS = ("propose_law", "propose_amendment")                                                    # P3.4 (amendment.law_api)
 CO_FNS = ("cases", "case", "court_rules", "set_court_rule")                                       # courts v2 (courts.law_api)
 W7E_FNS = ("is_number", "is_text")                                                              # W7e (dispatch.law_api)
-W6_V2_FNS = {*W6A_FNS, *CO_FNS, *EV_FNS, *W7E_FNS}                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
+PUB_FNS = ("publication", "publish", "unpublish")                                             # W8c (publication.law_api)
+W6_V2_FNS = {*W6A_FNS, *CO_FNS, *EV_FNS, *W7E_FNS, *PUB_FNS}                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
 W6_FNS = {*W6_V2_FNS}                                                 # every W6 law function (contract-module ones are in CONTRACT_FNS)
 SNAPSHOT = Path(__file__).parent / "fixtures" / "charter_lawapi_snapshot.json"
 ALL_ON = ["jurisdictions.enabled=false", "conflict.enabled=true", "media2.enabled=true", "life.enabled=true",
-          "shared_archive.enabled=false", "law.v2=true", "contracts.enabled=true"]   # law.v2: use and public_of exist (lawapi.V2_ONLY)
+          "shared_archive.enabled=false", "law.v2=true", "contracts.enabled=true",
+          "law.publication=true"]                                        # W8c: publish, unpublish, publication   # law.v2: use and public_of exist (lawapi.V2_ONLY)
 CONTRACT_FNS = {n for n, f in LA.LAWFNS.items() if f.module == "contracts"}   # P4.3: new rows, after the snapshot (contracts on only)
 
 

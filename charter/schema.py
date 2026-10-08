@@ -228,6 +228,8 @@ def _ann():
         "law.gas_price": dict(kind="leaf", types=("dict", "null"), check=_check_gas_price),
         "law.atomic": dict(types=("bool", "null")),
         "law.after_visibility": dict(types=("str", "null"), enum=("all", "evidence", None)),   # W7e (review 11 §4.1)
+        "law.publication": dict(types=("bool", "null")),                                     # review 12 WP2
+        "law.publication_seed": dict(types=("str",), enum=("today", "none")),
         **{f"law.gas.{x}": dict(types=("int",), range=(1, None)) for x in ("per_call", "python_depth", "per_cascade", "per_account_round",
                                                                             "depth_cap", "flag_limit", "flag_window")},
         **{f"law.gas.{x}": dict(types=("int",), range=NONNEG) for x in ("hook_cost", "prim_cost")},
@@ -410,6 +412,8 @@ def _ann():
 EXTRA = {
     "rng_version": 1,
     "law.after_visibility": None,                                      # W7e: None = "all" (after-hooks see every change, as before)
+    "law.publication": None,                                           # review 12 WP2: None/false = call sites' literal visibility
+    "law.publication_seed": "today",                                   # review 12 WP2: the publication table every polity starts from
     "fixer_model": None,
     "camps.model": "legacy",
     "models.by_class": {},
@@ -723,6 +727,12 @@ DOCS = {
     "contracts.breach_cases": "W7e (review 11 §4.1), with enforcement escrow_court: a breach a contract records opens a court case "
                               "through courts v2 (open_case, source \"contract\", accuser the victim or none) under a polity clause "
                               "breach_of_contract in force that binds the member (the Contract Enforcement Act's); default false",
+    "law.publication": "review 12 WP2 (charter/publication.py): true: who is told of an event is the event's natural audience "
+                       "(its parties, a channel's members, everyone for posts and world events) widened by its polity's "
+                       "publication table (law.publication_seed, laws' publish()); false/null (default): each call site's own "
+                       "visibility, as before. With the today seed every event is logged exactly as with it off",
+    "law.publication_seed": "review 12 WP2: the publication table every polity starts from under law.publication: today (every "
+                            "event type published as the code does today) | none (natural perception only: a state of nature)",
     "law.after_visibility": "law.v2 (W7e, review 11 §4.1): all (null, the default: an after-hook reacts to every change it hooks, "
                             "as before) | evidence: an after-hook runs only when its law could read the change's own event "
                             "(evidence.law_can_see, the predicate event()/history() use)",

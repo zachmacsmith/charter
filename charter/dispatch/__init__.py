@@ -28,7 +28,7 @@ Layout (module -> contents):
   api           the dispatcher's law-API functions (law_api, is_number, is_text)
   changes/      the primitives' changes (the rows' `fn`), by domain: economy, status (rights and sanctions), speech, world (camps
                 and leases), lifecycle, legal (legal acts and the propose draft), membership, press (media2), force (conflict),
-                loans, associations (contracts, swap, funds), cases (courts v2), agency
+                loans, associations (contracts, swap, funds), cases (courts v2), agency, publication (review 12 WP2)
 Imports run one way (tests/test_charter_dispatch_layout.py checks the layers): base, options, chains <- ranks, legacy, journal,
 billing, changes.* <- changes.legal, checks, api <- validity <- hooks <- cascade, notify <- routing <- this package."""
 from __future__ import annotations
@@ -88,4 +88,5 @@ from charter.dispatch.changes.loans import (do_accept_loan, do_default_loan, do_
 from charter.dispatch.changes.associations import (do_breach, do_create_contract, do_deposit_escrow, do_open_fund, do_pull,
     do_set_allowance, do_swap)
 from charter.dispatch.changes.cases import do_answer_case, do_appeal, do_open_case, do_set_court_rule
+from charter.dispatch.changes.publication import do_set_publication
 from charter.dispatch.changes.agency import do_act_for, do_authorize, do_deauthorize

@@ -444,6 +444,22 @@ E += [
      "victim, parties, ...). Costs gas by the size of what it reads.", "common", "uncommon"),
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("event", "history")})
+# the publication layer (charter/publication.py, review 12 WP2): documented only in law.v2 worlds with law.publication on (REQUIRES)
+E += [
+    ("publication", "chains", "Read", "publication(event_type=None)", "this polity's publication table in force: event type -> "
+     "audience (natural, parties, members, officials:<right>, public); with an event type, its audience (\"natural\" when no row "
+     "names it: only those who perceive it by nature are told).", "common", "uncommon"),
+    ("publish", "chains", "Governance", "publish(event_type, audience=\"public\")", "while this law is in force, events of this "
+     "type in this polity are also told to the audience: \"parties\" (the agents the event names), \"members\" (this polity's "
+     "members), \"officials:<right>\" (its members holding that right) or \"public\" (everyone); \"natural\" publishes nothing "
+     "beyond those who perceive it by nature. Publication only widens: nobody is untold. Encrypted messages and channel posts are "
+     "never published. Events published to this polity's members or officials can be read by its laws. Procedural.",
+     "common", "uncommon"),
+    ("unpublish", "chains", "Governance", "unpublish(event_type)", "drops this polity's own row for the event type (the default "
+     "applies again). Procedural.", "common", "uncommon"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2")) and bool((spec.get("law") or {}).get("publication")))
+                 for n in ("publication", "publish", "unpublish")})
 # contracts (charter/contracts.py, P4.3): documented only in worlds with contracts on (OPTIONAL), for the code of a contract
 E += [
     ("pull", "contracts", "Contracts", "pull(member, item, qty)", "a contract's law only: takes qty of item from a member into its "

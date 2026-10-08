@@ -530,7 +530,8 @@ def render_event(k, e, viewer=None) -> str | None:
         head = {x: y for x, y in d.items() if x != "evidence"}
         return f"{tag} {t} {who or ''}: " + json.dumps(head)[:300] + ("\n" + cited if cited else "")
     if t in ("rights", "sanction", "censure", "rename", "accuse", "respond", "ruling", "case_dismissed", "invoke", "channel_created",
-             "deposit", "redeem", "proposal_check_failed", "panel_vote", "case_final", "appeal", "court_rule"):   # courts v2 (law.v2)
+             "deposit", "redeem", "proposal_check_failed", "panel_vote", "case_final", "appeal", "court_rule",   # courts v2 (law.v2)
+             "publication_set"):                                    # review 12 WP2 (law.publication)
         return f"{tag} {t} {who or ''}: " + json.dumps({x: (y if not isinstance(y, list) or t != 'accuse' else [z['id'] for z in y]) for x, y in d.items()})[:600]
     if t in ("proposal_blocked", "primitive_blocked", "law_charged", "law_flagged", "account_out_of_gas"):   # law.v2 (P3.1)
         return f"{tag} {t.replace('_', ' ')}: " + json.dumps(d)[:600]

@@ -19,6 +19,10 @@ Visibility: what a law may see is what its ACCOUNT may know as an institution, n
      hidden jurisdiction or an association, and every recipient is a member of it (a hidden jurisdiction's hidden or current members,
      an association's members). This is the members-only public record of a hidden polity or of a contract, which its own laws
      share with its members.
+  3. Law.publication (review 12 WP2): an event its polity's publication table widened to the polity's register (parties, members
+     or officials:<right>; publication.published_to), for that polity's laws. Every rule above reads the published audience
+     (publication.audience): with the flag on, that is the natural audience widened by the table, the one source for "who may
+     know"; after-hook delivery under law.after_visibility "evidence" and the V17 channel register read it through this predicate.
   Never: monitor-only events (truth and records: who wrote an anonymous post, a covert attacker, the true order), private events
   of one agent or a few (DMs, notices, private results, goals, a Spy's or other secret role's notes, law_charged and compelled
   notices of J0 or a declared polity), channel (group) messages, events about another account's restricted record.
@@ -42,6 +46,7 @@ import json
 from charter import gas as G
 from charter import jurisdictions as J
 from charter import lawlang as L
+from charter import publication as PUB
 
 MAX_LIMIT = 50                         # events one history() call may return
 DEFAULT_LIMIT = 20
@@ -91,12 +96,15 @@ def law_can_see(k, lid, e) -> bool:
     by event() and history() and, under spec law.after_visibility "evidence", by after-hook delivery (dispatch._enqueue). With the
     default ("all") after-hooks still react to every change they hook, including ones whose own event the law could not read (a
     private DM's after_dm, a member-only transfer): that gap is documented in dispatch._enqueue and closed only by the flag."""
-    vis = e.get("vis")
+    vis = PUB.audience(k, e)                                           # review 12 WP2: who was told (the published audience)
     if vis == "public":
         return True
     if not isinstance(vis, list) or not vis:
         return False                                                   # monitor-only, channel messages
     acct = J.law_jur(k, lid)
+    reg = PUB.published_to(k, e)                                       # law.publication: widened to a polity's register (members,
+    if reg is not None and reg[0] == acct:                             # officials, parties): that polity's laws may read it
+        return True
     if about(k, e.get("data")) != acct:
         return False
     members = _account_members(k, acct)

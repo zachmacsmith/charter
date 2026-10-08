@@ -36,6 +36,7 @@ from charter import media as MD                                       # media2
 from charter import outside as O
 from charter import powers as PW                                      # the power table (P4.2): the Board's veto window, levels
 from charter import projects as P
+from charter import publication as PUB                                # review 12 WP2 (law.publication): the publication layer
 
 from charter import features as FT                                    # the feature table: phases and merge order (features.py)
 from charter import rights as RT                                      # the rights registry: names, docs, secrecy, entrenchment
@@ -106,6 +107,7 @@ class Kernel:
             "dm_extra": {a["id"]: int(a.get("dm_extra", 0)) for a in instance["agents"]},   # each agent's drawn extra DMs
             "loans": {}, "loan_seq": 0, "loan_law": None, "loan_enforce": False,
         }
+        PUB.install(self)                                              # law.publication: the store (off: nothing)
         for a in self.w["agents"].values():
             a["start_value"] = self.holdings_value(a["id"])
         def effects():                                                   # per-round effects, efficiency and the turn log
@@ -307,7 +309,10 @@ class Kernel:
     def log(self, kind, agent, data, vis="public"):
         if self.dry:
             return None
-        if vis == "public" and "jur" in self.w:                          # jurisdictions: events about a hidden one reach its members only
+        extra = None
+        if getattr(self, "_publication", False):                      # review 12 WP2 (law.publication): natural audience, widened by
+            vis, extra = PUB.publish(self, kind, agent, data, vis)     # the polity's publication table (charter/publication.py)
+        elif vis == "public" and "jur" in self.w:                      # jurisdictions: events about a hidden one reach its members only
             vis = J.vis(self, data, vis)
         if getattr(self, "_unhooked", False) and isinstance(data, dict):   # law.v2: a change in a halted cascade ran without hooks
             data = {**data, "unhooked": True}
@@ -317,6 +322,8 @@ class Kernel:
             chain = [self._redact(f, hide) for f in chain]             # attack) must not name it in its chain; truth events keep it
         e = {"id": f"e{len(self.events) + 1}", "round": self.r, "type": kind, "agent": agent, "data": data, "vis": vis,
              "cause": chain}
+        if extra:
+            e.update(extra)
         self.events.append(e)
         return e["id"]
 
@@ -678,7 +685,8 @@ class Kernel:
             "rights_of": k.law_rights_of,
             "rng": k.law_rng.random if k.rng_version < 2 else (lambda: k._law_stream(lid).random()),
             "bounty_number": lambda c: camp_of(c)["fn"].get("N") if camp_of(c).get("compute") == "factoring" else None,
-            "channels": lambda: {n: {"owner": c["owner"], "members": list(c["members"]), "open": c["open"]} for n, c in k.w["channels"].items()},
+            "channels": lambda: {n: {"owner": c["owner"], "members": list(c["members"]), "open": c["open"]} for n, c in k.w["channels"].items()
+                                 if not PUB.enabled(k) or PUB.channel_visible(k, lid, n)},   # V17: the register laws may read
             "posts": posts, "current_post": lambda: k.current_post, "hidden_posts": lambda: list(k.w["hidden"]),
             "hide_post": hide_post, "unhide_post": unhide_post,
             "create_right": create_right, "grant": grant, "revoke": revoke, "define_action": define_action,
@@ -701,6 +709,8 @@ class Kernel:
             api.update(AM.law_api(k, lid))                             # law.v2 (P3.4): propose_law, propose_amendment (from L3)
             api.update(CO.law_api(k, lid))                             # law.v2 (courts v2): cases, case, court_rules, set_court_rule
             api.update(EVD.law_api(k, lid))                            # law.v2 (review 10 #10): event(eid), history(...)
+            if PUB.enabled(k):
+                api.update(PUB.law_api(k, lid))                        # review 12 WP2: publish, unpublish, publication
         return J.scope_api(k, lid, api)                                # jurisdictions: a law reaches only its members (off: unchanged);
                                                                        # a contract's law: the contract column, v2 functions included
 
