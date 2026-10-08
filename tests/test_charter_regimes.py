@@ -442,3 +442,41 @@ def test_drop_and_amend_of_inherited_statutes():
     sp = spec.set_path(v2_sp({"base": "absolute_autocracy", "amend": {"Harvest Levy": {"RATE": 0.25}}}, rung="E4"), "law.library.edition", 2)
     st = generator.generate(sp, 1)["regime"]["statutes"]
     assert "RATE = 0.25" in st[0]["code"] and st[0]["template"] == {"name": "Harvest Levy", "params": {"RATE": 0.25}, "rank": None}
+
+
+# ------------------------------------------------------------------ example law-set regimes (W7d): same dimension point, other laws
+PAIRS = (("common_law_democracy", "civil_code_democracy"), ("creditor_market", "debtor_market"))
+
+
+def test_example_law_set_regimes_share_a_dimension_point_but_not_their_laws():
+    keys, fps = {}, {}
+    for name in RG.LAW_SET_REGIMES:
+        assert name not in RG.REGIMES
+        inst = generator.generate(v2_sp(name), 1)
+        reg = inst["regime"]
+        assert reg["name"] == name and reg["notes"] == []
+        k = start(inst)
+        assert all(x["status"] == "active" for x in k.w["laws"].values())
+        laws = [{"name": "c", "code": inst["constitution_code"]}] + reg["statutes"]
+        keys[name] = LS.key(LS.dimensions(laws))
+        assert keys[name] == LS.key(reg["law_set"]["dimensions"])
+        fps[name] = LS.fingerprint(k)
+    for a, b in PAIRS:
+        assert keys[a] == keys[b], (a, b)
+        d = LS.distance(fps[a], fps[b])
+        assert d["jaccard"] > 0 and d["only_a"] and d["only_b"] and d["coverage_l1"] > 0
+    assert keys["common_law_democracy"][0] == "democracy" and keys["creditor_market"][0] == "oligarchy"
+    dims = generator.generate(v2_sp("common_law_democracy"), 1)["regime"]["law_set"]["dimensions"]
+    assert dims["procedures"]["ordinary"]["stages"] == 2                    # the Senate is recorded, not keyed
+
+
+def test_example_law_set_regimes_are_selectable_but_unused():
+    import pathlib
+    from charter import schema as SC
+    assert SC.validate(v2_sp("debtor_market")) == []
+    assert any("did you mean 'debtor_market'" in e for e in SC.validate(v2_sp("debtor_markt")))
+    inline = generator.generate(v2_sp({"base": "creditor_market", "drop": ["Treasury Bonds"]}), 1)["regime"]
+    names = [s["name"] for s in inline["statutes"]]
+    assert "Treasury Bonds" not in names and "Secured Lending" in names
+    texts = [p.read_text() for p in pathlib.Path(spec.__file__).parent.joinpath("specs").rglob("*.yaml")]
+    assert texts and not any(n in t for n in RG.LAW_SET_REGIMES for t in texts)

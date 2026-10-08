@@ -118,7 +118,7 @@ def _constitutions():
 
 def _regimes():
     from charter import regimes as RG
-    return tuple(RG.REGIMES)
+    return tuple(RG.REGIMES) + tuple(RG.LAW_SET_REGIMES)
 
 
 def _library_categories():

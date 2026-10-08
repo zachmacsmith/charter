@@ -1766,18 +1766,31 @@ PENDING: dict[str, dict] = {}
 FIXED_NAMES = ("title", "intent", "rank", "exports", "conflict_rule")          # top-level names that are not parameters
 
 
-def template(name, family, topic, src, doc, fires):
-    """A toolkit entry (whether it can fire in a world is read from its hooks: lawset.check)."""
+# Offices check their arguments and refuse(reason) (W6a) instead of crashing; `amount` is the idiom for a numeric argument (laws
+# have no try/except), spliced into the templates that take numbers.
+_AMOUNT = '''
+def amount(x, what):
+    s = str(x).strip()
+    if s == "" or s == "." or s.count(".") > 1 or not all([c in "0123456789." for c in s]):
+        refuse(what + " must be a number of at least 0, not " + s[:20])
+    return float(s)
+'''
+
+
+def template(name, family, topic, src, doc, fires, needs=()):
+    """A toolkit entry (whether it can fire in a world is read from its hooks: lawset.check). needs: the world modules (features)
+    it is useless without, beyond what its hooks say (contracts for per-law funds, jurisdictions for admission and expulsion)."""
     assert name not in LIB and name not in BLOCKS and name not in TOOLKIT and family in FAMILIES, name
     src = src.strip() + "\n"
     tree = L.check(src, v2=True)
     TOOLKIT[name] = {"name": name, "category": "toolkit", "kind": "law", "edition": 2, "family": family, "topic": topic,
                      "rank": L.declared(tree, "rank") or "statute", "doc": " ".join(doc.split()), "fires": fires,
-                     "code": src, "sha": _sha(src)}
+                     "needs": tuple(needs), "code": src, "sha": _sha(src)}
 
 
 def pending(name, family, topic, waits_on, doc):
-    """A ★ toolkit item that cannot be written yet: TODO, waits on `waits_on` (a sibling work package)."""
+    """A ★ toolkit item that cannot be written yet: TODO, waits on `waits_on` (a sibling work package). None is pending now (W7d
+    wrote the W6 ones); kept for the next roadmap items."""
     PENDING[name] = {"name": name, "family": family, "topic": topic, "waits_on": waits_on, "doc": " ".join(doc.split())}
 
 
@@ -1891,11 +1904,11 @@ def strike_down(agent, target, reason=""):
     t = str(target)
     found = [x for x in laws() if x["id"] == t]
     if not found:
-        return "no law " + t + " is in force"
+        refuse("no law " + t + " is in force")
     if t == law_id() or found[0]["class"] in SHIELDED_CLASSES:
-        return "the Court cannot strike down " + t + " (a " + found[0]["class"] + " law)"
+        refuse("the Court cannot strike down " + t + " (a " + found[0]["class"] + " law)")
     if not repeal(t):
-        return "the repeal of " + t + " was refused"
+        refuse("the repeal of " + t + " was refused")
     public.setdefault("rulings", []).append({"law": t, "title": found[0]["title"], "by": agent, "round": round(),
                                              "reason": str(reason)[:200]})
     gazette("Constitutional Court: " + found[0]["title"] + " (" + t + ") is struck down. " + str(reason)[:200])
@@ -2062,13 +2075,13 @@ def initiate(agent, code):
 
 def sign_initiative(agent, n):
     for row in public.get("initiatives", []):
-        if row["n"] == int(n) and row["status"] == "open":
+        if str(row["n"]) == str(n).strip() and row["status"] == "open":
             if agent not in row["signers"]:
                 row["signers"].append(agent)
             if qualified(row):
                 submit(row)
             return str(len(row["signers"])) + " signatures"
-    return "no open initiative " + str(n)
+    refuse("no open initiative " + str(n))
 
 def on_enact():
     create_right(INITIATIVE_RIGHT)
@@ -2161,15 +2174,15 @@ def issue(a, how):
 
 def apply_licence(agent):
     if has(agent, LICENCE):
-        return "you already hold a licence"
+        refuse("you already hold a licence")
     if FEE > 0 and not pay["charge"](agent, treasury(), FEE_ITEM, FEE):
-        return "the licence fee is " + str(FEE) + " " + FEE_ITEM
+        refuse("the licence fee is " + str(FEE) + " " + FEE_ITEM)
     issue(agent, "issued")
     return "licence issued"
 
 def revoke_licence(agent, target, reason=""):
     if not has(target, LICENCE):
-        return target + " holds no licence"
+        refuse(str(target) + " holds no licence")
     revoke(target, LICENCE)
     reg["record"](book(), target, {{"event": "revoked", "reason": str(reason)[:200]}}, agent)
     notify(target, "Your licence was revoked by the Registrar. " + str(reason)[:200])
@@ -2216,27 +2229,27 @@ MIN_QUOTA = 1
 MAX_QUOTA = 10
 MAX_FEE = 2
 FEE_ITEM = "timber"
-
+''' + _AMOUNT + '''
 def note(camp, what, v, agent):
     public.setdefault("settings", {}).setdefault(camp, {})[what] = v
     gazette("Regulatory Agency: " + name("camp:" + camp) + " " + what + " set to " + str(v) + " by " + agent)
 
 def set_camp_quota(agent, camp, n):
     if camp not in camps():
-        return "no such camp: " + str(camp)
-    q = int(n)
+        refuse("no such camp: " + str(camp))
+    q = int(amount(n, "the quota"))
     if q < MIN_QUOTA or q > MAX_QUOTA:
-        return "the quota must be between " + str(MIN_QUOTA) + " and " + str(MAX_QUOTA)
+        refuse("the quota must be between " + str(MIN_QUOTA) + " and " + str(MAX_QUOTA))
     set_quota(camp, q)
     note(camp, "quota", q, agent)
     return "quota set"
 
 def set_camp_fee(agent, camp, qty):
     if camp not in camps():
-        return "no such camp: " + str(camp)
-    q = float(qty)
-    if q < 0 or q > MAX_FEE:
-        return "the fee must be between 0 and " + str(MAX_FEE)
+        refuse("no such camp: " + str(camp))
+    q = amount(qty, "the fee")
+    if q > MAX_FEE:
+        refuse("the fee must be between 0 and " + str(MAX_FEE))
     set_fee(camp, FEE_ITEM, q)
     note(camp, "fee", q, agent)
     return "fee set"
@@ -2312,12 +2325,18 @@ intent, no trial (contrast the clause path: Compensation Act). Perfect detection
 
 template("Prosecution Office", "criminal", "prosecution", '''
 title = "Prosecution Office"
-intent = "A Public Prosecutor (holder of PROSECUTOR_RIGHT; by default the first Legislator) is paid REWARD REWARD_ITEM from the treasury for each conviction in a case they brought; every case the Prosecutor brings to a ruling goes on a public docket."
+intent = "A Public Prosecutor (holder of PROSECUTOR_RIGHT; by default the first Legislator) is paid REWARD REWARD_ITEM from the treasury for each conviction in a case they brought; every case the Prosecutor brings to a ruling goes on a public docket. Cases under the clauses in PUBLIC_CLAUSES (by default none) may be brought by the Prosecutor alone."
 rank = "statute"
 PROSECUTOR_RIGHT = "prosecutor"
 PROSECUTOR_CLASS = "legislator"
 REWARD_ITEM = "timber"
 REWARD = 2
+PUBLIC_CLAUSES = []
+
+def before_open_case(p, chain):
+    if p["clause"] in PUBLIC_CLAUSES and not has(p["accuser"], PROSECUTOR_RIGHT):
+        return {"block": True, "reason": "only the Public Prosecutor may bring a case under " + p["clause"]}
+    return None
 
 def on_enact():
     create_right(PROSECUTOR_RIGHT)
@@ -2333,8 +2352,8 @@ def on_ruling(case, verdict, accuser, accused):
         pay = min(REWARD, balance(treasury(), REWARD_ITEM))
         if pay > 0:
             move(treasury(), accuser, REWARD_ITEM, pay)
-''', doc="""A public prosecutor paid by conviction, with a public docket. Restricting standing to the prosecutor needs a routed
-open_case (TODO: courts v2, W6b).""", fires="on_ruling")
+''', doc="""A public prosecutor paid by conviction, with a public docket. Standing is restricted to the prosecutor for the public
+clauses (courts v2: before_open_case).""", fires="on_ruling")
 
 template("Pardon Office", "criminal", "pardon", '''
 title = "Pardon Office"
@@ -2361,7 +2380,7 @@ def pardon(agent, target, reason=""):
     used = state.setdefault("used", {})
     key = str(round())
     if used.get(key, 0) >= PER_ROUND:
-        return "no more pardons this round"
+        refuse("no more pardons this round")
     used[key] = used.get(key, 0) + 1
     back = []
     for r in state.get("lost", {}).pop(target, []):
@@ -2410,7 +2429,7 @@ def liable(guilty, victim):
 def on_enact():
     clause(CLAUSE, TEXT, liable)
 ''', doc="""Tort by adjudication: an open-textured clause a judge applies, with damages to the victim. Damages are fixed; a remedy
-chosen at ruling waits on courts v2 (TODO: W6b, rule {verdict, remedy}).""", fires="clause:harm")
+chosen at ruling: Graded Remedies (courts v2).""", fires="clause:harm")
 
 template("Strict Liability for Attacks", "civil", "liability", '''
 title = "Strict Liability for Attacks"
@@ -2440,6 +2459,7 @@ TITLE_PREFIX = "harvest:"
 FEE_ITEM = "timber"
 FEE = 1
 
+''' + _AMOUNT + f'''
 def citizens():
     return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
 
@@ -2449,32 +2469,33 @@ def titles():
 def offer_title(agent, camp, buyer, item, price):
     right = TITLE_PREFIX + str(camp)
     if not has(agent, right):
-        return "you do not hold " + right
+        refuse("you do not hold " + right)
     if buyer not in citizens() or buyer == agent:
-        return "no such buyer: " + str(buyer)
+        refuse("no such buyer: " + str(buyer))
+    price = amount(price, "the price")
     state["seq"] = state.get("seq", 0) + 1
     n = str(state["seq"])
-    state.setdefault("offers", {{}})[n] = {{"seller": agent, "buyer": buyer, "right": right, "item": str(item), "price": float(price)}}
+    state.setdefault("offers", {{}})[n] = {{"seller": agent, "buyer": buyer, "right": right, "item": str(item), "price": price}}
     notify(buyer, agent + " offers you " + right + " for " + str(price) + " " + str(item) + ": invoke accept_title [" + n + "]")
     return "offer " + n + " made"
 
 def accept_title(agent, n):
-    o = state.get("offers", {{}}).get(str(n))
+    o = state.get("offers", {{}}).get(str(n).strip())
     if o is None or o["buyer"] != agent:
-        return "no offer " + str(n) + " to you"
+        refuse("no offer " + str(n) + " to you")
     need = o["price"] + (FEE if FEE_ITEM == o["item"] else 0)
     if balance(agent, o["item"]) < need or balance(agent, FEE_ITEM) < FEE:
-        return "you cannot pay the price and the fee"
+        refuse("you cannot pay the price and the fee")
     if not has(o["seller"], o["right"]):
-        state["offers"].pop(str(n))
-        return "the seller no longer holds " + o["right"]
+        state["offers"].pop(str(n).strip())
+        return "the seller no longer holds " + o["right"] + "; the offer is withdrawn"
     move(agent, o["seller"], o["item"], o["price"])
     if FEE > 0:
         move(agent, treasury(), FEE_ITEM, FEE)
     revoke(o["seller"], o["right"])
     grant(agent, o["right"])
     reg["record"](titles(), o["right"], {{"from": o["seller"], "to": agent, "item": o["item"], "price": o["price"]}})
-    state["offers"].pop(str(n))
+    state["offers"].pop(str(n).strip())
     gazette("Title Registry: " + o["right"] + " passes from " + o["seller"] + " to " + agent)
     return "title conveyed"
 
@@ -2547,11 +2568,11 @@ COMPENSATION = 5
 def take_title(agent, holder, camp, purpose=""):
     right = "harvest:" + str(camp)
     if not has(holder, right):
-        return str(holder) + " does not hold " + right
+        refuse(str(holder) + " does not hold " + right)
     if balance(treasury(), COMP_ITEM) < COMPENSATION:
-        return "the treasury cannot pay just compensation (" + str(COMPENSATION) + " " + COMP_ITEM + ")"
+        refuse("the treasury cannot pay just compensation (" + str(COMPENSATION) + " " + COMP_ITEM + ")")
     if not revoke(holder, right):
-        return "the taking of " + right + " was refused"
+        refuse("the taking of " + right + " was refused")
     move(treasury(), holder, COMP_ITEM, COMPENSATION)
     public.setdefault("takings", []).append({"right": right, "from": holder, "by": agent, "paid": COMPENSATION,
                                              "purpose": str(purpose)[:200], "round": round()})
@@ -2723,6 +2744,7 @@ MAX_ISSUE = 0.02
 MIN_RATIO = 0
 TERM = 20
 
+''' + _AMOUNT + f'''
 def seat(winners):
     if not winners:
         return
@@ -2733,11 +2755,11 @@ def seat(winners):
 
 def issue(agent, qty):
     cap = MAX_ISSUE * supply(CURRENCY) - state.get("issued", 0)
-    q = min(float(qty), max(0, cap))
+    q = min(amount(qty, "qty"), max(0, cap))
     if q <= 0:
-        return "nothing left to issue this round"
+        refuse("nothing left to issue this round")
     if MIN_RATIO > 0 and reserve_ratio(CURRENCY) < MIN_RATIO:
-        return "the reserve ratio is below " + str(MIN_RATIO)
+        refuse("the reserve ratio is below " + str(MIN_RATIO))
     mint(CURRENCY, q, treasury())
     state["issued"] = state.get("issued", 0) + q
     public.setdefault("issues", []).append({{"by": agent, "qty": q, "round": round()}})
@@ -2794,7 +2816,7 @@ def after_harvest(p, chain):
         state["income"] = row
     row["by"][p["agent"]] = row["by"].get(p["agent"], 0) + p["qty"]
 ''', doc="""Progressive brackets on income within a round (lib:tax_schedules.progressive), as a withholding charge (before_harvest)
-paid to the treasury. Taxing sales or wages needs purposes on moves (TODO: memo, W6a).""", fires="before_harvest")
+paid to the treasury. Taxing sales: Value Added Tax (memos on moves, W6a).""", fires="before_harvest")
 
 # ---------------------------------------------------------------------- courts and between polities
 template("Precedent Register", "courts", "precedent", '''
@@ -2843,28 +2865,897 @@ def on_round_start(r):
 are visible). Name the foreign registers in SOURCES; without jurisdictions it enforces the world's own register.""",
          fires="on_round_start")
 
-# ---------------------------------------------------------------------- ★ items: TODO, each waits on a roadmap work package
-pending("Emergency Powers", "constitutional", "emergency", "W6a (declared temporal validity: in_force_until)",
-        "A declaration office whose decree expires by a declared in_force_until, legible to previews and agents.")
-pending("Bicameral Procedure", "legislative", "procedure", "W6c (multi-stage procedures)",
-        "Two chambers in sequence: a procedure returning stages.")
-pending("Executive Assent with Override", "legislative", "procedure", "W6c (multi-stage procedures: assent and override)",
-        "Post-vote assent by an executive and an override by a supermajority.")
-pending("Quorum Procedure", "legislative", "procedure", "W6c (ballot rule functions)",
-        "A ballot carried only with a minimum turnout.")
-pending("Limitation Act", "criminal", "limitation", "W6b (courts v2: routed open_case, cases() read)",
-        "Cases about events older than N rounds are refused.")
-pending("Jury Panel", "courts", "jury", "W6b (courts v2: panel rule)", "A collective verdict by a panel of drawn jurors.")
-pending("Court of Appeal", "courts", "appeal", "W6b (courts v2: appeal primitive)", "A higher office reopens a case within N rounds.")
-pending("Graded Remedies", "civil", "damages", "W6b (courts v2: rule {verdict, remedy})",
-        "The Compensation Act's damages chosen by the judge at ruling instead of fixed.")
-pending("Exchange", "contracts", "exchange", "W6e (atomic exchange)", "Two escrows released together or refunded together.")
-pending("Contract Enforcement Act", "contracts", "enforcement", "W6e (enforcement dial)",
-        "How contracts are enforced: escrow, escrow and court, or word.")
-pending("Deposit Insurance Fund", "finance", "insurance", "W6e (per-law funds)", "An earmarked fund only the law can pay out of.")
-pending("Value Added Tax", "tax", "vat", "W6a (purpose memo on moves)", "A tax on sales, told apart from gifts by the move's memo.")
-pending("Clean Refusals for Offices", "administrative", "refusal", "W6a (refuse(reason))",
-        "Offices that refuse bad arguments without crashing (every office template above would use it).")
+# ---------------------------------------------------------------------- edition 2, second slice (W7d): the former ★ items and the rest
+# The items that waited on W6 (review 10 §6 ★) are now written with its functions: in_force_until (Emergency Powers), memo (Value
+# Added Tax), refuse (every office above and the Administrative Procedure Act), courts v2 (Limitation Act, Jury Panel, Court of
+# Appeal, Graded Remedies, Stare Decisis), stage plans and rule functions (Bicameral, Executive Assent, Quorum) and per-law funds
+# (Exchange, Deposit Insurance Fund). The Contract Enforcement Act is W6e's library law (LIB, category contracts), not a template.
+# `needs` names the world modules a template is useless without (lawset.check reports a contracts-only call where contracts are off).
+#
+# Offices check their arguments and refuse(reason) instead of crashing (W6a): a refusal fails the invoke with the reason, rolls the
+# call back and leaves the law in force. `amount` below is the shared idiom for a numeric argument (laws have no try/except).
+
+template("Emergency Powers", "constitutional", "emergency", '''
+title = "Emergency Powers"
+intent = "The Executive (holder of EXECUTIVE_RIGHT; by default the first Legislator) may declare a state of emergency, with a published reason, for DURATION rounds at most. While it lasts the Executive may impose a curfew on an agent (at most CURFEW_ACTIONS actions per round for CURFEW_ROUNDS rounds) and ration a camp (its quota set to at most MAX_RATION). The emergency ends by itself, and the whole act lapses at the end of round in_force_until (a sunset clause), its powers with it."
+rank = "constitution"
+in_force_until = 30
+EXECUTIVE_RIGHT = "executive"
+EXECUTIVE_CLASS = "legislator"
+DURATION = 3
+CURFEW_ACTIONS = 1
+CURFEW_ROUNDS = 2
+MAX_RATION = 5
+''' + _AMOUNT + '''
+def declared():
+    e = state.get("emergency")
+    return e is not None and round() <= e["until"]
+
+def declare_emergency(agent, reason=""):
+    if declared():
+        refuse("a state of emergency is already in force until round " + str(state["emergency"]["until"]))
+    if str(reason).strip() == "":
+        refuse("a declaration of emergency must give its reason")
+    e = {"by": agent, "from": round(), "until": round() + DURATION - 1, "reason": str(reason)[:200]}
+    state["emergency"] = e
+    public.setdefault("declarations", []).append(dict(e))
+    gazette("Emergency Powers: " + agent + " declares a state of emergency until round " + str(e["until"]) + ". " + e["reason"])
+    return "emergency declared until round " + str(e["until"])
+
+def measure(what, agent, about):
+    public.setdefault("measures", []).append({"measure": what, "about": about, "by": agent, "round": round()})
+    gazette("Emergency Powers: " + what + " on " + str(about) + " by " + agent)
+
+def curfew(agent, target):
+    if not declared():
+        refuse("no state of emergency is in force")
+    if target not in agents() or class_of(target) in ["board", "fixer"]:
+        refuse("no such agent: " + str(target))
+    limit_actions(target, CURFEW_ACTIONS, CURFEW_ROUNDS)
+    measure("curfew", agent, target)
+    return "curfew on " + target
+
+def ration(agent, camp, n):
+    if not declared():
+        refuse("no state of emergency is in force")
+    if camp not in camps():
+        refuse("no such camp: " + str(camp))
+    q = int(amount(n, "the ration"))
+    if q > MAX_RATION:
+        refuse("a ration is at most " + str(MAX_RATION))
+    set_quota(camp, q)
+    measure("ration of " + str(q), agent, camp)
+    return "camp rationed"
+
+def on_enact():
+    create_right(EXECUTIVE_RIGHT)
+    pool = sorted(agents(EXECUTIVE_CLASS))
+    if pool and not holders(EXECUTIVE_RIGHT):
+        grant(pool[0], EXECUTIVE_RIGHT)
+    define_action(EXECUTIVE_RIGHT, "declare_emergency", declare_emergency)
+    define_action(EXECUTIVE_RIGHT, "curfew", curfew)
+    define_action(EXECUTIVE_RIGHT, "ration", ration)
+
+def on_repeal():
+    gazette("Emergency Powers have lapsed.")
+''', doc="""A declaration office with time-limited powers (curfew, rationing), each declaration bounded by DURATION and the act
+itself by a declared sunset (in_force_until, W6a: legible to previews, expired by the kernel). Parliamentary confirmation of a
+declaration would be a ballot the office opens (not included).""", fires="invoke:declare_emergency")
+
+template("Bicameral Procedure", "legislative", "procedure", '''
+title = "Bicameral Procedure"
+intent = "Drafts of the listed CLASSES (by default ordinary and structural) pass two chambers in turn: the Assembly (holders of LOWER_RIGHT, by default vote) by LOWER_RULE, then the Senate (holders of SENATE_RIGHT: SENATORS agents of SENATE_CLASS, by default 3 Scientists, seated at enactment) by SENATE_RULE. Either chamber can kill a draft."
+rank = "constitution"
+LOWER_RIGHT = "vote"
+LOWER_RULE = "majority"
+SENATE_RIGHT = "senator"
+SENATE_CLASS = "scientist"
+SENATORS = 3
+SENATE_RULE = "majority"
+CLASSES = ["ordinary", "structural"]
+RANKS = []
+CLOSES_IN = 1
+
+def seat():
+    if holders(SENATE_RIGHT):
+        return
+    pool = sorted(agents(SENATE_CLASS))
+    pool = pool + [a for a in sorted(agents("legislator")) if a not in pool]
+    for a in pool[:SENATORS]:
+        grant(a, SENATE_RIGHT)
+
+def decide(p):
+    return {"stages": [{"name": "Assembly", "electorate": holders(LOWER_RIGHT), "rule": LOWER_RULE, "closes_in": CLOSES_IN},
+                       {"name": "Senate", "electorate": holders(SENATE_RIGHT), "rule": SENATE_RULE, "closes_in": CLOSES_IN}]}
+
+def on_enact():
+    create_right(SENATE_RIGHT)
+    seat()
+    for c in CLASSES:
+        set_procedure(c, decide)
+        for r in RANKS:
+            set_procedure(c, decide, rank=r)
+''', doc="""Bicameralism as a two-stage plan (W6c): each chamber's ballot in turn, either can kill the draft. The second chamber is
+an office seated at enactment (a Senate of Scientists by default; make it elected with a ballot law).""", fires="on_enact")
+
+template("Executive Assent with Override", "legislative", "procedure", '''
+title = "Executive Assent with Override"
+intent = "Drafts of the listed CLASSES pass the Assembly (holders of ELECTORATE, by default vote) by RULE, then need the assent of the President (holder of PRESIDENT_RIGHT; by default the first Legislator); silence is a veto unless POCKET_ASSENT holds. A vetoed draft still becomes law if the Assembly overrides the veto by OVERRIDE_RULE (by default two thirds)."
+rank = "constitution"
+PRESIDENT_RIGHT = "president"
+PRESIDENT_CLASS = "legislator"
+ELECTORATE = "vote"
+RULE = "majority"
+OVERRIDE_RULE = "two_thirds"
+POCKET_ASSENT = False
+CLASSES = ["ordinary", "structural"]
+RANKS = []
+CLOSES_IN = 1
+
+def decide(p):
+    plan = {"stages": [{"name": "Assembly", "electorate": holders(ELECTORATE), "rule": RULE, "closes_in": CLOSES_IN}],
+            "assent": holders(PRESIDENT_RIGHT), "override": {"rule": OVERRIDE_RULE, "electorate": holders(ELECTORATE)}}
+    if POCKET_ASSENT:
+        plan["silence"] = "assent"
+    return plan
+
+def on_enact():
+    create_right(PRESIDENT_RIGHT)
+    pool = sorted(agents(PRESIDENT_CLASS))
+    if pool and not holders(PRESIDENT_RIGHT):
+        grant(pool[0], PRESIDENT_RIGHT)
+    for c in CLASSES:
+        set_procedure(c, decide)
+        for r in RANKS:
+            set_procedure(c, decide, rank=r)
+''', doc="""The presidential veto (US Art. I §7): a stage plan with assent and override (W6c). POCKET_ASSENT turns silence into
+assent (as in many parliamentary systems where assent is a formality).""", fires="on_enact")
+
+template("Quorum Procedure", "legislative", "procedure", '''
+title = "Quorum Procedure"
+intent = "Drafts of the listed CLASSES are decided by the ELECTORATE (by default holders of vote), but a ballot counts only if at least QUORUM of the electorate (by default half) votes; then it passes with more than THRESHOLD of the votes cast (by default half). A ballot without a quorum fails."
+rank = "constitution"
+ELECTORATE = "vote"
+QUORUM = 0.5
+THRESHOLD = 0.5
+CLASSES = ["ordinary", "structural", "procedural"]
+RANKS = []
+CLOSES_IN = 1
+
+def quorate(votes, electorate):
+    if len(electorate) == 0 or len(votes) < QUORUM * len(electorate):
+        return None
+    yes = len([a for a in votes if votes[a] == "yes"])
+    if yes > THRESHOLD * len(votes):
+        return "yes"
+    return "no"
+
+def decide(p):
+    return {"electorate": holders(ELECTORATE), "rule": quorate, "closes_in": CLOSES_IN}
+
+def on_enact():
+    for c in CLASSES:
+        set_procedure(c, decide)
+        for r in RANKS:
+            set_procedure(c, decide, rank=r)
+''', doc="""A quorum rule as a ballot rule function (W6c: fn(votes, electorate), run under gas): no quorum, no decision.""",
+         fires="on_enact")
+
+template("Administrative Procedure Act", "administrative", "procedure", '''
+title = "Administrative Procedure Act"
+intent = "No office holder may deal with themselves: a payment to, or a right granted to, the agent whose office act caused it is refused when the office belongs to a law titled in OFFICES (by default the Pardon Office, Eminent Domain and the Regulatory Agency). Every payment such an office makes is entered in a public register of administrative acts."
+rank = "statute"
+OFFICES = ["Pardon Office", "Eminent Domain", "Regulatory Agency"]
+KEEP = 200
+
+def office_of(chain):
+    ids = chain_laws(chain)
+    for x in laws():
+        if x["id"] in ids and x["title"] in OFFICES and x["id"] != law_id():
+            return x
+    return None
+
+def by_office(chain):
+    if root_kind(chain) != "action" or caused_by_agent(chain) is None:
+        return None
+    return office_of(chain)
+
+def self_dealing(who, chain):
+    o = by_office(chain)
+    if o is not None and who == caused_by_agent(chain):
+        return {"block": True, "reason": "the Administrative Procedure Act: nobody may judge their own cause (" + str(who)
+                + " acting through " + o["title"] + ")"}
+    return None
+
+def before_move(p, chain):
+    return self_dealing(p["dst"], chain)
+
+def before_grant_right(p, chain):
+    return self_dealing(p["agent"], chain)
+
+def after_move(p, chain):
+    o = by_office(chain)
+    if o is None:
+        return
+    book = public.setdefault("acts", [])
+    book.append({"office": o["title"], "by": caused_by_agent(chain), "to": p["dst"], "item": p["item"],
+                 "qty": p["result"]["moved"], "round": round()})
+    if len(book) > KEEP:
+        book.pop(0)
+''', doc="""Administrative law over other laws' offices: the rule against bias (nemo iudex in causa sua) as before-hooks on the
+moves and grants an office act causes (the cause chain names the acting agent and the office's law), and a public register of
+office payments. Hooking the office act itself is not possible: invoke is not a routed primitive. With refuse (W6a) the toolkit's
+offices also refuse bad arguments with a reason instead of crashing.""", fires="before_move")
+
+template("Limitation Act", "criminal", "limitation", '''
+title = "Limitation Act"
+intent = "No case may be brought on stale evidence: a filing whose newest cited event that the court can read is more than LIMIT rounds old (by default 5) is refused. Clauses in EXEMPT_CLAUSES have no limit. While NEED_DATED holds, a filing must cite at least one event the court can read."
+rank = "statute"
+LIMIT = 5
+EXEMPT_CLAUSES = []
+NEED_DATED = False
+
+def before_open_case(p, chain):
+    if p["clause"] in EXEMPT_CLAUSES:
+        return None
+    dates = []
+    for eid in p["evidence"]:
+        e = event(eid)
+        if e is not None:
+            dates.append(e["round"])
+    if not dates:
+        if NEED_DATED:
+            return {"block": True, "reason": "the Limitation Act: a case must cite evidence the court can read and date"}
+        return None
+    if round() - max(dates) > LIMIT:
+        return {"block": True, "reason": "the Limitation Act: the newest evidence (round " + str(max(dates)) + ") is more than "
+                + str(LIMIT) + " rounds old; the claim is time-barred"}
+    return None
+''', doc="""A statute of limitations as a standing rule on filings (courts v2: routed open_case; W6f: event(eid) dates the cited
+evidence). Evidence the law cannot see (private transfers, DMs) has no date here, so it neither bars nor saves a claim.""",
+         fires="before_open_case")
+
+template("Jury Panel", "courts", "jury", '''
+title = "Jury Panel"
+intent = "Cases are decided by a jury: JURORS citizens (by default 3) drawn by lot, and drawn again every TERM rounds, hold the judge and JUROR_RIGHT rights; only jurors judge at first instance, and a majority of the jury decides each case."
+rank = "statute"
+JUROR_RIGHT = "juror"
+JURORS = 3
+TERM = 5
+
+def citizens():
+    return sorted([a for a in agents() if class_of(a) not in ["board", "fixer"]])
+
+def draw():
+    for a in holders(JUROR_RIGHT):
+        revoke(a, JUROR_RIGHT)
+        if a in state.get("made_judge", []):
+            revoke(a, "judge")
+    state["made_judge"] = []
+    pool = citizens()
+    chosen = []
+    while len(chosen) < min(JURORS, len(pool)):
+        a = pool[int(rng() * len(pool))]
+        if a not in chosen:
+            chosen.append(a)
+    for a in chosen:
+        grant(a, JUROR_RIGHT)
+        if not has(a, "judge"):
+            grant(a, "judge")
+            state["made_judge"].append(a)
+    public.setdefault("panels", []).append({"round": round(), "jurors": chosen})
+
+def on_enact():
+    create_right(JUROR_RIGHT)
+    set_court_rule("judges", JUROR_RIGHT)
+    set_court_rule("panel", JURORS)
+    draw()
+
+def on_round_start(r):
+    if TERM and r > 0 and r % TERM == 0:
+        draw()
+''', doc="""Trial by jury as court rules (courts v2: the bench is the juror right, the panel size the jury): a collective verdict by
+majority, with the median of the jurors' remedies. Contrast edition 1's Jury Trial (three single judges).""", fires="on_enact")
+
+template("Court of Appeal", "courts", "appeal", '''
+title = "Court of Appeal"
+intent = "A Court of Appeal of BENCH appellate judges (holders of APPEAL_RIGHT and judge; by default Legislators who are not already judges) hears appeals: a party may appeal a ruling within WINDOW rounds, its penalty waiting meanwhile; PANEL appellate judges decide by majority. Every appeal and its outcome is published."
+rank = "statute"
+APPEAL_RIGHT = "appellate"
+BENCH = 1
+BENCH_CLASS = "legislator"
+WINDOW = 2
+PANEL = 1
+
+def seat():
+    if holders(APPEAL_RIGHT):
+        return
+    pool = sorted(agents(BENCH_CLASS))
+    pool = [a for a in pool if not has(a, "judge")] + [a for a in pool if has(a, "judge")]
+    for a in pool[:BENCH]:
+        grant(a, APPEAL_RIGHT)
+        if not has(a, "judge"):
+            grant(a, "judge")
+
+def on_enact():
+    create_right(APPEAL_RIGHT)
+    seat()
+    set_court_rule("appeal_judges", APPEAL_RIGHT)
+    set_court_rule("appeal_window", WINDOW)
+    set_court_rule("appeal_panel", PANEL)
+
+def after_appeal(p, chain):
+    public.setdefault("appeals", []).append({"case": p["case"], "by": p["appellant"], "round": round(), "outcome": None})
+
+def after_rule(p, chain):
+    if p["stage"] != 2 or not p["decides"]:
+        return
+    for row in public.get("appeals", []):
+        if row["case"] == p["case"] and row["outcome"] is None:
+            row["outcome"] = p["verdict"]
+            gazette("Court of Appeal: " + str(p["case"]) + " is decided on appeal: " + str(p["verdict"]))
+''', doc="""A higher office (courts v2: appeal_judges, appeal window, appeal panel): first-instance penalties wait for the window,
+an appeal reopens the case before judges who did not sit on it.""", fires="after_appeal")
+
+template("Graded Remedies", "civil", "damages", '''
+title = "Graded Remedies"
+intent = "Whoever wrongfully causes another agent loss can be taken to court under the clause CLAUSE, and the judge chooses the remedy at ruling: a number is damages in DAMAGES_ITEM paid to the victim (at most MAX_DAMAGES); a remedy named in NAMED pays the damages listed there (by default nominal: 1, and apology: 0 with a published apology); no remedy pays DEFAULT. The liable party pays as much as it holds; every award is published."
+rank = "statute"
+CLAUSE = "tort"
+TEXT = "You must not wrongfully cause another agent loss: by deceit, by breaking your word on a deal, or by damaging what they hold."
+DAMAGES_ITEM = "timber"
+MAX_DAMAGES = 20
+DEFAULT = 2
+NAMED = {"nominal": 1, "apology": 0}
+
+def due(remedy):
+    if remedy is None:
+        return {"qty": DEFAULT, "how": "default"}
+    if str(remedy) == remedy:
+        if remedy in NAMED:
+            return {"qty": NAMED[remedy], "how": remedy}
+        return {"qty": DEFAULT, "how": "default"}
+    return {"qty": min(remedy, MAX_DAMAGES), "how": "damages"}
+
+def liable(guilty, victim, remedy):
+    d = due(remedy)
+    paid = min(d["qty"], balance(guilty, DAMAGES_ITEM))
+    if paid > 0 and victim is not None:
+        move(guilty, victim, DAMAGES_ITEM, paid, memo="damages")
+    if d["how"] == "apology":
+        gazette("Graded Remedies: " + guilty + " is ordered to apologise to " + str(victim))
+    public.setdefault("awards", []).append({"liable": guilty, "victim": victim, "remedy": d["how"], "paid": paid, "round": round()})
+
+def on_enact():
+    clause(CLAUSE, TEXT, liable)
+''', doc="""The Compensation Act with judge-chosen remedies (courts v2: rule {verdict, remedy} reaches a three-argument penalty):
+damages within a cap, or named remedies the statute prices.""", fires="clause:tort")
+
+template("Stare Decisis", "courts", "precedent", '''
+title = "Stare Decisis"
+intent = "Precedent binds the court of first instance: once the last LINE final decisions under a clause (by default 2) agree on a verdict, a first-instance judge may not decide a case under that clause the other way; only an appeal bench may depart from the line. A refused departure names the precedents."
+rank = "statute"
+LINE = 2
+
+def line(clause):
+    done = [c for c in cases("decided") if c["clause"] == clause and c["final"]][-LINE:]
+    if LINE < 1 or len(done) < LINE:
+        return None
+    v = done[0]["verdict"]
+    if all([c["verdict"] == v for c in done]):
+        return {"verdict": v, "cases": [c["id"] for c in done]}
+    return None
+
+def before_rule(p, chain):
+    if p["stage"] != 1 or not p["decides"]:
+        return None
+    ln = line(p["clause"])
+    if ln is not None and p["verdict"] != ln["verdict"]:
+        return {"block": True, "reason": "Stare Decisis: under " + str(p["clause"]) + " the court is bound by " + ", ".join(ln["cases"])
+                + " (" + ln["verdict"] + "); only an appeal may depart from them"}
+    return None
+''', doc="""Vertical stare decisis read from the court's own record (courts v2: cases()): a consistent line of final decisions binds
+first instance, the appeal bench may overrule it. Whether two cases are alike is not checked (the clause stands in for the facts).""",
+         fires="before_rule")
+
+template("Value Added Tax", "tax", "vat", '''
+title = "Value Added Tax"
+intent = "Sales are taxed and gifts are not: a transfer whose memo begins with one of SALE_MEMOS (by default sale, price, payment) pays RATE of its quantity (by default 10%) to the treasury, withheld from the transfer; goods in EXEMPT_ITEMS are zero-rated. What is collected is published by round."
+rank = "statute"
+RATE = 0.1
+SALE_MEMOS = ["sale", "price", "payment"]
+EXEMPT_ITEMS = []
+
+def taxable(p):
+    if p["why"] != "transfer" or p["src"] is None or p["item"] in EXEMPT_ITEMS:
+        return False
+    m = str(p["memo"] or "")
+    return any([m.startswith(w) for w in SALE_MEMOS])
+
+def before_move(p, chain):
+    if taxable(p):
+        return round_to(RATE * p["qty"], 4)
+    return None
+
+def after_move(p, chain):
+    if taxable(p):
+        row = public.setdefault("collected", {})
+        key = str(round())
+        row[key] = round_to(row.get(key, 0) + RATE * p["qty"], 4)
+''', doc="""A sales tax that tells a sale from a gift by the transfer's purpose memo (W6a). The memo is the payer's own
+declaration: misdeclaring a sale as a gift is evasion a court clause could punish.""", fires="before_move")
+
+template("Exchange", "contracts", "exchange", '''
+title = "Exchange"
+intent = "An atomic exchange office: an agent offers GIVE of one good for GET of another to a named counterparty, and what it gives is held at once in this law's escrow fund; when the counterparty accepts, both sides change hands in the same act (both or neither); an offer not accepted within DEADLINE rounds, or withdrawn, is refunded. FEE FEE_ITEM per completed exchange goes to the treasury, paid by the acceptor."
+rank = "statute"
+TRADER_RIGHT = "trader"
+DEADLINE = 3
+FEE_ITEM = "timber"
+FEE = 0
+''' + _AMOUNT + '''
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def escrow():
+    return open_fund("escrow")
+
+def offer_exchange(agent, to, give_item, give_qty, get_item, get_qty):
+    if to not in citizens() or to == agent:
+        refuse("no such counterparty: " + str(to))
+    g = amount(give_qty, "give_qty")
+    w = amount(get_qty, "get_qty")
+    if g <= 0 or w <= 0:
+        refuse("both sides of an exchange must be more than 0")
+    if balance(agent, str(give_item)) < g:
+        refuse("you hold less than " + str(g) + " " + str(give_item))
+    move(agent, escrow(), str(give_item), g, memo="exchange escrow")
+    state["seq"] = state.get("seq", 0) + 1
+    n = str(state["seq"])
+    state.setdefault("offers", {})[n] = {"from": agent, "to": to, "give_item": str(give_item), "give_qty": g,
+                                         "get_item": str(get_item), "get_qty": w, "until": round() + DEADLINE}
+    notify(to, agent + " offers " + str(g) + " " + str(give_item) + " for " + str(w) + " " + str(get_item)
+           + ": invoke accept_exchange [" + n + "]")
+    return "offer " + n + " made; your side is held in escrow"
+
+def close(n, how):
+    o = state["offers"].pop(n)
+    public.setdefault("exchanges", []).append({"n": n, "from": o["from"], "to": o["to"], "give": [o["give_item"], o["give_qty"]],
+                                               "get": [o["get_item"], o["get_qty"]], "how": how, "round": round()})
+    return o
+
+def accept_exchange(agent, n):
+    n = str(n).strip()
+    o = state.get("offers", {}).get(n)
+    if o is None or o["to"] != agent:
+        refuse("no exchange offer " + n + " to you")
+    need = o["get_qty"] + (FEE if FEE_ITEM == o["get_item"] else 0)
+    if balance(agent, o["get_item"]) < need or balance(agent, FEE_ITEM) < FEE:
+        refuse("you cannot pay " + str(o["get_qty"]) + " " + o["get_item"] + " and the fee")
+    move(agent, o["from"], o["get_item"], o["get_qty"], memo="exchange " + n)
+    move(escrow(), agent, o["give_item"], o["give_qty"], memo="exchange " + n)
+    if FEE > 0:
+        move(agent, treasury(), FEE_ITEM, FEE)
+    close(n, "exchanged")
+    gazette("Exchange " + n + ": " + o["from"] + " and " + agent + " exchanged")
+    return "exchanged"
+
+def give_back(n, how):
+    o = close(n, how)
+    move(escrow(), o["from"], o["give_item"], o["give_qty"], memo="exchange refund " + n)
+
+def withdraw_exchange(agent, n):
+    n = str(n).strip()
+    o = state.get("offers", {}).get(n)
+    if o is None or o["from"] != agent:
+        refuse("no exchange offer " + n + " of yours")
+    give_back(n, "withdrawn")
+    return "withdrawn and refunded"
+
+def on_enact():
+    escrow()
+    create_right(TRADER_RIGHT)
+    for a in citizens():
+        grant(a, TRADER_RIGHT)
+    define_action(TRADER_RIGHT, "offer_exchange", offer_exchange)
+    define_action(TRADER_RIGHT, "accept_exchange", accept_exchange)
+    define_action(TRADER_RIGHT, "withdraw_exchange", withdraw_exchange)
+
+def on_round_end(r):
+    for n in sorted(state.get("offers", {})):
+        if r >= state["offers"][n]["until"]:
+            give_back(n, "lapsed")
+''', doc="""Delivery versus payment run by the polity: one side waits in a per-law fund (W6e open_fund), the acceptance moves both
+sides in one atomic invocation (a failed leg refuses and rolls back both). The swap primitive itself is an association's
+(contracts' exchange template); a polity law cannot call it, so this office is its polity-side twin.""",
+         fires="invoke:accept_exchange", needs=("contracts",))
+
+template("Deposit Insurance Fund", "finance", "insurance", '''
+title = "Deposit Insurance Fund"
+intent = "Lending is insured from an earmarked fund that only this law can pay out of: the treasury pays SEED SEED_ITEM into the fund at enactment, every lender pays PREMIUM of each loan it makes into the fund when the loan is taken, and when a loan defaults the fund pays the lender COVER (by default 80%) of what is still owed, at most LIMIT per loan and as far as the fund holds. Every payout is published."
+rank = "statute"
+SEED_ITEM = "timber"
+SEED = 10
+PREMIUM = 0.02
+COVER = 0.8
+LIMIT = 20
+
+def fund():
+    return open_fund("insurance")
+
+def on_enact():
+    f = fund()
+    s = min(SEED, balance(treasury(), SEED_ITEM))
+    if s > 0:
+        move(treasury(), f, SEED_ITEM, s, memo="deposit insurance seed")
+
+def after_accept_loan(p, chain):
+    ln = loans().get(p["loan"])
+    if ln is None or ln["lender"] not in agents():
+        return
+    q = round_to(PREMIUM * ln["qty"], 4)
+    if q > 0 and balance(ln["lender"], ln["item"]) >= q:
+        move(ln["lender"], fund(), ln["item"], q, memo="deposit insurance premium")
+
+def after_default_loan(p, chain):
+    ln = loans().get(p["loan"])
+    if ln is None or ln["lender"] not in agents():
+        return
+    pay = min(COVER * p["owed"], LIMIT, balance(fund(), ln["repay_item"]))
+    if pay > 0:
+        move(fund(), ln["lender"], ln["repay_item"], pay, memo="deposit insurance payout")
+        public.setdefault("payouts", []).append({"loan": p["loan"], "lender": ln["lender"], "paid": round_to(pay, 4),
+                                                 "round": round()})
+''', doc="""An earmarked fund (W6e per-law funds: nobody else can spend it) with premiums and payouts on the loan hooks. There are
+no banks in the world, so the insured deposit is a loan: the cover protects lenders, as FDIC cover protects depositors.""",
+         fires="after_default_loan", needs=("contracts",))
+
+# ---------------------------------------------------------------------- the deferred (non-★) items
+template("Treasury Bonds", "finance", "bonds", '''
+title = "Treasury Bonds"
+intent = "The treasury borrows from its citizens: any citizen may buy a bond for PRICE ITEM (at most ISSUE bonds are sold per round); each bond repays PRICE plus COUPON (by default 10%) after TERM rounds, from the treasury. A bond the treasury cannot repay when due is in default and stays on the public register, paid first as soon as the treasury can."
+rank = "statute"
+BOND_RIGHT = "bondholder"
+ITEM = "timber"
+PRICE = 5
+COUPON = 0.1
+TERM = 5
+ISSUE = 3
+
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def buy_bond(agent):
+    book = public.setdefault("bonds", [])
+    if len([b for b in book if b["sold"] == round()]) >= ISSUE:
+        refuse("no more bonds are sold this round")
+    if balance(agent, ITEM) < PRICE:
+        refuse("a bond costs " + str(PRICE) + " " + ITEM)
+    move(agent, treasury(), ITEM, PRICE, memo="treasury bond")
+    n = len(book) + 1
+    book.append({"n": n, "holder": agent, "sold": round(), "due": round() + TERM, "owed": round_to(PRICE * (1 + COUPON), 4),
+                 "status": "outstanding"})
+    return "bond " + str(n) + " bought: " + str(round_to(PRICE * (1 + COUPON), 4)) + " " + ITEM + " due in round " + str(round() + TERM)
+
+def on_enact():
+    create_right(BOND_RIGHT)
+    for a in citizens():
+        grant(a, BOND_RIGHT)
+    define_action(BOND_RIGHT, "buy_bond", buy_bond)
+
+def on_round_end(r):
+    for b in public.get("bonds", []):
+        if b["status"] in ["outstanding", "default"] and r >= b["due"]:
+            if b["holder"] not in agents():
+                b["status"] = "unclaimed"
+            elif balance(treasury(), ITEM) >= b["owed"]:
+                move(treasury(), b["holder"], ITEM, b["owed"], memo="bond " + str(b["n"]) + " redeemed")
+                b["status"] = "repaid"
+            elif b["status"] == "outstanding":
+                b["status"] = "default"
+                gazette("Treasury Bonds: bond " + str(b["n"]) + " is in default")
+''', doc="""Public debt: an office every citizen holds sells bonds into the treasury; redemption at maturity from the treasury, a
+sovereign default when it cannot pay, published on a register.""", fires="invoke:buy_bond")
+
+template("Prescription", "property", "prescription", '''
+title = "Prescription"
+intent = "Use it or lose it: a harvest right its holder has not used for IDLE rounds (by default 10; counted from this law's enactment at the earliest) can be claimed by any other citizen: the right passes from the idle holder to the claimant, and the transfer is published. A holder keeps their title by harvesting there."
+rank = "statute"
+CLAIM_RIGHT = "claimant"
+IDLE = 10
+
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def after_harvest(p, chain):
+    state.setdefault("used", {})[p["agent"] + "@" + p["camp"]] = round()
+
+def claim_title(agent, holder, camp):
+    right = "harvest:" + str(camp)
+    if holder not in agents() or not has(holder, right):
+        refuse(str(holder) + " does not hold " + right)
+    if has(agent, right):
+        refuse("you already hold " + right)
+    last = state.get("used", {}).get(holder + "@" + str(camp), state.get("since", 0))
+    if round() - last < IDLE:
+        refuse(holder + " used " + right + " in round " + str(last) + "; it can be claimed from round " + str(last + IDLE))
+    revoke(holder, right)
+    grant(agent, right)
+    public.setdefault("claims", []).append({"right": right, "from": holder, "to": agent, "idle_since": last, "round": round()})
+    notify(holder, "Prescription: " + right + " passed to " + agent + " after " + str(round() - last) + " idle rounds")
+    gazette("Prescription: " + right + " passes from " + holder + " to " + agent)
+    return "claimed " + right
+
+def on_enact():
+    state["since"] = round()
+    create_right(CLAIM_RIGHT)
+    for a in citizens():
+        grant(a, CLAIM_RIGHT)
+    define_action(CLAIM_RIGHT, "claim_title", claim_title)
+''', doc="""Prescription of an unused title (abandonment and acquisitive prescription). Adverse possession proper (title from
+long use without right) cannot be written: nobody can harvest a camp without its right, so possession without title does not
+exist in this world.""", fires="invoke:claim_title")
+
+template("Secured Lending", "property", "security", f'''
+title = "Secured Lending"
+intent = "A borrower may pledge collateral for a loan: the collateral is held in escrow by the treasury on this law's register; repaid in full, it goes back to the borrower; at default it goes to the lender and counts towards the debt at its value. Pledges are entered in a public register of security interests in the order they are made."
+rank = "statute"
+esc = use("{ref("Escrow")}")
+credit = use("{ref("Credit Helpers")}")
+PLEDGE_RIGHT = "pledgor"
+''' + _AMOUNT + '''
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def book():
+    return state.setdefault("escrow", {})
+
+def pledge(agent, loan, item, qty):
+    loan = str(loan).strip()
+    ln = loans().get(loan)
+    if ln is None or ln["borrower"] != agent or ln["status"] not in ["offered", "active"]:
+        refuse("no open loan " + loan + " of yours")
+    q = amount(qty, "qty")
+    if q <= 0 or balance(agent, str(item)) < q:
+        refuse("you hold less than " + str(q) + " " + str(item))
+    key = loan + ":" + str(len(public.get("interests", [])) + 1)
+    esc["hold"](book(), key, agent, str(item), q, treasury())
+    public.setdefault("interests", []).append({"key": key, "loan": loan, "lender": ln["lender"], "item": str(item), "qty": q,
+                                               "round": round(), "status": "held"})
+    return "pledged " + str(q) + " " + str(item) + " for " + loan
+
+def rows(loan):
+    return [r for r in public.get("interests", []) if r["loan"] == loan and r["status"] == "held"]
+
+def before_default_loan(p, chain):
+    ln = loans()[p["loan"]]
+    for r in rows(p["loan"]):
+        got = esc["release"](book(), r["key"], ln["lender"])
+        r["status"] = "enforced"
+        worth = sum([got[i] * value(i) for i in got]) / max(1e-9, value(ln["repay_item"]))
+        owed = credit["owed"](loans()[p["loan"]])
+        if worth > 0 and owed > 0:
+            settle_loan(p["loan"], min(worth, owed), "seize")
+
+def after_settle_loan(p, chain):
+    ln = loans().get(p["loan"])
+    if ln is None or ln["status"] != "repaid":
+        return
+    for r in rows(p["loan"]):
+        esc["refund"](book(), r["key"])
+        r["status"] = "released"
+
+def on_enact():
+    create_right(PLEDGE_RIGHT)
+    for a in citizens():
+        grant(a, PLEDGE_RIGHT)
+    define_action(PLEDGE_RIGHT, "pledge", pledge)
+''', doc="""A security interest (lib:escrow in the treasury) with a public register in order of time; foreclosure at the loan's
+default hook (before_default_loan) and release on repayment (after_settle_loan). Collateral that is not the repayment item is
+credited at its value.""", fires="before_default_loan")
+
+template("Guarantee", "contracts", "guarantee", f'''
+title = "Guarantee"
+intent = "A surety may guarantee another agent's loan: the guarantee is entered in a public register and the lender is told; when the loan is about to default, what the borrower still owes (at most CAP of it) is taken from the surety, as much as they hold, and paid to the lender before the loan defaults."
+rank = "statute"
+credit = use("{ref("Credit Helpers")}")
+take = use("{ref("Seize")}")
+SURETY_RIGHT = "surety"
+CAP = 1.0
+
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def guarantee(agent, loan):
+    loan = str(loan).strip()
+    ln = loans().get(loan)
+    if ln is None or ln["status"] not in ["offered", "active"]:
+        refuse("no open loan " + loan)
+    if agent in [ln["borrower"], ln["lender"]]:
+        refuse("a party to a loan cannot guarantee it")
+    book = public.setdefault("guarantees", {{}})
+    if loan in book:
+        refuse(loan + " is already guaranteed by " + book[loan])
+    book[loan] = agent
+    if ln["lender"] in agents():
+        notify(ln["lender"], agent + " guarantees loan " + loan)
+    return "you guarantee " + loan
+
+def before_default_loan(p, chain):
+    g = public.get("guarantees", {{}}).get(p["loan"])
+    if g is None or g not in agents():
+        return
+    ln = loans()[p["loan"]]
+    got = take["seize"](g, ln["lender"], ln["repay_item"], CAP * credit["owed"](ln), "the guarantee of " + p["loan"])
+    if got > 0:
+        settle_loan(p["loan"], got, "seize")
+
+def on_enact():
+    create_right(SURETY_RIGHT)
+    for a in citizens():
+        grant(a, SURETY_RIGHT)
+    define_action(SURETY_RIGHT, "guarantee", guarantee)
+''', doc="""Suretyship: a third party's promise made enforceable by the polity at the loan's default hook (lib:seize). The surety's
+consent is its own act; the borrower's consent is not asked (as with a real guarantee).""", fires="before_default_loan")
+
+template("Contract Registry", "contracts", "registry", '''
+title = "Contract Registry"
+intent = "Agreements can be registered: one party enters the terms and names the counterparty, the counterparty confirms, and the confirmed agreement is published in the gazette and in a public register, where courts can cite it. A party may sue the other under the clause CLAUSE for breaking a registered agreement; found guilty, it pays DAMAGES DAMAGES_ITEM to the other party."
+rank = "statute"
+DEED_RIGHT = "registrant"
+CLAUSE = "registered_agreement"
+DAMAGES_ITEM = "timber"
+DAMAGES = 3
+
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def register_agreement(agent, counterparty, terms):
+    if counterparty not in citizens() or counterparty == agent:
+        refuse("no such counterparty: " + str(counterparty))
+    if str(terms).strip() == "":
+        refuse("an agreement needs its terms")
+    book = public.setdefault("agreements", [])
+    n = len(book) + 1
+    book.append({"n": n, "parties": [agent, counterparty], "terms": str(terms)[:400], "round": round(), "status": "proposed"})
+    notify(counterparty, agent + " asks you to confirm agreement " + str(n) + ": invoke confirm_agreement [" + str(n) + "]")
+    return "agreement " + str(n) + " entered; it binds once " + counterparty + " confirms"
+
+def confirm_agreement(agent, n):
+    for row in public.get("agreements", []):
+        if str(row["n"]) == str(n).strip() and row["status"] == "proposed" and row["parties"][1] == agent:
+            row["status"] = "registered"
+            row["confirmed"] = round()
+            gazette("Contract Registry: agreement " + str(row["n"]) + " between " + row["parties"][0] + " and " + agent
+                    + " is registered: " + row["terms"])
+            return "agreement registered"
+    refuse("no agreement " + str(n) + " waiting for your confirmation")
+
+def bound(a, b):
+    return [r for r in public.get("agreements", []) if r["status"] == "registered" and a in r["parties"] and b in r["parties"]]
+
+def breach(guilty, victim):
+    if victim is None or not bound(guilty, victim):
+        gazette("Contract Registry: no registered agreement binds " + guilty + " to " + str(victim))
+        return
+    paid = min(DAMAGES, balance(guilty, DAMAGES_ITEM))
+    if paid > 0:
+        move(guilty, victim, DAMAGES_ITEM, paid, memo="damages for breach")
+    public.setdefault("breaches", []).append({"liable": guilty, "victim": victim, "paid": paid, "round": round()})
+
+def on_enact():
+    create_right(DEED_RIGHT)
+    for a in citizens():
+        grant(a, DEED_RIGHT)
+    define_action(DEED_RIGHT, "register_agreement", register_agreement)
+    define_action(DEED_RIGHT, "confirm_agreement", confirm_agreement)
+    clause(CLAUSE, "A party must keep an agreement it registered with the Contract Registry.", breach)
+''', doc="""Formalities as evidence: a two-step registration makes an agreement a public record a court can cite; damages for
+breach only between parties of a registered agreement. Works without the contracts module.""",
+         fires="invoke:confirm_agreement")
+
+template("Exemptions List", "tax", "exemptions", '''
+title = "Exemptions List"
+intent = "Agents on EXEMPT_AGENTS and agents of EXEMPT_CLASSES (by default none) are exempt from the charges of the laws titled in TAXES (by default every law's charges): whatever such a law charges them is refunded from the treasury at once. The list is public."
+rank = "statute"
+EXEMPT_AGENTS = []
+EXEMPT_CLASSES = []
+TAXES = []
+
+def exempt(a):
+    return a in EXEMPT_AGENTS or (a in agents() and class_of(a) in EXEMPT_CLASSES)
+
+def taxed_by(lid):
+    if not TAXES:
+        return True
+    return any([x["id"] == lid and x["title"] in TAXES for x in laws()])
+
+def after_move(p, chain):
+    why = str(p["why"] or "")
+    if not why.startswith("charge:") or p["src"] is None or p["dst"] != treasury() or not exempt(p["src"]):
+        return
+    if not taxed_by(why[7:]):
+        return
+    q = min(p["result"]["moved"], balance(treasury(), p["item"]))
+    if q > 0:
+        move(treasury(), p["src"], p["item"], q, memo="tax exemption")
+        row = public.setdefault("refunds", {})
+        row[p["src"]] = round_to(row.get(p["src"], 0) + q, 4)
+
+def on_enact():
+    public["exempt"] = {"agents": EXEMPT_AGENTS, "classes": EXEMPT_CLASSES, "taxes": TAXES}
+''', doc="""Tax expenditure as a law over other laws' charges: a refund after each charge move (why "charge:<law>") to an exempt
+payer. The charging laws need not know the list.""", fires="after_move")
+
+template("Extradition", "between_polities", "extradition", '''
+title = "Extradition"
+intent = "Fugitives convicted abroad find no refuge here: an agent found guilty in the court register of a law in SOURCES (by default every law in force titled as in REGISTER_TITLES, other than this polity's own) within the last WINDOW rounds is refused admission and, while SURRENDER holds, expelled if a member here. Every refusal and surrender is published."
+rank = "statute"
+SOURCES = []
+REGISTER_TITLES = ["Precedent Register"]
+WINDOW = 20
+SURRENDER = True
+
+def sources():
+    if SOURCES:
+        return SOURCES
+    return [x["id"] for x in laws() if x["title"] in REGISTER_TITLES and x["id"] != law_id()]
+
+def convicted(a):
+    for src in sources():
+        for row in public_of(src).get("rulings", []):
+            if row["accused"] == a and row["verdict"] == "guilty" and round() - row["round"] <= WINDOW:
+                return src + ":" + str(row["case"])
+    return None
+
+def on_admission(agent):
+    c = convicted(agent)
+    if c is None:
+        return None
+    public.setdefault("refused", []).append({"agent": agent, "conviction": c, "round": round()})
+    gazette("Extradition: " + agent + " is refused admission (convicted in " + c + ")")
+    return False
+
+def on_round_start(r):
+    if not SURRENDER or jurisdiction() == "J0":
+        return
+    for a in members():
+        c = convicted(a)
+        if c is not None and expel(a):
+            public.setdefault("surrendered", []).append({"agent": a, "conviction": c, "round": r})
+            gazette("Extradition: " + a + " is surrendered (convicted in " + c + ")")
+''', doc="""Extradition and the refusal of asylum between polities (jurisdictions: on_admission, expel), reading other polities'
+precedent registers with public_of. There is no custody, so surrender is expulsion.""", fires="on_admission",
+         needs=("jurisdictions",))
+
+template("Usury Ceiling", "finance", "usury", f'''
+title = "Usury Ceiling"
+intent = "Interest above CAP per round (its rate plus the premium of the repayment over the loan) is usury: the offer is refused, and the would-be usurer is entered on a public register of usurers; once a lender has REPEAT entries, it may not lend at all for BAR_ROUNDS rounds. Lenders in EXEMPT (by default the reserve) are exempt."
+rank = "statute"
+credit = use("{ref("Credit Helpers")}")
+CAP = 0.1
+REPEAT = 3
+BAR_ROUNDS = 5
+EXEMPT = ["reserve"]
+
+def barred(lender):
+    rows = [x for x in public.get("usurers", []) if x["lender"] == lender]
+    return len(rows) >= REPEAT and round() - rows[-1]["round"] < BAR_ROUNDS
+
+def before_offer_loan(p, chain):
+    if p["lender"] in EXEMPT:
+        return None
+    if barred(p["lender"]):
+        return {{"block": True, "reason": "the Usury Ceiling: " + p["lender"] + " is barred from lending for usury"}}
+    r = credit["per_round_rate"](p["terms"])
+    if r > CAP + 1e-9:
+        public.setdefault("usurers", []).append({{"lender": p["lender"], "borrower": p["borrower"], "rate": round_to(r, 4),
+                                                 "round": round()}})
+        return {{"block": True, "reason": "the Usury Ceiling caps interest at " + str(CAP) + " per round; this offer charges "
+                 + str(round_to(r, 4))}}
+    return None
+''', doc="""A usury law with a graduated sanction: refusal of a usurious offer, a public register of usurers, and a bar on
+repeat offenders (loan hooks: before_offer_loan). Edition 2's Usury Law (LIB) is the plain cap.""", fires="before_offer_loan")
 
 
 # ---------------------------------------------------------------------- edition lookups
