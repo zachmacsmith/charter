@@ -2825,6 +2825,8 @@ def compel_note(k, name, p, opts=None) -> dict | None:
     change, who = got if got is not None else (dict(p), [p.get(x) for x in P.parties])
     if name == "move" and change.get("memo") is None:                 # W6a: a move without a memo reads as before
         change.pop("memo", None)
+    if name == "breach" and change.get("victim") is None:             # W7e: a breach without a victim reads as before
+        change.pop("victim", None)
     who = [a for a in dict.fromkeys(who) if isinstance(a, str) and a in k.w["agents"]]
     if not who:
         return None
