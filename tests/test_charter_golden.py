@@ -19,46 +19,15 @@ import pytest
 
 from charter import agents as AG
 from charter import context as CX
-from charter import generator, manual, runner, scorer
+from charter import generator, manual, scorer
 from charter import spec as S
 from charter.kernel import Kernel
 
-import charter_law_v2_laws as V2
+import charter_golden_cases as GC
+import charter_law_v2_laws as V2  # noqa: F401
+from charter_golden_cases import CASES, GOLDEN, PROMPT_CASES, SOCIETY_SMALL, V2_CASES   # noqa: F401 (re-exported)
 
-GOLDEN = Path(__file__).parent / "fixtures" / "charter_golden.json"
-
-# society, shrunk: every post-review module on (context, conflict, media2, jurisdictions, life with mortality, roles with the
-# Scholar and Maker, typed camps, observer, events, outside power), 11 founders, 4 rounds. Lifespans are 3-6 rounds, everyone
-# starts armed and conflict has no grace period, so births, attacks, deaths (mortality: bequests, succession, roles passing on)
-# all happen inside the short run (seed 5: 1 birth, 6 attacks, 6 disabled, a jurisdiction founded, editions, a tribute).
-SOCIETY_SMALL = ["rounds=4", "agents={worker: 4, scientist: 2, legislator: 2, media: 0, board: 2, fixer: 1}",
-                 "life.full_scale_rounds=4", "life.lifespan=[3, 6]", "life.elapsed=[0, 2]", "outside_power.every=2",
-                 "conflict.grace=0", "conflict.start.weapons=3"]
-
-CASES = {
-    "E2_seq_6": ("E2", 3, ["rounds=6"]),
-    "E4_fast_4": ("E4", 1, ["rounds=4", "turns=simultaneous"]),
-    "E6_seq_3": ("E6", 2, ["rounds=3"]),
-    "E7_events_3": ("E7", 4, ["rounds=3"]),
-    "E4_observer_hidden_4": ("E4", 5, ["rounds=4", "turns=simultaneous", "observer.enabled=true", "events.enabled=true",
-                                       "outside_power.enabled=true", "outside_power.every=2"]),
-    "society_small_4": ("society", 5, SOCIETY_SMALL),
-    "E2_rng2_drift_5": ("E2", 3, ["rounds=5", "rng_version=2", "conditions.drift=true", "camps.drift_every=2"]),   # P5.3 streams
-    # P3.1: law.v2 (new-style hooks from any cause, cascades, gas) with library-style v2 laws (tests/charter_law_v2_laws.py) in force
-    "society_law_v2": ("society", 5, SOCIETY_SMALL + ["rounds=3", "law.v2=true", "start_laws=" + json.dumps(V2.GOLDEN_LAWS)]),
-    "E2_library2_6": ("E2", 3, ["rounds=6", "law.v2=true", "law.library.edition=2", "law.library.access=catalogue",   # P3.9
-                                "start_laws=[Crown Currency, Loan Registry, Usury Law, Wealth Tax, Harvest Levy, Transfer Tax, "
-                                "Mint by Ballot]"]),
-    # P4.3: contracts (associations) with law.v2: the scripted bots found a club, a cartel, a crowdfund and a company, join, set
-    # allowances, deposit escrow, vote a change and leave (contracts.scripted_actions)
-    "contracts_small": ("E2", 3, ["rounds=5", "law.v2=true", "contracts.enabled=true"]),
-}
-V2_CASES = {"society_law_v2"}                          # their start laws are test fixtures: registered in library.LIB while they run
-
-PROMPT_CASES = {                                       # (preset, seed): system prompt and manual of every agent, with a kernel
-    "prompts_society_5": ("society", 5),
-    "prompts_E4_1": ("E4", 1),
-}
+pytestmark = pytest.mark.xdist_group("golden_runs")     # shares the session's golden runs with test_charter_history.py
 
 
 def _sha(b) -> str:
@@ -77,18 +46,11 @@ def score_fingerprint(out: Path) -> dict:
 
 
 def fingerprint(name: str, tmp: Path) -> dict:
-    if name in V2_CASES:
-        with V2.registered():
-            return _fingerprint(name, tmp)
-    return _fingerprint(name, tmp)
+    """The fingerprint of a fresh, plain run of a golden case."""
+    return files_fingerprint(GC.run(name, tmp))
 
 
-def _fingerprint(name: str, tmp: Path) -> dict:
-    preset, seed, sets = CASES[name]
-    sp = S.apply_overrides(S.load(preset), sets + ["shared_archive.enabled=false"])
-    inst = generator.generate(sp, seed)
-    inst["run_id"] = f"golden_{name}"
-    out = runner.run(inst, AG.ScriptedPolicy(seed), tmp / name, log=lambda *a: None)
+def files_fingerprint(out: Path) -> dict:
     fp = {f: _sha((out / f).read_bytes()) for f in ("instance.json", "events.jsonl", "snapshots.json")}
     fp["score"] = score_fingerprint(out)
     return fp
@@ -120,8 +82,9 @@ def _check(name, got):
 
 
 @pytest.mark.parametrize("name", sorted(CASES))
-def test_golden_dry_run(name, tmp_path):
-    _check(name, fingerprint(name, tmp_path))
+def test_golden_dry_run(name, golden_runs):
+    """The session's golden run of the case (built once, shared with test_charter_history.py) against the stored fingerprint."""
+    _check(name, files_fingerprint(golden_runs[name][0]))
 
 
 @pytest.mark.parametrize("name", sorted(PROMPT_CASES))
@@ -129,7 +92,10 @@ def test_prompt_fingerprints(name):
     _check(name, prompt_fingerprint(name))
 
 
-def test_golden_runs_are_deterministic(tmp_path):
+def test_golden_runs_are_deterministic(tmp_path, golden_runs):
+    """Runs of a case in one process agree: two fresh plain runs, and the session's run (built with the recording spies, so this
+    also shows the spies leave the files unchanged)."""
     a = fingerprint("E4_fast_4", tmp_path / "a")
     b = fingerprint("E4_fast_4", tmp_path / "b")
     assert a == b
+    assert a == files_fingerprint(golden_runs["E4_fast_4"][0])

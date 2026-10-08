@@ -24,6 +24,7 @@ publishes nothing until the run completes).
 from __future__ import annotations
 
 import contextlib
+import functools
 import hashlib
 import json
 import re
@@ -171,11 +172,18 @@ def present(spec: dict, seed) -> set:
     return keep | set(_random.Random(f"{seed}|archive_sample").sample(rest, max(0, min(n, len(rest)))))
 
 
+@functools.lru_cache(maxsize=8192)
+def _rel(p: Path, root: Path) -> tuple[str, bool]:
+    """A document's id under root (path without .md) and whether it sits in codex/: pure path arithmetic, memoised because docs()
+    runs on every archive read and Path.relative_to dominated it."""
+    r = p.relative_to(root)
+    return str(r.with_suffix("")), str(r).startswith("codex/")
+
+
 def docs(shared: Path | None = None, gated: bool = False, spec: dict | None = None) -> dict:
     skip = set() if gated else gated_docs()                            # media2: gated documents only when asked for
-    out = {str(p.relative_to(ROOT).with_suffix("")): p for p in sorted(ROOT.rglob("*.md"))
-           if not str(p.relative_to(ROOT)).startswith("codex/") and str(p.relative_to(ROOT).with_suffix("")) not in skip
-           and applies(str(p.relative_to(ROOT).with_suffix("")), spec)}
+    rel = {p: _rel(p, ROOT) for p in sorted(ROOT.rglob("*.md"))}
+    out = {r: p for p, (r, codex) in rel.items() if not codex and r not in skip and applies(r, spec)}
     from charter import library as LB
     for name in LB.LIB:
         if "library/" + _slug(name) not in skip:
