@@ -602,6 +602,14 @@ version per segment (exists) and both shas under `--code current`; replay equiva
   means. The global lineage override goes; lineage is a scope in the goals that say so.
 - `Ctx.score_of(agent, slot, span)` memoises cross-agent goals (Spoiler, Ally, Foil, Mirror) with a cycle guard.
 - Institution goals score structural signatures from History (review 06 §7); emergence studies use goal-free arms.
+  As built (P6.4): `goal_registry.INSTITUTION` (Company, Bank, Insurer, Cartel, Protection racket; scorers in
+  `institution_goals.py`), kept out of `GOALS`/`CATALOGUE` so no draw, prompt or golden changes; never drawn unless
+  `goals.institution_share` > 0 (out of Wealth's share, where each goal's modules are on) or assigned with `goals.explicit`
+  (names and params validated with did-you-mean). Each is about "an association you founded" (best one) or, with param
+  `contract`, about one named association; param `scoring: partial | all` (mean of components, or all-or-nothing). The agent is
+  shown the text then the rule (`goal_registry.shown`). History gains `foundings`, `accounts(r)`, `account`, `members`,
+  `membership`, `founded_by`, `treasury`, `treasury_value`, `treasury_key`, `account_laws`, `payments`, `receipts`,
+  `deductions`, `breaches`, `funds`, `rulings`, `losses` (all window-aware; `foundings` survives a window).
 - Per-goal versions in `score.json`; old scorers stay importable by version for rescoring.
 
 ---
