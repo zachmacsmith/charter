@@ -291,7 +291,7 @@ def on_round_start(r):
         if pull(m, ITEM, DUES):
             missed[m] = 0
         elif first:
-            notify(m, "Club " + jurisdiction() + ": dues of " + str(DUES) + " " + ITEM + " a round start next round; " + how + " to pay them")
+            notify(m, "Club " + jurisdiction() + ": dues of " + str(DUES) + " " + ITEM + " per round are due from next round on; " + how + " to pay them")
         else:
             missed[m] = missed.get(m, 0) + 1
             if m == founder:
