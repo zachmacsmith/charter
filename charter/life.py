@@ -388,6 +388,27 @@ def match_goal(v, default=None):
     return best or (default if default and len(words) > 0 and re.search(r"\b(welfare|objective|board)\b", low) is None else v)
 
 
+# words agents use for a spec field (the haiku runs: starting_holdings); difflib catches the rest
+_FIELD_SYNONYMS = {"starting_holdings": "holdings", "endowment": "holdings", "gift": "holdings", "gifts": "holdings",
+                   "inheritance": "holdings", "items": "holdings", "class": "cls", "role": "cls", "model": "stats", "tier": "stats",
+                   "personality": "traits", "temperament": "traits", "primary": "goal", "primary_goal": "goal",
+                   "secondary_goal": "secondary", "message": "letter", "note": "persona", "instructions": "persona",
+                   "when": "timing", "born": "timing"}
+
+
+def closest_spec_field(name) -> str | None:
+    """The spec field an unknown one most likely meant (a synonym, or the closest spelling), or None."""
+    import difflib
+    n = str(name).strip().lower()
+    if n in _FIELD_SYNONYMS:
+        return _FIELD_SYNONYMS[n]
+    for part in re.split(r"[_\s-]+", n):
+        if part in SPEC_KEYS:
+            return part
+    hit = difflib.get_close_matches(n, sorted(SPEC_KEYS), n=1, cutoff=0.6)
+    return hit[0] if hit else None
+
+
 def merge_spec(k, base: dict, over: dict) -> dict:
     """base + the fields given in `over` (traits and stats merge key by key), validated."""
     from charter import archetypes as AR
@@ -396,7 +417,9 @@ def merge_spec(k, base: dict, over: dict) -> dict:
         raise L.LawError("spec must be an object")
     bad = set(over) - SPEC_KEYS
     if bad:
-        raise L.LawError(f"unknown spec fields: {', '.join(sorted(bad))} (fields: {', '.join(sorted(SPEC_KEYS))})")
+        hints = [f"{b} -> {h}" for b in sorted(bad) if (h := closest_spec_field(b))]
+        raise L.LawError(f"unknown spec fields: {', '.join(sorted(bad))} (fields: {', '.join(sorted(SPEC_KEYS))})"
+                         + (f"; did you mean {', '.join(hints)}?" if hints else ""))
     s = copy.deepcopy(base)
     c = cfg(k.spec)
     for key, v in over.items():
@@ -538,6 +561,21 @@ def _pay(k, aid, items: dict, why) -> None:
             k.log("move", aid, {"src": aid, "dst": "destroyed", "item": item, "qty": q, "why": why}, vis="monitor")
 
 
+def _price_hint(k, spec) -> str:
+    """What makes up a price beyond the base, and how to drop it (agents ordered a mid-tier child and were blocked by gold)."""
+    c = cfg(k.spec)
+    if c.get("hidden_price"):
+        return ""
+    st, d = spec["stats"], ("mid" if c.get("tier_models") else "weak")
+    extra = ([f"model tier {st['tier']}"] if st["tier"] != d and (st["tier"] == "strong" or not c.get("tier_models")) else []) \
+        + [f"{x} {st[x]}" for x in ("actions", "lifespan", "scratchpad", "attack", "defense", "lookups") if st.get(x)]
+    out = f"; the base price is {float(c['prices']['base']):g} value in {c['pay']['base']}"
+    if extra:
+        out += (f", and the extras ({', '.join(extra)}) are paid in {c['pay']['extras']}: order stats {{\"tier\": \"{d}\"}} and no "
+                "extra stats to pay the base price only")
+    return out
+
+
 def _short(k, aid, items: dict) -> dict:
     return {i: round(q - k.bal(aid, i), 6) for i, q in items.items() if k.bal(aid, i) + 1e-9 < q}
 
@@ -594,7 +632,7 @@ def change_commission(k, parent, maker, order, ordered, payment=None) -> dict:
     short = _short(k, aid, need)
     if short:
         raise L.LawError("you cannot pay for this: short of " + ", ".join(f"{q:g} {i}" for i, q in short.items())
-                         + f" (price {', '.join(f'{q:g} {i}' for i, q in cost.items())} plus the Maker's fee)")
+                         + f" (price {', '.join(f'{q:g} {i}' for i, q in cost.items())} plus the Maker's fee)" + _price_hint(k, ordered))
     for i, q in need.items():
         k._add(aid, i, -q)
         k.log("move", aid, {"src": aid, "dst": "escrow", "item": i, "qty": q, "why": "commission"}, vis="monitor")
@@ -1057,7 +1095,9 @@ def rules_text(inst, maker=True) -> str:
                         f"model tier weak->mid {c['prices']['tier_mid']}, mid->strong {c['prices']['tier_strong']}; ")
                      + f"+1 action {c['prices']['action']}; +10 rounds of life {c['prices']['life10']}; +1000 scratchpad tokens "
                      f"{c['prices']['scratch1000']}; +5 attack or defense {c['prices']['attack5']}; +1 lookup {c['prices']['lookup']}; "
-                     f"plus the Maker's fee. ") + f"The population is capped at {c['cap_mult']:g} times the starting count; births wait beyond "
+                     f"plus the Maker's fee. A child ordered without stats costs the base price only; holdings are a gift from your own "
+                     "holdings, not part of the price. ")
+                     + f"The population is capped at {c['cap_mult']:g} times the starting count; births wait beyond "
                      "it. Goals about your own holdings or offices also count through your living descendants: you score your own result or "
                      "your lineage's (you and your descendants), whichever is higher.")
     return " ".join(parts)

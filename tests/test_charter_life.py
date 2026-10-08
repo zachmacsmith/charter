@@ -602,3 +602,20 @@ def test_explicit_full_scale_override_keeps_plain_scaling():
     assert max(k.w["life"]["lifespan"].values()) <= 25           # [30, 50] x 4/8
     sp = S.apply_overrides(S.load("E2"), ["rounds=4"])           # Life off: the spec is untouched
     assert "life" not in sp
+
+
+# ---------------------------------------------------------------------- commission: the fields and the price, explained
+def test_commission_unknown_field_suggests_the_closest_and_short_price_explains_extras():
+    from charter import action_registry as AR_
+    inst, k = world()
+    maker = LF.living_makers(k)[0]
+    parent = plain(k)[0]
+    _give(k, parent, timber=40, gold=0)
+    with pytest.raises(A.ActionError, match=r"unknown spec fields: starting_holdings .*did you mean starting_holdings -> holdings"):
+        A.act(k, parent, "commission", {"maker": maker, "spec": {"goal": "Wealth", "starting_holdings": {"timber": 1}}})
+    assert LF.closest_spec_field("goals") == "goal" and LF.closest_spec_field("zzz") is None
+    with pytest.raises(A.ActionError, match=r"short of .* gold.*extras \(model tier mid\) are paid in gold.*base price only"):
+        A.act(k, parent, "commission", {"maker": maker, "spec": {"goal": "Wealth", "stats": {"tier": "mid"}}})
+    assert "K1" in A.act(k, parent, "commission", {"maker": maker, "spec": {"goal": "Wealth"}})   # no stats: the base price only
+    doc = AR_.REG["commission"].doc
+    assert "no others" in doc and "leave stats out" in doc and '"tier": "mid"' not in doc
