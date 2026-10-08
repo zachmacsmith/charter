@@ -309,8 +309,23 @@ def _unborn(k, aid) -> list:
     from charter import life as LF
     if not LF.enabled(k.spec) or "life" not in k.w:
         return []
+    if LF.fixes(LF.cfg(k.spec)):                                          # audit B4: every child still to be born whose share
+        return [f"unborn:{c['id']}" for c in sorted(LF.state(k)["commissions"].values(), key=lambda c: c["id"])   # is held for it
+                if c["parent"] == aid and c["status"] in ("due", "open") and c.get("reserved") is not None]
     return [f"unborn:{c['id']}" for c in sorted(LF.state(k)["commissions"].values(), key=lambda c: c["id"])
             if c["parent"] == aid and c["status"] == "due" and c.get("due_round") == k.r and c.get("reserved") is not None]
+
+
+def default_heirs(k, aid) -> list:
+    """Where the unbequeathed part of an estate goes under `life.default_heirs: children` (review 15 §4.6, audit R7): the living
+    children and those still to be born, else the living co-parents (the other parents of its children), else [] (the reserve)."""
+    from charter import life as LF
+    if LF.cfg(k.spec).get("default_heirs") != "children":
+        return []
+    kids = _group(k, aid, "@children", None, None)
+    if kids:
+        return kids
+    return [p for p in LF.coparents(k, aid) if alive(k, p)]
 
 
 def _reserve_dst(k, aid):
@@ -368,6 +383,18 @@ def _run_bequest(k, aid, cause, by) -> dict:
     res_dst, jid = _reserve_dst(k, aid)
     given = {}
     hold = dict(k.agent(aid)["holdings"])
+    heirs = default_heirs(k, aid)                                         # [] unless life.default_heirs: children
+
+    def hand(g, item, amt, why):
+        if g.startswith("unborn:"):                                        # an heir still to be born: handed over at birth
+            from charter import life as LF
+            c = LF.state(k)["commissions"][g.split(":", 1)[1]]
+            k._add(aid, item, -amt)
+            c["reserved"][item] = round(c["reserved"].get(item, 0.0) + amt, 6)
+        else:
+            _give(k, aid, (res_dst if g == "reserve" else g), item, amt, why)
+        given.setdefault(g, {})[item] = round(given.get(g, {}).get(item, 0.0) + amt, 6)
+
     for item, q in sorted(hold.items()):
         if q <= 0:
             continue
@@ -376,21 +403,21 @@ def _run_bequest(k, aid, cause, by) -> dict:
             amt = min(amt, k.bal(aid, item))
             if amt <= 0:
                 continue
-            if g.startswith("unborn:"):                                    # an heir born at this death: handed over at birth
-                from charter import life as LF
-                c = LF.state(k)["commissions"][g.split(":", 1)[1]]
-                k._add(aid, item, -amt)
-                c["reserved"][item] = round(c["reserved"].get(item, 0.0) + amt, 6)
-            else:
-                _give(k, aid, (res_dst if g == "reserve" else g), item, amt, "bequest")
-            given.setdefault(g, {})[item] = round(given.get(g, {}).get(item, 0.0) + amt, 6)
+            hand(g, item, amt, "bequest")
         rest = k.bal(aid, item)
+        if rest > 1e-9 and heirs:                                         # the unbequeathed part: default heirs, equal shares
+            for i, g in enumerate(heirs):
+                amt = k.bal(aid, item) if i == len(heirs) - 1 else min(round(rest / len(heirs), 6), k.bal(aid, item))
+                if amt > 1e-9:
+                    hand(g, item, amt, "estate")
+            rest = k.bal(aid, item)
         if rest > 1e-9:
             _give(k, aid, res_dst, item, rest, "estate")
             given.setdefault("reserve" if jid is None else f"reserve:{jid}", {})[item] = rest
     for g, items in given.items():
         if g in k.w["agents"]:
-            k.notify(g, f"{aid} has left the game, and their bequest gives you " + ", ".join(f"{q:g} {i}" for i, q in items.items()) + ".")
+            k.notify(g, f"{aid} has left the game, and their {'bequest gives' if b or not heirs else 'estate passes to'} you "
+                     + ", ".join(f"{q:g} {i}" for i, q in items.items()) + ".")
     files = _pass_files(k, aid, files_to, cause, by)
     return {"bequest": bool(b), "switch": switch, "given": given, "files": files}
 

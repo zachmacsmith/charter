@@ -1,0 +1,19 @@
+# The recommended demography (review 15 §2.6, D-36; review 16 R1, R7): a fragment to put after a Life preset, e.g.
+#   extends: [society, charter/specs/fragments/demography.yaml]
+# or the same keys with --set. Lifespans are absolute (U[60, 120] rounds, mean 90, never scaled by run length); founders start at
+# ages drawn iid from the stationary age distribution, so about N/90 (1.1%) of the population dies of old age each round from round 1,
+# with natural clusters and gaps; whatever a run's length. No population cap (carrying capacity is the only ceiling); the run stops
+# with STOPPED.md if it ever starts a round with more than 4x the starting agents (a model-cost guard, never a refused birth).
+# Estates go to children (unborn ones included), then co-parents, then the reserve. The audit fixes (B2-B5, B7) follow the new
+# demography by default. Makers are refilled when one dies; orders stay open longer and heirs are suggested earlier (audit R3, R4).
+life:
+  scale: none
+  lifespan: [60, 120]
+  age_structure: stationary
+  age_sampling: iid
+  max_population: 4N
+  default_heirs: children
+  commission_expiry: 8
+  heir_reminder: 6
+roles:
+  maker_refill: true
