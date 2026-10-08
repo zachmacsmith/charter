@@ -130,7 +130,8 @@ Runs the same scripted worlds on two code revisions and reports where they first
 | `archive.py`, `archive/` | the Scientists' archive (read-only) and the shared archive they write |
 | `hidden.py`, `lawdocs.py`, `archive/codex/` | the tiered codex, which law functions the prompt documents (`law_docs`), the nine hidden powers, tips |
 | `projects.py`, `outside.py` | threshold public goods (granary, upgrade, road, discovery); the outside power's tribute and raids |
-| `roles.py` | roles: Spy (the observer as a member), assassin, Scholar, Maker, Media; pass_on; the Eliminator goal's gating; refusal metrics |
+| `roles.py` | roles: Spy (the observer as a member), assassin, Scholar, Maker, Media, Historian (optional); pass_on; the Eliminator goal's gating; refusal metrics |
+| `directories.py` | directories: owned, access-controlled trees of text files (dir_* actions, grants, size limits), run- or namespace-scoped; the Historian's persistent chronicle with a `_records/` digest per run; frozen per run, written back |
 | `camptypes/`, `resources.py` | camps: typed camps under `camps.model: types` (registry, framework, modifiers, leases, harness, calibration); resource values, uses, slots, `pay`, optional upkeep |
 | `mortality.py`, `life.py` | removing agents from play (`disable`), bequests, Board succession; lifespans, Makers and children, mutation, the population cap, lineage scoring |
 | `roles.py` | STUB of the Roles module's contract (`has_role`, `holders`, `pass_on`), replaced at merge |
@@ -554,5 +555,23 @@ exact | approximate (`approx_error` 0.2), `cap_mult` 1.5, `mutation` {enabled, t
   Every call's stated `reasoning` field, prompt, actions and results are saved for every model either way.
 - **The shared archive breaks independence between runs** once it has content: use a separate `shared_archive.namespace` per experiment
   family, and read `ground_truth.json -> shared_archive_at_start` when comparing runs.
+- **Directories and the Historian** (`charter/directories.py`, off by default). `roles.explicit: {historian: [Name]}` (or
+  `roles.counts.historian`) makes an agent the Historian: it owns the chronicle, a directory of text files (`dir_write`, `dir_edit`,
+  `dir_move`, `dir_delete`; look-ups `dir_list`, `dir_read`, `dir_search`) and grants others read or write access to files or folders
+  (`dir_grant`; `none` revokes). The chronicle persists across runs on `chronicle.namespace` under `runs/charter/directories/<namespace>/
+  chronicle/` (plain files you can read): each run starts from a frozen snapshot of it (`<run>/directories/base.json` + blobs, so
+  replays are exact) and writes its changes back at each checkpoint and at the end, file by file, atomically, last writer wins per
+  file (parallel runs on one namespace never corrupt a file; a file both edit keeps the later write). A complete run also appends a
+  public digest of itself as `_records/<run_id>.md` (read-only to agents), listing the access granted in it (grants themselves are
+  run state). Dry runs, replays and forks do not write back (`directories.publish_dry: true` makes dry runs write back). The goal
+  Chronicler (never drawn; `goals.explicit: {Name: {primary: Chronicler}}`) scores coverage: rounds named, agents profiled under
+  `people/`, evidence files. Other directories: `directories: {enabled: true, stores: {<name>: {owner: role:<r>|agent:<id>|right:<r>|
+  class:<c>|institution:<id>, scope: run|namespace, ...}}}`, e.g. a Scholars' shared library (`owner: role:scholar`), the
+  Scientists' notes (`owner: class:scientist, scope: namespace`) or later an institution's records office (`owner:
+  institution:A1`: its resolver, `directories.OWNER_KINDS["institution"]`, is the hook; grant subjects are strings ready for
+  offices). In-world creation (founding or buying a directory) would call `directories.create`.
+- **Per-agent scenario rules** (`agent_rules: {Name: {briefing: "...", deny: [found, leave, ...]}}`, `charter/agent_rules.py`, default
+  empty): the briefing is shown as "Your situation: ..." in that agent's system prompt (every call); denied actions are left out of
+  its action list and refused by the kernel (`actions.act`), an experimental-contract rule (tier X) no law can lift.
 - Personality prompts may move behaviour less than expected; the spec's behavioural correlates (honesty vs contradicted statements, risk
   vs harvest-input variance, talkativeness vs messages per turn) are not computed yet.

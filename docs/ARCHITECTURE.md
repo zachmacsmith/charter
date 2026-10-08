@@ -618,6 +618,9 @@ runs/<spec>/<run_id>/
   snapshots.json, ground_truth.json, score.json (+ per-goal versions), validity.json
   checkpoints/rNNNN.pkl + checkpoints/index.json (G6): state only + offsets into append-only files
   blobs/<sha>           sandbox outputs and archive documents read (P5.4)
+  directories/          base.json (the namespace-scoped directories' files at the start, as blob shas) and state.json (publish flag,
+                        the manifest last written back): the frozen directories (charter/directories.py), as the shared archive's
+                        archive/; the working copies live in k.w["dirs"] (checkpointed), written back to the live tree file by file
 ```
 
 ### 8.2 History (G5)

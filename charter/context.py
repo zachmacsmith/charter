@@ -982,7 +982,9 @@ def _overview(v):
 
 @_SC.section("identity", layers=("core",))
 def _identity(v):
-    return f"You are {v.aid}. {_class_line(v.inst, v.a)}" + ((" Your roles: " + ", ".join(v.roles) + ".") if v.roles else "")
+    from charter import agent_rules as AGR                              # spec agent_rules: a scenario's briefing ("" when unset)
+    return f"You are {v.aid}. {_class_line(v.inst, v.a)}" + ((" Your roles: " + ", ".join(v.roles) + ".") if v.roles else "") \
+        + AGR.line(v.inst, v.aid)
 
 
 @_SC.section("leverage", layers=("core",))

@@ -137,6 +137,9 @@ def _act(k, aid: str, name: str, args: dict) -> str:
         hidden_here |= set(DR.ACTIONS)
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
+    from charter import agent_rules as AGR
+    if name in AGR.denied(k, aid):                                     # spec agent_rules: refused for this agent (tier X)
+        raise ActionError(f"{name} is not open to you in this world" + (f". {AGR.briefing(k, aid)}" if AGR.briefing(k, aid) else ""))
     if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):
         from charter import life as LF, roles as RO                       # a Maker making its own child directly
         if LF.enabled(k.spec) and "life" in k.w and RO.has_role(k, aid, "maker"):

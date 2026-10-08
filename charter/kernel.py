@@ -113,6 +113,8 @@ class Kernel:
         PUB.install(self)                                              # law.publication: the store (off: nothing)
         from charter import directories as DR
         DR.install(self)                                               # directories (the Historian's chronicle; off: nothing)
+        from charter import agent_rules as AGR
+        AGR.install(self)                                              # spec agent_rules: names checked (unset: nothing)
         for a in self.w["agents"].values():
             a["start_value"] = self.holdings_value(a["id"])
         def effects():                                                   # per-round effects, efficiency and the turn log

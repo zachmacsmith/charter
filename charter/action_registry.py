@@ -177,7 +177,11 @@ def available(inst, k, a, rights=None) -> list:
         rights = k.w["agents"][aid]["rights"] if k is not None and aid in k.w["agents"] else a.get("rights", [])
     live = k is not None and aid in k.w["agents"]
     out = []
+    from charter import agent_rules as AGR
+    deny = AGR.denied(inst, aid)                                        # spec agent_rules: denied to this agent (empty when unset)
     for act in REG.values():
+        if act.name in deny:
+            continue
         if "dir:any" in act.needs:                                      # directories: who can reach one (the live state with a
             from charter import directories as DR                      # kernel; owners only in the system prompt written before)
             if not (DR.enabled(k if live else inst) and (DR.has_any(inst, k, a, rights) if live else DR.static_access(inst, a))):

@@ -406,6 +406,8 @@ def _ann():
         "contracts.breach_cases": dict(types=("bool",)),                 # W7e (review 11 §4.1): breaches open court cases
         "contracts.max_own": dict(types=("int",), range=NONNEG),           # W8e (D-27): was contracts.MAX_OWN
         "contracts.max_funds": dict(types=("int",), range=NONNEG),         # W8e (D-27): was contracts.MAX_FUNDS
+        "agent_rules": dict(kind="map"),
+        "agent_rules.*": dict(kind="leaf", types=("dict",), check=_check_agent_rules),
         "directories.stores": dict(kind="map"),
         "directories.stores.*": dict(types=("dict",), fields=("owner", "scope", "namespace", "max_bytes", "max_file_bytes",
                                                              "records", "title", "readonly")),
@@ -431,6 +433,7 @@ def _ann():
 EXTRA = {
     "rng_version": 1,
     "law.after_visibility": None,                                      # W7e: None = "all" (after-hooks see every change, as before)
+    "agent_rules": {},                                                 # per-agent briefing and denied actions (agent_rules.py)
     "law.publication": None,                                           # review 12 WP2: None/false = call sites' literal visibility
     "law.publication_seed": "today",                                   # review 12 WP2: the publication table every polity starts from
     "fixer_model": None,
@@ -472,6 +475,9 @@ EXTRA = {
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
 DOCS = {
+    "agent_rules": "per-agent scenario rules: {Name: {briefing: text shown every turn as \"Your situation\", deny: [actions the "
+                   "kernel refuses for that agent]}} (charter/agent_rules.py)",
+    "agent_rules.*": "{briefing: \"...\", deny: [found, leave, ...]}",
     "chronicle.enabled": "the Historian's chronicle (a directory owned by role:historian); null: on exactly when the historian role is "
                          "in play (roles.explicit.historian or roles.counts.historian > 0)",
     "chronicle.namespace": "the chronicle's persistent namespace (null: directories.namespace, shared_archive.namespace, else default)",
@@ -992,6 +998,11 @@ def _check_goal_weights(path, v) -> list:
 def _explicit_goal_names():
     from charter import goal_registry as GR
     return _goal_names() + tuple(GR.INSTITUTION)                     # P6.4: institution goals are assigned explicitly
+
+
+def _check_agent_rules(path, v) -> list:
+    from charter import agent_rules as AGR
+    return AGR.check_spec(path, v)
 
 
 def _check_explicit_goal(path, v) -> list:
