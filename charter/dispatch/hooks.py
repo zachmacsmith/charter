@@ -25,8 +25,6 @@ from charter.dispatch.validity import in_force
 
 
 # ---------------------------------------------------------------------- binding and order
-
-
 def _binds_value(k, lid, key, value):
     """Does a law's account bind this payload value? None: the value names no one bindable."""
     jid = J.law_jur(k, lid)

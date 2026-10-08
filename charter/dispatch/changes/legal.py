@@ -16,6 +16,7 @@ from charter.dispatch.base import v2
 from charter.dispatch.ranks import declared_rank, set_conflict_rule
 
 
+# ---------------------------------------------------------------------- payload helpers (the callers build the payload with these)
 def jur_of(k, lid) -> str | None:
     """A legal act's `jurisdiction`: the law's jurisdiction with jurisdictions on (J.law_jur), None when they are off."""
     return J.law_jur(k, lid) if "jur" in k.w else None
@@ -66,6 +67,7 @@ def draft(k, lid) -> dict:
                if law.get("amends") else {})}
 
 
+# ---------------------------------------------------------------------- the changes
 def do_propose(k, jurisdiction, draft, actor=None, preview=None) -> dict:
     """A checked draft goes to the procedure: the proposal is published with its dry-run preview (inline, or monitor-only when
     effect previews are off). The procedure runs next (Kernel.decide), after the on_proposal alias.
