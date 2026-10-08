@@ -21,6 +21,7 @@ from charter import jurisdictions as J
 from charter import lawlang as L
 from charter import media as MD                                       # media2
 from charter import outside as O
+from charter import powers as PW                                      # the power table (P4.2): levels, dry run, propose right
 from charter import projects as P
 from charter import roles as R                                         # roles: court evidence the Spy read
 
@@ -556,8 +557,9 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
         return J.propose(k, aid, code, intent, jurisdiction)
     if jurisdiction is not None:
         raise ActionError("there are no jurisdictions in this world")
-    _need(k, aid, "propose", "propose laws")
-    level = k.inst["law_level"]
+    if PW.has_power(k, "J0", "propose_right"):                          # J0's proposals need the kernel 'propose' right
+        _need(k, aid, "propose", "propose laws")
+    level = PW.law_level(k, "J0")
     if level == "L0":
         raise ActionError("no laws can be made in this world (law level L0)")
     try:
@@ -571,18 +573,20 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
             law["status"] = "failed_check"
             raise ActionError(f"no active law {law['repeal_target']!r} to repeal")
         law["cls"] = tgt["cls"]
-    if law["cls"] not in L.LEVEL_CLASSES[level]:
+    if not PW.level_allows(k, "J0", law["cls"]):                       # the law_levels power: J0's preset (spec law_level)
         law["status"] = "failed_check"
         raise ActionError(f"{law['cls']} laws are not allowed at law level {level}")
-    if law["defines_action"] and level != "L4":
+    if law["defines_action"] and not PW.level_allows_define_action(k, "J0"):
         law["status"] = "failed_check"
         raise ActionError("define_action needs law level L4")
-    try:
-        diff = k.dry_run(lid)
-    except Exception as e:
-        k.w["laws"][lid]["status"] = "failed_check"                    # the dry run restored a copy of the world: not `law`
-        k.log("proposal_check_failed", aid, {"law": lid, "error": str(e)}, vis=[aid])
-        raise ActionError(f"your law failed the 3-round dry run: {e}")
+    diff = None
+    if PW.has_power(k, "J0", "dry_run"):
+        try:
+            diff = k.dry_run(lid)
+        except Exception as e:
+            k.w["laws"][lid]["status"] = "failed_check"                # the dry run restored a copy of the world: not `law`
+            k.log("proposal_check_failed", aid, {"law": lid, "error": str(e)}, vis=[aid])
+            raise ActionError(f"your law failed the 3-round dry run: {e}")
     k.apply("propose", jurisdiction=None, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
     return f"Proposed {lid} '{law['title']}' ({law['cls']}); status: {k.w['laws'][lid]['status']}."
@@ -640,7 +644,7 @@ def _patch(k, aid, law, code, reason):
     k.w["fixes_this_round"] += 1
     k.w["fixer_queue"] = [q for q in k.w["fixer_queue"] if q["law"] != law]
     if max(cls, old["cls"], key=["ordinary", "structural", "procedural"].index) != "ordinary" and k.board() \
-            and (not J.enabled(k) or J.board_reviews(k, J.law_jur(k, law))):   # jurisdictions: only laws the Board reviews
+            and PW.has_power(k, J.law_jur(k, law), "board_veto"):     # only laws of an account the Board reviews (powers.py)
         k.w["veto_queue"].append({"kind": "patch", "law": law, "until": k.r + k.spec["veto_window"], "vetoes": [], "patch": patch})
         where = "it enters the Board's veto window"
     else:
