@@ -454,8 +454,9 @@ E += [
      "prompt", "common"),
     ("refund", "contracts", "Contracts", "refund(member, item=None)", "a contract's law only: gives the member's escrow back (one "
      "item, or all); returns what it gave.", "prompt", "common"),
-    ("breach", "contracts", "Contracts", "breach(member, clause, remedy)", "a contract's law only: records that a member broke a "
-     "clause, and the remedy, for all members to see. The record is all it does: take the remedy yourself (forfeit, expel).",
+    ("breach", "contracts", "Contracts", "breach(member, clause, remedy, victim=None)", "a contract's law only: records that a member broke a "
+     "clause, and the remedy, for all members to see. The record is all it does: take the remedy yourself (forfeit, expel). "
+     "victim: the agent it injured, if any (a polity's Contract Enforcement Act pays its fine to the victim).",
      "prompt", "common"),
     ("escrow_of", "contracts", "Contracts", "escrow_of(member)", "what a member holds in this contract's escrow.", "prompt", "common"),
     ("allowance_of", "contracts", "Contracts", "allowance_of(member)", "what a member still allows this contract to pull this round.",

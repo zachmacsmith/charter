@@ -2954,9 +2954,9 @@ def do_pull(k, contract, member, item, qty, lid=None) -> dict:
     return CT.change_pull(k, contract, member, item, qty, lid)
 
 
-def do_breach(k, contract, member, clause, remedy, lid=None) -> dict:
+def do_breach(k, contract, member, clause, remedy, lid=None, victim=None) -> dict:
     from charter import contracts as CT
-    return CT.change_breach(k, contract, member, clause, remedy, lid)
+    return CT.change_breach(k, contract, member, clause, remedy, lid, victim)
 
 
 # ---------------------------------------------------------------------- courts v2 (charter/courts.py; review 10 §6 item 5)

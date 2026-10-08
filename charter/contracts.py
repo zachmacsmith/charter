@@ -12,7 +12,8 @@ k.w["contracts"]["assoc"][cid] so jurisdiction listings stay unchanged (P4.6 mer
      (the treasury's holdings: owner key "assoc:A1"), "escrow": {aid: {item: qty}} (owner keys "escrow:A1:<aid>"),
      "allowances": {aid: {item: qty per round}}, "pulled": {aid: {item: qty}} (this round, "pulled_round"), "procedure":
      "members" | "two_thirds" | "founder" | <a law's registered function>, "admission": "open" | "closed", "applicants": [aid],
-     "leaving": {aid: why}, "breaches": [{round, member, clause, remedy, law}], "errors": [{round, law, error}],
+     "leaving": {aid: why}, "breaches": [{round, member, clause, remedy, law, victim (W7e: only when the code named one)}],
+     "errors": [{round, law, error}],
      "proposals": {pid: {...}}, "template": str | None, "params": dict, "exit": {"notice": 0, "forfeit": "escrow"}}
 
 Its power set (powers.py, association column; lawapi.LawFn.contract, scope_api below):
@@ -916,11 +917,15 @@ def law_api(k, lid) -> dict:
                 got[it] = q
         return got
 
-    def breach(member, clause, remedy=""):
+    def breach(member, clause, remedy="", victim=None):
+        """W7e: victim, the injured agent (not the member itself), where the code knows it."""
         rec = mine("breach")
         if member not in rec["members"]:
             return False
-        k.apply("breach", contract=rec["id"], member=member, clause=str(clause)[:120], remedy=str(remedy)[:200], lid=lid)
+        if victim is not None and (victim == member or victim not in k.w["agents"]):
+            raise L.LawError("breach: the victim is another agent (or None)")
+        k.apply("breach", contract=rec["id"], member=member, clause=str(clause)[:120], remedy=str(remedy)[:200], lid=lid,
+                **({"victim": victim} if victim is not None else {}))
         return True
 
     def escrow_of_(member):
@@ -1228,12 +1233,15 @@ def change_pull(k, contract, member, item, qty, lid=None) -> dict:
     return {"pulled": qty}
 
 
-def change_breach(k, contract, member, clause, remedy, lid=None) -> dict:
+def change_breach(k, contract, member, clause, remedy, lid=None, victim=None) -> dict:
     rec = recs(k)[contract]
     b = {"round": k.r, "member": member, "clause": clause, "remedy": remedy, "law": lid}
+    if victim is not None:                                             # W7e: the injured party, where the code knows it
+        b["victim"] = victim
     rec["breaches"].append(b)
     k.log("contract_breach", member, {"contract": contract, **{x: v for x, v in b.items() if x != "member"}},
           vis="public" if enforcement(k) == "word" else _vis(rec))            # P4.4: under "word" a breach is a public reputation
+    # (W7e: a victim outside the contract is not told here, so the record stays members-only and the contract's laws can read it)
     return {"breach": len(rec["breaches"])}
 
 

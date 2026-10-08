@@ -374,3 +374,51 @@ def test_the_lookup_error_lists_the_lookups():
         CX.lookup(k, agents(k)[0], "nope", {})
     assert "preview_law" in str(ei.value) and "legal_position" not in str(ei.value)
     assert CX.lookup_names(k)[0] == "manual" and CX._lookups is not CX.lookup_names
+
+
+# ====================================================================== 6. W6e: breach victims; the Act pays them
+def victim_world(victim_expr):
+    from charter import library as LB
+    k = contracts_world()
+    k.spec["contracts"]["enforcement"] = "escrow_court"
+    a, b, c, judge = people(k)[:4]
+    body = f"def on_round_start(r):\n    if r == 1:\n        breach({b!r}, 'delivery', 'late', {victim_expr})\n"
+    res = A.act(k, a, "create_contract", {"name": "Supply", "code": law("Supply", body)})
+    cid = re.search(r"A\d+", res).group()
+    A.act(k, b, "join_contract", {"contract": cid})
+    act = enact(k, LB.LIB["Contract Enforcement Act"]["code"].replace('MODE = "court"', 'MODE = "auto"'))
+    k._add(b, "grain", 10.0 - k.bal(b, "grain"))
+    return k, (a, b, c), cid, act
+
+
+@pytest.mark.parametrize("who", ["member", "outsider", "none"])
+def test_a_breach_names_its_victim_and_the_act_pays_the_fine_to_it(who):
+    k0 = contracts_world()
+    a, b, c = people(k0)[:3]
+    victim = {"member": a, "outsider": c, "none": None}[who]
+    k, (a, b, c), cid, act = victim_world(repr(victim))
+    before = {x: k.bal(x, "grain") for x in (a, c, "reserve")}
+    k.end_round()
+    k.start_round()
+    k.end_round()                                                        # round 1: recorded, then sanctioned (auto)
+    rec = k.w["contracts"]["assoc"][cid]
+    br = rec["breaches"][-1]
+    assert (br.get("victim"), "victim" in br) == (victim, victim is not None)
+    assert events(k, "contract_breach")[-1]["data"].get("victim") == victim
+    assert k.bal(b, "grain") == 8.0                                      # FINE 2, once
+    if victim is None:
+        assert k.bal("reserve", "grain") == before["reserve"] + 2
+    else:
+        assert k.bal(victim, "grain") == before[victim] + 2 and k.bal("reserve", "grain") == before["reserve"]
+
+
+def test_a_breach_victim_must_be_another_agent():
+    from charter import lawlang as L
+    k = contracts_world()
+    a, b = people(k)[:2]
+    res = A.act(k, a, "create_contract", {"name": "Supply", "code": law("Supply", "def go(m, v):\n    return breach(m, 'x', '', v)\n")})
+    cid = re.search(r"A\d+", res).group()
+    lid = k.w["contracts"]["assoc"][cid]["laws"][0]
+    for bad in (a, "nobody"):
+        with pytest.raises(L.LawError, match="victim"):
+            k.call(lid, k.ns[lid]["go"], a, bad)

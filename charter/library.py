@@ -1174,13 +1174,14 @@ def on_round_end(r):
 GATED_CATEGORIES["contracts"] = "contracts"
 law("Contract Enforcement Act", "contracts", '''
 title = "Contract Enforcement Act"
-intent = "The polity enforces the contracts its members join. A breach a contract records against a member (where courts may hear contract breaches) is sanctioned once: when a judge finds the member guilty under this law's clause breach_of_contract (MODE court), or at the end of the round it was recorded (MODE auto). The sanction (SANCTION fine, suspend or both) is a fine of FINE ITEM per breach to the reserve and/or the suspension of RIGHT for ROUNDS rounds."
+intent = "The polity enforces the contracts its members join. A breach a contract records against a member (where courts may hear contract breaches) is sanctioned once: when a judge finds the member guilty under this law's clause breach_of_contract (MODE court), or at the end of the round it was recorded (MODE auto). The sanction (SANCTION fine, suspend or both) is a fine of FINE ITEM per breach and/or the suspension of RIGHT for ROUNDS rounds. The fine goes to the breach's victim where the contract named one (PAY victim), else to the reserve."
 MODE = "court"
 SANCTION = "fine"
 ITEM = "grain"
 FINE = 2
 RIGHT = "propose"
 ROUNDS = 2
+PAY = "victim"
 
 def open_breaches(member):
     done = state.setdefault("done", [])
@@ -1195,7 +1196,15 @@ def sanction(member):
     for b in hits:
         state["done"].append(b["id"])
     if SANCTION == "fine" or SANCTION == "both":
-        fine(member, ITEM, FINE * len(hits))
+        rest = 0
+        for b in hits:
+            victim = b.get("victim")
+            if PAY == "victim" and victim and victim in agents() and victim != member:
+                move(member, victim, ITEM, min(FINE, balance(member, ITEM)))
+            else:
+                rest = rest + 1
+        if rest > 0:
+            fine(member, ITEM, FINE * rest)
     if SANCTION == "suspend" or SANCTION == "both":
         suspend(member, RIGHT, ROUNDS)
     gazette("Contract Enforcement Act: " + member + " sanctioned for " + str(len(hits)) + " breach(es) of contract")
