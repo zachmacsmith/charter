@@ -86,7 +86,7 @@ COMMON_TEXT = "common_text.json"                                       # Leaker'
 
 
 def freeze_common_text(out, inst, overwrite=True) -> None:
-    """Text every agent already sees (goals.common_texts: API doc, goal prior, library intents, goal list, world rules), frozen
+    """Text every agent already sees (goals.common_texts: the lines present in every agent's rendered prompt layers, P7.2), frozen
     into the run directory so Leaker is rescored against what the agents saw, not the current code (review 05 section 4.3 item 4)."""
     from charter import goals as G
     from charter import history as HI
