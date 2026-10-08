@@ -20,6 +20,7 @@ An entry:  register(name, purpose, section, core=False, pre=False, msg=False, ne
               "cls:<c>"       the agent's class (or second class) is c; "notcls:<c>" it is not
               "level:<n>"     law level at least Ln
               "law:<key>"     spec law.<key> is true (e.g. "law:v2": the legal system v2)
+              "library:<v>"   spec law.library.visibility is v (review 14 A: "library:on_request")
               "any:<a>|<b>"   at least one of the requirements a, b, ... (e.g. "any:mod:hidden|level:4")
   edge      rights that make a core action part of the holder's edge though it does not require them ("harvest:*" any harvest
             right): open camps let anyone harvest, but the rights holders are the ones it is an edge for
@@ -162,6 +163,8 @@ def _need(inst, a, rights, n) -> bool:
         return bool((inst["spec"].get("law") or {}).get(v))
     if kind == "level":
         return ["L0", "L1", "L2", "L3", "L4"].index(inst["law_level"]) >= int(v)
+    if kind == "library":                                               # review 14 A: "library:<visibility>"
+        return library_visibility(inst["spec"]) == v
     raise ValueError(f"unknown requirement {n!r}")
 
 
@@ -172,7 +175,10 @@ def available(inst, k, a, rights=None) -> list:
         rights = k.w["agents"][aid]["rights"] if k is not None and aid in k.w["agents"] else a.get("rights", [])
     live = k is not None and aid in k.w["agents"]
     out = []
+    core = core_only(inst["spec"])
     for act in REG.values():
+        if core and act.name not in CORE_SURFACE:                        # review 14 A: actions.core_only
+            continue
         if not all(_need(inst, a, rights, n) for n in act.needs):
             if not (act.alt is not None and live and all(_need(inst, a, rights, n) for n in act.needs if not n.startswith("right:"))
                     and act.alt(inst, k, a, rights)):
@@ -186,6 +192,28 @@ def available(inst, k, a, rights=None) -> list:
 def purpose(name) -> str:
     """The few words on what an action is for (the core prompt's list and the manual's fallback)."""
     return REG[name].purpose if name in REG else ""
+
+
+def phrase(kind, spec=None) -> str:
+    """The "You can also ..." phrase of a niche kind, in this world's wording (the design arm names no templates)."""
+    if spec is not None:
+        if kind in NO_TEMPLATE_PHRASE and not templates_offered(spec):
+            return NO_TEMPLATE_PHRASE[kind]
+        if kind in CORE_ONLY_PHRASE and core_only(spec):
+            return CORE_ONLY_PHRASE[kind]
+    return NICHE_PHRASE[kind]
+
+
+def purpose_overrides(spec) -> dict:
+    """{action: purpose} where this world's wording differs from the registry's (the design arm: no template names)."""
+    return {} if templates_offered(spec) else dict(NO_TEMPLATE_PURPOSE)
+
+
+def doc_for(name, spec) -> str | None:
+    """An action's doc template in this world's wording, or None for the registry's (agents.action_doc)."""
+    if name in NO_TEMPLATE_DOC and not templates_offered(spec):
+        return NO_TEMPLATE_DOC[name]
+    return None
 
 
 def layout(acts, rights) -> tuple:
@@ -645,6 +673,72 @@ R("invoke", "use a hidden power you know, or an action a law defined", "powers",
   doc='invoke {"action": "name", "args": [...]}: use an action a law defined, if you hold its right')
 
 
+R("read_library", "read the law library: drafted laws to copy or adapt (uses an action)", "INFORMATION", core=True,
+  needs=("library:on_request", "level:1"), args='{"name": null}',
+  handler="actions:_read_library", module="core", category="productive", emits=("library_lookup",), legacy=False,
+  aliases={"law": "name", "title": "name", "doc": "name", "entry": "name", "query": "name"},
+  doc='read_library {"name": null}: uses an action, answered next turn: without a name, the index of the law library (each '
+      'drafted law\'s name and intent); with a name, that law\'s full code, to copy, adapt or import')
+
+
+# ---------------------------------------------------------------------- the design arm (review 14 package A)
+# Spec flags, all off by default (every existing world unchanged):
+#   contracts.offer_templates: false   create_contract and propose_contract_change take code only; no template name appears in any
+#                                      prompt, doc, manual section or error (the templates still exist for scripted presets).
+#                                      contracts.templates: false hides them the same way (it used to leak the names in the docs).
+#   law.library.visibility             prompt (default: today) | on_request (one line says a library exists; read_library costs an
+#                                      action) | none (no library text, no lookup)
+#   actions.core_only: true            only CORE_SURFACE exists (listed, documented, executable); every other action is unknown
+#   goals.outcome_only: true           (goals.py) only outcome goals are drawn (goal_registry.GOAL_CLASS)
+# The surface: what an agent needs to talk, trade, produce, make law, found and run institutions of its own design, fight and
+# have children (physics), plus offices that a role or law creates. Not here: the preset institutions (courts, jurisdictions'
+# secret founding, the press and outlets, Scholars, loans and reserve coins, projects, tribute, leases, groups) and the
+# conveniences that are institutions in kit form (standing orders, agency, guards, assassins, initiative).
+CORE_SURFACE = (
+    "dm", "reply", "post", "transfer",                                  # talk and trade
+    "manual", "manual_search", "recent", "read_law", "preview_law", "legal_position", "read_library", "read_file",   # look-ups
+    "write_scratchpad", "write_file",                                   # memory
+    "harvest",                                                          # produce
+    "propose", "amend", "vote", "invoke",                               # law; invoke: offices a law or contract defines
+    "create_contract", "join_contract", "leave_contract", "propose_contract_change", "deposit_escrow", "set_allowance",   # institutions
+    "attack", "forge", "fortify",                                       # force (where conflict is on)
+    "commission", "create_agent",                                       # children (where life is on; create_agent: Makers)
+    "patch", "rule")                                                    # the Fixer's patch; judges' rule (an office a law creates)
+NO_TEMPLATE_PURPOSE = {"create_contract": "found a contract: an association that runs on code you write"}
+NO_TEMPLATE_PHRASE = {"contracts": "found, join or leave contracts (associations that run on code their members write)"}
+CORE_ONLY_PHRASE = {"files": "save files"}
+NO_TEMPLATE_DOC = {
+    "create_contract": 'create_contract {"name": "...", "code": "<law code>"} (or a list of up to three codes): found an '
+                       'association; you are its first member. Its code is in force at once and binds only members who join: it '
+                       'may tax or block what members do, take only what they deposit in its escrow or allow it each round, and pay '
+                       'anyone from its treasury. You write the code yourself (the manual\'s law sections list the functions and '
+                       'hooks; preview_law tries a draft). Add "under": "<polity>" to incorporate it under a polity: that polity\'s '
+                       'rules for incorporated associations then bind it (above its own code) and grant it benefits'}
+
+
+def templates_offered(spec) -> bool:
+    """Whether agents are offered the contract templates by name (contracts.templates and contracts.offer_templates, both default on)."""
+    c = (spec or {}).get("contracts") or {}
+    return c.get("templates", True) is not False and c.get("offer_templates", True) is not False
+
+
+def library_visibility(spec) -> str:
+    """law.library.visibility: prompt (default) | on_request | none."""
+    return str((((spec or {}).get("law") or {}).get("library") or {}).get("visibility") or "prompt")
+
+
+def core_only(spec) -> bool:
+    return bool(((spec or {}).get("actions") or {}).get("core_only"))
+
+
+def hidden(spec) -> set:
+    """Actions that do not exist in this world because of the design-arm flags (actions._act treats them as unknown)."""
+    out = set() if library_visibility(spec) == "on_request" else {"read_library"}
+    if core_only(spec):
+        out |= {n for n in REG if n not in CORE_SURFACE}
+    return out
+
+
 # ---------------------------------------------------------------------- frozen older orders (see the module docstring)
 # actions.ACTIONS: the order the "unknown action" error lists actions in (it reaches logged results)
 ACTIONS_ORDER = (
@@ -661,7 +755,8 @@ ACTIONS_ORDER = (
     "answer_poll", "buy_licence", "set_memory_price", "library_permit", "library_remove", "buy_memory", "library_deposit",
     "library_read", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance", "propose_contract_change",
     "appeal", "legal_position",
-    "authorize", "revoke_authorization", "act_for", "standing_order")    # P4.5
+    "authorize", "revoke_authorization", "act_for", "standing_order",    # P4.5
+    "read_library")                                                     # review 14 A (hidden unless law.library.visibility on_request)
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -676,7 +771,8 @@ DOC_ORDER = (
     "grant_licence", "buy_licence", "annotate", "set_memory_price", "buy_memory", "library_deposit", "library_read",
     "library_permit", "library_remove", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance",
     "propose_contract_change", "appeal", "legal_position",
-    "authorize", "revoke_authorization", "act_for", "standing_order")    # P4.5
+    "authorize", "revoke_authorization", "act_for", "standing_order",    # P4.5
+    "read_library")                                                     # review 14 A
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 

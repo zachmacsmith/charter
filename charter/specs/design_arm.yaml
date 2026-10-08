@@ -1,0 +1,10 @@
+# Review 14 package A, the design arm (D3, D4 (b), D9 (b)): no template names anywhere, create_contract takes code only, the
+# library only on request (one line says it exists; reading it costs an action), outcome goals only (no institution goals, no
+# goal that names an institution type or an action recipe), the ~25-action core surface, citizens only (plus the Fixer).
+# Compare with scaffolded_arm.yaml: the two differ only in these flags and the classes.
+extends: [arms/base]
+agents: {worker: 29, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}
+contracts: {offer_templates: false}
+law: {library: {visibility: on_request}}
+goals: {outcome_only: true}
+actions: {core_only: true}

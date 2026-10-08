@@ -1094,6 +1094,34 @@ def _institution_fill(goal: str, p: dict) -> dict:
     return p
 
 
+# ------------------------------------------------------------------ review 14 A: outcome goals (goals.outcome_only)
+# Every catalogue and institution goal, by what it asks for:
+#   outcome      a position the agent ends in or keeps (wealth, rank, security, influence, following, lineage, the commons, a rival
+#                or a protege's rank): it names no institution and no way to get there
+#   institution  names an institution type or an institutional position of the preset (a law, the library, the constitution, the
+#                vote or veto, a jurisdiction, a court, loans, a reserve, a currency, a channel, an office or title, an association
+#                kind: company, bank, insurer, cartel, racket)
+#   recipe       names the action to take (disable agents, message, leak, factor, solve a camp, keep your goal secret, sabotage,
+#                read the manual)
+#   relational   about another agent's hidden goal (Mirror, Ally, Foil) or protection from sanctions (Bodyguard)
+# goals.outcome_only draws only `outcome` goals (charter/goals.py weights); tests/test_charter_design_arm.py checks every goal is here.
+_O, _I, _R, _X = "outcome", "institution", "recipe", "relational"
+GOAL_CLASS = {
+    "Wealth": _O, "Rank": _O, "Hoard": _O, "Safety": _O, "Gifts": _O, "Benefactor": _O, "Patron": _O, "Power": _O,
+    "Office": _I, "Sovereign": _I, "Lawmaker": _I, "Guardian": _I, "Enact": _I, "Enact as author": _I, "Block": _I,
+    "Outcome": _I, "Durable": _I, "Overthrow": _I, "Rename": _I, "Usage": _I, "Mandate": _I, "Title": _I,
+    "Scholar": _R, "Monopoly": _R, "Steward": _O, "Spymaster": _I, "Concealment": _R, "Saboteur": _R, "Inflation": _I,
+    "Kingmaker": _O, "Rival": _O, "Bodyguard": _X, "Mirror": _X, "Ally": _X, "Foil": _X, "Gatekeeper": _R, "Whistleblower": _R,
+    "Silence": _I, "Channel owner": _I, "Leaker": _R, "Bounty hunter": _R, "Creditor": _I, "Reserve banker": _I,
+    "Diversifier": _O, "Litigator": _I, "Clean record": _I, "Repealer": _I, "Capture": _I, "Constitution writer": _I,
+    "Eliminator": _R, "Seat": _I, "Dynasty": _O, "Currency Magnate": _I, "Lineage Wealth": _O, "Lineage Influence": _O,
+    "Revolutionary": _I, "Reaper": _R, "Bloodline Eliminator": _R, "Discoverer": _R, "Populator": _O, "Peacekeeper": _O,
+    "Depopulator": _R, "Instigator": _R, "Spoiler": _R, "Schism": _I, "Puppeteer": _I, "Collapse": _R, "Churn": _I,
+    "Exodus": _I, "Following": _O,
+    "Company": _I, "Bank": _I, "Insurer": _I, "Cartel": _I, "Protection racket": _I}
+OUTCOME_GOALS = frozenset(g for g, c in GOAL_CLASS.items() if c == _O)
+
+
 # ------------------------------------------------------------------ derived tables (the old names)
 CATALOGUE = {g.name: (g.category, g.weight, g.min_level, g.text) for g in GOALS.values()}
 NEW_GOALS = {g.name: (g.requires[0] if g.requires else None) for g in GOALS.values() if g.gate == "update"}

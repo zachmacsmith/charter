@@ -163,6 +163,8 @@ E("factored", "actions", "summary", "public", "event", "agents", act="harvest",
 E("sandbox", "actions", "output", "parties", "event", "agents", act="run_python")
 E("archive_read", "actions", "output", "parties", "silent", None, act="read_archive", silent=SILENT_RESULT)
 E("archive_search", "actions", "output", "parties", "silent", None, act="search_archive", silent=SILENT_RESULT)
+E("library_lookup", "actions", "output", "parties", "silent", None, act="read_library", silent=SILENT_RESULT,
+  note="review 14 A: law.library.visibility on_request")
 E("archive_write", "actions", "record", "monitor", "silent", None, act="write_archive", primitive="write_note")
 E("transfer", "actions", "primitive", "parties", "event", "agents", act="transfer", flags="own", primitive="move")
 E("transfer_blocked", "actions", "primitive", "parties", "event", "agents", act="transfer", primitive="move")
