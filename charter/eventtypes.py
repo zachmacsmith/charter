@@ -197,6 +197,11 @@ E("account_out_of_gas", "dispatch", "summary", "public|parties", "event", "agent
   note="an account (polity) used its gas for the round: its laws' new-style hooks are skipped until the next round; members told")
 E("cascade_halted", "dispatch", "record", "monitor", "silent", None,
   note="a cascade halted (per-cascade gas) or dropped queued reactions of dead invocations")
+E("compelled", "dispatch", "summary", "parties", "event", "agents",
+  note="P3.7 (D-5, law.notify_parties): a law-caused change of a primitive whose row has compel_vis parties, told to its agent "
+       "parties: the law (\"hidden\" to non-members of a hidden jurisdiction), its hook, what changed (concealed actors as None), why")
+E("gas_billed", "dispatch", "record", "monitor", "silent", None, primitive="move",
+  note="P3.8 (law.gas_price): an account's gas for the round billed to its treasury (owed, paid); the move to the reserve is logged too")
 E("patch_submitted", "actions", "legal_act", "public", "official", "agents", act="patch", primitive="amend")
 E("patched", "kernel", "legal_act", "public", "official", "agents", primitive="amend")
 E("patch_failed", "kernel", "legal_act", "public", "official", "agents", primitive="amend")

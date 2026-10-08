@@ -390,6 +390,42 @@ def _legacy_reply(v):
 
 
 # ------------------------------------------------------------------ feeds
+def _you(x, viewer) -> str:
+    return "you" if viewer is not None and x == viewer else ("someone unnamed" if x is None else str(x))
+
+
+def _yours(x, viewer) -> str:
+    return "your" if viewer is not None and x == viewer else f"{_you(x, viewer)}'s"
+
+
+# compelled (P3.7): what a law changed, by primitive (unknown ones fall back to the change's JSON)
+_COMPELLED = {
+    "move": lambda c, v: f"moved {c.get('qty', 0):g} {c.get('item')} from {_you(c.get('src'), v)} to {_you(c.get('dst'), v)}",
+    "mint": lambda c, v: f"minted {c.get('qty', 0):g} {c.get('currency')} to {_you(c.get('to'), v)}",
+    "burn": lambda c, v: f"burned {c.get('qty', 0):g} {c.get('currency')} held by {_you(c.get('frm'), v)}",
+    "destroy": lambda c, v: f"destroyed {c.get('qty', 0):g} {c.get('item')} held by {_you(c.get('owner'), v)}",
+    "set_title": lambda c, v: (f"set {_yours(c.get('agent'), v)} title to {c['text']!r}" if c.get("text") is not None
+                               else f"cleared {_yours(c.get('agent'), v)} title"),
+    "guard_bind": lambda c, v: f"obliged {_you(c.get('guard'), v)} to guard {_you(c.get('agent'), v)}",
+    "guard_release": lambda c, v: "released the guard obligations " + ", ".join(
+        f"{_you(g, v)} guarding {_you(a, v)}" for g, a in c.get("released") or ()),
+    "subscribe": lambda c, v: (f"subscribed {_you(c.get('agent'), v)} to outlet {c.get('outlet')}" if c.get("on")
+                               else f"unsubscribed {_you(c.get('agent'), v)} from outlet {c.get('outlet')}"),
+}
+
+
+def compelled_text(d: dict, viewer=None) -> str:
+    """A `compelled` event as its party reads it: "law L4 (on_round_end) moved 2 grain from you to reserve (why: fine)"."""
+    who = "a law of a hidden jurisdiction" if d.get("law") == "hidden" else f"law {d.get('law')}"
+    if d.get("hook"):
+        who += f" ({d['hook']})"
+    c = d.get("change") or {}
+    f = _COMPELLED.get(d.get("primitive"))
+    what = f(c, viewer) if f else f"{d.get('primitive')}: " + json.dumps(c)[:300]
+    why = f" (why: {d['why']})" if d.get("why") and d.get("why") != d.get("hook") else ""
+    return f"compelled by {who}: {what}{why}"
+
+
 def render_event(k, e, viewer=None) -> str | None:
     e = H.as_shown(k, e)                                             # rewritten history reads as forged (hidden.py)
     if e["type"] in H.EVENT_TYPES:
@@ -470,6 +506,8 @@ def render_event(k, e, viewer=None) -> str | None:
         return f"{tag} {t} {who or ''}: " + json.dumps({x: (y if not isinstance(y, list) or t != 'accuse' else [z['id'] for z in y]) for x, y in d.items()})[:600]
     if t in ("proposal_blocked", "primitive_blocked", "law_charged", "law_flagged", "account_out_of_gas"):   # law.v2 (P3.1)
         return f"{tag} {t.replace('_', ' ')}: " + json.dumps(d)[:600]
+    if t == "compelled":                                                # law.v2 (P3.7, D-5): a law's change that concerns you
+        return f"{tag} {compelled_text(d, viewer)}"
     if t == "story":
         return f"{tag} STORY by {who}: {d['headline']}\n  {d['text']}"
     if t == "digest":

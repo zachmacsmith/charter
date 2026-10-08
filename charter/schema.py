@@ -216,6 +216,8 @@ def _ann():
         "turns": dict(types=("str",), enum=("sequential", "simultaneous")),
         "rng_version": dict(types=("int",), enum=(1, 2)),
         "law.v2": dict(types=("bool",)),
+        "law.notify_parties": dict(types=("bool", "null")),
+        "law.gas_price": dict(kind="leaf", types=("dict", "null"), check=_check_gas_price),
         **{f"law.gas.{x}": dict(types=("int",), range=(1, None)) for x in ("per_call", "python_depth", "per_cascade", "per_account_round",
                                                                             "depth_cap", "flag_limit", "flag_window")},
         **{f"law.gas.{x}": dict(types=("int",), range=NONNEG) for x in ("hook_cost", "prim_cost")},
@@ -407,6 +409,8 @@ EXTRA = {
     "prompts.profiles": {},
     "prompts.assign": [],
     "law.v2": False,
+    "law.notify_parties": None,                                       # P3.7 (D-5): null follows law.v2
+    "law.gas_price": None,                                            # P3.8 (D-12): gas billing off
     # law.v2 budgets (P3.1, review 09 §9.2, I-8, D-12): read by dispatch.gas_cfg only when law.v2 is on
     "law.gas.per_call": 10_000, "law.gas.python_depth": 20, "law.gas.per_cascade": 100_000, "law.gas.per_account_round": 1_000_000,
     "law.gas.depth_cap": 8, "law.gas.hook_cost": 20, "law.gas.prim_cost": 5, "law.gas.flag_limit": 3, "law.gas.flag_window": 5,
@@ -612,6 +616,10 @@ DOCS = {
               "before_<primitive>(p, chain) / after_<primitive>(p, chain) for every change whatever caused it, cascades drained at "
               "the end of each root cause, gas per call, cascade and account, depth cap 8, flags: charter/dispatch.py, P3.1); "
               "false: as before",
+    "law.notify_parties": "law.v2 (P3.7, D-5): a law-caused change to an agent (fines, moves, mints, burns, titles, guard obligations, "
+                          "compelled subscriptions) is told to it as a `compelled` event; null: on exactly when law.v2 is on",
+    "law.gas_price": "law.v2 (P3.8): null (off) | {item, rate} or {item, qty, per}: at round end each account pays its laws' gas for "
+                     "the round from its treasury to the reserve; an account that cannot pay has its hooks skipped next round",
     "law.gas": "law.v2 gas budgets (review 09 §9.2): a hook that runs out dies, its law is flagged (charter/dispatch.py)",
     "law.gas.per_call": "law.v2: steps one hook invocation may run (today's per-call limit)",
     "law.gas.python_depth": "law.v2: law function frames one invocation may nest",
@@ -738,6 +746,26 @@ def _check_library(path, v) -> list:
         return [f"{path}: expected all | none | a list of categories, got {v!r}"]
     cats = _library_categories()
     return [f"{path}: unknown library category {c!r}{_close(c, cats)}; categories: {', '.join(cats)}" for c in v if c not in cats]
+
+
+def _check_gas_price(path, v) -> list:
+    """null or {item: str, rate: number >= 0} or {item: str, qty: number >= 0, per: int >= 1}"""
+    if v is None:
+        return []
+    if not isinstance(v, dict):
+        return [f"{path}: expected null or {{item, rate}} / {{item, qty, per}}, got {v!r}"]
+    errs = [f"{path}.{x}: unknown key{_close(x, ('item', 'rate', 'qty', 'per'))}" for x in v if x not in ("item", "rate", "qty", "per")]
+    if not isinstance(v.get("item"), str):
+        errs.append(f"{path}.item: expected the name of an item, got {v.get('item')!r}")
+    num = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool)
+    if ("rate" in v) == ("qty" in v):
+        errs.append(f"{path}: give either rate or qty (with per)")
+    for x in ("rate", "qty"):
+        if x in v and not (num(v[x]) and v[x] >= 0):
+            errs.append(f"{path}.{x}: expected a number >= 0, got {v[x]!r}")
+    if "per" in v and not (num(v["per"]) and v["per"] >= 1):
+        errs.append(f"{path}.per: expected a number >= 1, got {v['per']!r}")
+    return errs
 
 
 def _check_start_laws(path, v) -> list:
@@ -1052,6 +1080,8 @@ def validate(spec) -> list[str]:
     lib = law.get("library") if isinstance(law.get("library"), dict) else {}
     if lib.get("edition") == 2 and law.get("v2") is not True:
         errs.append("law.library.edition: edition 2 builds laws from lib:* blocks with use(), which needs law.v2: true")
+    if law.get("gas_price") is not None and law.get("v2") is not True:
+        errs.append("law.gas_price: gas is metered only under law.v2, which needs law.v2: true")
     return errs
 
 
