@@ -282,7 +282,7 @@ def seed(k, inst: dict) -> list:
             LK.on_new_law(k, lid)                                     # version 1 and the code store: an amendment's base
         dc["acts"][act.name] = lid
         dc["store"][ROOT][act.name] = twin_rows(act, code, k.spec)
-        k.log(EVENT, None, {"law": lid, "title": title, "rank": a["rank"], "params": dict(a["params"]), "run": "native"},
+        k.log("code_act", None, {"law": lid, "title": title, "rank": a["rank"], "params": dict(a["params"]), "run": "native"},
               vis="monitor")
         out.append(lid)
     return out
@@ -302,7 +302,7 @@ def on_code_changed(k, lid: str) -> None:
         pos = next((i for i, x in enumerate(order) if x not in acts or acts.index(x) > acts.index(lid)), len(order))
         order.insert(pos, lid)
     k.w["default_code"]["store"].setdefault(ROOT, {})[act.name] = rows
-    k.log(EVENT, None, {"law": lid, "title": rec["title"], "run": "source", "rows": dict(rows)}, vis="monitor")
+    k.log("code_act", None, {"law": lid, "title": rec["title"], "run": "source", "rows": dict(rows)}, vis="monitor")
 
 
 def on_repeal(k, lid: str) -> None:
@@ -312,7 +312,7 @@ def on_repeal(k, lid: str) -> None:
     rec["native"] = False
     for rows in k.w["default_code"]["store"].values():
         rows.pop(act.name, None)
-    k.log(EVENT, None, {"law": lid, "title": rec["title"], "run": "repealed"}, vis="monitor")
+    k.log("code_act", None, {"law": lid, "title": rec["title"], "run": "repealed"}, vis="monitor")
 
 
 def switch_to_source(k, lid: str) -> None:
