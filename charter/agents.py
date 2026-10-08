@@ -756,6 +756,9 @@ class ScriptedPolicy:
         if "contracts" in k.w:                                           # contracts (P4.3): own RNG stream; nothing when off
             from charter import contracts as KC
             acts[:0] = KC.scripted_actions(k, a, n_actions)
+        gone = AR.hidden(k.spec) if AR.core_only(k.spec) else ()      # review 14 A: the core surface's bots use only its actions
+        if gone:
+            acts = [x for x in acts if x.get("action") not in gone]
         guesses = {x: r.choice(G.drawable_names(k.spec)) for x in k.roster() if x != aid} if final else {}   # the goals drawable here
         out = {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
                "goal_guesses_json": json.dumps(guesses)}

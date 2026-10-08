@@ -19,6 +19,7 @@
   python -m charter spec check E3 [--set models.mix=balanced]                    validate a spec (unknown keys, bad values; did-you-mean hints)
   python -m charter spec docs --out charter/docs/spec_reference.md              write the spec reference (every key, type, default, doc)
   python -m charter library list [--family F] | library show NAME [--set K=V]    the legal toolkit: templates, parameters, code
+  python -m charter novelty RUN_DIR [RUN_DIR...] [--threshold 0.8]               copied vs adapted vs novel agent code (review 14)
   python -m charter explore E3 --runs 8 --perturb "endowment_gini={uniform: [0.1, 0.7]}" --perturb "conditions.fixer={choice: [honest, hidden]}" [--dry]
 
 SPEC is a preset name (E0..E7, base, example_E3) or a path to a YAML spec. --set applies explicit choices (they win over draws).
@@ -367,6 +368,10 @@ def main(argv=None):
     from charter import lawset
     p = sub.add_parser("library", help="library list [--family F] | library show NAME [--set K=V] (charter/library.py toolkit)")
     lawset.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(lawset.cmd(a)))
+    from charter import novelty
+    p = sub.add_parser("novelty", help="novelty RUN_DIR.. [--threshold 0.8] [--json OUT]: copied vs novel law and contract code "
+                       "(charter/novelty.py)")
+    novelty.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(novelty.cmd(a)))
     from charter import schema
     p = sub.add_parser("spec", help="spec check SPEC.. [--set k=v] | spec docs [--out F] (charter/schema.py)")
     schema.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(schema.cmd(a)))
