@@ -4,6 +4,7 @@ documented, how jurisdictions scope it and who dispatches it.
 Behaviour stays in `Kernel.api_for` and the module `law_api(k, lid)` closures; this table only describes them. Generated from it:
   lawlang.API_GROUPS, API, STRUCTURAL_CALLS, PROCEDURAL_CALLS, L4_CALLS, HOOKS   (classification; the old hand lists, plus repeal as structural: P1.4)
   jurisdictions.AGENT_ARGS, REFUSED, LEGACY_ONLY                                   (jurisdiction scoping)
+  powers.POWERS[*].lawfns, POWER_OF                                                (the power table, P4.2)
 tests/test_charter_lawapi.py checks the table against the real API (every module's law_api closures, with every module on), against
 lawdocs (every function is documented by the mechanism its row names), against the hook call sites, and the classification against a
 snapshot of the hand-written values it replaced. tests/test_charter_jurisdictions.py checks the agent parameters (AGENTISH).
@@ -21,7 +22,8 @@ Function row (LawFn):
                    "read"    a read: scope_api filters what it returns, or it is harmless outside the jurisdiction.
                    "none"    deliberately not scoped; `why` says why.
   refused        what an out-of-scope call returns
-  legacy_only    works only in J0 (uses J0's reserve): a LawError in any other jurisdiction
+  power          the power (charter/powers.py) the law's account needs to call it; scope_api refuses the call, with the power's
+                 refusal text, in an account without it ("legacy_reserve" replaces the old legacy_only flag: works only in J0)
   why            for scope "none", or parameters in AGENTISH that are not agents
   docs           which documentation mechanism documents it (all in charter/lawdocs.py unless noted; see DOCS)
   level          a law-level constraint beyond the class (define_action: "L4")
@@ -71,7 +73,7 @@ class LawFn:
     agents: tuple = ()          # ((position, parameter name), ...) of the parameters that name agents
     scope: str = "bound"        # bound | custom | read | none (see the module docstring)
     refused: object = None      # what an out-of-scope call returns
-    legacy_only: bool = False   # works only in J0 (uses J0's reserve): a LawError in any other jurisdiction
+    power: str | None = None    # the power (powers.POWERS) the law's account needs to call it (P4.2; replaces legacy_only)
     why: str = ""               # for scope "none", or parameters in AGENTISH that are not agents
     group: str = ""             # lawlang.API_GROUPS group
     module: str = "kernel"      # the module whose law_api returns it
@@ -79,6 +81,11 @@ class LawFn:
     level: str | None = None    # a law-level constraint beyond the class
     primitive: str | None = None    # the primitive it causes (its compel face, charter/primitives.py), if it writes (P1.7)
     v2: bool = False            # exists only in law.v2 worlds (Kernel.api_for adds it; off: the name is unknown, as before)
+
+    @property
+    def legacy_only(self) -> bool:
+        """Works only in J0 (uses J0's reserve): the J0-only legacy_reserve power."""
+        return self.power == "legacy_reserve"
 
     @property
     def cls(self) -> str:
@@ -152,8 +159,8 @@ LAWFNS = _fns(
         F("burn", "money", ((2, "frm"),), scope="custom", refused=False, primitive="burn"),
         F("move", "money", ((0, "src"), (1, "dst")), scope="custom", refused=False, primitive="move"),    # either side may be a reserve
         F("set_convertible", "money", primitive="set_money_rule"),
-        F("enable_loans", "money", legacy_only=True, primitive="set_money_rule"),
-        F("forgive_loan", "money", legacy_only=True, primitive="settle_loan"),
+        F("enable_loans", "money", power="legacy_reserve", primitive="set_money_rule"),
+        F("forgive_loan", "money", power="legacy_reserve", primitive="settle_loan"),
         # camps
         F("set_quota", "camps", primitive="set_camp_rule"),
         F("set_harvest_limit", "camps", primitive="set_camp_rule"),
@@ -184,13 +191,13 @@ LAWFNS = _fns(
     ),
     _module(
         "credit",
-        F("set_par", "money", legacy_only=True, primitive="set_money_rule"),
-        F("suspend_redemption", "money", legacy_only=True, primitive="set_money_rule"),
-        F("set_interest_cap", "money", legacy_only=True, primitive="set_money_rule"),
-        F("set_default_consequence", "money", legacy_only=True, primitive="set_money_rule"),
-        F("restructure_loan", "money", legacy_only=True, primitive="loan_terms"),
-        F("lend_from_reserve", "money", ((0, "borrower"),), legacy_only=True, primitive="offer_loan"),
-        F("buy_loan", "money", legacy_only=True, primitive="loan_assign"),
+        F("set_par", "money", power="legacy_reserve", primitive="set_money_rule"),
+        F("suspend_redemption", "money", power="legacy_reserve", primitive="set_money_rule"),
+        F("set_interest_cap", "money", power="legacy_reserve", primitive="set_money_rule"),
+        F("set_default_consequence", "money", power="legacy_reserve", primitive="set_money_rule"),
+        F("restructure_loan", "money", power="legacy_reserve", primitive="loan_terms"),
+        F("lend_from_reserve", "money", ((0, "borrower"),), power="legacy_reserve", primitive="offer_loan"),
+        F("buy_loan", "money", power="legacy_reserve", primitive="loan_assign"),
         F("credit_record", "read", ((0, "a"),), scope="read"),
         F("reserve_ratio", "read"),
         F("redemption_open", "read"),
@@ -200,20 +207,20 @@ LAWFNS = _fns(
     ),
     _module(
         "hidden",                                                       # hidden powers
-        F("disclose_capability_use", "rights", legacy_only=True, primitive="set_power_rule"),
+        F("disclose_capability_use", "rights", power="legacy_reserve", primitive="set_power_rule"),
         F("capability_holders", "read"),
         F("revoke_capability", "rights", ((0, "agent"),), refused=0, primitive="revoke_right"),
     ),
     _module(
         "projects",                                                     # structural: new camps/rights, reserve outflows
-        F("start_project", "projects", legacy_only=True, primitive="start_project"),
-        F("contribute_project", "projects", legacy_only=True, primitive="contribute"),
-        F("set_refund", "projects", legacy_only=True, primitive="set_project_rule"),
+        F("start_project", "projects", power="legacy_reserve", primitive="start_project"),
+        F("contribute_project", "projects", power="legacy_reserve", primitive="contribute"),
+        F("set_refund", "projects", power="legacy_reserve", primitive="set_project_rule"),
         F("projects", "projects_read"),
     ),
     _module(
         "outside",                                                      # tribute to the outside power
-        F("pay_tribute", "projects", legacy_only=True, primitive="destroy"),
+        F("pay_tribute", "projects", power="legacy_reserve", primitive="destroy"),
         F("tribute_status", "projects_read"),
     ),
     _module(
@@ -289,6 +296,15 @@ LAWFNS = _fns(
         F("treasury", "read", scope="none", why="the owner key of the calling law's own treasury", docs="requires", v2=True),
     ),
 )
+# P4.2: the power column of the rows every polity may call today (charter/powers.py; the legacy_reserve rows carry it on their own
+# line). Kept off the rows' lines, like the P1.7 block below.
+LAWFNS.update({n: replace(LAWFNS[n], power=p) for p, names in (
+    ("kernel_rights", ("create_right", "grant", "revoke", "suspend", "revoke_capability")),
+    ("compel_members", ("fine", "limit_actions", "censure", "set_dm_limit", "oblige_guard", "compel_subscription")),
+    ("lawful_force", ("lawful_attack",)),
+    ("unlimited_seizure", ("move", "burn")),
+    ("camp_rules", ("set_quota", "set_harvest_limit", "set_fee", "set_lease_rules")),
+) for n in names})
 V2_ONLY = {f.name for f in LAWFNS.values() if f.v2}                    # law.v2 names: off, Kernel.api_for has none of them
 # P1.7: the primitive column of the two rows P1.4 edits (kept off their lines to avoid a merge conflict; fold in after the merge)
 LAWFNS.update({n: replace(LAWFNS[n], primitive=p) for n, p in (("repeal", "repeal"), ("set_official_editor", "appoint"))})
@@ -366,7 +382,8 @@ L4_CALLS = {f.name for f in LAWFNS.values() if f.level == "L4"}
 
 AGENT_ARGS = {f.name: f.agents for f in LAWFNS.values() if f.scope == "bound" and f.agents}
 REFUSED = {f.name: f.refused for f in LAWFNS.values() if f.name in AGENT_ARGS or f.scope == "custom"}
-LEGACY_ONLY = {f.name for f in LAWFNS.values() if f.legacy_only}
+LEGACY_ONLY = {f.name for f in LAWFNS.values() if f.power == "legacy_reserve"}
+POWER_OF = {f.name: f.power for f in LAWFNS.values() if f.power}      # law function -> the power its account needs (P4.2)
 
 
 # ---------------------------------------------------------------------- lookups over the source (for the table's readers and tests)
@@ -435,7 +452,7 @@ def rows() -> list[dict]:
     """The whole table, one dict per function and per hook (dispatch sites with their current file:line)."""
     sites = dispatch_sites()
     out = [{"kind": "function", "name": f.name, "module": f.module, "group": f.group, "cls": f.cls, "min_level": f.min_level,
-            "agents": f.agents, "scope": f.scope, "refused": f.refused, "legacy_only": f.legacy_only, "docs": f.docs} for f in LAWFNS.values()]
+            "agents": f.agents, "scope": f.scope, "refused": f.refused, "legacy_only": f.legacy_only, "power": f.power, "docs": f.docs} for f in LAWFNS.values()]
     out += [{"kind": "hook", "name": h.name, "sig": h.sig, "returns": h.returns, "module": h.module, "law_caused": h.law_caused,
              "jur": h.jur, "docs": h.docs, "dispatch": [f"{p}:{line} {q}" for p, line, q in sites.get(h.name, [])]} for h in HOOKTABLE.values()]
     return out

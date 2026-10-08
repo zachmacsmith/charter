@@ -31,6 +31,7 @@ from charter import linker as LK                                      # law.v2: 
 from charter import mortality as MO                                   # life: the mortality contract (disable, succession)
 from charter import media as MD                                       # media2
 from charter import outside as O
+from charter import powers as PW                                      # the power table (P4.2): the Board's veto window, levels
 from charter import projects as P
 
 from charter import features as FT                                    # the feature table: phases and merge order (features.py)
@@ -1082,25 +1083,24 @@ class Kernel:
                     self.law_error(lid, str(e))
 
     def passed(self, lid):
-        if "jur" in self.w:                                             # jurisdictions: hidden -> dormant; Board scope
+        if "jur" in self.w:                                             # jurisdictions: a hidden one's law goes dormant (J.passed)
             return J.passed(self, lid)
+        self.pass_or_veto(lid, J.law_jur(self, lid))
+
+    def pass_or_veto(self, lid, account):
+        """A passed law: a non-ordinary law of an account holding board_veto (powers.py) waits in the Board's veto window while a
+        Board seat is held; otherwise it is enacted (an error on enactment fails it)."""
         law = self.w["laws"][lid]
-        if law["cls"] == "ordinary":
-            try:
-                self.enact(lid, via="procedure")
-            except L.LawError as e:
-                law["status"] = "failed"
-                self.log("proposal_failed", law["author"], {"law": lid, "why": f"error on enactment: {e}"}, vis="public")
-        elif self.board():
+        if law["cls"] != "ordinary" and PW.has_power(self, account, "board_veto") and self.board():
             law["status"] = "veto_window"
             self.w["veto_queue"].append({"kind": "law", "law": lid, "until": self.r + self.spec["veto_window"], "vetoes": []})
             self.log("veto_window", None, {"law": lid, "until": self.r + self.spec["veto_window"]}, vis="public")
-        else:
-            try:
-                self.enact(lid, via="procedure")
-            except L.LawError as e:
-                law["status"] = "failed"
-                self.log("proposal_failed", law["author"], {"law": lid, "why": f"error on enactment: {e}"}, vis="public")
+            return
+        try:
+            self.enact(lid, via="procedure")
+        except L.LawError as e:
+            law["status"] = "failed"
+            self.log("proposal_failed", law["author"], {"law": lid, "why": f"error on enactment: {e}"}, vis="public")
 
     def board(self):
         # life: only members still in the game (a seat whose holder left without a successor is empty)

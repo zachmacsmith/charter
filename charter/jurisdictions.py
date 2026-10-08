@@ -59,6 +59,7 @@ from charter import features as FT                                    # the one 
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawapi as LA
 from charter import lawlang as L
+from charter import powers as P                                       # the power table (P4.2): what each polity may do
 
 KEY = "jurisdictions"
 EVENT_TYPES = ET.rendered_by("jurisdictions")                          # this module renders them (agents.render_event)
@@ -477,11 +478,11 @@ def scope_api(k, lid, api: dict) -> dict:
                 k.w["effects"]["harvests_gazetted"] += 1
         out["gazette"] = gazette
 
-        for name in LEGACY_ONLY:
-            if name in out:
-                def blocked(*a, _n=name, **kw):
-                    raise L.LawError(f"{_n} works only in the founding jurisdiction J0 (it uses J0's reserve)")
-                out[name] = blocked
+    for name, power in LA.POWER_OF.items():                            # P4.2: functions needing a power this polity lacks
+        if name in out and not P.has_power(k, jid, power):             # (today: legacy_reserve outside J0)
+            def blocked(*a, _n=name, _p=power, **kw):
+                raise L.LawError(P.refusal(_p, _n))
+            out[name] = blocked
     return out
 
 
@@ -602,12 +603,8 @@ def decide(k, lid):
 
 
 def board_reviews(k, jid) -> bool:
-    scope = cfg(k)["board_scope"]
-    if scope == "all":
-        return True
-    if scope == "none":
-        return False
-    return jid is not None and jid == k.w["jur"]["founding"]
+    """Does the Board review this jurisdiction's laws? The board_veto power (powers.py; resolved by spec board_scope)."""
+    return bool(P.has_power(k, jid, "board_veto"))
 
 
 def passed(k, lid):
@@ -625,17 +622,7 @@ def passed(k, lid):
 
 
 def _pass_declared(k, lid, jid):
-    law = k.w["laws"][lid]
-    if law["cls"] != "ordinary" and board_reviews(k, jid) and k.board():
-        law["status"] = "veto_window"
-        k.w["veto_queue"].append({"kind": "law", "law": lid, "until": k.r + k.spec["veto_window"], "vetoes": []})
-        k.log("veto_window", None, {"law": lid, "until": k.r + k.spec["veto_window"]}, vis="public")
-        return
-    try:
-        k.enact(lid, via="procedure")
-    except L.LawError as e:
-        law["status"] = "failed"
-        k.log("proposal_failed", law["author"], {"law": lid, "why": f"error on enactment: {e}"}, vis="public")
+    k.pass_or_veto(lid, jid)                                            # the Board's window if jid holds board_veto, else enact
 
 
 def intercept_enact(k, lid) -> bool:
@@ -658,7 +645,7 @@ def intercept_enact(k, lid) -> bool:
 
 # ---------------------------------------------------------------------- proposing (actions._propose with jurisdictions on)
 def propose(k, aid, code, intent=None, jurisdiction=None):
-    level = k.inst["law_level"]
+    level = P.law_level(k, jurisdiction or member_of(k, aid))
     if level == "L0":
         raise L.LawError("no laws can be made in this world (law level L0)")
     jid = jurisdiction or member_of(k, aid)
@@ -672,7 +659,7 @@ def propose(k, aid, code, intent=None, jurisdiction=None):
     if j["status"] == "declared" and member_of(k, aid) != jid:
         _log_scope(k, "jur_scope_error", aid, {"action": "propose", "jurisdiction": jid, "why": "not a member"})
         raise L.LawError(f"you are not a member of {jid}; only its members propose its laws")
-    if j.get("legacy") and not k.has(aid, "propose"):
+    if P.has_power(k, jid, "propose_right") and not k.has(aid, "propose"):
         raise L.LawError("you need the 'propose' right to propose laws")
     try:
         lid = k.new_law(str(code), aid, intent_override=intent)
@@ -688,18 +675,21 @@ def propose(k, aid, code, intent=None, jurisdiction=None):
             law["status"] = "failed_check"
             raise L.LawError(f"no active law {law['repeal_target']!r} of {jid} to repeal")
         law["cls"] = tgt["cls"]
-    if law["cls"] not in L.LEVEL_CLASSES[level]:
+    level = P.law_level(k, jid)
+    if not P.level_allows(k, jid, law["cls"]):
         law["status"] = "failed_check"
         raise L.LawError(f"{law['cls']} laws are not allowed at law level {level}")
-    if law["defines_action"] and level != "L4":
+    if law["defines_action"] and not P.level_allows_define_action(k, jid):
         law["status"] = "failed_check"
         raise L.LawError("define_action needs law level L4")
-    try:
-        diff = k.dry_run(lid)
-    except Exception as e:
-        k.w["laws"][lid]["status"] = "failed_check"
-        k.log("proposal_check_failed", aid, {"law": lid, "error": str(e)}, vis=[aid])
-        raise L.LawError(f"your law failed the 3-round dry run: {e}")
+    diff = None
+    if P.has_power(k, jid, "dry_run"):
+        try:
+            diff = k.dry_run(lid)
+        except Exception as e:
+            k.w["laws"][lid]["status"] = "failed_check"
+            k.log("proposal_check_failed", aid, {"law": lid, "error": str(e)}, vis=[aid])
+            raise L.LawError(f"your law failed the 3-round dry run: {e}")
     from charter import dispatch as D
     k.apply("propose", jurisdiction=jid, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
@@ -743,9 +733,9 @@ def _charter_laws(k, aid, jid, laws) -> list:
     for code in laws:
         lid = k.new_law(str(code), aid)
         law = k.w["laws"][lid]
-        if law["cls"] not in L.LEVEL_CLASSES[k.inst["law_level"]]:
+        if not P.level_allows(k, jid, law["cls"]):
             del k.w["laws"][lid]
-            raise L.LawError(f"a {law['cls']} law is not allowed at law level {k.inst['law_level']}")
+            raise L.LawError(f"a {law['cls']} law is not allowed at law level {P.law_level(k, jid)}")
         law["jurisdiction"], law["status"] = jid, "charter"
         out.append(lid)
     return out
