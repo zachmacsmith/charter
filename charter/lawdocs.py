@@ -27,7 +27,9 @@ TOPICS = {
               "that rank (only a law of that rank or higher may); a procedure's p.rank is the draft's rank. Before-hooks run highest "
               "rank first. When laws' before-hooks disagree, the polity's conflict rule decides: any_block (the default: any block "
               'blocks), superior (the highest-rank explicit verdict wins; a dict with "exempt": True cancels lower-rank charges), '
-              "posterior (the latest-enacted explicit verdict wins) or a constitution's function."),
+              "posterior (the latest-enacted explicit verdict wins), specialis (as superior, but within the highest rank the most "
+              'specific verdict wins: "specific": True or a number) or a constitution\'s function. A law may also declare when it is '
+              "in force (in_force_from, in_force_until) and refuse(reason) cleanly."),
     "social-hooks": ("Hooks on posts, votes, proposals and rulings",
                      "Beyond the round and economic hooks, a law can react to public speech, votes, new proposals and court rulings."),
     "dm-hook": ("Reading private messages: on_dm", "A law can be told about private messages, but only in worlds that allow it."),
@@ -329,12 +331,35 @@ REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2")))
 # rank and conflict rules (charter/dispatch.py, P3.2): documented only in law.v2 worlds (REQUIRES)
 E += [
     ("set_conflict_rule", "ranks", "Governance", "set_conflict_rule(rule)", 'how conflicting before-hook verdicts are resolved in '
-     'this law\'s polity: "any_block", "superior", "posterior", or a function fn(verdicts) returning {"block": bool, "charges": '
-     '[{"law", "charge"}]} (verdicts: [{law, rank, seq, block, allow, charge, exempt, reason}]). Only a constitution-rank law may '
-     'call it (or declare conflict_rule = "superior"); it holds while that law is in force. Makes a law procedural.',
-     "common", "uncommon"),
+     'this law\'s polity: "any_block", "superior", "posterior", "specialis", or a function fn(verdicts) returning {"block": bool, '
+     '"charges": [{"law", "charge"}]} (verdicts: [{law, rank, seq, block, allow, charge, exempt, reason, specific}]). Only a '
+     'constitution-rank law may call it (or declare conflict_rule = "superior"); it holds while that law is in force. Makes a law '
+     'procedural.', "common", "uncommon"),
 ]
 REQUIRES["set_conflict_rule"] = lambda spec: bool((spec.get("law") or {}).get("v2"))
+# W6a (review 10 §4/§6 #1-#3, #12): purpose memos, declared validity, clean refusal and lex specialis; documented only in law.v2 worlds
+E += [
+    ("move_memo", "money", "Money", 'move(src, dst, item, qty, memo="wage")', "a move may carry a short purpose (memo, at most 80 "
+     "characters): wage, sale, gift, loan, fee, ... Agents give one with transfer {\"to\", \"item\", \"qty\", \"memo\"}. Hooks on moves "
+     "read it as p[\"memo\"] (None when the mover gave none), so a law can tax sales but not gifts, or refuse a transfer marked as a "
+     "bribe; the move's events show it to whoever sees them.", "common", "uncommon"),
+    ("in_force", "ranks", "Meta", "in_force_from = 3, in_force_until = 9",
+     "a law may declare when it is in force, as top-level constants (round numbers, both included; each optional): before "
+     "in_force_from and after in_force_until its hooks do not run (on_round_start/end, hooks on changes, old hooks) and its offices "
+     "refuse; on_enact and on_repeal still run at enactment and repeal. At the end of round in_force_until the kernel repeals it "
+     "(the repeal says via \"expired\"; before_repeal hooks may keep it, but it stays out of force). A sunset clause or a law that "
+     "starts later, with no code of its own for it.", "common", "uncommon"),
+    ("refuse", "ranks", "Meta", "refuse(reason)", "ends this hook or function call at once and undoes everything it did, without "
+     "error: the law is not suspended or flagged and the Fixer is not called. In a before_<change> hook it blocks the change, like "
+     "returning {\"block\": True, \"reason\": reason}, and the agent whose action it was is told the reason; in an office "
+     "(define_action) the agent's invoke fails with the reason; elsewhere the call is simply undone. \"The registrar refuses.\"",
+     "common", "uncommon"),
+    ("verdict_specific", "ranks", "Governance", '"specific": True in a before-verdict', 'a before-hook\'s dict verdict may say '
+     'how specific its rule is: "specific": True (1) or a number. Under the conflict rule "specialis" (lex specialis) the most '
+     "specific explicit verdicts of the highest rank decide (a special rule beats the general one of the same rank; a higher "
+     "rank still wins), then as superior.", "common", "uncommon"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("move_memo", "in_force", "refuse", "verdict_specific")})
 # proposals by law (charter/amendment.py, P3.4): documented only in law.v2 worlds (REQUIRES); procedural, so from law level L3 (D-16)
 E += [
     ("propose_law", "governance", "Governance", "propose_law(code, intent=None)", "proposes a new law (complete code) in this "
@@ -453,9 +478,10 @@ def v2_article(contracts: bool = False) -> dict:
     from charter import dispatch as D, primitives as PR
     lines = ["# Hooks on any change (law.v2)", "", V2_PROMPT, "", V2_LIMITS, "",
              "Verdicts of before_<change>: None or True (no objection), False (block), a number > 0 (a charge of the change's good "
-             "to its payer, paid to your treasury after the change), or a dict with block, charge, reason (and the change's "
-             "directives). A block of an agent's own action fails the action with your law's id and reason; a block of a law's "
-             "call ends that call. after_<change> gets p['result'] too.", "", "Changes you can hook:"]
+             "to its payer, paid to your treasury after the change), or a dict with block, charge, reason, specific (and the "
+             "change's directives); refuse(reason) blocks too. A block of an agent's own action fails the action with your law's "
+             "id and reason; a block of a law's call ends that call. after_<change> gets p['result'] too.", "",
+             "Changes you can hook:"]
     for n in D.ROUTED:
         P = PR.get(n)
         if P.feature == "contracts" and not contracts:                  # P4.3: absent where contracts are off

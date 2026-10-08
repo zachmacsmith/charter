@@ -173,6 +173,8 @@ def action_doc(name: str, inst: dict, a: dict, f: dict | None = None) -> str:
                  "rival, a blocker or a threat to your broader goal") if secret else
                 (". Disabling an agent is public and irreversible, but it can serve your broader goal: removing a rival, a blocker or a "
                  "threat at the right moment"))
+    if name == "transfer" and ((inst.get("spec") or {}).get("law") or {}).get("v2"):   # W6a: law.v2's purpose memo
+        doc += '; add "memo": "wage" (a short purpose: wage, sale, gift, loan, ...) that laws can read'
     return doc
 
 
@@ -404,7 +406,8 @@ def _yours(x, viewer) -> str:
 
 # compelled (P3.7): what a law changed, by primitive (unknown ones fall back to the change's JSON)
 _COMPELLED = {
-    "move": lambda c, v: f"moved {c.get('qty', 0):g} {c.get('item')} from {_you(c.get('src'), v)} to {_you(c.get('dst'), v)}",
+    "move": lambda c, v: f"moved {c.get('qty', 0):g} {c.get('item')} from {_you(c.get('src'), v)} to {_you(c.get('dst'), v)}"
+                         + (f' (memo: "{c["memo"]}")' if c.get("memo") else ""),                  # W6a: law.v2's memo
     "mint": lambda c, v: f"minted {c.get('qty', 0):g} {c.get('currency')} to {_you(c.get('to'), v)}",
     "burn": lambda c, v: f"burned {c.get('qty', 0):g} {c.get('currency')} held by {_you(c.get('frm'), v)}",
     "destroy": lambda c, v: f"destroyed {c.get('qty', 0):g} {c.get('item')} held by {_you(c.get('owner'), v)}",
@@ -466,10 +469,12 @@ def render_event(k, e, viewer=None) -> str | None:
         lock = " (encrypted)" if d.get("encrypted") else ""
         pay = f", with {d['payment']['qty']:g} {d['payment']['item']}" if d.get("payment") else ""
         return f"{tag} DM{lock} {who} -> {to}" + (f" (reply to {d['reply_to']}{pay})" if d.get("reply_to") else "") + f": {d['text']}"
+    memo = f' (memo: "{d["memo"]}")' if t in ("transfer", "transfer_blocked") and d.get("memo") else ""   # W6a: law.v2's memo
     if t == "transfer":
-        return f"{tag} transfer {who} -> {to}: {d['qty']:g} {d['item']}" + (f" (tax {d['tax']:g})" if d.get("tax") else "")
+        return f"{tag} transfer {who} -> {to}: {d['qty']:g} {d['item']}" + (f" (tax {d['tax']:g})" if d.get("tax") else "") + memo
     if t == "transfer_blocked":
-        return f"{tag} a law blocked a transfer {who} -> {to}: {d['qty']:g} {d['item']}"
+        return f"{tag} a law blocked a transfer {who} -> {to}: {d['qty']:g} {d['item']}" + memo + (
+            f" (law {', '.join(d.get('by') or [])}: {d['reason']})" if d.get("reason") else "")
     if t == "harvest":
         return f"{tag} your harvest at {d['camp']} with x={d['x']}: yield {d['yield']:.3g}" + (f" ({d['deducted']:.3g} deducted)" if d["deducted"] else "") + \
             (f". {d['note']}" if d.get("note") else "")                 # camps-b: typed camps' private results (readings, pairings)

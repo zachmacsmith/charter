@@ -115,7 +115,7 @@ DRAFT_SAMPLE = {"id": "L5", "title": "t", "intent": "i", "code": 'title = "t"\ni
 
 # Every payload key, with a sample value: the payload vocabulary (a new key needs a sample, so payloads stay JSON-able).
 PARAM_SAMPLES = {
-    "src": "a1", "dst": "a2", "item": "grain", "qty": 2.0, "why": "transfer", "agent": "a1", "camp": "camp1", "x": [3, 4],
+    "src": "a1", "dst": "a2", "item": "grain", "qty": 2.0, "why": "transfer", "memo": "wage", "agent": "a1", "camp": "camp1", "x": [3, 4],
     "currency": "coin", "to": "a2", "frm": "a1", "name": "coin", "backed": True, "reserve": "reserve", "src_item": "copper",
     "dst_item": "weapons", "via": "forge", "owner": "a1", "cause": "attack", "key": "quota", "value": 3, "right": "press",
     "rounds": 2, "n": 3, "text": "hello", "entity": "agent:a1", "role": "editor", "office": "official_editor:J1", "how": "born",
@@ -146,12 +146,14 @@ _PHYS = "physics: no law may stop it"
 
 _ROWS = [
     # ------------------------------------------------------------------ goods and money
-    P("move", "core", "move", ("src", "dst", "item", "qty", "why"), "dispatch:do_move", subject="src", parties=("src", "dst"),
+    P("move", "core", "move", ("src", "dst", "item", "qty", "why", "memo"), "dispatch:do_move", subject="src", parties=("src", "dst"),
       agent_params=("src", "dst"), charge=("src", "item"), event="move", blocked_event="transfer_blocked", causes=("agent", "law", "world"),
       reads=("balance", "reserve", "holdings_value"), preview=("holdings", "reserve"), compel_vis="parties", legacy_vis="monitor",
       sites=("dispatch:do_move", "kernel:Kernel.move", "actions:_send", "dispatch:legacy_hooks"),
       notes="agents move only their own goods (transfer, fees, payments); laws move members' goods and reserves (move, fine); "
-            "seizure (credit.settle, bequests) is a move with its why. Today only an agent's transfer runs on_transfer."),
+            "seizure (credit.settle, bequests) is a move with its why. Today only an agent's transfer runs on_transfer. W6a: memo, "
+            "the move's purpose (law.v2 only; transfer {memo}, law move(..., memo=)), a short string hooks read as p[\"memo\"] (None "
+            "when unset) and the move's events carry"),
     P("harvest", "core", "create", ("agent", "camp", "x", "item", "qty", "via"), "dispatch:do_harvest", subject="agent", parties=("agent",),
       agent_params=("agent",), charge=("agent", "item"), event="harvest", causes=("agent",), gates=("set_quota", "set_harvest_limit", "set_fee"),
       reads=("stock", "camps", "bounty_number"), preview=("camps",), sites=("dispatch:do_harvest", "actions:_harvest", "dispatch:legacy_hooks",
@@ -539,8 +541,9 @@ _ROWS = [
       notes="via: procedure, veto_window, preview (dry run), start (setup), intervention, kernel (any other caller)"),
     P("repeal", "core", "legal", ("jurisdiction", "law", "by_law", "via"), "dispatch:do_repeal", subject="jurisdiction",
       parties=("jurisdiction",), legal=True, event="repeal", causes=("law", "kernel"), reads=("laws",), preview=("laws",),
-      compel_vis="public", sites=("dispatch:do_repeal", "kernel:Kernel.repeal"),
-      notes="via: law (a law's repeal()), procedure (an enacted repeal law), intervention, kernel"),
+      compel_vis="public", sites=("dispatch:do_repeal", "kernel:Kernel.repeal", "dispatch:expire_laws"),
+      notes="via: law (a law's repeal()), procedure (an enacted repeal law), intervention, kernel, expired (W6a, law.v2: the end "
+            "of a law's declared in_force_until round, dispatch.expire_laws)"),
     P("amend", "core", "legal", ("jurisdiction", "law", "old_sha", "new_sha", "diff", "via", "by"), "dispatch:do_amend",
       subject="jurisdiction", parties=("jurisdiction",), legal=True, entrenched=("fixer_patch",), event="patched",
       causes=("agent", "kernel"), sites=("dispatch:do_amend", "actions:_patch", "kernel:Kernel.apply_patch",
@@ -677,6 +680,8 @@ LAW_OUTPUTS = {
     "notify": "an output (ARCHITECTURE §3.3)",
     "censure": "a public statement about an agent: an output (it only counts in the round's effects)",
     "use": "law.v2 (P3.3): links another law's exports into the calling module when it loads; no change to the world",
+    "refuse": "law.v2 (W6a): ends the calling invocation and rolls back what it did (P3.6 journal); a before-hook's refusal is a "
+              "block verdict, so the change it gates is refused through that primitive's own block path; no change of its own",
 }
 
 # Event types that are outputs, look-ups or records of no change (EventType.primitive None on purpose); every other type of kind

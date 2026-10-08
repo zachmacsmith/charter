@@ -299,6 +299,7 @@ LAWFNS = _fns(
         F("treasury", "read", scope="none", why="the owner key of the calling law's own treasury", docs="requires", v2=True),
         F("set_conflict_rule", "governance", scope="none", why="sets the conflict rule of the calling law's own polity (P3.2; only "
           "a constitution-rank law may)", docs="requires", v2=True, primitive="set_conflict_rule"),
+        F("refuse", "meta", scope="none", why="ends the calling law's own invocation (W6a), binds nobody", docs="requires", v2=True),
     ),
     _module(
         "amendment",                                                    # law.v2 (P3.4): laws propose laws and amendments (D-16: L3)
@@ -343,7 +344,8 @@ CONTRACT_ALLOW_GROUPS = ("read", "text", "projects_read")
 CONTRACT_COLUMN = {
     **{f.name: "allow" for f in LAWFNS.values() if f.group in CONTRACT_ALLOW_GROUPS},
     **{n: "allow" for n in ("name", "gazette", "notify", "open_ballot", "set_procedure", "repeal", "breach", "admit", "expel", "use",
-                            "public_of", "root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")},
+                            "public_of", "root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury",
+                            "refuse")},                                 # W6a: a contract's law may refuse too
     **{n: "escrow" for n in ("move", "fine", "pull", "forfeit", "refund")},
 }
 LAWFNS.update({n: replace(f, contract=CONTRACT_COLUMN.get(n, "deny")) for n, f in LAWFNS.items()})

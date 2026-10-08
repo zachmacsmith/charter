@@ -75,6 +75,7 @@ class Outcome:
     blocked_by: tuple = ()
     charges: tuple = ()
     refused: str | None = None
+    reason: str | None = None       # W6a: the blocking verdicts' reason (law.v2: a dict's "reason", a refuse(reason)), for the actor
 
 
 @dataclass(frozen=True)
@@ -372,7 +373,22 @@ def check_move(k, p):
                 raise L.LawError(f"no such agent: {key}")
     if not AC.can_pay(k, p["src"], p["item"], qty):
         raise PhysicsError("insufficient")
+    if p.get("memo") is not None:                                    # W6a: a purpose memo (law.v2 only), a short string
+        if not v2(k):
+            raise L.LawError("a move's memo needs law.v2")
+        return {**p, "qty": qty, "memo": memo_text(p["memo"])}
     return {**p, "qty": qty}
+
+
+MEMO_MAX = 80                                                        # W6a: a memo's length cap (characters)
+
+
+def memo_text(memo) -> str | None:
+    """W6a: a move's purpose memo as stored and shown: a string, stripped, at most MEMO_MAX characters (None or empty: no memo)."""
+    if memo is None:
+        return None
+    t = " ".join(str(memo).split())[:MEMO_MAX]
+    return t or None
 
 
 def check_grant_right(k, p, via="law"):
@@ -478,16 +494,17 @@ CHECKS = {"move": check_move, "grant_right": check_grant_right, "revoke_right": 
 
 
 # ---------------------------------------------------------------------- the changes (primitives.Primitive.fn)
-def do_move(k, src, dst, item, qty, why, actor=None, charged=0.0, charge_to=None) -> dict:
-    """Goods change owner. A charge (a legacy tax) is taken from what dst receives and moved, as its own move, to charge_to."""
+def do_move(k, src, dst, item, qty, why, memo=None, actor=None, charged=0.0, charge_to=None) -> dict:
+    """Goods change owner. A charge (a legacy tax) is taken from what dst receives and moved, as its own move, to charge_to. W6a:
+    memo, the move's purpose (law.v2), is recorded on its event when set."""
     moved = qty - charged if charged else qty
-    ok = _move(k, src, dst, item, moved, why, actor)
+    ok = _move(k, src, dst, item, moved, why, actor, memo)
     for to, q in AC.payouts(charge_to, charged):                    # one destination today; one move per law treasury (P4.1)
         k.move(src, to, item, q, why=f"{why}_tax", by=actor)
     return {"moved": moved if ok else 0.0, "charged": charged}
 
 
-def _move(k, src, dst, item, qty, why, actor) -> bool:
+def _move(k, src, dst, item, qty, why, actor, memo=None) -> bool:
     """Today's Kernel.move body (after the physics check): a balance that changed under the hooks fails quietly, as before."""
     if qty == 0:
         return True
@@ -502,7 +519,8 @@ def _move(k, src, dst, item, qty, why, actor) -> bool:
         cls = k.cls_of(dst)
         e["from_reserve_by_class"][cls] = e["from_reserve_by_class"].get(cls, 0.0) + qty * k._v(item)
         e["from_reserve_recipients"].add(dst)
-    k.log("move", actor, {"src": src, "dst": dst, "item": item, "qty": qty, "why": why}, vis="monitor")
+    k.log("move", actor, {"src": src, "dst": dst, "item": item, "qty": qty, "why": why, **({"memo": memo} if memo else {})},
+          vis="monitor")
     return True
 
 
@@ -989,7 +1007,7 @@ def do_repeal(k, jurisdiction, law, by_law, via) -> dict:
     for nm, act in list(k.w["actions"].items()):
         if act["law"] == law:
             del k.w["actions"][nm]
-    k.log("repeal", None, {"law": law, "by": by_law}, vis="public")
+    k.log("repeal", None, {"law": law, "by": by_law, **({"via": via} if via == "expired" else {})}, vis="public")   # W6a: expiry
     return {"status": rec["status"]}
 
 
@@ -1306,6 +1324,7 @@ def do_settle_loan(k, loan, paid, how, lid=None, data=None) -> dict:
 # exactly as before, and new-style hooks are a check error without law.v2 (lawlang.check_hooks from Kernel.new_law/_exec).
 # Limited death (review 09 §9.4): invoke() and die(). Budgets: GAS, overridden by spec law.gas.
 import copy as _copy
+import functools as _functools
 import math as _math
 
 from charter import gas as G
@@ -1517,7 +1536,125 @@ HELPERS = ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_i
 def law_api(k, lid) -> dict:
     return {"root_kind": root_kind, "caused_by_agent": caused_by_agent, "caused_by_law": caused_by_law, "chain_laws": chain_laws,
             "law_id": lambda: lid, "treasury": lambda: treasury_of(k, lid),
-            "set_conflict_rule": lambda rule: law_set_conflict_rule(k, lid, rule)}             # P3.2
+            "set_conflict_rule": lambda rule: law_set_conflict_rule(k, lid, rule),             # P3.2
+            "refuse": refuse}                                                                  # W6a
+
+
+# ---------------------------------------------------------------------- W6a: clean refusal (review 10 §4 "Clean failure", roadmap #3)
+# refuse(reason) aborts the law invocation it is called in (law code has no raise): everything the invocation did is rolled back with
+# the P3.6 journal (dispatch.rollback; hook_aborted kind "refused" with the reason, monitor) and the law is neither flagged nor
+# suspended, nor does the Fixer hear of it; the gas it used stays spent, as for a normal return.
+#   - in a before_<p> hook (invoke, _run_before): the refusal is the verdict {"block": True, "reason": reason}, so the change is
+#     blocked under the polity's conflict rule like any block, and the actor is told the reason (an agent's action fails with it;
+#     a transfer's error names it; a law's call ends, its move returns False);
+#   - anywhere else run through invoke (after_<p> hooks): the invocation is rolled back, nothing more;
+#   - in code the kernel calls through Kernel.call (old hooks, on_round_start/end, offices, ballot callbacks, procedures, penalties):
+#     that call is rolled back and returns None; an office (define_action) fails the agent's invoke with the reason
+#     (actions._invoke uses Kernel.call_refusable). Kernel.call journals only laws whose code names refuse (refuses), so others pay
+#     nothing; invoke journals every invocation under law.atomic and, with atomic off, those of laws that name refuse.
+#   - dry runs (previews, proposal checks) journal nothing: a refusal still ends the call and blocks, and the dry run's own restore
+#     undoes the rest.
+class Refusal(G.LawError):
+    """refuse(reason) in law code: the invocation ends cleanly (see the block comment above)."""
+    kind = "refused"
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(f"refused: {reason}")
+
+
+@dataclass(frozen=True)
+class Refused:
+    """invoke's value for an invocation that called refuse(reason)."""
+    reason: str
+
+
+def refuse(reason=""):
+    """Law API refuse(reason) (law.v2): abort this invocation cleanly; never returns."""
+    raise Refusal(str(reason if reason is not None else "")[:300])
+
+
+def refuses(k, lid) -> bool:
+    """Does law `lid`'s code name refuse (so a call into it is journaled even where P3.6 does not journal)?"""
+    code = (k.w["laws"].get(lid) or {}).get("code")
+    return isinstance(code, str) and "refuse" in code and _names_refuse(code)
+
+
+@_functools.lru_cache(maxsize=4096)
+def _names_refuse(code: str) -> bool:
+    import ast
+    try:
+        return any(isinstance(n, ast.Name) and n.id == "refuse" for n in ast.walk(ast.parse(code)))
+    except SyntaxError:
+        return False
+
+
+def call_frame(k, lid, fn):
+    """Kernel.call's journal frame (law.v2, not dry, a law whose code names refuse), or None."""
+    if not v2(k) or k.dry or not refuses(k, lid):
+        return None
+    cs = k._cascade_stack()
+    cas = cs[-1] if cs else Cascade(root={"kind": "kernel", "id": "kernel:call"}, index=len(k._causes))
+    return begin(k, cas, Invocation(law=lid, hook=getattr(fn, "__name__", None) or "call", account=account_of(k, lid)))
+
+
+def refused_call(k, fr, lid, e: Refusal) -> None:
+    """A Kernel.call that refused: roll it back (if journaled: hook_aborted kind refused). Kernel.call_refusable returns the reason."""
+    if fr is not None:
+        rollback(k, fr.cas, fr, e)
+
+
+# ---------------------------------------------------------------------- W6a: declared temporal validity (review 10 §4, roadmap #2)
+# A law declares `in_force_from = R` / `in_force_until = R` (lawlang.check_window). Under law.v2, outside [from, until] (inclusive)
+# the dispatcher skips its change hooks (new-style before_/after_: bound_laws; old ones: Kernel.hooks, jurisdictions.hooks/hooks_of)
+# and its clock hooks (on_round_start/end), and its offices refuse (actions._invoke); its lifecycle hooks (on_enact, on_repeal) still
+# run, its exports still link and its procedures, conflict rule and ballots stand. At the end of round `until` (Kernel's round_end
+# step expire_cases) the kernel repeals it: a routed repeal with via "expired" in a {"kernel": "expiry"} root frame, so before_repeal
+# may keep it in force (it then stays out of force; the kernel tries again each round) and after_repeal sees it; the repeal event
+# says via "expired". Associations' laws (P4.3) end only by their own procedure and never expire. Off: every law is in force.
+@_functools.lru_cache(maxsize=4096)
+def code_window(code: str) -> tuple:
+    import ast
+    try:
+        return L.window(ast.parse(code))
+    except SyntaxError:
+        return (None, None)
+
+
+def window_of(k, lid) -> tuple:
+    """W6a: (in_force_from, in_force_until) of a law's current code (None: open on that side)."""
+    code = (k.w["laws"].get(lid) or {}).get("code")
+    return code_window(code) if isinstance(code, str) and "in_force_" in code else (None, None)
+
+
+def in_force(k, lid) -> bool:
+    """W6a: is the law inside its declared window this round? Always True without law.v2."""
+    if not v2(k):
+        return True
+    lo, hi = window_of(k, lid)
+    return (lo is None or k.r >= lo) and (hi is None or k.r <= hi)
+
+
+def expire_laws(k) -> list:
+    """W6a: at the end of a round, repeal (via "expired") every law in force whose in_force_until is this round or earlier. Returns
+    the ids repealed."""
+    if not v2(k) or k.dry:
+        return []
+    from charter import linker as LK
+    done = []
+    for law in list(k.active_laws()):
+        hi = window_of(k, law["id"])[1]
+        if hi is None or k.r < hi or law["status"] != "active":
+            continue
+        if "contracts" in k.w and J.association(k, J.law_jur(k, law["id"])) is not None:
+            continue
+        with k.cause("kernel", "expiry", root=True):
+            out = k.apply("repeal", jurisdiction=jur_of(k, law["id"]), law=law["id"], by_law=None, via="expired")
+            if out.ok:
+                done.append(law["id"])
+                if LK.enabled(k):                                      # as Kernel.repeal: following importers auto-pin (D-8)
+                    LK.on_repeal(k, law["id"])
+    return done
 
 
 # ---------------------------------------------------------------------- P3.2: rank, lex superior, procedures per rank (review 09 §8)
@@ -1694,7 +1831,7 @@ def bound_laws(k, P, payload, phase) -> list:
     """Active laws whose account binds the payload (review 09 §4.5), in canonical order (§8.1: rank descending, then enactment, then
     id). Without jurisdictions: every active law. With them: laws of declared jurisdictions (any in a dry run) binding the subject
     (before) or any party (after); a payload naming nothing bindable is seen by all of them."""
-    laws = k.active_laws()
+    laws = [l for l in k.active_laws() if in_force(k, l["id"])]        # W6a: laws outside their declared window are skipped
     assoc = []
     if "contracts" in k.w:                                             # P4.3: associations' laws see their members' changes only
         from charter import contracts as CT                            # (contracts.sees; D-24: no polity legal acts)
@@ -1769,6 +1906,16 @@ class Verdict:
     reason: str | None = None
     exempt: bool = False
     directives: dict = field(default_factory=dict)
+    specific: float = 0.0           # W6a: lex specialis: a dict's "specific" (True counts 1; a number its specificity)
+
+
+def _specificity(x) -> float:
+    """W6a: a verdict's "specific" value: True 1, False/None 0, a finite number itself; anything else is the law's runtime error."""
+    if x is None or isinstance(x, bool):
+        return 1.0 if x else 0.0
+    if isinstance(x, (int, float)) and _math.isfinite(float(x)):
+        return float(x)
+    raise G.LawError(f"specific must be True or a number, not {x!r}")
 
 
 def normalise(P, lid, out):
@@ -1787,7 +1934,7 @@ def normalise(P, lid, out):
             raise G.LawError(f"before_{P.name} returned a charge, but a {P.name} cannot be charged")
         return Verdict(lid, charge=x) if x > 0 else None
     if isinstance(out, dict):
-        allowed = {"block", "charge", "reason", "exempt"} | set(P.directives)
+        allowed = {"block", "charge", "reason", "exempt", "specific"} | set(P.directives)   # W6a: specific
         bad = sorted(str(x) for x in out if x not in allowed)
         if bad:
             raise G.LawError(f"before_{P.name} returned unknown keys {bad} (allowed: {sorted(allowed)})")
@@ -1798,7 +1945,7 @@ def normalise(P, lid, out):
             raise G.LawError(f"before_{P.name} returned a charge, but a {P.name} cannot be charged")
         return Verdict(lid, block=bool(out.get("block")), allow="block" in out and not out["block"], charge=float(ch),
                        reason=None if out.get("reason") is None else str(out["reason"])[:300], exempt=bool(out.get("exempt")),
-                       directives={x: out[x] for x in P.directives if x in out})
+                       directives={x: out[x] for x in P.directives if x in out}, specific=_specificity(out.get("specific")))
     raise G.LawError(f"before_{P.name} must return None, True, False, a number or a dict, not {type(out).__name__}")
 
 
@@ -1819,8 +1966,11 @@ def resolve_v2(k, P, payload, verdicts) -> DecisionV2:
         them blocking (ties: any_block); no explicit verdict, no block. Charges sum, except that an exempt verdict of a law of rank >=
         the charging law's cancels that charge. Directives: canonical order (highest rank first).
       posterior: the latest-enacted law with an explicit verdict decides; charges sum; directives: latest enactment first.
+      specialis (W6a, lex specialis): as superior, except that within the highest rank only the explicit verdicts of the highest
+        specificity (a dict's "specific": True counts 1, a number itself, none 0) decide; ties: any_block among them. Exemptions as
+        superior.
       function: the constitution's fn(verdicts) -> {"block": bool, "charges": [{"law", "charge"}]} (verdicts: [{law, rank, seq, block,
-        allow, charge, exempt, reason}]), run as the constitution's call; its output is validated, and any_block decides when it
+        allow, charge, exempt, reason, specific (W6a)}]), run as the constitution's call; its output is validated, and any_block decides when it
         fails or returns something invalid. Directives as any_block.
     The polity: the payload's jurisdiction (legal acts with jurisdictions on), else that of the first verdict's law; J0 without
     jurisdictions."""
@@ -1833,10 +1983,13 @@ def resolve_v2(k, P, payload, verdicts) -> DecisionV2:
     order = verdicts
     deciding = verdicts                                                 # the verdicts whose blocks count
     exempting = ()
-    if name == "superior":
+    if name in ("superior", "specialis"):
         explicit = [v for v in verdicts if v.block or v.allow]
         top = max((RANKS[rank_of(k, v.law)] for v in explicit), default=None)
         deciding = [v for v in explicit if RANKS[rank_of(k, v.law)] == top]
+        if name == "specialis":                                         # W6a: within the top rank, the most specific decide
+            most = max((v.specific for v in deciding), default=None)
+            deciding = [v for v in deciding if v.specific == most]
         exempting = [v for v in verdicts if v.exempt]
     elif name == "posterior":
         order = sorted(verdicts, key=lambda v: -pos.get(v.law, -1))
@@ -1868,7 +2021,7 @@ def _rule_function(k, rule, P, verdicts, pos, charges):
     None (a runtime error or an invalid output: the caller keeps any_block's decision)."""
     lid, fn = k.fnreg[rule["key"]]
     view = [{"law": v.law, "rank": rank_of(k, v.law), "seq": pos.get(v.law, -1), "block": v.block, "allow": v.allow,
-             "charge": v.charge, "exempt": v.exempt, "reason": v.reason} for v in verdicts]
+             "charge": v.charge, "exempt": v.exempt, "reason": v.reason, "specific": v.specific} for v in verdicts]   # W6a: specific
     try:
         with quiet(k):
             out = k.call(lid, fn, view)
@@ -1979,7 +2132,7 @@ def invoke(k, cas, lid, hook, payload, chain, depth, parent=None, reader=None):
         out = fn(payload, chain)
         return reader(out) if reader is not None else out
     _invs(k).append(inv)
-    fr = begin(k, cas, inv) if atomic(k) else None                  # P3.6: the invocation's journal frame
+    fr = begin(k, cas, inv) if atomic(k) or (not k.dry and refuses(k, lid)) else None   # P3.6 (W6a: and a law that may refuse)
     try:
         with k.cause("law", lid, hook=hook, depth=depth):
             try:
@@ -1996,6 +2149,10 @@ def invoke(k, cas, lid, hook, payload, chain, depth, parent=None, reader=None):
         commit(k, fr)                                                # (not a death: what it did before stands)
         k.w["effects"]["kernel_refusals"].append(e.reason)
         return None
+    except Refusal as e:                                             # W6a: refuse(reason): rolled back, no flag, no suspension
+        rollback(k, cas, fr, e)
+        die(k, cas, inv, e, flagged=False)                            # (its queued reactions go with it)
+        return Refused(e.reason)
     except LIMITS as e:
         if k.dry and not _assoc_law(k, lid):                           # P4.3: an association's error never fails a dry run
             raise
@@ -2038,7 +2195,7 @@ def invoke(k, cas, lid, hook, payload, chain, depth, parent=None, reader=None):
 #     its own subtree: nested invocations roll back independently.
 #   - events logged inside the invocation are a contiguous suffix of k.events (nothing else runs meanwhile): they are truncated
 #     (Kernel.truncate_events) and replaced by one monitor-only `hook_aborted {law, hook, kind, events_dropped, dropped, undone}`
-#     (dropped: the truncated events by type; undone: the parts restored: "world", "w.<key>", "w.laws", "law:<id>", "ns",
+#     (W6a: and reason, for kind refused; dropped: the truncated events by type; undone: the parts restored: "world", "w.<key>", "w.laws", "law:<id>", "ns",
 #     "fnreg", "eff").
 #   - the cascade's finalizers registered inside it are dropped and its change count restored; die() drops the after-items its
 #     subtree queued (as in P3.1).
@@ -2184,9 +2341,12 @@ def lasting(k, fn) -> None:
 
 
 def abort_kind(e) -> str:
-    """hook_aborted's kind: the flag kinds of §9.4, halted (a change refused in a halted cascade) or error (a LawError)."""
+    """hook_aborted's kind: the flag kinds of §9.4, halted (a change refused in a halted cascade), refused (W6a: refuse(reason)) or
+    error (a LawError)."""
     if isinstance(e, Halted):
         return "halted"
+    if isinstance(e, Refusal):                                         # W6a: refuse(reason)
+        return "refused"
     if isinstance(e, G.GasExhausted):
         return FLAG_KINDS.get(e.kind, "gas_call")
     if isinstance(e, DepthCapExceeded):
@@ -2223,7 +2383,8 @@ def rollback(k, cas, fr, e) -> dict | None:
     for ev in dropped:
         counts[ev["type"]] = counts.get(ev["type"], 0) + 1
     data = {"law": fr.inv.law, "hook": fr.inv.hook, "kind": abort_kind(e), "events_dropped": len(dropped),
-            "dropped": dict(sorted(counts.items())), "undone": undone}
+            "dropped": dict(sorted(counts.items())), "undone": undone,
+            **({"reason": e.reason} if isinstance(e, Refusal) else {})}                   # W6a: a refusal's reason
     k.log("hook_aborted", None, data, vis="monitor")
     for fn in fr.lasting:                                            # the penalties of invocations that died inside it stand
         lasting(k, fn)
@@ -2332,11 +2493,11 @@ def on_block(k, cas, P, p, d: DecisionV2, chain):
         if name == "enact":
             k.w["laws"][p["law"]]["status"] = "struck_down"
         k.log("primitive_blocked", None, {**data, "law": p["law"]}, vis="public")
-        return Outcome(ok=False, blocked_by=d.blocked_by, refused="blocked")
+        return Outcome(ok=False, blocked_by=d.blocked_by, refused="blocked", reason=d.reason)
     if name == "move":
-        k.log("primitive_blocked", None, {**data, "src": p["src"], "dst": p["dst"], "item": p["item"], "qty": p["qty"]},
-              vis=_blocked_vis(k, P, p))
-        return Outcome(ok=False, blocked_by=d.blocked_by, refused="blocked")
+        k.log("primitive_blocked", None, {**data, "src": p["src"], "dst": p["dst"], "item": p["item"], "qty": p["qty"],
+                                          **({"memo": p["memo"]} if p.get("memo") else {})}, vis=_blocked_vis(k, P, p))   # W6a: memo
+        return Outcome(ok=False, blocked_by=d.blocked_by, refused="blocked", reason=d.reason)   # W6a: the reason, for the actor
     if _refusable(k, cas, P, chain):
         k.log("primitive_blocked", None, data, vis=_blocked_vis(k, P, p))
         raise Blocked(name, d.blocked_by, d.reason)
@@ -2375,6 +2536,8 @@ def _run_before(k, cas, P, p, opts, depth, raw, hide) -> list:
                    reader=lambda out, lid=lid: normalise(P, lid, out))
         if v is DEAD:
             v = Verdict(lid, block=True, reason="fail_closed") if P.legal and _fail_closed(k, lid) else None   # D-6: else abstain
+        elif isinstance(v, Refused):                                    # W6a: refuse(reason) is a block with that reason
+            v = Verdict(lid, block=True, reason=v.reason or None)
         if v is not None:
             verdicts.append(v)
     return verdicts
@@ -2543,6 +2706,8 @@ def compel_note(k, name, p, opts=None) -> dict | None:
     sub = SUBJECTS.get(name)
     got = sub(k, p, opts) if sub else None
     change, who = got if got is not None else (dict(p), [p.get(x) for x in P.parties])
+    if name == "move" and change.get("memo") is None:                 # W6a: a move without a memo reads as before
+        change.pop("memo", None)
     who = [a for a in dict.fromkeys(who) if isinstance(a, str) and a in k.w["agents"]]
     if not who:
         return None

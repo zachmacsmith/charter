@@ -657,13 +657,13 @@ def scope_api(k, lid, api: dict) -> dict:
             return x
         return None
 
-    def move(src, dst, item, qty):
+    def move(src, dst, item, qty, memo=None):                           # W6a: memo (law.v2)
         s, d = src_key(src), dst_key(dst)
         if s is None:
             return refuse("move", src)
         if d is None:
             return refuse("move", dst)
-        return k.move(s, d, item, qty, why=f"law:{lid}", by=None)
+        return k.move(s, d, item, qty, why=f"law:{lid}", by=None, memo=memo)
     out["move"] = move
 
     def fine(aid, item, qty):

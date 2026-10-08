@@ -19,7 +19,8 @@ def test_law_api_classification_and_docs_agree():
     assert api == L.API - LA.V2_ONLY - LA.CONTRACTS_ONLY, (sorted(api - L.API), sorted(L.API - api))   # law.v2 and contract names: only there
     non_functions = set(L.HOOKS) | {e for e, v in LD.ENTRIES.items() if v["topic"] in ("ballots", "rare-mechanics")} \
         | {"approval_rules", "ballot_gate", "ballot_weights", "dry_run_preview", "step_limits"}
-    assert api <= set(LD.ENTRIES) and set(LD.ENTRIES) - api - LA.V2_ONLY - LA.CONTRACTS_ONLY <= non_functions
+    gated = set(LD.REQUIRES) | set(LD.OPTIONAL)                         # entries documented only in some worlds (law.v2, contracts)
+    assert api <= set(LD.ENTRIES) and set(LD.ENTRIES) - api - LA.V2_ONLY - LA.CONTRACTS_ONLY - gated <= non_functions
 
 
 def test_every_action_has_a_doc_and_an_explicit_activity_category():

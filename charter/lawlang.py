@@ -36,7 +36,11 @@ CLASS_RANK = {"ordinary": 0, "structural": 1, "procedural": 2}         # strictn
 # reserved (kernel-seeded: no draft may declare it, no procedure exists for it). CONFLICT_RULES: the named conflict rules (§8.3) a
 # constitution-rank law may declare with `conflict_rule = "superior"` or set with set_conflict_rule(name_or_fn).
 RANKS = {"charter": 4, "constitution": 3, "statute": 2, "regulation": 1, "bylaw": 0}
-CONFLICT_RULES = ("any_block", "superior", "posterior")
+CONFLICT_RULES = ("any_block", "superior", "posterior", "specialis")  # W6a: specialis (the most specific verdict within the top rank)
+# W6a (review 10 §4, roadmap #2): a law's declared temporal validity, top-level constants `in_force_from = 3` / `in_force_until = 9`
+# (round numbers, both inclusive; checked by check_window under law.v2). Outside its window the dispatcher skips the law's change and
+# clock hooks (dispatch.in_force); at the end of round in_force_until the kernel repeals it with via "expired" (dispatch.expire_laws).
+WINDOW = ("in_force_from", "in_force_until")
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},
                  "L4": {"ordinary", "structural", "procedural"}}
 from charter.primitives import LAW_HOOKS as HOOKS                     # noqa: E402  live hooks of primitives.HOOKS (lawapi.HOOKTABLE)
@@ -249,7 +253,7 @@ def load_module(code: str, law_id: str, api: dict, state: dict, limited: Limited
 REF_RE = re.compile(r"^(?:(L\d+)(?:@([0-9a-f]{8,16}))?|lib:([a-z0-9_]+)@([0-9a-f]{8,16}))$")
 MAX_IMPORT_DEPTH = 6
 MAX_LINKED_BYTES = 64 * 1024
-NOT_EXPORTABLE = {"title", "intent", "rank", "conflict_rule", "exports", "state", "public", "use"}
+NOT_EXPORTABLE = {"title", "intent", "rank", "conflict_rule", "exports", "state", "public", "use", *WINDOW}   # W6a: the window
 
 
 def _single(n) -> str | None:
@@ -357,6 +361,33 @@ def check_rank(tree: ast.Module) -> None:
             raise LawError(f"{nm} must be one of {', '.join(known)} as a constant string (line {top[0].lineno})")
     if declared(tree, "conflict_rule") is not None and RANKS[declared(tree, "rank") or "statute"] < RANKS["constitution"]:
         raise LawError('only a constitution-rank law may declare conflict_rule (rank = "constitution")')
+    check_window(tree)
+
+
+def check_window(tree: ast.Module) -> None:
+    """W6a static rules (law.v2), run with the rank rules: `in_force_from` and `in_force_until`, when a module names them, are
+    assigned once, at the top level, a constant whole round number >= 0, and the window is not empty (from <= until)."""
+    for nm in WINDOW:
+        uses = [n for n in ast.walk(tree) if (isinstance(n, ast.Name) and n.id == nm and isinstance(n.ctx, (ast.Store, ast.Del)))
+                or (isinstance(n, ast.arg) and n.arg == nm)]
+        top = [n for n in tree.body if _single(n) == nm]
+        if len(uses) > 1 or len(uses) != len(top):
+            raise LawError(f"{nm} is set once, at the top level: {nm} = 5")
+        v = declared(tree, nm)
+        if top and (isinstance(v, bool) or not isinstance(v, int) or v < 0):
+            raise LawError(f"{nm} must be a constant round number (a whole number >= 0), e.g. {nm} = 5 (line {top[0].lineno})")
+    lo, hi = window(tree)
+    if lo is not None and hi is not None and hi < lo:
+        raise LawError(f"in_force_until ({hi}) is before in_force_from ({lo})")
+
+
+def window(tree: ast.Module) -> tuple:
+    """W6a: (in_force_from, in_force_until) as a module declares them; None where it declares none (or not a round number)."""
+    out = []
+    for nm in WINDOW:
+        v = declared(tree, nm)
+        out.append(v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None)
+    return tuple(out)
 
 
 def check_v2(tree: ast.Module, code: str) -> None:
@@ -405,7 +436,7 @@ def check_v2(tree: ast.Module, code: str) -> None:
         nm = _single(n)
         if isinstance(n, ast.FunctionDef) or (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant)):
             continue
-        if nm in ("title", "intent", "rank", "conflict_rule") and isinstance(n.value, ast.Constant):
+        if nm in ("title", "intent", "rank", "conflict_rule", *WINDOW) and isinstance(n.value, ast.Constant):   # W6a: the window
             continue
         if nm == "exports" or (nm and _is_use(n.value)):
             continue
