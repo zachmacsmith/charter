@@ -120,6 +120,8 @@ def act(k, aid: str, name: str, args: dict) -> str:
 
 def _act(k, aid: str, name: str, args: dict) -> str:
     hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MEDIA_ACTIONS))   # context, media2: off = unknown
+    if not D.v2(k):                                                    # P3.5: preview_law exists only under law.v2
+        hidden_here.add("preview_law")
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):

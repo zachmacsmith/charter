@@ -558,6 +558,7 @@ ACTION_PRIMITIVES = {
     "dm": ("dm",), "reply": ("dm", "move"), "post": ("post",), "transfer": ("move",),
     # information
     "manual": LOOKUP, "manual_search": LOOKUP, "recent": LOOKUP, "search_board": LOOKUP, "search_dms": LOOKUP, "read_law": LOOKUP,
+    "preview_law": LOOKUP,                                            # P3.5: a transaction, undone (charter/lawpreview.py)
     "read_file": LOOKUP, "read_archive": LOOKUP, "search_archive": LOOKUP, "run_python": LOOKUP,
     # memory
     "write_scratchpad": ("write_note",), "write_archive": ("write_note",),
