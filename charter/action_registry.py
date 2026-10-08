@@ -448,7 +448,9 @@ R("anon_post", "speak publicly without your name", "press", needs=("right:anon",
   doc='anon_post {"text": "..."}: $anon_post_where (needs the anon right; nobody holds it at the start)')
 R("library_read", "read a library document", "press", needs=("mod:media2",), when=_k_scholar,
   handler="scholars:library_read", module="scholars", category="productive", emits=("library_read",),
-  doc='library_read {"scholar": "Name", "doc": null}: a Scholar\'s catalogue (doc null) or a document you may read')
+  aliases={"name": "doc", "title": "doc", "document": "doc", "id": "doc", "doc_id": "doc", "law": "doc", "query": "doc",
+           "library": "scholar", "owner": "scholar", "aid": "scholar"},
+  doc='library_read {"scholar": "Name", "doc": "D3"}: read a document in a Scholar\'s library: "scholar" is the Scholar who keeps it (required unless there is one Scholar or doc names a document in one library); "doc" is a document id (D3) or its exact title; leave doc out for the catalogue of what you may read. Laws in force are read with read_law, not here')
 R("library_deposit", "store a text in a Scholar's library", "press", needs=("mod:media2",), when=_k_scholar,
   handler="scholars:library_deposit", module="scholars", category="talk", emits=("library_deposit",),
   doc='library_deposit {"scholar": "Name", "title": "...", "text": "..."}: deposit a document under your name in a Scholar\'s library (it cannot be edited)')

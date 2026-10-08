@@ -200,7 +200,30 @@ def can_read(k, aid, d) -> bool:
     return d["open"] and aid not in d["deny"]
 
 
-def library_read(k, aid, scholar, doc=None):
+def _find_doc(k, doc, scholar=None):
+    """A live document by id (D3) or by title (case-insensitive), in one Scholar's library or any; None if none or ambiguous."""
+    live = [d for d in k.w["scholars"]["docs"].values() if not d["removed"] and (scholar is None or d["scholar"] == scholar)]
+    d = k.w["scholars"]["docs"].get(str(doc))
+    if d in live:
+        return d
+    hits = [d for d in live if str(d["title"]).strip().lower() == str(doc).strip().lower()]
+    return hits[0] if len(hits) == 1 else None
+
+
+def library_read(k, aid, scholar=None, doc=None):
+    """scholar: whose library (it may be left out when there is one Scholar, or when doc names a document in one library); doc:
+    a document id or title, or none for the catalogue. Agents passed name/title/law for doc (aliases in the action row)."""
+    if scholar in (None, "") and doc not in (None, "") and enabled(k) and is_scholar(k, str(doc)):
+        scholar, doc = doc, None                                        # {"name": "Nell"}: the Scholar, not a document
+    if scholar in (None, ""):
+        found = _find_doc(k, doc) if doc not in (None, "") else None
+        if found is not None:
+            scholar = found["scholar"]
+        elif len(scholars(k)) == 1:
+            scholar = scholars(k)[0]
+        else:
+            raise _err('library_read needs "scholar" (whose library: ' + (", ".join(scholars(k)) or "there are no Scholars")
+                       + '), and optionally "doc" (a document id such as D3, or its title; leave it out for the catalogue)')
     s = _scholar_arg(k, scholar)
     docs = [d for d in k.w["scholars"]["docs"].values() if d["scholar"] == s and not d["removed"]]
     if doc in (None, ""):
@@ -208,9 +231,10 @@ def library_read(k, aid, scholar, doc=None):
         closed = len(docs) - len(mine)
         return (f"{s}'s library: " + ("; ".join(f"{d['id']} '{d['title']}' by {d['author']} (round {d['round'] + 1})" for d in mine) or "nothing you may read")
                 + (f"; {closed} more you may not read" if closed else "") + ".")
-    d = k.w["scholars"]["docs"].get(str(doc))
-    if not d or d["scholar"] != s or d["removed"]:
-        raise _err(f"no document {doc} in {s}'s library")
+    d = _find_doc(k, doc, s)
+    if not d:
+        raise _err(f"no document {doc} in {s}'s library (library_read {{\"scholar\": \"{s}\"}} lists its catalogue; a law in force "
+                   "is read with read_law, not here)")
     if not can_read(k, aid, d):
         raise _err(f"{s} does not let you read {doc}")
     k.log("library_read", aid, {"doc": d["id"], "scholar": s}, vis="monitor")
