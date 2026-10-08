@@ -16,6 +16,7 @@ from charter import context as CX                                     # context:
 from charter import conflict as CF
 from charter import credit as CR
 from charter import dispatch as D                                     # legal acts: the propose payload's draft (P2.3)
+from charter import digest as DG                                      # law.v2 with law.digest: the legal_position look-up
 from charter import hidden as H
 from charter import jurisdictions as J
 from charter import lawlang as L
@@ -126,6 +127,8 @@ def _act(k, aid: str, name: str, args: dict) -> str:
         hidden_here.add("preview_law")
     if not D.v2(k):                                                     # law.v2 (P3.4): amend is unknown without it
         hidden_here |= set(LAW_V2_ACTIONS)
+    if not DG.enabled(k):                                               # law.v2 with law.digest (review 10 §7): legal_position
+        hidden_here.add("legal_position")
     if "contracts" not in k.w:                                          # P4.3: contracts off = unknown
         hidden_here |= set(CONTRACT_ACTIONS)
     if name not in ACTIONS or name in hidden_here:
