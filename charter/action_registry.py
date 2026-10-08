@@ -675,7 +675,7 @@ R("invoke", "use a hidden power you know, or an action a law defined", "powers",
 
 R("read_library", "read the law library: drafted laws to copy or adapt (uses an action)", "INFORMATION", core=True,
   needs=("library:on_request", "level:1"), args='{"name": null}',
-  handler="actions:_read_library", module="core", category="productive", emits=("library_lookup",), legacy=False,
+  handler="actions:_read_library", module="core", category="productive", emits=("library_lookup",),
   aliases={"law": "name", "title": "name", "doc": "name", "entry": "name", "query": "name"},
   doc='read_library {"name": null}: uses an action, answered next turn: without a name, the index of the law library (each '
       'drafted law\'s name and intent); with a name, that law\'s full code, to copy, adapt or import')
