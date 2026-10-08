@@ -8,6 +8,13 @@ population audit, recommendations R1-R7, bugs 1-7), the lifespan fix on `fix/hai
 below. The reference numbers come from the audit's scripted dry runs (`out/econ_*`) and from a toy model (§9.2). Section 12 lists the
 decisions still open.*
 
+> **v2.1 (user, 8 Oct): no smoothing, no caps.** "This shouldn't be an absolute limit, but the initial conditions should just set up to
+> incentivise. I would be interested to see if we get boom-bust or Malthusian scenarios." Founder ages are drawn iid from the stationary
+> distribution (U17 b); there is no population cap (U20 c), only a run-stopping budget guard. Calibration (§9) no longer targets a
+> steady population: it checks that steady states, boom-bust cycles and Malthusian ceilings are all *reachable* under different play,
+> and measures the dynamics (oscillation period and amplitude, overshoot above carrying capacity, collapse depth, cohort echoes). The
+> "±15%" and "deaths per round ≤ ⌈N/μ⌉" targets below are superseded where they conflict.
+
 ## Changelog
 
 ### v2 (user direction 8 Oct)
@@ -215,8 +222,8 @@ rejection from the clipped normal.
 | `life.scale` | `none` | `run` (today) / `none` | `none`: lifespans in absolute rounds. `run` keeps today's `_scale` (with `design_rounds`) |
 | `life.lifespan` | U[60, 120] (μ = 90) | lo 40-100, hi = 2 × lo | Old-age death rate d = 1/μ: 1.1% a round at the default, 0.7-1.7% across the range. Choose lo ≥ R where possible so the rate is exact |
 | `life.age_structure` | `stationary` | `stationary` / `elapsed` (today: `elapsed` [lo, hi] drawn independently) | How founders' ages are drawn |
-| `life.age_sampling` | `systematic` | `systematic` / `iid` | Systematic spacing of remaining lives |
-| `life.cap_mult` | 1.5 | 1.25-2.0 | X: a model-cost guard. Conceptions are refused while population plus pending births is at the cap (§4.2), so no food is lost to a queue |
+| `life.age_sampling` | `iid` (user, 8 Oct) | `iid` / `systematic` | Independent draws from the stationary distribution: realistic on average, with natural clusters and gaps; `systematic` (evenly spaced deaths) only as an option |
+| `life.cap_mult` | none (user, 8 Oct) | none / ≥ 3.0 | No population cap by default: carrying capacity (food, land, fertility) is the only ceiling, so booms can overshoot and crash. Model cost is guarded instead by `life.max_population` (default 4 × N), which stops the run with a flag in STOPPED.md (an experiment budget, X), never by refusing conceptions |
 
 **What it means in a run.** At the default, about R/μ of the founders die of old age in a run: 44% in 40 rounds, 22% in 20, and
 in an 80-round run every founder whose remaining life is under 80 rounds (89%). Deaths are spread one every μ/N rounds: at N = 24
@@ -931,10 +938,10 @@ code before and after each WP.
 | **U14** | May starving agents vote? | (a) no; (b) yes | **(a).** "Further reduced" | Turnout collapses make legislatures unrepresentative in ways that hide the hunger effect: (b) |
 | **U15** | Channel upkeep trigger (§8) | as written; looser; none | **as written** | — |
 | **U16** (v2) | Is the agricultural ladder a tech tree? | (a) **only** the agricultural ladder (7 closed rungs, goods, buildings and skills; no research state); (b) a general tech tree; (c) no ladder (v1 fields + optional tools) | **(a).** Farming is the staple the owner asked for; the toy shows the ladder carries population (no ladder: 0.53-0.71 N). General tech trees stay deferred | Agents treat rungs as a menu and never organise them: consider (c) as a treatment arm |
-| **U17** (v2) | Founder age sampling | (a) systematic (deaths evenly spaced); (b) iid | **(a)** | A study of demographic shocks: (b) or a deliberate age pyramid |
+| **U17** (v2) | Founder age sampling | (a) systematic (deaths evenly spaced); (b) iid | **(b), decided by the user (8 Oct)**: no smoothing; initial conditions set incentives, dynamics are emergent | A study of demographic shocks: (b) or a deliberate age pyramid |
 | **U18** (v2) | Where knowledge lives | (a) per agent, teachable, lost at death; (b) also held by institutions (a school "knows" and members inherit); (c) transferable like goods | **(a).** Makes teaching, schools and lineages matter; transmission is measurable | Knowledge dying out wipes the ladder in long runs: (b) |
 | **U19** (v2) | Who benefits from irrigation | (a) whoever sows the plot (attached to land); (b) the builder only | **(a).** Makes land tenure (law) the precondition of investment, a core institutional question | Theft of improved plots blocks all investment in nature presets: start them with Tillers' Right (U1 (b)) |
-| **U20** (v2) | Population cap | (a) `cap_mult` 1.5; (b) 2.0 (v1) | **(a)**: cost guard; coop play reaches 1.3-1.45 N in 40-80 rounds | Studies of growth: (b) |
+| **U20** (v2) | Population cap | (a) `cap_mult` 1.5; (b) 2.0 (v1); (c) none | **(c), decided by the user (8 Oct)**: no cap; a run-stopping budget guard (`life.max_population`) instead | Studies of growth: (b) |
 | **U21** (v2) | Class affinities | (a) on in scaffolded presets, off in the design arm; (b) off everywhere; (c) stronger (class-specific rungs) | **(a)** | Class decides survival in pilots: (b) |
 | **U22** (v2) | Default heirs (audit R7) | (a) `children` (incl. gestations) → co-parents → reserve, for subsistence presets now and every Life preset after a golden re-record; (b) only subsistence presets; (c) today's reserve | **(a)** | A study of the reserve as a fiscal institution: (c) per preset |
 | **U23** (v2) | Soil fertility | (a) on (−0.1 per harvest, floor 0.7; rotation removes the loss); (b) off | **(a)**: gives rotation its payoff and makes fallowing a choice | Agents cannot read fertility: show it in the plot line, or (b) |
