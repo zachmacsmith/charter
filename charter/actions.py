@@ -312,7 +312,7 @@ def _anon_post(k, aid, text):
 def _dm(k, aid, to, text, encrypted=False):
     _dm_check(k, aid, to, encrypted)
     eid = _deliver(k, aid, to, text, encrypted)
-    return f"Message sent to {to} ({eid})."
+    return f"Message sent to {to} ({eid})." + _dm_left_note(k, aid)
 
 
 def _dm_check(k, aid, to, encrypted=False):
@@ -327,7 +327,15 @@ def _dm_check(k, aid, to, encrypted=False):
         _need(k, aid, "encrypt", "send encrypted messages")
     used, lim = k.w["dm_sent"].get(aid, 0), k.dm_limit(aid)
     if used >= lim:
-        raise ActionError(f"you have sent your {lim} private messages for this round (the limit is set by holders of dm_rules or by law)")
+        raise ActionError(f"you have sent your {lim} private messages for this round: 0 left, so every further dm or reply this round "
+                          "will fail too; the count resets next round (the limit is set by holders of dm_rules or by law)")
+
+
+def _dm_left_note(k, aid) -> str:
+    """Said after a DM that used the sender's last one this round (the haiku runs: agents kept retrying past the limit)."""
+    if k.w["dm_sent"].get(aid, 0) >= k.dm_limit(aid):
+        return " That was your last private message this round (0 left): further dm or reply calls this round will fail."
+    return ""
 
 
 def _deliver(k, aid, to, text, encrypted=False, extra=None):
@@ -413,7 +421,7 @@ def _reply(k, aid, message, text, item=None, qty=None, encrypted=False):
     if pay:
         _send(k, aid, true, item, qty, extra=mark)
     eid = _deliver(k, aid, true, text, encrypted, {**mark, **({"payment": {"item": item, "qty": float(qty)}} if pay else {})})
-    return f"Replied to {shown} ({eid})" + (f" and sent {float(qty):g} {item}" if pay else "") + "."
+    return f"Replied to {shown} ({eid})" + (f" and sent {float(qty):g} {item}" if pay else "") + "." + _dm_left_note(k, aid)
 
 
 def forge_message(k, sender, shown_as, to, text, cost=None, source="observer"):
@@ -610,9 +618,11 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
             k.w["laws"][lid]["status"] = "failed_check"                # the dry run restored a copy of the world: not `law`
             k.log("proposal_check_failed", aid, {"law": lid, "error": str(e)}, vis=[aid])
             raise ActionError(f"your law failed the 3-round dry run: {e}")
+    from charter.dispatch.changes import legal as LG
+    note = LG.similar_note(k, lid)                                     # law.v2: an identical active or pending law is noted
     k.apply("propose", jurisdiction=None, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
-    return f"Proposed {lid} '{law['title']}' ({law['cls']}); status: {k.w['laws'][lid]['status']}."
+    return f"Proposed {lid} '{law['title']}' ({law['cls']}); status: {k.w['laws'][lid]['status']}.{note}"
 
 
 def _amend(k, aid, law, code, reason="", intent=None):

@@ -157,6 +157,8 @@ V2_SEAMS = {
     "dispatch.changes.legal:draft": "the draft's rank is the code's declared one, and it carries imports, exports, amends and the "
                                     "validity window (off: statute, none of these)",
     "dispatch.changes.legal:do_propose": "the draft's rank is recorded on the law (P3.2)",
+    "dispatch.changes.legal:similar_laws": "active or pending laws with the same normalised code are found, so a proposal's result "
+                                           "and event note them (off: none, never blocked)",
     "dispatch.changes.legal:do_enact": "a law enacted without a proposal records its declared rank; a constitution's declared "
                                        "conflict_rule is set",
     "dispatch.changes.legal:do_rule": "courts v2 (courts.change_rule: panels, remedies, appeals; off: the v1 verdict and penalty)",

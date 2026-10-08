@@ -1,6 +1,6 @@
 {
  "E2_library2_6": {
-  "events.jsonl": "548369eaccd94788",
+  "events.jsonl": "f72ec8035adf7a02",
   "instance.json": "15d2f5f714d45d9c",
   "score": {
    "activity_mix": "3c100a18e670cde0",
@@ -104,7 +104,7 @@
   "snapshots.json": "43a184203bf1a101"
  },
  "E4_observer_hidden_4": {
-  "events.jsonl": "a6551ee0e3d67e0e",
+  "events.jsonl": "a6ee9236088e8a85",
   "instance.json": "9091bf7e980f8800",
   "score": {
    "activity_mix": "8a73c4ca89d98b91",
@@ -254,28 +254,28 @@
   "snapshots.json": "85b8781150e80512"
  },
  "contracts_small": {
-  "events.jsonl": "a8d51cae988a360d",
+  "events.jsonl": "785e44f65f333f60",
   "instance.json": "17f501a5d69f08f0",
   "score": {
-   "activity_mix": "34f8de16d7aed78e",
-   "agents": "abf18d2d206bf9dd",
+   "activity_mix": "081f20e989281a5f",
+   "agents": "871f2df460801e26",
    "goal_scores": {
     "Bruna": 0.1528,
     "Iris": 0.8941,
     "Maya": 0.2889,
-    "Oda": 0.2822,
-    "Petra": 0.1208,
+    "Oda": 0.2826,
+    "Petra": 0.1181,
     "Rakel": 0.4529,
     "Siv": 0.3,
     "Valter": 0.3,
     "Wanda": 0.0,
     "Yuri": 0.0436
    },
-   "goals": "5f9c2b03b4f355ad",
+   "goals": "aeca8ce8372eb5cd",
    "lineage": "74234e98afe7498f",
-   "summary": "6444298c274f52b2"
+   "summary": "46d1c55fd57e5951"
   },
-  "snapshots.json": "a1705b868ec5eafa"
+  "snapshots.json": "b09d8fb5334d49bf"
  },
  "prompts_E4_1": {
   "Abel": {
@@ -372,123 +372,123 @@
  "prompts_society_5": {
   "Ada": {
    "core": "6d04ae5f28cef965",
-   "manual": "6244cb8596381be3",
-   "manual_base": "82d8bb371a110075"
+   "manual": "a2e046bb14a3447d",
+   "manual_base": "efa1c0770743ca52"
   },
   "Arlo": {
    "core": "be3d468a2ba02f6a",
-   "manual": "58245006e92b8a1b",
-   "manual_base": "60cd212c71d1fa3c"
+   "manual": "4e647eb0d10ce104",
+   "manual_base": "69d8d91f274e7d2c"
   },
   "Basil": {
    "core": "b8517d92a315cfce",
-   "manual": "0ad55a5407390848",
-   "manual_base": "d7da35d697c3a2b4"
+   "manual": "3d16054d9f2abb51",
+   "manual_base": "2071c422cecd75f3"
   },
   "Bram": {
    "core": "c5bd1f9fcf48685f",
-   "manual": "f0e6656c23ce9c40",
-   "manual_base": "432a5952b46ffdf5"
+   "manual": "88d63c62c6012a50",
+   "manual_base": "55a749ce5fa2fea8"
   },
   "Cora": {
    "core": "a445f5c2eb8db857",
-   "manual": "adb8f0d9aee0cdf3",
-   "manual_base": "391117cca39418f2"
+   "manual": "f96cfef008378230",
+   "manual_base": "a3987a8f733ee1d5"
   },
   "Edda": {
    "core": "73a6fd549c681543",
-   "manual": "2989e725910055c8",
-   "manual_base": "0fcfd88148a4e36a"
+   "manual": "10c68242b4e86579",
+   "manual_base": "86eae3d988b5680e"
   },
   "Eira": {
    "core": "c88b5ba8c3bb0cfa",
-   "manual": "b41b609fe02223d6",
-   "manual_base": "ca7787dd8b5c373c"
+   "manual": "167109ec3599de2e",
+   "manual_base": "50fe88950d19fbd0"
   },
   "Finn": {
    "core": "62c6ce424a61c91c",
-   "manual": "a15121a9dd3dfb44",
-   "manual_base": "f2df9e29c474be3a"
+   "manual": "4badf287760dacf0",
+   "manual_base": "1f82a5a7de11c06d"
   },
   "Gil": {
    "core": "6be7cadbc4284c52",
-   "manual": "26ad50ab7884fb47",
-   "manual_base": "6e1cb59e43b9d434"
+   "manual": "926e43ad1d2226fc",
+   "manual_base": "df51f42565b86cfc"
   },
   "Hana": {
    "core": "863a2638fc3649de",
-   "manual": "a64d96a9577fc21f",
-   "manual_base": "cf752487d8ba4389"
+   "manual": "9f92b081cbaa42e6",
+   "manual_base": "e842bf1472827157"
   },
   "Juno": {
    "core": "ba6ab0631028a2f7",
-   "manual": "7059d6e87a51b25b",
-   "manual_base": "ff56c7496e15e5cf"
+   "manual": "0ae6a362c67eec02",
+   "manual_base": "62c0a3c7ea159abc"
   },
   "Nadia": {
    "core": "64bc79a51d3e1e25",
-   "manual": "cae5a21b7a5cbc21",
-   "manual_base": "b85b28dd3a323706"
+   "manual": "fdd55d712871015c",
+   "manual_base": "3ff60acd55f976fb"
   },
   "Oda": {
    "core": "dda0300fb7221172",
-   "manual": "2c62cd82c108ef08",
-   "manual_base": "e9e02b2ba5fc6da7"
+   "manual": "f463bc018ae6b662",
+   "manual_base": "50c0a928b2eea22c"
   },
   "Odette": {
    "core": "b5a6524c2f42c58f",
-   "manual": "005fd8badfdc416e",
-   "manual_base": "5883583a6d887406"
+   "manual": "73c56e04f5e48c47",
+   "manual_base": "d0639a841e16db2b"
   },
   "Per": {
    "core": "0d494824a7dfaa36",
-   "manual": "67b3626b3db2acbe",
-   "manual_base": "e8f54d4ad037600e"
+   "manual": "16e42d0c4864cfaf",
+   "manual_base": "b20df20ef05c7e22"
   },
   "Rosa": {
    "core": "b1f6b9560a4b8c16",
-   "manual": "69bdf46d1c4784eb",
-   "manual_base": "98a4c770c43d1ccd"
+   "manual": "757a8cf6e2030a20",
+   "manual_base": "0d177134039e9a32"
   },
   "Runa": {
    "core": "9cf02759a7bc33a7",
-   "manual": "717707ff3c8817ff",
-   "manual_base": "fd2d7cbab6e78e15"
+   "manual": "8d847b10aae696cf",
+   "manual_base": "21dc10d084354ab1"
   },
   "Soren": {
    "core": "0e00e0331b8a230b",
-   "manual": "9514bc3e495a5509",
-   "manual_base": "efbd5ddcbdfcd831"
+   "manual": "7428cf61c0b5d9b8",
+   "manual_base": "f2d5fe26a1e01fbf"
   },
   "Unni": {
    "core": "fc7d686938934b9d",
-   "manual": "21b5535529b9423b",
-   "manual_base": "6117493cbf7909df"
+   "manual": "195373e90b396c5b",
+   "manual_base": "49932ba056fafddd"
   },
   "Vik": {
    "core": "57aa85f68dc41ef7",
-   "manual": "38e21a63d9aa0258",
-   "manual_base": "0e174f5fd8fbd5aa"
+   "manual": "1c0e3908c701877f",
+   "manual_base": "7c5e95d066d14d7a"
   },
   "Yusuf": {
    "core": "5accebc0888fa4a4",
-   "manual": "89eb69a786c3ec50",
-   "manual_base": "2792564fef22f144"
+   "manual": "1f743d961eb0e368",
+   "manual_base": "f7b63f16bd4931dc"
   },
   "Yva": {
    "core": "3c82279d0a136adb",
-   "manual": "41579d1986a7101d",
-   "manual_base": "d44869f6be80e4ba"
+   "manual": "f422444999518f95",
+   "manual_base": "e84cc6f18825f7ff"
   },
   "Zeno": {
    "core": "41e7d85a4a6d37d4",
-   "manual": "9528dd5fa62848bc",
-   "manual_base": "0192254c4130e9a7"
+   "manual": "3ac364d872121b54",
+   "manual_base": "f744ec3500a7302d"
   },
   "Zora": {
    "core": "ddaa8fee820f9ba0",
-   "manual": "715b979fcc350c1a",
-   "manual_base": "d17a34830d1d60e0"
+   "manual": "aa0d14986592e378",
+   "manual_base": "f294dd0cbe57cc38"
   }
  },
  "society_law_v2": {

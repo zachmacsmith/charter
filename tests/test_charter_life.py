@@ -576,3 +576,46 @@ def test_maker_create_agent_without_order_makes_own_child():
     assert "Made the agent" in out
     c = max(LF.state(k)["commissions"].values(), key=lambda c: int(c["id"][1:]))
     assert c["parent"] == maker and c["final"]["goal"] == "Eliminator" and c["status"] == "waiting"
+
+
+# ---------------------------------------------------------------------- lifespans under a shortened run
+def test_shortening_a_run_does_not_compress_lifespans():
+    """society (40 rounds, full_scale_rounds 60) cut to 20 rounds: lifespans are scaled for the preset's 40 rounds, not for 20, so the
+    founders do not all die of old age by round 14 (the haiku runs: 23 of 24 founders dead in rounds 8-13)."""
+    sp = S.apply_overrides(S.load("society"), ["rounds=20", "shared_archive.enabled=false"])
+    assert sp["life"]["design_rounds"] == 40
+    k = Kernel(generator.generate(sp, 1))
+    spans = k.w["life"]["lifespan"]
+    assert not all(v < 14 for v in spans.values())
+    native = Kernel(generator.generate(S.apply_overrides(S.load("society"), ["shared_archive.enabled=false"]), 1))
+    assert spans == native.w["life"]["lifespan"]                 # the same lives as the full-length run
+    assert "design_rounds" not in native.spec["life"]
+    sp = S.apply_overrides(S.load("grand35"), ["rounds=30", "shared_archive.enabled=false"])
+    spans = Kernel(generator.generate(sp, 1)).w["life"]["lifespan"]
+    assert statistics.mean(spans.values()) > 20                  # mean 30 (sd 15), not ~9
+
+
+def test_explicit_full_scale_override_keeps_plain_scaling():
+    sp = S.apply_overrides(S.load("society"), ["rounds=4", "life.full_scale_rounds=8", "shared_archive.enabled=false"])
+    assert "design_rounds" not in sp["life"]
+    k = Kernel(generator.generate(sp, 1))
+    assert max(k.w["life"]["lifespan"].values()) <= 25           # [30, 50] x 4/8
+    sp = S.apply_overrides(S.load("E2"), ["rounds=4"])           # Life off: the spec is untouched
+    assert "life" not in sp
+
+
+# ---------------------------------------------------------------------- commission: the fields and the price, explained
+def test_commission_unknown_field_suggests_the_closest_and_short_price_explains_extras():
+    from charter import action_registry as AR_
+    inst, k = world()
+    maker = LF.living_makers(k)[0]
+    parent = plain(k)[0]
+    _give(k, parent, timber=40, gold=0)
+    with pytest.raises(A.ActionError, match=r"unknown spec fields: starting_holdings .*did you mean starting_holdings -> holdings"):
+        A.act(k, parent, "commission", {"maker": maker, "spec": {"goal": "Wealth", "starting_holdings": {"timber": 1}}})
+    assert LF.closest_spec_field("goals") == "goal" and LF.closest_spec_field("zzz") is None
+    with pytest.raises(A.ActionError, match=r"short of .* gold.*extras \(model tier mid\) are paid in gold.*base price only"):
+        A.act(k, parent, "commission", {"maker": maker, "spec": {"goal": "Wealth", "stats": {"tier": "mid"}}})
+    assert "K1" in A.act(k, parent, "commission", {"maker": maker, "spec": {"goal": "Wealth"}})   # no stats: the base price only
+    doc = AR_.REG["commission"].doc
+    assert "no others" in doc and "leave stats out" in doc and '"tier": "mid"' not in doc

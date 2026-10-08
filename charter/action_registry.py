@@ -374,7 +374,7 @@ R("forge_dm", "send a message that looks like someone else's", "FORCE", core=Tru
 # lineage
 R("commission", "order a child from a Maker: heirs, helpers", "LINEAGE", core=True, needs=("mod:life",), when=_k_maker_exists,
   handler="actions:_commission", module="life", category="economic", emits=("commission",),
-  doc='commission {"maker": "Name", "spec": {"goal": "Wealth", "secondary": null, "traits": {"honesty": 0.8}, "archetype": null, "persona": "...", "letter": "...", "holdings": {"timber": 5}, "files": [], "stats": {"tier": "mid", "actions": 0, "lifespan": 0, "scratchpad": 0, "attack": 0, "defense": 0, "lookups": 0}, "timing": "next_round"}, "payment": {"timber": 2}}: order a new agent (your child) from a Maker; the price and the fee (payment) are held until it is made. Omitted fields default to your own goals and traits (a Mirror or fixed goal cannot be copied: then name one); "timing": "on_death" has it born when you leave')
+  doc='commission {"maker": "Name", "spec": {"goal": "Wealth", "traits": {"honesty": 0.8}, "persona": "...", "letter": "...", "holdings": {"timber": 5}, "timing": "next_round"}, "payment": {"timber": 2}}: order a new agent (your child) from a Maker. spec fields, all optional and no others: goal, secondary (goal names), traits {trait: 0..1}, archetype, cls (worker|scientist|legislator|media), persona and letter (text), holdings {item: qty} (a gift from your own holdings at birth, not part of the price), files [your file names], stats {tier, actions, lifespan, scratchpad, attack, defense, lookups}, timing (next_round|on_death: born when you leave). Price: a default child costs the base price, paid in the base good; each stat above the default (a stronger model tier, extra actions, rounds of life, ...) adds extras paid in the extras good (gold unless set): leave stats out to pay the base price only (the Life section of your manual lists the prices). payment is the Maker\'s fee (any items). Price and fee are held until it is made. Omitted goals and traits default to your own (a Mirror or fixed goal cannot be copied: then name one)')
 # your role's other tools (niche)
 R("copy_agent", "make a copy of an agent (Makers)", "inheritance", needs=("mod:life", "right:maker"),
   handler="life:copy_agent", module="life", category="productive",
@@ -448,7 +448,9 @@ R("anon_post", "speak publicly without your name", "press", needs=("right:anon",
   doc='anon_post {"text": "..."}: $anon_post_where (needs the anon right; nobody holds it at the start)')
 R("library_read", "read a library document", "press", needs=("mod:media2",), when=_k_scholar,
   handler="scholars:library_read", module="scholars", category="productive", emits=("library_read",),
-  doc='library_read {"scholar": "Name", "doc": null}: a Scholar\'s catalogue (doc null) or a document you may read')
+  aliases={"name": "doc", "title": "doc", "document": "doc", "id": "doc", "doc_id": "doc", "law": "doc", "query": "doc",
+           "library": "scholar", "owner": "scholar", "aid": "scholar"},
+  doc='library_read {"scholar": "Name", "doc": "D3"}: read a document in a Scholar\'s library: "scholar" is the Scholar who keeps it (required unless there is one Scholar or doc names a document in one library); "doc" is a document id (D3) or its exact title; leave doc out for the catalogue of what you may read. Laws in force are read with read_law, not here')
 R("library_deposit", "store a text in a Scholar's library", "press", needs=("mod:media2",), when=_k_scholar,
   handler="scholars:library_deposit", module="scholars", category="talk", emits=("library_deposit",),
   doc='library_deposit {"scholar": "Name", "title": "...", "text": "..."}: deposit a document under your name in a Scholar\'s library (it cannot be edited)')

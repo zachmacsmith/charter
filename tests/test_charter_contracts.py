@@ -407,13 +407,43 @@ def test_club_dues_from_allowances_breaches_and_payout():
     give(k, b, "grain", 10)
     A.act(k, a, "set_allowance", {"contract": cid, "item": "grain", "qty": 1})
     A.act(k, b, "join_contract", {"contract": cid})
-    next_round(k)                                                       # round 1: a pays, b has no allowance (a breach)
-    assert k.bal(f"assoc:{cid}", "grain") == 1 and [x["member"] for x in rec(k, cid)["breaches"]] == [b]
-    next_round(k)                                                       # round 1's end: the payout (to a alone); round 2: b misses
-    assert rec(k, cid)["leaving"] == {b: "expelled"}                    # again: expelled, out at the end of the round
+    next_round(k)                                                       # round 1: a pays; b's grace round (told how to pay)
+    assert k.bal(f"assoc:{cid}", "grain") == 1 and rec(k, cid)["breaches"] == []
+    assert any(e["type"] == "notify" and e["data"]["to"] == b and "set_allowance" in e["data"]["text"] for e in k.events)
+    next_round(k)                                                       # round 1's end: the payout (to a alone: b never paid); round 2: b misses
+    assert [x["member"] for x in rec(k, cid)["breaches"]] == [b] and "set_allowance" in rec(k, cid)["breaches"][0]["remedy"]
     assert k.bal(a, "grain") == 9 and k.bal(f"assoc:{cid}", "grain") == 1
+    next_round(k)                                                       # round 3: b misses again: expelled
+    assert rec(k, cid)["leaving"] == {b: "expelled"}
     next_round(k)
     assert b not in rec(k, cid)["members"] and k.bal(b, "grain") == 10
+
+
+def test_club_founder_gets_a_grace_round_and_is_never_expelled():
+    """The haiku runs: a club founded in round 0 breached its founder in round 1 (before any turn to set an allowance) and expelled
+    them in round 2, dissolving the club."""
+    k = make()
+    a = people(k)[0]
+    cid = found(k, a, template="club", params={"ITEM": "grain", "DUES": 1, "MISSES": 2})
+    next_round(k)                                                       # round 1: grace, no breach
+    assert rec(k, cid)["breaches"] == []
+    for _ in range(4):
+        next_round(k)
+    r = rec(k, cid)
+    assert a in r["members"] and r["status"] == "active" and a not in r["leaving"]
+    assert r["breaches"] and all("founder is not expelled" in x["remedy"] for x in r["breaches"])
+
+
+def test_cartel_founder_is_not_expelled_for_a_short_bond():
+    k = make()
+    a, b = people(k)[:2]
+    cid = found(k, a, template="cartel", params={"BOND": 2})
+    A.act(k, b, "join_contract", {"contract": cid})
+    for _ in range(3):
+        next_round(k)
+    r = rec(k, cid)
+    assert a in r["members"] and r["leaving"].get(a) is None
+    assert b not in r["members"] or r["leaving"].get(b) == "expelled"
 
 
 def test_company_cut_shares_and_dividends():

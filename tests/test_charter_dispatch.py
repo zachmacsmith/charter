@@ -23,7 +23,10 @@ FIXTURE = Path(__file__).parent / "fixtures" / "charter_dispatch_hooks.json"
 
 HOOK_LAWS = ['start_laws=["Harvest Levy", "Transfer Tax", "Bribery Disclosure", "Moderation", "Open Data", "Research Grant", '
              '"Communications Act", "Poll Tax", "Universal Dividend"]', "conditions.law_reads_dms=true"]
-PRESET_CASES = {"E4": ("E4", ()), "society": ("society", ()), "society_hooks": ("society", tuple(HOOK_LAWS))}
+# society's own full_scale_rounds, given explicitly: the recorded runs predate life.design_rounds (a 3-round run of society now keeps
+# its 40-round lifespans unless the overrides set the scaling), and this fixture is about the hook sequence, not the lifespans
+_SCALE = ("life.full_scale_rounds=60",)
+PRESET_CASES = {"E4": ("E4", ()), "society": ("society", _SCALE), "society_hooks": ("society", tuple(HOOK_LAWS) + _SCALE)}
 
 
 def _plain(x):

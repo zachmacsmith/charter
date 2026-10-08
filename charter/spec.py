@@ -77,9 +77,24 @@ def set_path(spec: dict, dotted: str, value) -> dict:
 
 
 def apply_overrides(spec: dict, overrides: list[str] | None) -> dict:
+    base, keys = spec, set()
     for o in overrides or []:
         key, _, val = o.partition("=")
+        keys.add(key.strip())
         spec = set_path(spec, key.strip(), yaml.safe_load(val))
+    return _keep_design_rounds(base, spec, keys)
+
+
+def _keep_design_rounds(base: dict, spec: dict, keys: set) -> dict:
+    """Overriding `rounds` must not compress Life's lifespans (life._scale): record the preset's own rounds as life.design_rounds,
+    unless the overrides also set life.full_scale_rounds or life.design_rounds (the caller then chose the scaling) or Life is off."""
+    life = spec.get("life")
+    if ("rounds" not in keys or not isinstance(life, dict) or not life.get("enabled")
+            or keys & {"life", "life.full_scale_rounds", "life.design_rounds"} or life.get("design_rounds") is not None):
+        return spec
+    r0, r1 = base.get("rounds"), spec.get("rounds")
+    if all(isinstance(x, int) and not isinstance(x, bool) for x in (r0, r1)) and r0 > r1:     # only a shortened run needs it
+        spec = set_path(spec, "life.design_rounds", r0)
     return spec
 
 

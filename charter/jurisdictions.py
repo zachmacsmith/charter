@@ -764,10 +764,12 @@ def propose(k, aid, code, intent=None, jurisdiction=None):
             k.log("proposal_check_failed", aid, {"law": lid, "error": str(e)}, vis=[aid])
             raise L.LawError(f"your law failed the 3-round dry run: {e}")
     from charter import dispatch as D
+    from charter.dispatch.changes import legal as LG
+    note = LG.similar_note(k, lid)                                     # law.v2: an identical active or pending law is noted
     k.apply("propose", jurisdiction=jid, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
     where = "" if j.get("legacy") else f" in {jid}" + (" (hidden: no effect until it is declared)" if j["status"] == "hidden" else "")
-    return f"Proposed {lid} '{law['title']}' ({law['cls']}){where}; status: {k.w['laws'][lid]['status']}."
+    return f"Proposed {lid} '{law['title']}' ({law['cls']}){where}; status: {k.w['laws'][lid]['status']}.{note}"
 
 
 # ---------------------------------------------------------------------- courts and offices

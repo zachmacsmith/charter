@@ -296,6 +296,25 @@ def test_scholars_sell_memory_with_caps():
     assert k.w["file_space"][buyer] == 5000
 
 
+def test_library_read_aliases_titles_and_a_clear_error():
+    """The haiku runs: library_read {"name": ...} / {"law": ...} without the required scholar failed with a Python signature error."""
+    k = make()
+    s = SC.scholars(k)[0]
+    a, b = plain(k)[:2]
+    did = act(k, a, "library_deposit", scholar=s, title="Conflict of Interest", text="Declare your stakes.").split()[1]
+    assert "Declare your stakes." in A.act(k, b, "library_read", {"name": "Conflict of Interest"})           # title, no scholar
+    assert "Declare your stakes." in act(k, b, "library_read", scholar=s, law="conflict of interest")
+    assert "Declare your stakes." in act(k, b, "library_read", library=s, title=did)
+    assert f"{s}'s library" in A.act(k, b, "library_read", {"name": s})                                       # a Scholar's name: the catalogue
+    with pytest.raises(A.ActionError, match="no document Nope .*read_law"):
+        act(k, b, "library_read", scholar=s, doc="Nope")
+    if len(SC.scholars(k)) > 1:
+        with pytest.raises(A.ActionError, match='library_read needs "scholar"'):
+            act(k, b, "library_read", doc="Nope")
+    else:
+        assert f"{s}'s library" in act(k, b, "library_read")
+
+
 def test_library_permissions_removal_and_bequest():
     k = make()
     s = SC.scholars(k)[0]

@@ -267,10 +267,12 @@ def _new(cid, name, founder, r, template, params, admission, procedure) -> dict:
 _SCHEDULE = LB.ref("Schedule")
 _LEDGER = LB.ref("Ledger")
 TEMPLATES = {
-    "club": {"admission": "open", "procedure": "members", "doc": "dues from each member's allowance every round; the pool is shared "
-             "among members in good standing every few rounds; a member who misses payments is expelled", "code": f'''
+    "club": {"admission": "open", "procedure": "members", "doc": "dues of ITEM (grain unless set) from each member's allowance every "
+             "round, starting the round after the member's first full turn as a member (set_allowance with the same item first); "
+             "the pool is shared among members in good standing every few rounds; a member (not the founder) who misses MISSES "
+             "payments in a row is expelled", "code": f'''
 title = "Club"
-intent = "Members pay DUES of ITEM each round from their allowance (set_allowance); every PAYOUT_EVERY rounds the pool is shared equally among members in good standing. A member who misses MISSES payments in a row is expelled."
+intent = "Members pay DUES of ITEM each round from their allowance (set_allowance, in ITEM); a new member's first round is a grace round (no dues are missed before the member has had a turn to set the allowance). Every PAYOUT_EVERY rounds the pool is shared equally among members in good standing. A member who misses MISSES payments in a row is expelled; the founder is never expelled, but gets no payout while in arrears."
 ITEM = "grain"
 DUES = 1
 PAYOUT_EVERY = 3
@@ -279,19 +281,30 @@ sched = use("{_SCHEDULE}")
 
 def on_round_start(r):
     missed = state.setdefault("missed", {{}})
+    since = state.setdefault("since", {{}})
+    founder = contract_state(jurisdiction())["founder"]
+    how = "set_allowance {{contract: " + jurisdiction() + ", item: " + ITEM + ", qty: " + str(DUES) + "}}"
     for m in members():
+        first = m not in since
+        if first:
+            since[m] = r
         if pull(m, ITEM, DUES):
             missed[m] = 0
+        elif first:
+            notify(m, "Club " + jurisdiction() + ": dues of " + str(DUES) + " " + ITEM + " per round are due from next round on; " + how + " to pay them")
         else:
             missed[m] = missed.get(m, 0) + 1
-            breach(m, "dues", "missed " + str(missed[m]) + " of " + str(MISSES) + " allowed")
-            if missed[m] >= MISSES:
-                expel(m)
+            if m == founder:
+                breach(m, "dues", "missed " + str(missed[m]) + " (the founder is not expelled; no payout while in arrears); " + how)
+            else:
+                breach(m, "dues", "missed " + str(missed[m]) + " of " + str(MISSES) + " allowed; " + how)
+                if missed[m] >= MISSES:
+                    expel(m)
 
 def on_round_end(r):
     if not sched["every"](r + 1, PAYOUT_EVERY):
         return
-    good = [m for m in members() if state.get("missed", {{}}).get(m, 0) == 0]
+    good = [m for m in members() if state.get("missed", {{}}).get(m, 1) == 0]
     pool = balance(treasury(), ITEM)
     if good and pool > 0:
         for m in good:
@@ -370,9 +383,10 @@ def on_round_end(r):
         gazette("Not funded (" + str(round_to(total, 2)) + " of " + str(TARGET) + " " + ITEM + "): every pledge was refunded")
 '''},
     "cartel": {"admission": "open", "procedure": "members", "doc": "members' harvests above a quota go to a pool shared equally "
-               "every round; members post a bond in escrow and forfeit a penalty from it when they sell to outsiders", "code": '''
+               "every round; members post a bond in escrow and forfeit a penalty from it when they sell to outsiders; a member "
+               "(not the founder) whose bond is short at the end of the round after joining is expelled", "code": '''
 title = "Cartel"
-intent = "Members harvest at most QUOTA per round: anything above it goes to the cartel's pool, shared equally among members at the end of each round. Members keep a bond of BOND BOND_ITEM in escrow (deposit_escrow); a member who sells ITEM to an outsider forfeits PENALTY of the bond to the pool, and a member whose bond is short after its first round is expelled."
+intent = "Members harvest at most QUOTA per round: anything above it goes to the cartel's pool, shared equally among members at the end of each round. Members keep a bond of BOND BOND_ITEM in escrow (deposit_escrow); a member who sells ITEM to an outsider forfeits PENALTY of the bond to the pool, and a member (other than the founder) whose bond is short at the end of the round after the one it joined in is expelled."
 ITEM = "grain"
 QUOTA = 3
 BOND_ITEM = "grain"
@@ -399,12 +413,21 @@ def on_transfer(src, dst, item, qty):
 
 def on_round_end(r):
     joined = state.setdefault("joined", {})
+    founder = contract_state(jurisdiction())["founder"]
+    how = "deposit_escrow {contract: " + jurisdiction() + ", item: " + BOND_ITEM + ", qty: " + str(BOND) + "}"
     for m in members():
         if m not in joined:
             joined[m] = r
+            if escrow_of(m).get(BOND_ITEM, 0) < BOND:
+                notify(m, "Cartel " + jurisdiction() + ": your bond is due by the end of next round; " + how)
         elif escrow_of(m).get(BOND_ITEM, 0) < BOND:
-            breach(m, "bond", "expelled")
-            expel(m)
+            if m == founder:
+                if not state.get("founder_short"):
+                    state["founder_short"] = True
+                    breach(m, "bond", "short (the founder is not expelled); " + how)
+            else:
+                breach(m, "bond", "expelled; " + how)
+                expel(m)
     ms = members()
     for item, q in sorted(reserve().items()):
         for m in ms:
