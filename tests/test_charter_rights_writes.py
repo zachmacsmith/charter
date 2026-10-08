@@ -40,7 +40,7 @@ EXCEPTIONS = {
     ("events.py", "h_camp_discovered"): "P2.4b: a discovered camp's harvest right (create_right + grant_right, no rights event today)",
     ("mortality.py", "_disable.lapse"): "P2.4b: a dead agent's rights cleared (end_life)",
     ("mortality.py", "take_seat"): "P2.4b: a Board seat's successor (appoint: the class and rights change together)",
-    ("life.py", "ensure_maker"): "P2.4b: the Maker role's right (set_role)",
+    ("life.py", "_name_maker"): "P2.4b: the Maker role's right (set_role; ensure_maker and the S0 refill)",
     ("interventions.py", "_grant"): "P5.x: an intervention's grant (its own logged op)",
     ("interventions.py", "_revoke"): "P5.x: an intervention's revoke (its own logged op)",
 }
