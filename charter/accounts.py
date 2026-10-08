@@ -50,7 +50,9 @@ SOURCES_SINKS = {
     "burn": ("dispatch.do_burn", "interventions._burn"),
     "destroy": ("dispatch.do_destroy", "actions._harvest", "framework.harvest_action", "resources.pay",
                 "resources.upkeep_start_round", "conflict._take", "conflict._spoils", "conflict.act_forge",
-                "conflict.act_fortify", "conflict.act_buy_initiative"),                 # consumed, spent, destroyed or converted
+                "conflict.act_fortify", "conflict.act_buy_initiative",                  # consumed, spent, destroyed or converted
+                "conflict.fort_change", "dispatch.do_convert", "conflict.commit", "conflict.pledge",
+                "conflict._release_pledge"),        # P2.4a: stone into and out of forts, forging, weapons committed/pledged/returned
 }
 
 

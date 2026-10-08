@@ -339,7 +339,8 @@ def test_lease_law_functions_are_registered_and_documented():
     from charter import lawdocs as LD
     assert {"set_lease_rules", "leases"} <= L.API and {"set_lease_rules", "leases"} <= set(LD.ENTRIES)
     k = HN.world(["tutorial"])
-    assert set(k.api_for("L0")) == L.API
+    from charter import lawapi as LA
+    assert set(k.api_for("L0")) == L.API - LA.V2_ONLY                # law.v2-only functions are absent when v2 is off
     assert "set_lease_rules" in LD.resolve(k.spec)["mapping"]
     assert "set_lease_rules" not in LD.resolve(S.load("base"))["mapping"]   # legacy worlds document exactly what they did
 

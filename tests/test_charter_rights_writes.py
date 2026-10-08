@@ -19,6 +19,9 @@ MUTATORS = {"append", "remove", "extend", "sort", "insert", "clear", "pop", "rev
 
 # (file relative to charter/, qualname) -> why the write is not (yet) through grant_right/revoke_right/create_right
 EXCEPTIONS = {
+    ("events.py", "leave_world"): "a departure (end_life cause departure, P2.4b): the agent leaves play with its rights cleared, as "
+                                  "today's depart did; recorded in the departure event, not a law's grant or revocation",
+    ("lawpreview.py", "_procedure"): "the previewer lends the propose right for one call inside a transaction that is undone (P3.5)",
     # world generation: instance dicts before any kernel exists (no k.w, nothing to log)
     ("generator.py", "generate"): "generation: the instance's agents (no kernel yet)",
     ("generator.py", "validate"): "generation: the instance's repairs (no kernel yet)",
