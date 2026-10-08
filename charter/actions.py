@@ -481,11 +481,13 @@ def _pay_tribute(k, aid, item, qty):
     return f"Paid {took:g} {item} toward tribute {t['id']}" + (" (now paid in full)." if t["status"] == "met" else ".")
 
 
-def _transfer(k, aid, to, item, qty):
-    return _send(k, aid, to, item, qty)
+def _transfer(k, aid, to, item, qty, memo=None):
+    if memo is not None and not D.v2(k):                               # W6a: a purpose memo exists only under law.v2 (off: as before)
+        raise TypeError("_transfer() got an unexpected keyword argument 'memo'")
+    return _send(k, aid, to, item, qty, memo=memo)
 
 
-def _send(k, aid, to, item, qty, extra=None):
+def _send(k, aid, to, item, qty, extra=None, memo=None):
     qty = float(qty)
     if to not in k.w["agents"] or to == aid:
         raise ActionError(f"unknown recipient {to}")
@@ -493,11 +495,17 @@ def _send(k, aid, to, item, qty, extra=None):
         raise ActionError("qty must be positive")
     if not AC.can_pay(k, aid, item, qty):                              # accounts: the sender's balance cap
         raise ActionError(f"you have only {k.bal(aid, item):g} {item}")
-    out = k.apply("move", src=aid, dst=to, item=item, qty=qty, why="transfer", actor=aid)   # on_transfer may block or tax it
+    memo = D.memo_text(memo)                                           # W6a: law.v2's purpose memo (None: none, as before)
+    if memo is not None:
+        out = k.apply("move", src=aid, dst=to, item=item, qty=qty, why="transfer", memo=memo, actor=aid)
+        extra = {**(extra or {}), "memo": memo}                        # the transfer events carry it (their visibility)
+    else:
+        out = k.apply("move", src=aid, dst=to, item=item, qty=qty, why="transfer", actor=aid)   # on_transfer may block or tax it
     if not out.ok:
         k.w["effects"]["blocked_transfers"] += 1
-        k.log("transfer_blocked", aid, {"to": to, "item": item, "qty": qty, **(extra or {})}, vis=[aid, to])
-        raise ActionError("a law blocked this transfer")
+        k.log("transfer_blocked", aid, {"to": to, "item": item, "qty": qty, **(extra or {}),
+                                        **({"by": list(out.blocked_by), "reason": out.reason} if out.reason else {})}, vis=[aid, to])
+        raise ActionError("a law blocked this transfer" + (f" (law {', '.join(out.blocked_by)}: {out.reason})" if out.reason else ""))
     tax = out.result["charged"]                                        # paid to each taxing law's treasury (accounts; "reserve" when off)
     v = k._v(item)
     k.w["effects"]["transfer_qty"] += qty * v
@@ -726,12 +734,18 @@ def _invoke(k, aid, action, args=None):
     if J.enabled(k):                                                   # jurisdictions: an office serves only its own members
         J.check_invoke(k, aid, a["law"])
     lid, fn = k.fnreg[a["fn"]]
+    if not D.in_force(k, lid):                                         # W6a (law.v2): its law is outside its declared window
+        lo, hi = D.window_of(k, lid)
+        raise ActionError(f"{action}: law {lid} is not in force this round (in force from round {lo if lo is not None else 0}"
+                          + (f" to round {hi}" if hi is not None else "") + ")")
     args = args if isinstance(args, list) else ([] if args is None else [args])
     try:
-        res = k.call(lid, fn, aid, *args)
+        res, why = k.call_refusable(lid, fn, aid, *args)
     except L.LawError as e:
         k.law_error(lid, str(e))
         raise ActionError(f"{action} failed and its law was suspended: {e}")
+    if why is not None:                                                # W6a: the office refused (rolled back; no fault)
+        raise ActionError(f"{action} refused by law {lid}" + (f": {why}" if why else ""))
     k.log("invoke", aid, {"action": action, "args": args, "law": lid, "result": str(res)[:400]}, vis="public")
     return f"{action}: {res}"
 

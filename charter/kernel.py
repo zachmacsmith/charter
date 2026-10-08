@@ -273,9 +273,12 @@ class Kernel:
     def _add(self, owner, item, qty):
         AC.add(self, owner, item, qty)                                 # accounts.py: any registered owner key
 
-    def move(self, src, dst, item, qty, why="move", by=None):
-        """The move primitive as a yes/no (every module's moves): False when the balance is short or a law blocks it."""
+    def move(self, src, dst, item, qty, why="move", by=None, memo=None):
+        """The move primitive as a yes/no (every module's moves): False when the balance is short or a law blocks it. W6a: memo, the
+        move's purpose (law.v2 only; dispatch.check_move)."""
         try:
+            if memo is not None:
+                return self.apply("move", src=src, dst=dst, item=item, qty=qty, why=why, memo=memo, actor=by).ok
             return self.apply("move", src=src, dst=dst, item=item, qty=qty, why=why, actor=by).ok
         except D.PhysicsError:
             return False
@@ -468,15 +471,32 @@ class Kernel:
         return key
 
     def call(self, lid, fn, *args):
-        with self.cause("law", lid, hook=getattr(fn, "__name__", None)):
-            try:
-                out = self.limited(fn, *args)
-            except D.Blocked as e:                                     # law.v2: a change the law asked for was blocked by another
-                self.w["effects"]["kernel_refusals"].append(e.reason)  # law: its call ends there, without fault (never raised
-                out = None                                             # without law.v2)
+        return self.call_refusable(lid, fn, *args)[0]
+
+    def call_refusable(self, lid, fn, *args):
+        """Kernel.call, with the refusal: (value, None), or (None, reason) when the law code called refuse(reason) (law.v2, W6a: the
+        call is rolled back, without fault; dispatch.refused_call). An office (actions._invoke) tells the agent the reason."""
+        fr = D.call_frame(self, lid, fn)                               # W6a: journaled only for a law whose code names refuse
+        refusal = None
+        try:
+            with self.cause("law", lid, hook=getattr(fn, "__name__", None)):
+                try:
+                    out = self.limited(fn, *args)
+                except D.Blocked as e:                                 # law.v2: a change the law asked for was blocked by another
+                    self.w["effects"]["kernel_refusals"].append(e.reason)   # law: its call ends there, without fault (never
+                    out = None                                         # raised without law.v2)
+                except D.Refusal as e:                                 # W6a: refuse(reason) (only law.v2 laws have it)
+                    refusal, out = e, None
+        except BaseException:
+            D.commit(self, fr)
+            raise
+        if refusal is not None:
+            D.refused_call(self, fr, lid, refusal)
+        else:
+            D.commit(self, fr)
         if LK.enabled(self):                                           # law.v2: a law's public dict stays JSON data
             LK.check_public(self, lid)
-        return out
+        return out, (refusal.reason if refusal is not None else None)
 
     def api_for(self, lid):
         k = self
@@ -526,8 +546,8 @@ class Kernel:
                 return False
             return True
 
-        def move(src, dst, item, qty):
-            return k.move(src, dst, item, qty, why=f"law:{lid}", by=None)       # Kernel.move -> apply("move")
+        def move(src, dst, item, qty, memo=None):                       # W6a: memo, the move's purpose (law.v2 only)
+            return k.move(src, dst, item, qty, why=f"law:{lid}", by=None, memo=memo)   # Kernel.move -> apply("move")
 
         def set_convertible(cur, only=None, only_item=None):
             """Turn on the kernel's deposit/redeem actions for a backed currency (optionally for one resource only; `only_item` is
@@ -752,6 +772,8 @@ class Kernel:
             return J.hooks(self, hook, *args)                           # contracts (P4.3): associations' laws only for their members
         out = []
         for law in self.active_laws():
+            if not D.in_force(self, law["id"]):                         # W6a (law.v2): outside its declared window
+                continue
             ns = self.ns.get(law["id"]) or self._load(law["id"])
             fn = ns.get(hook)
             if fn is None:
@@ -1238,6 +1260,7 @@ class Kernel:
         def expire_cases():
             with self.cause("kernel", "cases", root=True):
                 self._expire_cases()
+            D.expire_laws(self)                                        # W6a (law.v2): laws whose in_force_until is this round
 
         def record():
             with self.cause("kernel", "record"):

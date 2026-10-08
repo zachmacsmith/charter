@@ -261,6 +261,8 @@ R("post", "speak publicly: claims, offers, pressure", "TALK AND TRADE", core=Tru
 R("transfer", "give goods: pay, bribe, gift, fund", "TALK AND TRADE", core=True,
   handler="actions:_transfer", module="core", category="economic", emits=("transfer", "transfer_blocked"), aliases={"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item", "resources": "item", "goods": "item", "good": "item", "payment": "item"},
   doc='transfer {"to": "Name", "item": "timber", "qty": 3}: give resources or currency')
+# ^ W6a: under law.v2 transfer also takes "memo" (a short purpose laws read as p["memo"]); agents.action_doc appends it in law.v2 worlds
+#   only, so every other world's prompt is unchanged (actions._transfer refuses a memo without law.v2, exactly as before)
 # information (look-ups: the context module)
 R("manual", "read a manual section: rules, more options", "INFORMATION", core=True, pre=True, needs=("mod:context",), args='{"section": "<title or number>"}',
   handler="actions:_manual", module="context", category="productive", legacy=False,

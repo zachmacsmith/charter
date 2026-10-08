@@ -378,12 +378,12 @@ def scope_api(k, lid, api: dict) -> dict:
         return take
     out["fine"] = fine
 
-    def move(src, dst, item, qty):
+    def move(src, dst, item, qty, memo=None):                           # W6a: memo (law.v2)
         s, ok1 = owner(src, "move")
         d, ok2 = owner(dst, "move")
         if not (ok1 and ok2):
             return refuse("move", src if not ok1 else dst)
-        return k.move(s, d, item, qty, why=f"law:{lid}", by=None)
+        return k.move(s, d, item, qty, why=f"law:{lid}", by=None, memo=memo)
     out["move"] = move
 
     def own_cur(cur):
@@ -561,6 +561,8 @@ def hooks_of(k, jid, hook, *args):
 
 def _run_hook_off(k, law, hook, *args):
     """Kernel.hooks' body for one law (jurisdictions off, contracts on): errors suspend the law and call the Fixer, as before."""
+    if not _in_force(k, law):
+        return []
     ns = k.ns.get(law["id"]) or k._load(law["id"])
     fn = ns.get(hook)
     if fn is None:
@@ -575,7 +577,15 @@ def _run_hook_off(k, law, hook, *args):
         return []
 
 
+def _in_force(k, law) -> bool:
+    """W6a (law.v2): the law is inside its declared window (dispatch.in_force); always True without law.v2."""
+    from charter import dispatch as D
+    return D.in_force(k, law["id"])
+
+
 def _run_hook(k, law, hook, *args):
+    if not _in_force(k, law):                                           # W6a: outside its declared window
+        return []
     ns = k.ns.get(law["id"]) or k._load(law["id"])
     fn = ns.get(hook)
     if fn is None:
