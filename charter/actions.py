@@ -28,6 +28,7 @@ from charter import roles as R                                         # roles: 
 ACTIONS = AR.actions()                                                 # every action (charter/action_registry.py), in the old order
 CONTEXT_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module == "context")   # context: lookups and files; only when it is on
 MEDIA_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module in ("media", "scholars"))   # media2: outlets, licences, Scholars
+CONTRACT_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module == "contracts")   # P4.3: only when contracts are on
 DM_ACTIONS = AR.dm_actions()                                           # private messages: the DM limit applies; fast mode's DM step delivers them
 
 
@@ -120,6 +121,8 @@ def act(k, aid: str, name: str, args: dict) -> str:
 
 def _act(k, aid: str, name: str, args: dict) -> str:
     hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MEDIA_ACTIONS))   # context, media2: off = unknown
+    if "contracts" not in k.w:                                          # P4.3: contracts off = unknown
+        hidden_here |= set(CONTRACT_ACTIONS)
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):

@@ -348,6 +348,8 @@ def legacy_actions(inst: dict, a: dict) -> list:
     absent |= set(CX.ACTIONS)                                            # context: its actions exist only when it is on
     from charter import life as LF
     absent |= LF.absent_actions(inst, a)                               # life: only where Life (or mortality) is on
+    if not FT.on("contracts", inst):                                    # contracts (P4.3): their actions only when on
+        absent |= {n for n, x in AR.REG.items() if x.module == "contracts"}
     return [k for k in ACTION_DOC if k not in absent] + {
         "board": ["veto"], "fixer": ["patch"], "scientist": ["read_archive", "search_archive", "write_archive"],
         "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) + (["rule"] if lvl >= 2 else []) \
@@ -667,6 +669,9 @@ class ScriptedPolicy:
         if J.enabled(k):                                             # jurisdictions: a scripted founder (own RNG; only when on)
             acts[:0] = J.scripted_actions(k, a, n_actions)
         acts = MD.scripted_extra(k, a, acts)                             # media2 only (own RNG stream): media and library actions
+        if "contracts" in k.w:                                           # contracts (P4.3): own RNG stream; nothing when off
+            from charter import contracts as KC
+            acts[:0] = KC.scripted_actions(k, a, n_actions)
         guesses = {x: r.choice(G.drawable_names(k.spec)) for x in k.roster() if x != aid} if final else {}   # the goals drawable here
         out = {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
                "goal_guesses_json": json.dumps(guesses)}

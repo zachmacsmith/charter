@@ -44,18 +44,19 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 CORE_ORDER = ("TALK AND TRADE", "INFORMATION", "MEMORY", "PRODUCE", "POLITICS", "FORCE", "LINEAGE")
-NICHE_ORDER = ("your role", "camps", "commons", "files", "press", "finance", "jurisdictions", "courts", "force, more", "inheritance",
-               "groups", "powers")
+NICHE_ORDER = ("your role", "camps", "commons", "files", "press", "finance", "jurisdictions", "contracts", "courts", "force, more",
+               "inheritance", "groups", "powers")
 NICHE_PHRASE = {"your role": "use your role's other tools", "camps": "survey, improve or lease camps",
                 "commons": "fund projects or pay the tribute", "files": "keep files, pin them or buy memory from a Scholar",
                 "press": "subscribe to outlets, buy placements, leak, answer polls, post anonymously or use the library",
                 "finance": "lend, borrow and use coins", "jurisdictions": "found, fund or join jurisdictions",
+                "contracts": "found, join or leave contracts (clubs, companies, crowdfunds, cartels)",
                 "courts": "go to court or call the Fixer", "force, more": "guard others, join attacks, hire the assassin or buy initiative",
                 "inheritance": "decide your inheritance or copy an agent", "groups": "run private groups", "powers": "use a word of power or an action a law defined"}
 UNIVERSAL_RIGHTS = ()                                                   # rights everyone holds (none at present): never an edge
 CATEGORIES = ("productive", "economic", "political", "talk")           # activity categories, in scorer.CATEGORIES' key order
 MODULES = ("core", "context", "camps", "credit", "projects", "outside", "mortality", "life", "roles", "conflict", "jurisdictions",
-           "media", "scholars")
+           "media", "scholars", "contracts")
 
 
 @dataclass(frozen=True)
@@ -497,6 +498,37 @@ R("declare", "make your jurisdiction public", "jurisdictions", needs=("mod:juris
 R("set_charter", "change your hidden jurisdiction's starting laws", "jurisdictions", needs=("mod:jurisdictions",), when=_k_founder,
   handler="jurisdictions:act_set_charter", module="jurisdictions", category="political", emits=("jur_charter",),
   doc='set_charter {"jurisdiction": "J2", "laws": ["<law code>", ...]}: founder only, before it is declared: replace its charter (the starting laws enacted at declaration)')
+# contracts (P4.3: associations, charter/contracts.py)
+R("create_contract", "found a contract (a club, company, crowdfund, cartel)", "contracts", needs=("mod:contracts",),
+  handler="contracts:act_create_contract", module="contracts", category="political", emits=("contract_created",),
+  aliases={"laws": "code", "type": "template", "kind": "template"},
+  doc='create_contract {"name": "...", "template": "club", "params": {"DUES": 2}} or {"name": "...", "code": "<law code>"}: found '
+      'an association; you are its first member. Its code is in force at once and binds only members who join: it may tax or '
+      'block what members do, take only what they deposit in its escrow or allow it each round, and pay anyone from its treasury '
+      '(templates: club, company, crowdfund, cartel; the manual lists their params)')
+R("join_contract", "join a contract", "contracts", needs=("mod:contracts",),
+  handler="contracts:act_join_contract", module="contracts", category="political",
+  emits=("contract_joined", "contract_join_refused", "contract_applied"),
+  doc='join_contract {"contract": "A1"}: become a member at once (its laws then bind you); a closed contract records you as an '
+      'applicant until a law of it admits you')
+R("leave_contract", "leave a contract", "contracts", needs=("mod:contracts",),
+  handler="contracts:act_leave_contract", module="contracts", category="political", emits=("contract_leave_pending",),
+  doc='leave_contract {"contract": "A1"}: leave at the end of this round, always; its laws may first take from your escrow (never '
+      'more), the rest of your escrow comes back to you and your allowances end')
+R("deposit_escrow", "put goods in escrow with a contract", "contracts", needs=("mod:contracts",),
+  handler="contracts:act_deposit_escrow", module="contracts", category="economic", emits=("contract_deposit",),
+  doc='deposit_escrow {"contract": "A1", "item": "timber", "qty": 5}: a bond, a pledge or capital held by a contract you belong '
+      'to; its code may forfeit it under its rules, and what is left comes back when you leave')
+R("set_allowance", "let a contract take from you each round", "contracts", needs=("mod:contracts",),
+  handler="contracts:act_set_allowance", module="contracts", category="economic", emits=("contract_allowance",),
+  doc='set_allowance {"contract": "A1", "item": "grain", "qty": 2}: a contract you belong to may take up to qty of item from you '
+      'each round (dues, premiums, instalments); qty 0 withdraws it')
+R("propose_contract_change", "propose new code for a contract", "contracts", needs=("mod:contracts",),
+  handler="contracts:act_propose_contract_change", module="contracts", category="political",
+  emits=("contract_changed", "contract_change_failed"), aliases={"law": "replaces", "target": "replaces"},
+  doc='propose_contract_change {"contract": "A1", "code": "<law code>", "replaces": "L7"}: new code for a contract you belong to '
+      '(replaces: one of its laws, or none to add a law; empty code with replaces ends that law); its procedure decides (by '
+      'default its members vote, closing at the end of the round)')
 # courts
 R("accuse", "take someone to court", "courts", needs=("level:2",), when=_k_clauses,
   handler="actions:_accuse", module="core", category="political", emits=("accuse",),
@@ -559,7 +591,7 @@ ACTIONS_ORDER = (
     "invite", "join", "leave", "declare", "fund", "set_charter", "write_edition", "run_placement", "poll", "set_subscription_fee",
     "send_subscriber_list", "revoke_licence", "grant_licence", "annotate", "subscribe", "unsubscribe", "buy_placement", "leak",
     "answer_poll", "buy_licence", "set_memory_price", "library_permit", "library_remove", "buy_memory", "library_deposit",
-    "library_read")
+    "library_read", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance", "propose_contract_change")
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch",
@@ -572,7 +604,8 @@ DOC_ORDER = (
     "fund", "set_charter", "invite", "join", "leave", "declare", "subscribe", "unsubscribe", "set_subscription_fee",
     "write_edition", "buy_placement", "run_placement", "leak", "poll", "answer_poll", "send_subscriber_list", "revoke_licence",
     "grant_licence", "buy_licence", "annotate", "set_memory_price", "buy_memory", "library_deposit", "library_read",
-    "library_permit", "library_remove")
+    "library_permit", "library_remove", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance",
+    "propose_contract_change")
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 

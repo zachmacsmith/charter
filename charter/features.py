@@ -134,6 +134,9 @@ FEATURES: list[Feature] = [
     F("leases", "charter.camptypes.leases", "camps.leases", implied_by=("camps",), state=("leases",), golden="society_small_4"),
     F("events", "charter.events", "events", rng=(), golden="E7_events_3"),
     F("observer", "charter.observer", "observer", rng=("observer-fill", "observer-step", "observer-bot"), golden="E4_observer_hidden_4"),
+    # P4.3: associations (contracts); needs law.v2. Every entry below returns at once (and changes nothing) when it is off.
+    F("contracts", "charter.contracts", "contracts", state=("contracts",), rng=("contracts",), golden="contracts_small",
+      live="contracts"),
 ]
 del F
 REG: dict[str, Feature] = {f.name: f for f in FEATURES}
@@ -159,12 +162,13 @@ def on(name: str, x) -> bool:
 PHASES: dict[str, list[tuple[str, str]]] = {
     "init": [("projects", "init_state"), ("outside", "init_state"), ("core", "effects"), ("hidden", "install"),
              ("context", "install"), ("roles", "init_state"), ("camps", "init_state"), ("life", "install"), ("conflict", "install"),
-             ("jurisdictions", "install"), ("media", "install")],             # media.install installs the Scholars
+             ("jurisdictions", "install"), ("media", "install"), ("contracts", "install")],   # media.install installs the Scholars
     "round_start": [("core", "reset_counters"), ("core", "settle_loans"), ("projects", "start_round"), ("outside", "start_round"),
                     ("projects", "maybe_spawn"), ("core", "pending_patches"), ("core", "drift"), ("camps", "start_round"),
                     ("law", "on_round_start"), ("hidden", "on_round_start"), ("conflict", "start_round"), ("media", "start_round")],
     "round_end": [("conflict", "resolve_attacks"), ("camps", "end_of_round"), ("core", "close_ballots"), ("core", "veto_queue"),
-                  ("law", "on_round_end"), ("jurisdictions", "end_round"), ("core", "regrow"), ("camps", "world_update"),
+                  ("law", "on_round_end"), ("jurisdictions", "end_round"), ("contracts", "end_round"), ("core", "regrow"),
+                  ("camps", "world_update"),
                   ("life", "end_of_round"), ("core", "expire_cases"), ("credit", "end_round"), ("core", "record"), ("core", "advance")],
     # runner-level, declared (call sites inline in runner.run until P5.3): the observer reads and acts after the turns, then
     # Kernel.end_round, then the editors write next round's editions
@@ -187,21 +191,23 @@ FRAMES: dict[tuple[str, str], tuple[str, str]] = {
     ("camps", "world_update"): ("world", "camps"), ("hidden", "on_round_start"): ("world", "hidden"),
     ("conflict", "start_round"): ("world", "conflict"), ("jurisdictions", "end_round"): ("kernel", "jurisdictions"),
     ("credit", "end_round"): ("kernel", "loans"),
+    ("contracts", "end_round"): ("kernel", "contracts"),                # P4.3: contract changes voted, exits (on_exit first)
 }
 
 # ---------------------------------------------------------------------- tails (merge order, exactly today's)
 TAILS: dict[str, list[tuple[str, str]]] = {
     "law_api": [(f, "law_api") for f in ("credit", "hidden", "projects", "outside", "camps", "mortality", "conflict", "jurisdictions",
-                                         "media", "life")],
+                                         "media", "life", "contracts")],
     "snapshot_fields": [("credit", "snapshot_fields"), ("core", "effects"), ("projects", "snapshot_fields"),
                         ("outside", "snapshot_fields"), ("camps", "snapshot_fields"), ("conflict", "snapshot_fields"),
-                        ("jurisdictions", "snapshot_fields"), ("media", "snapshot_fields"), ("core", "efficiency")],
+                        ("jurisdictions", "snapshot_fields"), ("media", "snapshot_fields"), ("core", "efficiency"),
+                        ("contracts", "snapshot_fields")],
     "state_lines": [("credit", "state_lines"), ("core", "channels"), ("projects", "state_lines"), ("outside", "state_lines"),
                     ("camps", "state_lines"), ("life", "state_lines"), ("core", "archive_reminder"), ("conflict", "state_lines"),
-                    ("jurisdictions", "state_lines"), ("media", "state_lines")],
+                    ("jurisdictions", "state_lines"), ("media", "state_lines"), ("contracts", "state_lines")],
     "truth": [(f, "truth") for f in ("hidden", "events", "context", "roles", "camps", "mortality", "life", "conflict", "media")],
     "render_event": [(f, "render_event") for f in ("projects", "conflict", "media", "outside", "camps", "jurisdictions", "mortality",
-                                                   "life")],
+                                                   "life", "contracts")],
 }
 
 # Fixed module names and their parameters (names only; defaults allowed after them).

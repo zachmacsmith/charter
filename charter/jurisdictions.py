@@ -144,8 +144,17 @@ def law_jur(k, lid) -> str:
     return (law or {}).get("jurisdiction") or "J0"
 
 
+def association(k, jid):
+    """P4.3: the association (contract) record of account jid, or None (a polity, J0, or contracts off). Laws of an association bind
+    only its members, whether or not jurisdictions are on (charter/contracts.py)."""
+    return ((k.w.get("contracts") or {}).get("assoc") or {}).get(jid) if isinstance(jid, str) else None
+
+
 def binds(k, law_id, aid) -> bool:
-    """Does this law reach this agent? Off: always."""
+    """Does this law reach this agent? Off: always. An association's law (P4.3): its members."""
+    a = association(k, law_jur(k, law_id))
+    if a is not None:
+        return aid in a["members"]
     if not enabled(k):
         return True
     jid = law_jur(k, law_id)
@@ -311,8 +320,15 @@ def _arg(a, kw, pos, name):
 
 
 def scope_api(k, lid, api: dict) -> dict:
-    """The law API as this law's jurisdiction sees it. Off: unchanged."""
+    """The law API as this law's jurisdiction sees it. Off: unchanged. An association's law (P4.3): its power set
+    (contracts.scope_api)."""
+    if association(k, law_jur(k, lid)) is not None:
+        from charter import contracts as CT
+        return CT.scope_api(k, lid, api)
     if not enabled(k):
+        if "contracts" in k.w:                                          # P4.3: a polity's laws do not list associations' laws
+            from charter import contracts as CT
+            return CT.polity_api(k, lid, api)
         return api
     jid = law_jur(k, lid)
     j = jurs(k).get(jid)
@@ -489,10 +505,21 @@ def scope_api(k, lid, api: dict) -> dict:
 # ---------------------------------------------------------------------- hooks, procedures, passing and enactment
 def hooks(k, hook, *args):
     """Kernel.hooks with jurisdictions on: laws of declared jurisdictions only (in a dry run, the law being previewed too), and
-    hooks about one agent only for laws that bind it."""
+    hooks about one agent only for laws that bind it. P4.3: also with contracts on (jurisdictions on or off): an association's laws
+    run where contracts.reaches says (the clock, their members' agent hooks, their own ballots); with jurisdictions off every
+    other law runs exactly as Kernel.hooks runs it."""
     out = []
+    on = "jur" in k.w
     for law in k.active_laws():
         jid = law_jur(k, law["id"])
+        if association(k, jid) is not None:
+            from charter import contracts as CT
+            if CT.reaches(k, jid, hook, args):
+                out += CT.run_hook(k, law, hook, *args)
+            continue
+        if not on:
+            out += _run_hook_off(k, law, hook, *args)
+            continue
         j = jurs(k).get(jid)
         if not k.dry and (not j or j["status"] != "declared"):
             continue
@@ -513,7 +540,11 @@ def hooks(k, hook, *args):
 
 
 def hooks_of(k, jid, hook, *args):
-    """Run one hook on the laws in force of one declared jurisdiction (on_exit, on_admission, on_birth)."""
+    """Run one hook on the laws in force of one declared jurisdiction (on_exit, on_admission, on_birth); P4.3: or of one
+    association (contracts.hooks_of)."""
+    if association(k, jid) is not None:
+        from charter import contracts as CT
+        return CT.hooks_of(k, jid, hook, *args)
     j = jurs(k).get(jid)
     if not j or j["status"] != "declared":
         return []
@@ -522,6 +553,22 @@ def hooks_of(k, jid, hook, *args):
         if law_jur(k, law["id"]) == jid:
             out += _run_hook(k, law, hook, *args)
     return out
+
+
+def _run_hook_off(k, law, hook, *args):
+    """Kernel.hooks' body for one law (jurisdictions off, contracts on): errors suspend the law and call the Fixer, as before."""
+    ns = k.ns.get(law["id"]) or k._load(law["id"])
+    fn = ns.get(hook)
+    if fn is None:
+        return []
+    try:
+        return [(law["id"], k.call(law["id"], fn, *args))]
+    except L.LawError as e:
+        if k.dry:
+            raise
+        with k.cause("law", law["id"], hook=hook):
+            k.law_error(law["id"], str(e))
+        return []
 
 
 def _run_hook(k, law, hook, *args):

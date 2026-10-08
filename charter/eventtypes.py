@@ -52,7 +52,7 @@ KINDS = ("communication", "primitive", "legal_act", "output", "summary", "truth"
 VIS = ("public", "parties", "channel", "monitor")
 FEEDS = ("post", "message", "official", "event", "silent")
 RENDERERS = ("agents", "hidden", "credit", "projects", "conflict", "media", "outside", "camptypes", "leases", "mortality", "life",
-             "jurisdictions")
+             "jurisdictions", "contracts")
 FLAGS = ("post", "board", "forge", "veil", "lawpost", "quote", "goalpub", "leak:public", "leak:passing", "recent:editions",
          "recent:posts", "recent:gazette", "recent:dms", "observed", "messages", "own")
 PRIORITY = {"event": 1, "official": 5, "silent": 1}                     # post and message depend on the reader (context._priority)
@@ -394,6 +394,30 @@ E("lease_offer", "leases", "primitive", "parties", "event", "leases", act="lease
 E("lease_start", "leases", "primitive", "public", "event", "leases", act="accept_lease", primitive="lease")
 E("lease_end", "leases", "summary", "public", "event", "leases", primitive="lease")
 E("lease_rules", "leases", "legal_act", "public", "event", "leases", primitive="set_lease_rules")
+
+
+# ---------------------------------------------------------------------- contracts (P4.3: associations, charter/contracts.py)
+# Public: that an association exists, who joins and leaves it, its code changing. Members only ("parties"): its money (deposits,
+# allowances, pulls), breaches, notices and its laws' errors (an association's error never goes to the Fixer).
+E("contract_created", "contracts", "primitive", "public", "event", "contracts", act="create_contract", primitive="create_contract")
+E("contract_joined", "contracts", "primitive", "public", "event", "contracts", act="join_contract", primitive="join")
+E("contract_join_refused", "contracts", "primitive", "parties", "event", "contracts", act="join_contract", primitive="join")
+E("contract_applied", "contracts", "primitive", "parties", "event", "contracts", act="join_contract", primitive="join")
+E("contract_leave_pending", "contracts", "primitive", "parties", "event", "contracts", act="leave_contract", primitive="leave")
+E("contract_left", "contracts", "summary", "public", "event", "contracts", primitive="leave")
+E("contract_admitted", "contracts", "legal_act", "public", "event", "contracts", primitive="admit")
+E("contract_expelled", "contracts", "legal_act", "parties", "event", "contracts", primitive="expel")
+E("contract_deposit", "contracts", "primitive", "parties", "event", "contracts", act="deposit_escrow", primitive="deposit_escrow")
+E("contract_allowance", "contracts", "primitive", "parties", "event", "contracts", act="set_allowance", primitive="set_allowance")
+E("contract_pull", "contracts", "legal_act", "parties", "event", "contracts", primitive="pull")
+E("contract_breach", "contracts", "legal_act", "parties", "event", "contracts", primitive="breach")
+E("contract_notice", "contracts", "summary", "parties", "event", "contracts", note="a contract law's gazette, shown to its members")
+E("contract_law_error", "contracts", "summary", "parties|monitor", "event", "contracts",
+  note="an association's law failed: it is suspended and its members told; the Fixer is not called")
+E("contract_changed", "contracts", "legal_act", "public", "event", "contracts", primitive="amend")
+E("contract_change_failed", "contracts", "summary", "parties", "event", "contracts")
+E("contract_dissolved", "contracts", "summary", "public", "event", "contracts", primitive="dissolve")
+E("contract_out_of_scope", "contracts", "record", "monitor", "silent", None, note="a contract law's call beyond its power set")
 
 
 # ---------------------------------------------------------------------- lookups

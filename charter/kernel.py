@@ -693,6 +693,8 @@ class Kernel:
         """Repeal the active laws named `target` (an id or a title), one repeal primitive each (dispatch.do_repeal). A law-caused
         repeal never reaches a law of a stricter class (review F1). True if any was repealed."""
         hit = [l for l in self.active_laws() if l["id"] == target or l["title"].lower() == target.lower()]
+        if "contracts" in self.w:                                       # P4.3: associations' laws end only by their own procedure
+            hit = [l for l in hit if J.association(self, J.law_jur(self, l["id"])) is None]
         if by_law is not None:                                          # law-caused: never a law of a stricter class (review F1)
             rank = self.w["laws"].get(by_law, {}).get("cls")
             hit = [l for l in hit if L.CLASS_RANK.get(l["cls"], 0) <= L.CLASS_RANK.get(rank, 0)]
@@ -709,8 +711,8 @@ class Kernel:
 
     def hooks(self, hook, *args):
         """Run a hook on every active law, in enactment order. Errors suspend the law and call the Fixer."""
-        if "jur" in self.w:                                             # jurisdictions: only laws that bind the agent concerned
-            return J.hooks(self, hook, *args)
+        if "jur" in self.w or "contracts" in self.w:                    # jurisdictions: only laws that bind the agent concerned;
+            return J.hooks(self, hook, *args)                           # contracts (P4.3): associations' laws only for their members
         out = []
         for law in self.active_laws():
             ns = self.ns.get(law["id"]) or self._load(law["id"])
@@ -727,6 +729,9 @@ class Kernel:
         return out
 
     def law_error(self, lid, msg):
+        if "contracts" in self.w and not PW.has_power(self, J.law_jur(self, lid), "fixer_patch"):   # P4.3: an association's law:
+            from charter import contracts as KC                         # suspended, its members told; never the Fixer
+            return KC.law_error(self, lid, msg)
         law = self.w["laws"][lid]
         law["status"] = "suspended"
         self.log("law_error", None, {"law": lid, "error": msg}, vis="public")

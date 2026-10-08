@@ -1050,19 +1050,32 @@ CHECKS["set_outlet_rule"] = check_set_outlet_rule
 
 
 def do_join(k, agent, polity, via, parent=None, **directives) -> dict:
-    """directives: admit (on_admission: True admits), jurisdiction (on_birth: where the child goes; None: none)."""
+    """directives: admit (on_admission: True admits), jurisdiction (on_birth: where the child goes; None: none). P4.3: joining an
+    association (contracts.change_join)."""
+    if J.association(k, polity) is not None:
+        from charter import contracts as CT
+        return CT.change_join(k, agent, polity, via, **directives)
     return J.change_join(k, agent, polity, via, parent, **directives)
 
 
 def do_leave(k, agent, polity, via) -> dict:
+    if J.association(k, polity) is not None:                          # P4.3: leaving an association (contracts.change_leave)
+        from charter import contracts as CT
+        return CT.change_leave(k, agent, polity, via)
     return J.change_leave(k, agent, polity, via)
 
 
 def do_admit(k, polity, agent, lid=None) -> dict:
+    if J.association(k, polity) is not None:                          # P4.3: an association admits an applicant
+        from charter import contracts as CT
+        return CT.change_admit(k, polity, agent)
     return J.change_admit(k, polity, agent)
 
 
 def do_expel(k, polity, agent, lid=None) -> dict:
+    if J.association(k, polity) is not None:                          # P4.3: an association expels a member (at the round's end)
+        from charter import contracts as CT
+        return CT.change_expel(k, polity, agent)
     return J.change_expel(k, polity, agent)
 
 
@@ -1444,6 +1457,11 @@ def bound_laws(k, P, payload, phase) -> list:
     id). Without jurisdictions: every active law. With them: laws of declared jurisdictions (any in a dry run) binding the subject
     (before) or any party (after); a payload naming nothing bindable is seen by all of them."""
     laws = k.active_laws()
+    assoc = []
+    if "contracts" in k.w:                                             # P4.3: associations' laws see their members' changes only
+        from charter import contracts as CT                            # (contracts.sees; D-24: no polity legal acts)
+        assoc = [l for l in laws if CT.sees(k, l["id"], P, payload, phase)]
+        laws = [l for l in laws if J.association(k, J.law_jur(k, l["id"])) is None]
     if "jur" in k.w:
         keys = ((P.subject,) if P.subject else ()) if phase == "before" else tuple(P.parties)
         seen = []
@@ -1455,6 +1473,7 @@ def bound_laws(k, P, payload, phase) -> list:
             if any(h for h in hits) or all(h is None for h in hits):
                 seen.append(law)
         laws = seen
+    laws = laws + assoc
     pos = {lid: i for i, lid in enumerate(k.w["law_order"])}
     return sorted(laws, key=lambda l: (-RANKS[rank_of(k, l["id"])], pos.get(l["id"], 1 << 30), l["id"]))
 
@@ -1670,12 +1689,12 @@ def invoke(k, cas, lid, hook, payload, chain, depth, parent=None, reader=None):
         k.w["effects"]["kernel_refusals"].append(e.reason)
         return None
     except LIMITS as e:
-        if k.dry:
+        if k.dry and not _assoc_law(k, lid):                           # P4.3: an association's error never fails a dry run
             raise
         die(k, cas, inv, e)
         return DEAD
     except G.LawError as e:
-        if k.dry:
+        if k.dry and not _assoc_law(k, lid):
             raise
         die(k, cas, inv, e, flagged=False)                            # its queued reactions go; the law is suspended as before
         with k.cause("law", lid, hook=hook):
@@ -1942,3 +1961,60 @@ def _enqueue(k, cas, P, payload, depth, causes, inv, hide) -> None:
             continue
         snap = snap if snap is not None else _copy.deepcopy(payload)
         cas.queue.append(AfterItem(cas.next(), depth, lid, hook, P.name, snap, causes, hide, k.current_turn_agent(), inv))
+
+
+# ====================================================================== P4.3: contracts (associations, charter/contracts.py)
+# Rows routed by P4.3: create_contract, deposit_escrow, set_allowance, pull, breach. Joining and leaving an association are the
+# membership primitives join/leave/admit/expel (do_join etc. branch on the account's kind). The changes are made in contracts.py
+# (change_<name>); the checks here refuse what physics refuses (a pull beyond an allowance or a balance: PhysicsError).
+def _assoc_law(k, lid) -> bool:
+    return J.association(k, J.law_jur(k, lid)) is not None
+
+
+OPTIONS.update({
+    "create_contract": frozenset({"code", "params", "admission"}), "deposit_escrow": frozenset(), "set_allowance": frozenset(),
+    "pull": frozenset({"lid"}), "breach": frozenset({"lid"}),
+})
+
+
+def check_pull(k, p):
+    from charter import contracts as CT
+    return CT.check_pull(k, p)
+
+
+def check_deposit_escrow(k, p):
+    from charter import contracts as CT
+    return CT.check_deposit(k, p)
+
+
+def check_set_allowance(k, p):
+    from charter import contracts as CT
+    return CT.check_allowance(k, p)
+
+
+CHECKS.update({"pull": check_pull, "deposit_escrow": check_deposit_escrow, "set_allowance": check_set_allowance})
+
+
+def do_create_contract(k, agent, contract, name, template, code=None, params=None, admission=None) -> dict:
+    from charter import contracts as CT
+    return CT.change_create(k, agent, contract, name, template, code or [], params or {}, admission)
+
+
+def do_deposit_escrow(k, agent, contract, item, qty) -> dict:
+    from charter import contracts as CT
+    return CT.change_deposit(k, agent, contract, item, qty)
+
+
+def do_set_allowance(k, agent, contract, item, qty) -> dict:
+    from charter import contracts as CT
+    return CT.change_allowance(k, agent, contract, item, qty)
+
+
+def do_pull(k, contract, member, item, qty, lid=None) -> dict:
+    from charter import contracts as CT
+    return CT.change_pull(k, contract, member, item, qty, lid)
+
+
+def do_breach(k, contract, member, clause, remedy, lid=None) -> dict:
+    from charter import contracts as CT
+    return CT.change_breach(k, contract, member, clause, remedy, lid)

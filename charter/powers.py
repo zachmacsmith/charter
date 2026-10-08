@@ -5,7 +5,8 @@ attaches to that account (the Board's veto window, the Fixer, law levels, the pr
 (LawFn.power in charter/lawapi.py) is decided here, by `has_power(k, account, power)`, instead of by `"jur" in k.w` / `legacy`
 branches. P4.2 is behaviour-preserving: every polity's power set is exactly what the kernel and jurisdictions.py granted it before.
 
-A power's `kinds` column maps an account kind to a value (only "polity" exists today; "association" and "personal" are P4.3's):
+A power's `kinds` column maps an account kind to a value ("polity"; "association" since P4.3: every record in
+k.w["contracts"]["assoc"]; "personal" is reserved):
     True / False    every account of that kind holds it / none does
     "j0"            only J0, the legacy polity whose state lives at the top level of k.w (k.w["reserve"], k.w["procedures"], the
                     camp dicts, top-level currencies): J0 with jurisdictions on (record["legacy"]), and the world itself with them
@@ -62,36 +63,50 @@ def _powers(*ps: Power) -> dict:
 POWERS = _powers(
     Power("board_veto", "The Board's veto window: the account's passed non-ordinary laws, and Fixer patches making one of its laws "
           "non-ordinary, wait veto_window rounds for a Board majority veto before they take effect.",
-          {"polity": "board_scope"}, entrenched=True,
+          {"polity": "board_scope", "association": False}, entrenched=True,
           consulted=("kernel.py:Kernel.pass_or_veto", "jurisdictions.py:board_reviews", "actions.py:_patch")),
     Power("fixer_patch", "The Fixer may patch the account's laws and receives their runtime errors (law_error -> fixer_queue). "
-          "The Fixer serves every polity today.", {"polity": True}, entrenched=True),
+          "The Fixer serves every polity today.", {"polity": True, "association": False}, entrenched=True),
     Power("law_levels", "The law level preset (LEVEL_PRESETS) the account's proposals and charter laws are checked against: which "
-          "classes are allowed and whether define_action is.", {"polity": "spec"},
+          "classes are allowed and whether define_action is.", {"polity": "spec", "association": False},
           consulted=("actions.py:_propose", "jurisdictions.py:propose", "jurisdictions.py:_charter_laws")),
     Power("dry_run", "Every proposal runs a 3-round dry run (Kernel.dry_run) before it is decided; a failing law is rejected.",
-          {"polity": True}, consulted=("actions.py:_propose", "jurisdictions.py:propose")),
+          {"polity": True, "association": False}, consulted=("actions.py:_propose", "jurisdictions.py:propose")),
     Power("propose_right", "Proposing a law of this account needs the kernel 'propose' right (elsewhere membership suffices).",
-          {"polity": "j0"}, consulted=("actions.py:_propose", "jurisdictions.py:propose")),
+          {"polity": "j0", "association": False}, consulted=("actions.py:_propose", "jurisdictions.py:propose")),
     Power("kernel_rights", "The account's laws may create kernel rights and grant, revoke and suspend them for its members.",
-          {"polity": True}, primitives=("grant_right", "revoke_right", "suspend_right"),
+          {"polity": True, "association": False}, primitives=("grant_right", "revoke_right", "suspend_right"),
           refusal="{fn} needs the kernel_rights power, which this jurisdiction does not hold", consulted=("jurisdictions.py:scope_api",)),
     Power("compel_members", "Compulsion: the account's laws bind non-consenting members (fines, action limits, DM limits, censure, "
-          "guard obligations, compelled subscriptions).", {"polity": True},
+          "guard obligations, compelled subscriptions).", {"polity": True, "association": False},
           primitives=("move", "limit_actions", "set_dm_limit", "guard_bind", "subscribe"),
           refusal="{fn} needs the compel_members power, which this jurisdiction does not hold", consulted=("jurisdictions.py:scope_api",)),
-    Power("lawful_force", "The account's laws may order lawful attacks paid from its armory (lawful_attack).", {"polity": True},
+    Power("lawful_force", "The account's laws may order lawful attacks paid from its armory (lawful_attack).", {"polity": True, "association": False},
           primitives=("attack",), refusal="{fn} needs the lawful_force power, which this jurisdiction does not hold",
           consulted=("jurisdictions.py:scope_api",)),
     Power("unlimited_seizure", "The account's laws may move or burn any amount a bound member holds (also from leavers, on_exit), "
-          "not capped by an escrow.", {"polity": True}, primitives=("move", "burn"),
+          "not capped by an escrow.", {"polity": True, "association": False}, primitives=("move", "burn"),
           refusal="{fn} needs the unlimited_seizure power, which this jurisdiction does not hold", consulted=("jurisdictions.py:scope_api",)),
     Power("camp_rules", "The account's laws may set camp quotas, harvest limits, fees and lease rules (for its own members).",
-          {"polity": True}, primitives=("set_camp_rule", "set_lease_rules"),
+          {"polity": True, "association": False}, primitives=("set_camp_rule", "set_lease_rules"),
           refusal="{fn} needs the camp_rules power, which this jurisdiction does not hold", consulted=("jurisdictions.py:scope_api",)),
     Power("legacy_reserve", "Loans, par coins, projects, tribute and the powers-disclosure switch run on J0's reserve: their law "
-          "functions work only in J0.", {"polity": "j0"},
+          "functions work only in J0.", {"polity": "j0", "association": False},
           refusal="{fn} works only in the founding jurisdiction J0 (it uses J0's reserve)", consulted=("jurisdictions.py:scope_api",)),
+    # P4.3: the association column (review 06 §3, ARCHITECTURE §7.2). An association (a contract, charter/contracts.py) holds none of
+    # the powers above: no Board, no Fixer (its law errors suspend the law and tell its members), no levels (its code is rank bylaw,
+    # capped by this table and lawapi's `contract` column instead), no dry run, no compulsion, no lawful force, no kernel rights, no
+    # camp rules, no seizure beyond escrow. What it may do positively is below and in the `contract` column (allow | escrow | deny).
+    Power("take_deposits", "The account's laws may take what its members deposited in its escrow or pre-authorised as allowances "
+          "(pull, forfeit, refund). Polities hold it vacuously: they keep no escrows or allowances (only an association's law can "
+          "call these functions).", {"polity": True, "association": True},
+          refusal="{fn} needs the take_deposits power, which this account does not hold", consulted=("contracts.py:law_api",)),
+    Power("hook_members", "The account's laws' hooks see their members' changes (before_/after_ hooks and the legacy agent hooks "
+          "on_harvest, on_transfer, on_post, on_dm), and their charges go to its treasury.", {"polity": True, "association": True},
+          consulted=("contracts.py:sees",)),
+    Power("hook_legal_acts", "The account's laws may hook legal acts (proposals, ballots, enactments, rulings) of the polities its "
+          "members belong to. An association hooks only its own legal acts and its members' non-legal changes (D-24).",
+          {"polity": True, "association": False}, consulted=("contracts.py:sees",)),
 )
 J0_ONLY = tuple(n for n, p in POWERS.items() if p.value("polity") == "j0")    # legacy_reserve, propose_right
 
@@ -113,7 +128,11 @@ def _on(k) -> bool:
 
 
 def _record(k, account):
-    """The account's polity record: jurisdictions off -> J0 is the world itself (a virtual legacy record); on -> its record or None."""
+    """The account's record: an association's (k.w["contracts"]["assoc"], P4.3); else its polity record: jurisdictions off -> J0
+    is the world itself (a virtual legacy record); on -> its record or None."""
+    assoc = ((k.w.get("contracts") or {}).get("assoc") or {}).get(account) if isinstance(account, str) else None
+    if assoc is not None:
+        return assoc
     if not _on(k):
         return {"id": "J0", "kind": "polity", "legacy": True} if account == "J0" else None
     return k.w["jurisdictions"].get(account)

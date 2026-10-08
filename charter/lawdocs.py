@@ -57,6 +57,8 @@ TOPICS = {
     "media": ("Outlets and official statistics", "Private outlets sell editions; each jurisdiction's official outlet prints statistics set by law."),   # media2
     "media-rules": ("Rules for the press", "Laws can open the board, protect or suspend outlets, and require labels on paid placements."),   # media2
     "subscription-writ": ("The subscription writ", "An old call, rarely recorded, that binds readers to an outlet."),   # media2
+    "contracts": ("Contracts (associations)", "A contract's code is law that binds only its members, who joined it; it can take "
+                  "only what they deposited or allowed, and pay anyone from its own treasury."),   # contracts.py (P4.3)
 }
 
 # (name, topic, prompt group, prompt text, article detail, core tier, minimal tier)
@@ -316,9 +318,31 @@ E += [
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2")))
                  for n in ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")})
+# contracts (charter/contracts.py, P4.3): documented only in worlds with contracts on (OPTIONAL), for the code of a contract
+E += [
+    ("pull", "contracts", "Contracts", "pull(member, item, qty)", "a contract's law only: takes qty of item from a member into its "
+     "treasury, within the allowance the member set this round (set_allowance) and what it holds; True or False (nothing taken).",
+     "prompt", "common"),
+    ("forfeit", "contracts", "Contracts", "forfeit(member, item, qty, to=None)", "a contract's law only: takes up to qty of item from "
+     "the member's escrow (what it deposited) into the treasury, or to `to`; returns what it took. Never more than the escrow.",
+     "prompt", "common"),
+    ("refund", "contracts", "Contracts", "refund(member, item=None)", "a contract's law only: gives the member's escrow back (one "
+     "item, or all); returns what it gave.", "prompt", "common"),
+    ("breach", "contracts", "Contracts", "breach(member, clause, remedy)", "a contract's law only: records that a member broke a "
+     "clause, and the remedy, for all members to see. The record is all it does: take the remedy yourself (forfeit, expel).",
+     "prompt", "common"),
+    ("escrow_of", "contracts", "Contracts", "escrow_of(member)", "what a member holds in this contract's escrow.", "prompt", "common"),
+    ("allowance_of", "contracts", "Contracts", "allowance_of(member)", "what a member still allows this contract to pull this round.",
+     "prompt", "common"),
+    ("contract_state", "contracts", "Contracts", "contract_state(cid)", "a contract's public record: name, template, founder, "
+     "members, laws, treasury, breaches.", "common", "common"),
+    ("contracts", "contracts", "Contracts", "contracts()", "the ids of the contracts in force.", "common", "common"),
+    ("breaches", "contracts", "Contracts", "breaches(cid=None)", "breach records (of one contract, or of all).", "common", "common"),
+]
+OPTIONAL.update({e[0]: "contracts" for e in E if e[1] == "contracts"})
 ENTRIES ={e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers",
-               "Jurisdictions", "Media", "Life"]
+               "Jurisdictions", "Media", "Life", "Contracts"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt
 ARTICLE_ONLY = {"compel_subscription"}                  # media2: a hidden call, in an article even under preset full (with REQUIRES)
 
@@ -358,6 +382,8 @@ def resolve(spec: dict) -> dict:
     out = {"preset": preset, "mapping": mapping}
     if (spec.get("law") or {}).get("v2"):                               # law.v2 (P3.1): the new-style hooks, prompt and article
         out["v2"] = True
+        if (spec.get("contracts") or {}).get("enabled"):                # P4.3: contracts' changes are listed only where they exist
+            out["contracts"] = True
     return out
 
 
@@ -381,7 +407,7 @@ def v2_doc(spec: dict, original: str) -> str:
     return original + ("\n" + V2_PROMPT if (spec.get("law") or {}).get("v2") else "")
 
 
-def v2_article() -> dict:
+def v2_article(contracts: bool = False) -> dict:
     """codex/law/v2-hooks: every hookable change (the routed primitives), its payload, and what a before-verdict can do to it."""
     from charter import dispatch as D, primitives as PR
     lines = ["# Hooks on any change (law.v2)", "", V2_PROMPT, "", V2_LIMITS, "",
@@ -391,6 +417,8 @@ def v2_article() -> dict:
              "call ends that call. after_<change> gets p['result'] too.", "", "Changes you can hook:"]
     for n in D.ROUTED:
         P = PR.get(n)
+        if P.feature == "contracts" and not contracts:                  # P4.3: absent where contracts are off
+            continue
         hooks = [h for h in P.hooks]
         if not hooks:
             continue
@@ -443,5 +471,5 @@ def articles(resolved: dict) -> dict:
             body += ["", "These work in any law, whether or not the rules you were given mention them."]
             out[aid] = {"tier": tier, "title": title, "text": "\n".join(body) + "\n", "documents": names}
     if resolved.get("v2"):
-        out["codex/law/v2-hooks"] = v2_article()
+        out["codex/law/v2-hooks"] = v2_article(resolved.get("contracts", False))
     return out

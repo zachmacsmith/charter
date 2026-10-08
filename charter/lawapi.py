@@ -55,6 +55,7 @@ DOCS = {
     "requires": "lawdocs.E, gated by lawdocs.REQUIRES: only where its condition holds (mortality: life or conflict on; linker: law.v2)",
     "leases": "lawdocs.E, gated by lawdocs._gated_off: only with leasing on (camptypes/leases.py)",
     "conflict": "conflict.LAW_DOCS, shown by conflict.prompt_section with conflict on (lawdocs.MODULE_ENTRIES: never in the mapping)",
+    "contracts": "lawdocs.E, gated by lawdocs.OPTIONAL: only with contracts on (P4.3)",
 }
 
 
@@ -81,6 +82,7 @@ class LawFn:
     level: str | None = None    # a law-level constraint beyond the class
     primitive: str | None = None    # the primitive it causes (its compel face, charter/primitives.py), if it writes (P1.7)
     v2: bool = False            # exists only in law.v2 worlds (Kernel.api_for adds it; off: the name is unknown, as before)
+    contract: str = "deny"      # P4.3: what an association's (contract's) law may do with it: allow | escrow | deny (CONTRACT_COLUMN)
 
     @property
     def legacy_only(self) -> bool:
@@ -295,6 +297,22 @@ LAWFNS = _fns(
         F("law_id", "read", scope="none", why="the calling law's own id", docs="requires", v2=True),
         F("treasury", "read", scope="none", why="the owner key of the calling law's own treasury", docs="requires", v2=True),
     ),
+    _module(
+        "contracts",                                                    # P4.3: associations (charter/contracts.py); only with contracts on
+        F("pull", "money", scope="none", why="only an association's own law may call it: from its members, within their allowances",
+          docs="contracts", power="take_deposits", primitive="pull"),
+        F("forfeit", "money", scope="none", why="only an association's own law may call it: from its members' escrow",
+          docs="contracts", power="take_deposits", primitive="move"),
+        F("refund", "money", scope="none", why="only an association's own law may call it: its escrow back to the member",
+          docs="contracts", power="take_deposits", primitive="move"),
+        F("breach", "sanctions", scope="none", why="only an association's own law may call it: a record about one of its members",
+          docs="contracts", primitive="breach"),
+        F("escrow_of", "read", docs="contracts"),
+        F("allowance_of", "read", docs="contracts"),
+        F("contract_state", "read", docs="contracts"),
+        F("contracts", "read", docs="contracts"),
+        F("breaches", "read", docs="contracts"),
+    ),
 )
 # P4.2: the power column of the rows every polity may call today (charter/powers.py; the legacy_reserve rows carry it on their own
 # line). Kept off the rows' lines, like the P1.7 block below.
@@ -305,6 +323,21 @@ LAWFNS.update({n: replace(LAWFNS[n], power=p) for p, names in (
     ("unlimited_seizure", ("move", "burn")),
     ("camp_rules", ("set_quota", "set_harvest_limit", "set_fee", "set_lease_rules")),
 ) for n in names})
+# P4.3: the contract column (review 06 §3, ARCHITECTURE §7.2): what an association's law may do with each function, as data.
+#   allow   as a polity's law may (subject to the power table: a function whose `power` the association lacks is refused)
+#   escrow  only over what the association holds or its members pre-authorised: its own treasury, its members' escrow and their
+#           allowances (move from the treasury or an escrow to anyone; fine and forfeit from escrow; pull within an allowance)
+#   deny    never (rights, sanctions, camp rules, currencies, force, J0's reserve functions, offices: compulsion and kernel rights)
+# contracts.scope_api applies it (and contracts.check_code refuses a contract whose code calls a denied function).
+CONTRACT_ALLOW_GROUPS = ("read", "text", "projects_read")
+CONTRACT_COLUMN = {
+    **{f.name: "allow" for f in LAWFNS.values() if f.group in CONTRACT_ALLOW_GROUPS},
+    **{n: "allow" for n in ("name", "gazette", "notify", "open_ballot", "set_procedure", "repeal", "breach", "admit", "expel", "use",
+                            "public_of", "root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")},
+    **{n: "escrow" for n in ("move", "fine", "pull", "forfeit", "refund")},
+}
+LAWFNS.update({n: replace(f, contract=CONTRACT_COLUMN.get(n, "deny")) for n, f in LAWFNS.items()})
+CONTRACT_DENIED = frozenset(n for n, f in LAWFNS.items() if f.contract == "deny")
 V2_ONLY = {f.name for f in LAWFNS.values() if f.v2}                    # law.v2 names: off, Kernel.api_for has none of them
 # P1.7: the primitive column of the two rows P1.4 edits (kept off their lines to avoid a merge conflict; fold in after the merge)
 LAWFNS.update({n: replace(LAWFNS[n], primitive=p) for n, p in (("repeal", "repeal"), ("set_official_editor", "appoint"))})
@@ -343,8 +376,10 @@ def _hooks(*hooks: Hook) -> dict:
 
 
 HOOKTABLE = _hooks(
-    Hook("on_enact", "()", "ignored", ("dispatch.py:do_enact",), None, note="also in every dry-run preview"),
-    Hook("on_repeal", "()", "ignored", ("dispatch.py:do_repeal",), True, note="a law's repeal(target) runs it too"),
+    Hook("on_enact", "()", "ignored", ("dispatch.py:do_enact", "contracts.py:_on_enact"), None,
+         note="also in every dry-run preview; a contract's law when it comes into force (P4.3)"),
+    Hook("on_repeal", "()", "ignored", ("dispatch.py:do_repeal", "contracts.py:_retire"), True,
+         note="a law's repeal(target) runs it too; a contract's law when it is replaced or the contract dissolves (P4.3)"),
     Hook("on_round_start", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run"), None),   # the round_start phase
     Hook("on_round_end", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run"), None),       # the round_end phase
     Hook("on_harvest", "(agent, camp, x, y)", "deduct",
