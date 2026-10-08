@@ -34,8 +34,7 @@ def test_every_goal_has_a_rule_and_a_version(name):
 
 def test_every_example_passes():
     assert GR.check_examples() == []
-    with_examples = [n for n, g in GR.GOALS.items() if g.examples]
-    assert len(with_examples) >= 12
+    assert [n for n, g in GR.GOALS.items() if not g.examples] == []     # every goal has an executable example (P6.1)
 
 
 def test_a_wrong_example_is_reported():
@@ -48,12 +47,24 @@ def test_a_wrong_example_is_reported():
         GR.GOALS["Wealth"] = old
 
 
-def test_score_is_the_legacy_scorer_through_history():
+def test_score_is_the_native_scorer():
     h = GR.EXAMPLES["Gifts"][0][0]()
+    for name in GR.GOALS:
+        g = GR.GOALS[name]
+        assert g.score.native is G.HSCORERS[name] and g.score.legacy is G.SCORERS[name]
     for name in ("Gifts", "Safety", "Benefactor", "Wealth"):
         g = GR.GOALS[name]
         assert g.score(h, "A", {}, HI.Ctx(h)) == G.SCORERS[name](h.gt, "A", {}) == HI.score_goal(h, name, "A", {})
-        assert g.score.legacy is G.SCORERS[name]
+    for name, legacy in (("Board objective", G.board_score), ("Fixer objective", G.fixer_score)):
+        assert GR.FIXED[name].score(h, "A") == legacy(h.gt, "A") and GR.FIXED[name].score.legacy is legacy
+
+
+def test_examples_agree_with_the_legacy_scorers():
+    """Every example's expected value is also what the version-1 legacy scorer gives on the same fixture (a port, not a change)."""
+    for name, g in GR.GOALS.items():
+        for fx, agent, params, expected in g.examples:
+            h = fx()
+            assert GR._close(G.SCORERS[name](h.gt, agent, params), expected), name
 
 
 def test_old_names_are_derived_from_the_rows():

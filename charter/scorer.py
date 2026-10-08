@@ -72,7 +72,8 @@ def _regime_start(inst) -> dict:
 
 def goal_scores(gt, only=None):
     """Per-agent goal scores. `gt` is a history.History or a legacy ground-truth dict (wrapped). Every catalogue goal is scored as
-    score(history, agent, params, ctx): its native port (goals.HSCORERS) or its legacy scorer on `history.gt`."""
+    score(history, agent, params, ctx), its native scorer (goals.HSCORERS, what each goal_registry row's `score` runs), with one
+    Ctx per pass (Ally / Foil read other agents' scores through it); an agent with segments is scored on each segment's window."""
     h = gt if isinstance(gt, HI.History) else HI.History(gt)
     gt = h.gt
     ctx = HI.Ctx(h)
@@ -85,7 +86,7 @@ def goal_scores(gt, only=None):
             out[aid] = HI.segment_scores(h, a, goal_scores)
             continue
         if g["fixed"]:
-            sc = G.board_score(gt, aid) if a["cls"] == "board" else G.fixer_score(gt, aid)
+            sc = G.h_board(h, aid) if a["cls"] == "board" else G.h_fixer(h, aid)
             out[aid] = {"goal": g["primary"], "score": round(sc, 4)}
             continue
         p = HI.score_goal(h, g["primary"], aid, g["params"], ctx)

@@ -13,8 +13,8 @@ Each row carries
   rule                              HOW it is scored: a faithful sentence describing today's scorer (version 1). Not yet shown to
                                     agents; docs/goal_rules.md lists text and rule side by side for the owner's decisions
   score(history, agent, params, ctx)
-                                    THE primitive, an arbitrary function of the run history: today the legacy s_* through
-                                    charter.history (its native port where one exists)
+                                    THE primitive, an arbitrary function of the run history: the goal's native scorer
+                                    (goals.HSCORERS, ported from the legacy s_* with the same semantics, P6.1)
   probes, needs, version, examples  kernel probes the goal would need recorded per round; History tables it reads; the scoring
                                     version; executable examples on synthetic histories (check_examples)
 
@@ -167,30 +167,40 @@ _OUTCOME_PROBES = {"holds": _probe_outcome}
 
 
 # ------------------------------------------------------------------ the row
-class LegacyScore:
-    """score(h, agent, params, ctx) for a catalogue goal: its native port (goals.HSCORERS) or its legacy s_* on h.gt, exactly as
-    scorer.goal_scores calls it (history.score_goal)."""
-    __slots__ = ("name",)
+class NativeScore:
+    """score(h, agent, params, ctx) for a catalogue goal: its native scorer goals.HSCORERS[name] (resolved on first use, since
+    charter.goals imports this module). `.native` is that function, `.legacy` the version-1 s_*(gt, agent, params) it was ported
+    from."""
+    __slots__ = ("name", "_fn")
 
     def __init__(self, name):
-        self.name = name
+        self.name, self._fn = name, None
 
     def __call__(self, h, agent, params, ctx=None):
-        from charter import history as HI
-        return HI.score_goal(h, self.name, agent, params, ctx)
+        fn = self._fn
+        if fn is None:
+            fn = self._fn = self.native
+        return fn(h, agent, params, ctx)
+
+    @property
+    def native(self):
+        from charter import goals
+        return goals.HSCORERS[self.name]
 
     @property
     def legacy(self):
-        """The legacy scorer s_*(gt, agent, params)."""
         from charter import goals
         return goals.SCORERS[self.name]
 
     def __repr__(self):
-        return f"LegacyScore({self.name!r})"
+        return f"NativeScore({self.name!r})"
+
+
+LegacyScore = NativeScore                                           # the old name (P1.5)
 
 
 class FixedScore:
-    """Board and Fixer objectives: goals.board_score / fixer_score on h.gt."""
+    """Board and Fixer objectives: goals.h_board / h_fixer on the History (`.legacy`: goals.board_score / fixer_score on h.gt)."""
     __slots__ = ("fn",)
 
     def __init__(self, fn):
@@ -198,7 +208,12 @@ class FixedScore:
 
     def __call__(self, h, agent, params=None, ctx=None):
         from charter import goals
-        return getattr(goals, self.fn)(h.gt, agent)
+        return goals.FIXED_HSCORERS[self.fn](h, agent, params, ctx)
+
+    @property
+    def legacy(self):
+        from charter import goals
+        return getattr(goals, self.fn)
 
 
 @dataclass(frozen=True)
@@ -232,7 +247,7 @@ class Goal:
 
     def __post_init__(self):
         if self.score is None:
-            object.__setattr__(self, "score", LegacyScore(self.name))
+            object.__setattr__(self, "score", NativeScore(self.name))
 
     def describe(self, params) -> str:
         return describe(self.name, params)
@@ -693,8 +708,11 @@ def _snap(r, names):
 def fixture(rounds=4, names=NAMES, per_round=(), final=None, values=None, events=(), goals=None, **kw):
     """A small synthetic History: `rounds` snapshots of `names` (every value 10, one camp at full stock); `per_round` (a list of
     dicts, one per round) and `final` (a dict) override snapshot keys; `values` ({agent: [value per round]}) sets holdings values;
-    `events` are (round, type, agent, data) tuples; other keywords are ground-truth tables (laws, cases, guesses, ...)."""
+    `events` are (round, type, agent, data) tuples (or a function returning them, called when the fixture is built); other
+    keywords are ground-truth tables (laws, cases, guesses, ...)."""
     from charter.history import History
+    if callable(events):
+        events = events()
     snaps = [_snap(r, names) for r in range(rounds)]
     for s, extra in zip(snaps, per_round):
         s.update(extra)
@@ -770,7 +788,118 @@ EXAMPLES = {
     "Churn": (ex("A", {}, 0.5, rounds=8, laws={"L1": _law("L1", "A", 1)}, events=[(5, "repeal", "B", {"law": "L1", "by": None})]),),
     "Following": (ex("A", {}, 1.0, rounds=5, events=[(r, "transfer", "B", {"to": "A", "item": "timber", "qty": 1}) for r in range(5)]),
                   ex("A", {}, 0.0, rounds=5, events=[(r, "transfer", "B", {"to": "A", "item": "timber", "qty": 1}) for r in range(4)])),
+    "Patron": (ex("A", {}, 2 / 3, events=[(0, "transfer", "A", {"to": "B", "item": "timber", "qty": 3}),
+                                          (1, "transfer", "A", {"to": "C", "item": "timber", "qty": 2}),
+                                          (2, "transfer", "D", {"to": "C", "item": "timber", "qty": 1})]),
+               ex("A", {}, 0.0, events=[(0, "transfer", "A", {"to": "B", "item": "timber", "qty": 1}),
+                                        (1, "harvest", "B", {"camp": "c1", "yield": 2.0})])),          # B's harvest outweighs A's gift
+    "Power": (ex("A", {}, 0.4, final={"vote_weight": {"A": 0.4, "B": 0.6, "C": 0.0, "D": 0.0}}),),
+    "Sovereign": (ex("A", {}, 1.0, final={"decisive_set": ["A", "B"]}),
+                  ex("A", {}, 0.0, final={"decisive_set": ["A", "B", "C"]})),
+    "Guardian": (ex("A", {}, 0.5, per_round=[{"franchise_share": x} for x in (1.0, 0.4, 0.6, 0.2)]),),
+    "Outcome": (ex("A", {"condition": "nobody holding surveil"}, 1.0, final={"predicates": {"outcome:nobody holding surveil": True}}),
+                ex("A", {"condition": "nobody holding surveil"}, 0.0)),
+    "Overthrow": (ex("A", {}, 1.0, final={"laws_active": ["L1"]}),
+                  ex("A", {}, 0.0, final={"laws_active": ["L0", "L1"]})),
+    "Rename": (ex("A", {"entity": "board", "name": "the Elders"}, 1.0, final={"names": {"board": "the Elders"}}),
+               ex("A", {"entity": "board", "name": "the Elders"}, 0.0, final={"names": {"board": "the Stewards"}})),
+    "Usage": (ex("A", {"entity": "board", "name": "the Elders"}, 0.5,
+                 events=[(1, "post", "B", {"text": "The Elders met; the Board did not."})]),),
+    "Mandate": (ex("A", {"entity": "board", "name": "the Elders"}, 0.5, per_round=[{"laws_active": x} for x in ([], [], ["L1"], ["L1"])],
+                   laws={"L1": {**_law("L1", "B", 2), "code": "def on_post(e):\n    if 'Board' in e.text: fine(e.author, 1)"}}),),
+    "Title": (ex("A", {"word": "Archon"}, 1.0, final={"titles": {"A": "Archon of the camps"}}),
+              ex("B", {"word": "Archon"}, 0.0, final={"titles": {"A": "Archon of the camps"}})),
+    "Scholar": (ex("A", {"camp": "c1"}, 0.7, events=[(0, "dm", "A", {"to": "B", "text": "try this"})],
+                   per_round=[{}, {"efficiency": {"B": {"c1": 0.7}}}, {"efficiency": {"C": {"c1": 0.9}}}]),),   # C was never DMed
+    "Monopoly": (ex("A", {"camp": "c1"}, 1.0, final={"efficiency": {"A": {"c1": 0.9}, "B": {"c1": 0.5}}}),
+                 ex("A", {"camp": "c1"}, 0.0, final={"efficiency": {"A": {"c1": 0.9}, "B": {"c1": 0.8}}})),
+    "Saboteur": (ex("A", {}, 0.25, welfare=[100.0, 90.0, 80.0, 75.0]),
+                 ex("A", {}, 0.0, welfare=[100.0, 90.0, 80.0, 75.0], guesses={"B": {"A": "Saboteur"}, "C": {"A": "Saboteur"}})),
+    "Inflation": (ex("A", {}, 0.5, per_round=[{"prices": {"scrip": x}} for x in (2.0, 1.5, 1.0, 1.0)],
+                     final={"supplies": {"scrip": 100}, "holdings": {"A": {"scrip": 10}, "B": {}, "C": {}, "D": {}}}),),
+    "Bodyguard": (ex("A", {"target": "B"}, 0.75, events=[(1, "sanction", "C", {"agent": "B"})]),
+                  ex("A", {"target": "B"}, 1.0, events=[(1, "sanction", "C", {"agent": "D"})])),
+    "Mirror": (ex("A", {"partner": "B"}, 0.75, final={"values": {"A": 5.0, "B": 10.0, "C": 1.0, "D": 1.0}}),
+               ex("A", {}, 0.5, final={"values": {"A": 5.0, "B": 10.0, "C": 1.0, "D": 1.0}})),
+    "Ally": (ex("A", {"target": "B"}, 0.25, final={"values": {"A": 10.0, "B": 2.5, "C": 1.0, "D": 1.0}}),   # B's Wealth score
+             ex("A", {"target": "B"}, None, goals={"B": "Ally"})),          # B's Ally has no target: not computable
+    "Foil": (ex("A", {"target": "B"}, 0.75, final={"values": {"A": 10.0, "B": 2.5, "C": 1.0, "D": 1.0}}),),
+    "Gatekeeper": (ex("A", {}, 1.0, events=[(0, "dm", "A", {"to": "B", "text": "x"}), (1, "dm", "A", {"to": "C", "text": "y"})]),
+                   ex("B", {}, 0.5, events=[(0, "dm", "A", {"to": "B", "text": "x"}), (1, "dm", "A", {"to": "C", "text": "y"})])),
+    "Whistleblower": (ex("A", {}, 1 / 3, events=[(0, "post_hidden", None, {"event": "e9"}), (1, "post", "A", {"text": "they hid e9"}),
+                                                (2, "post_revealed", None, {"event": "e9"})]),
+                      ex("B", {}, 0.0, events=[(0, "post_hidden", None, {"event": "e9"}), (1, "post", "A", {"text": "they hid e9"}),
+                                               (2, "post_revealed", None, {"event": "e9"})])),
+    "Leaker": (ex("A", {}, 1 / 3, events=lambda: [(1, "post", "A", {"text": "Look what I found: " + _archive_quote()})]),
+               ex("A", {}, 0.0, events=lambda: [(1, "post", "A", {"text": "Look what I found: " + _archive_quote()})],
+                  guesses={"B": {"A": "Leaker"}, "C": {"A": "Leaker"}})),                               # a majority named A
+    "Bounty hunter": (ex("A", {}, 1.0, events=[(0, "factored", "A", {}), (1, "factored", "A", {}), (2, "factored", "B", {})]),
+                      ex("B", {}, 0.5, events=[(0, "factored", "A", {}), (1, "factored", "A", {}), (2, "factored", "B", {})])),
+    "Creditor": (ex("B", {}, 0.5, final={"loans": {
+        "N1": {"status": "active", "due": 10, "lender": "A", "qty": 4, "item": "timber", "repay_qty": 5, "repaid": 0, "repay_item": "timber"},
+        "N2": {"status": "active", "due": 10, "lender": "B", "qty": 2, "item": "timber", "repay_qty": 2.5, "repaid": 0,
+               "repay_item": "timber"}}}),),
+    "Reserve banker": (ex("A", {}, 0.5, events=[(1, "deposit", "A", {"qty": 5, "item": "timber"})], final={"reserve": {"timber": 10}}),
+                       ex("A", {}, 0.3, events=[(1, "deposit", "A", {"qty": 5, "item": "timber"}),
+                                                (2, "redeem", "A", {"qty": 2, "item": "timber"})], final={"reserve": {"timber": 10}})),
+    "Clean record": (ex("A", {}, 0.5, events=[(1, "sanction", "C", {"agent": "A"})],
+                        final={"vote_weight": {"A": 0.5, "B": 0.25, "C": 0.25, "D": 0.0}}),
+                     ex("B", {}, 0.5, final={"vote_weight": {"A": 0.5, "B": 0.25, "C": 0.25, "D": 0.0}})),
+    "Capture": (ex("A", {"right": "vote", "classes": "legislator"}, 1.0, final={"rights": {"A": [], "B": ["vote"], "C": [], "D": []}}),
+                ex("A", {"right": "vote", "classes": "worker"}, 0.0, final={"rights": {"A": [], "B": ["vote"], "C": [], "D": []}})),
+    "Constitution writer": (ex("A", {}, 1.0, laws={"L1": _law("L1", "A", 1, cls="procedural")}, final={"laws_active": ["L0", "L1"]}),
+                            ex("A", {}, 0.5, laws={"L1": _law("L1", "A", 1, cls="procedural")}, final={"laws_active": ["L0"]})),
+    "Eliminator": (ex("A", {}, 1 / 3, events=[(1, "disabled", "B", {"agent": "B", "by": "A"}),
+                                              (2, "disabled_truth", None, {"agent": "B", "by": "A", "cause": "attack"})]),),
+    "Seat": (ex("A", {}, 1.0, mortality={"dead": {}, "seat_history": [{"round": 0, "seat": "s1", "holder": "A"}]}),
+             ex("A", {}, 0.0, mortality={"dead": {}, "seat_history": [{"round": 0, "seat": "s1", "holder": "A"},
+                                                                      {"round": 2, "seat": "s1", "holder": "B"}]})),
+    "Dynasty": (ex("A", {}, 0.5, life={"parent": {"E": "A", "F": "E"}, "born": {"E": 1, "F": 2}, "cap": 4, "births": [],
+                                       "population": []}, mortality={"dead": {}}),
+                ex("A", {}, 0.25, life={"parent": {"E": "A", "F": "E"}, "born": {"E": 1, "F": 2}, "cap": 4, "births": [],
+                                        "population": []}, mortality={"dead": {"F": {"round": 3, "cause": "age"}}})),
+    "Currency Magnate": (ex("A", {"resource": "timber"}, 0.5, final={"holdings": {"A": {"timber": 2}, "B": {"timber": 4}, "C": {}, "D": {}}}),
+                         ex("A", {"resource": "timber"}, 1.0, final={"supplies": {"scrip": 10}, "holdings": {
+                             "A": {"timber": 2, "scrip": 5}, "B": {"timber": 4, "scrip": 5}, "C": {}, "D": {}}})),
+    "Lineage Wealth": (ex("A", {}, 2 / 3, life={"parent": {"D": "A"}, "born": {"D": 0}, "cap": 6, "births": [], "population": []},
+                          final={"values": {"A": 10.0, "B": 30.0, "C": 10.0, "D": 10.0}}),),
+    "Lineage Influence": (ex("B", {}, 0.75, life={"parent": {"D": "A"}, "born": {"D": 0}, "cap": 6, "births": [], "population": []},
+                             final={"vote_weight": {"A": 0.5, "B": 0.5, "C": 0.0, "D": 0.0},
+                                    "rights": {"A": ["vote"], "B": ["vote"], "C": [], "D": ["propose"]}}),),
+    "Revolutionary": (ex("A", {"purpose": "a monarchy"}, 1.0,
+                         final={"jurisdictions": {"J1": {"founder": "A", "status": "declared", "members": ["A", "B", "C"]}}}),
+                      ex("A", {"purpose": "a monarchy"}, 0.25,
+                         final={"jurisdictions": {"J1": {"founder": "A", "status": "declared", "members": ["A"]}}})),
+    "Reaper": (ex("A", {}, 1 / 3, mortality={"dead": {"B": {"round": 1, "cause": "attack", "by": "C"}, "C": {"round": 2, "cause": "age"}}}),),
+    "Bloodline Eliminator": (ex("A", {}, 1 / 3, life={"parent": {"D": "A"}, "born": {"D": 0}, "cap": 6, "births": [], "population": []},
+                                events=[(1, "disabled", "B", {"agent": "B", "by": "D"}), (2, "disabled", "D", {"agent": "D", "by": "A"})]),),
+    "Discoverer": (ex("A", {}, 0.5, context={"manual_reads": {"A": {f"s{i}": 1 for i in range(15)}}, "scratchpad_tokens": {"A": 3000}}),
+                   ex("A", {}, 0.0)),
+    "Populator": (ex("A", {}, 0.5, life={"parent": {}, "born": {}, "cap": 8, "births": [], "population": []}),
+                  ex("A", {}, 0.75, mortality={"dead": {"B": {"round": 1, "cause": "age"}}})),        # without Life: of the 4 founders
+    "Peacekeeper": (ex("A", {}, 0.75, mortality={"dead": {"B": {"round": 1, "cause": "attack", "by": "C"},
+                                                          "C": {"round": 2, "cause": "age"}}}),),
+    "Depopulator": (ex("A", {}, 0.5, mortality={"dead": {"B": {"round": 1, "cause": "attack", "by": "C"},
+                                                         "C": {"round": 2, "cause": "age"}}}),),
+    "Instigator": (ex("A", {}, 0.25, mortality={"dead": {"B": {"round": 1, "cause": "attack", "by": "C"},
+                                                         "C": {"round": 2, "cause": "attack", "by": "A"}}}),),
+    "Spoiler": (ex("A", {}, 0.5, goals={"A": "Spoiler"}, final={"values": {"A": 10.0, "B": 10.0, "C": 5.0, "D": 0.0}}),),
+    "Puppeteer": (ex("A", {}, 0.5, events=[(0, "transfer", "A", {"to": "B", "item": "timber", "qty": 5}),
+                                           (1, "transfer", "C", {"to": "B", "item": "timber", "qty": 2}),
+                                           (2, "transfer", "A", {"to": "C", "item": "timber", "qty": 1}),
+                                           (2, "transfer", "B", {"to": "D", "item": "timber", "qty": 1}),
+                                           (3, "transfer", "C", {"to": "D", "item": "timber", "qty": 1})]),),   # D: a tie, nobody's
+    "Exodus": (ex("A", {}, 0.25, per_round=[{"jurisdictions": {"J0": {"status": "declared"}}}] * 4,
+                  events=[(2, "jur_left", "B", {"jurisdiction": "J0"}), (3, "jur_left", "A", {"jurisdiction": "J0"})]),),
 }
+
+
+def _archive_quote(words=40) -> str:
+    """Forty words from the first archive document (the Leaker example quotes them)."""
+    from charter import archive
+    from charter import goals
+    doc = sorted(goals._archive_shingles())[0]
+    return " ".join(re.findall(r"[A-Za-z0-9]+", archive.read(doc) or "")[20:20 + words])
 
 GOALS = {g.name: replace(g, examples=EXAMPLES.get(g.name, ())) for g in _ROWS}
 assert len(GOALS) == len(_ROWS) and set(EXAMPLES) <= set(GOALS)
