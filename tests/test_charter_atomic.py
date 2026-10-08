@@ -156,8 +156,8 @@ intent = "test"
 """
 '''
 JUR_ONLY = {"admit", "expel", "lawful_attack"}
-# A contract's own functions (pull, forfeit, refund, breach) exist only in an association's law (contracts.scope_api), which this
-# generic harness does not build; their rollback is not covered here yet (follow-up: an association variant of this test).
+# A contract's own functions (pull, forfeit, refund, breach, swap, open_fund) exist only in an association's law
+# (contracts.scope_api): the association variant below (test_a_killed_contract_invocation_leaves_no_trace, W7e) covers them.
 CONTRACT_ONLY = {n for n, f in LA.LAWFNS.items() if f.module == "contracts"}
 WRITERS = sorted(n for n, f in LA.LAWFNS.items() if f.primitive and n not in CONTRACT_ONLY)
 
@@ -225,6 +225,79 @@ def test_a_killed_invocation_leaves_no_trace_whatever_it_wrote(name):
     new = after["events"][len(before["events"]):]
     assert [e["type"] for e in new] == ["hook_aborted", "law_flagged"]
     assert new[0]["vis"] == "monitor" and ab["events_dropped"] == sum(ab["dropped"].values())
+    after["events"] = after["events"][:len(before["events"])]
+    assert after == before, name
+
+
+# ------------------------------------------------------------------ the association variant (W7e)
+# Every contract-only writer, called by an association's own law (contracts on, law.v2): {a} the founder, {b} a member, both with
+# escrow, b with an allowance, the treasury funded. Kept in step with CONTRACT_ONLY by test_every_contract_writer_has_a_call.
+CONTRACT_CALLS = {
+    "pull": "pull('{b}', 'timber', 1)",
+    "forfeit": "forfeit('{b}', 'timber', 1)",
+    "refund": "refund('{b}')",
+    "breach": "breach('{b}', 'late', 'pay 1 timber')",
+    "swap": "swap('{a}', '{b}', {{'timber': 1}}, {{'grain': 1}})",
+    "open_fund": "move(treasury(), open_fund('works'), 'timber', 1)",
+}
+CONTRACT_WRITERS = sorted(n for n in CONTRACT_ONLY if LA.LAWFNS[n].primitive)
+
+
+def test_every_contract_writer_has_a_call():
+    assert set(CONTRACT_CALLS) == set(CONTRACT_WRITERS)
+
+
+def contract_world(name, dies):
+    """A contracts world (law.v2) with one association founded by a and joined by b, escrows (a: timber; b: timber, grain), b's
+    allowance, a funded treasury, and the association's law calling `name` in after_post (then dying, if `dies`)."""
+    import re
+    sp = S.apply_overrides(S.load("E2"), ["shared_archive.enabled=false", "turns=sequential", "law.v2=true",
+                                          "contracts.enabled=true", "contracts.scripted=false"])
+    inst = generator.generate(sp, 1)
+    k = Kernel(inst)
+    k.enact(k.new_law(inst["constitution_code"], "constitution"))
+    k.start_round()
+    a, b = [x for x in k.roster() if k.w["agents"][x]["cls"] not in ("board", "fixer")][:2]
+    for x in (a, b):
+        for it in ("timber", "grain"):
+            k._add(x, it, 10.0)
+    body = CONTRACT_CALLS[name].format(a=a, b=b)
+    src = law(f"Writer {name}", "public_note = []\n\ndef after_post(p, chain):\n    state['ran'] = 1\n    " + body
+              + "\n    state['done'] = 1\n    public_note.append(1)\n" + (LOOP if dies else ""))
+    out = A.act(k, a, "create_contract", {"name": "Test", "code": src})
+    cid = re.search(r"A\d+", out).group()
+    A.act(k, b, "join_contract", {"contract": cid})
+    for x, it in ((a, "timber"), (b, "timber"), (b, "grain")):
+        A.act(k, x, "deposit_escrow", {"contract": cid, "item": it, "qty": 3})
+    A.act(k, b, "set_allowance", {"contract": cid, "item": "timber", "qty": 2})
+    k._add(f"assoc:{cid}", "timber", 4.0)
+    lid = k.w["contracts"]["assoc"][cid]["laws"][0]
+    assert k.w["laws"][lid]["status"] == "active", (out, k.w["laws"][lid])
+    return k, lid
+
+
+@pytest.mark.parametrize("name", CONTRACT_WRITERS)
+def test_a_killed_contract_invocation_leaves_no_trace(name):
+    """The association variant of test_a_killed_invocation_leaves_no_trace_whatever_it_wrote: each contract writer, run inside an
+    association law's hook that then dies, leaves the world (escrows, allowance counters, breach records, funds), the events and
+    module data exactly as before, except the hook_aborted record and the law's flag."""
+    k, lid = contract_world(name, dies=False)
+    before = image(k)
+    out, ab = run_hook(k, lid)
+    assert ab is None and out is None
+    after = image(k)
+    assert k.w["laws"][lid]["state"].get("done") == 1, (name, k.w["laws"][lid]["status"], events(k, "law_error")[-1:])
+    changed = {x for x in set(before["w"]) | set(after["w"]) if before["w"].get(x) != after["w"].get(x)} - {"laws"}
+    assert changed and len(after["events"]) > len(before["events"]), name           # it wrote something
+    k, lid = contract_world(name, dies=True)
+    before = image(k)
+    out, ab = run_hook(k, lid)
+    assert out is D.DEAD and ab is not None and ab["kind"] == "gas_call" and ab["law"] == lid
+    after = image(k)
+    flags = after["w"]["laws"][lid].pop("flags")
+    assert flags == [{"round": k.r, "kind": "gas_call", "cascade": "kernel:test"}]
+    new = after["events"][len(before["events"]):]
+    assert [e["type"] for e in new] == ["hook_aborted", "law_flagged"]
     after["events"] = after["events"][:len(before["events"])]
     assert after == before, name
 
