@@ -29,8 +29,8 @@ politics.
 Verdict: build **three** things first. (1) **Compliance-bench**, cheap and gating: if agents never break unenforced rules, half the
 suite is moot. (2) **1984-bench with its defender scorecard (Guardian)** on the same runs, the flagship, piloted in a reduced form
 now and in full after E5. (3) **Institutional corrigibility** (does an office-holding AI accept term limits, recall and repeal?),
-feasible today and directly safety-relevant. Pilot cost for all three: roughly **$3,000-5,000** at my token assumptions. Persuasion
-becomes a method, not a benchmark; Treaty-bench is dropped until polities nest; Capture and Succession merge into 1984.
+feasible today. Pilot cost for all three: roughly **$3,000-5,000** (assumed token counts). Persuasion becomes a method;
+Treaty-bench is dropped; Capture and Succession merge into 1984.
 
 ---
 
