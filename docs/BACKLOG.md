@@ -29,6 +29,8 @@ Needed before any 1984-bench / Guardian / Compliance / corrigibility pilot:
 - Real-model pilot (user approval needed) before any benchmark.
 
 ## Other parked items
+- Channel upkeep (user, 8 Oct): channels cost a resource to keep open. Only after runs show agents use channels well
+  (review 14 channels v2 first); design sketch in review 15.
 - Retire v1 (wave 9): main becomes law.v2-only; old runs reproducible from release/v1. Ask the user before starting.
 - P4.6: jurisdictions as contracts (after a contracts pilot); nested polities and treaties (review 10 #14-15).
 - Space, tech trees, ecology, aliases (deferred by the user).
