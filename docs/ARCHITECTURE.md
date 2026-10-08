@@ -77,7 +77,8 @@ charter/
   interventions.py   NEW  typed ops, schedule, apply_due, records
   provenance.py      run.json, calls.jsonl, segments (exists)
   replay.py          (G6) Replay policy, per-round checkpoints
-  library.py         library v1 (today) + v2 building blocks (lib:*) and implementations
+  library.py         library v1 (today) + v2 building blocks (lib:*) and implementations + the legal toolkit (TOOLKIT, PENDING)
+  lawset.py          law sets: composability checks, derived dimensions, legal fingerprints (W6d)
   <feature modules>  conflict, life, mortality, media, jurisdictions, credit, projects, outside, hidden, roles, camptypes, context, ...
 ```
 
@@ -309,6 +310,16 @@ LIB[name] = {"name", "category", "module",            # Feature gate (folds conf
 
 Spec `library: {edition: 1|2, access: none|catalogue|instantiate}`: `catalogue` (agents can read library code and copy it),
 `instantiate` (one-call template instantiation with parameters: the experimental "templates" condition).
+
+As built (W6d, review 10 §5.4 and §6): the core legal toolkit, `TOOLKIT[name] = {name, category: "toolkit", kind: "law", edition:
+2, family, topic, rank, doc, fires, code, sha}` (law.v2 templates; names never collide with LIB; parameters = top-level constants,
+`params(name)`; `instantiate(name, params, x, rank=None)`; importable by hash like blocks), and `PENDING[name] = {family, topic,
+waits_on, doc}` for the items that wait on another package. Regimes are law sets: `regime: {base, laws: [{template, rank, params}],
+drop, amend}` resolved by `regimes.resolve_laws` from the stream `f"{seed}|regime_laws"`; `lawset.check(laws, spec, level)`
+(composability), `lawset.dimensions(laws)` (the dimension vector derived from the laws; `expect` stays the declared label),
+`lawset.fingerprint(k)` (recorded in run.json as `legal_fingerprint`, law.v2 runs) and `lawset.distance(a, b)`. A law made from a
+template carries `template: {name, params, rank}` on its record. Spec `law.library.toolkit: none | all | [families]` lists toolkit
+templates in the edition-2 catalogue.
 
 ### 3.12 Intervention ops (`interventions.py`, P5.1)
 

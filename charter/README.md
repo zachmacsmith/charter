@@ -119,7 +119,8 @@ Runs the same scripted worlds on two code revisions and reports where they first
 | `kernel.py` | world state, invariants, the law API, ballots, procedures, Board veto window, Fixer, courts, dry-run transactions, probes, snapshots |
 | `actions.py` | every agent action |
 | `credit.py` | loans, interest, default, credit records, par currencies, reserve ratio, bank runs, credit metrics |
-| `library.py` | 58 drafted laws, 5 constitutions, effect predicates |
+| `library.py` | 58 drafted laws, 5 constitutions, effect predicates; edition 2: lib:* blocks, readable rewrites and the legal toolkit (29 parameterised law.v2 templates) |
+| `lawset.py` | law sets: composability checks, dimensions derived from laws, legal fingerprints and distances; `python -m charter library list|show` |
 | `regimes.py` | 22 starting regimes: constitution + starting statutes + starting rights/offices + description |
 | `goals.py` | 29 goals with weights, samplers and state-based scores; Board/Fixer objectives |
 | `agents.py` | prompts, visibility-filtered feeds, scripted bots, the LLM policy |
@@ -280,6 +281,23 @@ Runs the same scripted worlds on two code revisions and reports where they first
   constitution (free_market and surveillance_state: oligarchy of Legislators). The Board's veto window still applies to the
   Ruler's structural and procedural laws, and class briefs still call Legislators voters where a regime revoked their vote (the
   regime paragraph and the rights shown each turn say otherwise).
+- **Regimes as law sets and the legal toolkit** (W6d; law.v2 worlds). `library.TOOLKIT` holds parameterised law.v2 templates for
+  the structures real legal systems are built from (review 10 §6): Entrenched Constitution, Bill of Rights, Constitutional Court,
+  Delegated Regulation Act, the procedure set (simple, supermajority, referendum, popular initiative), Definitions and Citizenship
+  Act, Licensing Authority, Regulatory Agency, Public Register, Penal Code, Prosecution Office, Pardon Office, Compensation Act,
+  Strict Liability for Attacks, Title Registry, Commons Charter, Eminent Domain, Intestacy, Primogeniture, Forced Heirship, Estate
+  Tax, Slayer Rule, Central Bank Charter, Progressive Income Tax, Precedent Register, Recognition of Judgments; each tagged with a
+  family and topic, its top-level constants are its parameters (`python -m charter library list`, `library show NAME --set K=V`).
+  `library.PENDING` lists the items waiting on another package (emergency powers, bicameralism, juries, appeals, exchange, funds,
+  VAT, ...). A regime may name laws made from templates: `regime: {base, laws: [{template, rank, params}], drop: [...], amend:
+  {name: {PARAM: v}}}`; templates and parameters may be distributions (`{choice: [...]}`, `{randint: [a, b]}`, ...) drawn from the
+  regime's own law stream, so replicates vary the law set while the world and the derived dimensions stay put. The set is checked
+  at generation (`lawset.check`: level, rank, import DAG, overlaps; a law that can never fire is an error) and its dimensions are
+  derived from the laws (`lawset.dimensions`: procedures, amendment rule, label, entrenchment, rights guards, review, courts,
+  succession, taxes, hooks per family), recorded next to the declared `expect` (they agree for every built-in regime but
+  federation). Template laws keep their provenance on the law record (`template`), and law.v2 runs record a `legal_fingerprint` in
+  `run.json` (law shas, ranks, templates, hook coverage primitive x rank; `lawset.distance` compares two). `start_laws` also accepts
+  toolkit templates (law.v2), and `law.library.toolkit: all | [families]` lists them in the edition-2 catalogue.
 - **World events** (`events.py`, spec `events:`, off in base, on in E7; try `--set events.enabled=true`). A hidden schedule is drawn at
   generation (`instance.json -> world_events`): each type's times are a Poisson process with its `mean_interval` (own RNG per type, own
   seed per event, so runs and resumes are reproducible). Types: camp discovered (25 rounds; one discoverer learns it and, if a Worker,
