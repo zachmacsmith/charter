@@ -187,8 +187,13 @@ def twin_rows(act: Act, code: str, sp: dict | None = None) -> dict:
     """The native twin of a store-based Act: its constants, read statically from its code and checked -> {key: value}."""
     out = {}
     for c, node in _constants(L.check(code)).items():
-        if c in act.keys and L.const_expr(node):
-            out[act.keys[c]] = act.check(act.keys[c], ast.literal_eval(node), sp or {})
+        if c not in act.keys:
+            continue
+        try:
+            value = ast.literal_eval(node)                              # literals only: a computed constant runs only as law
+        except ValueError:
+            continue
+        out[act.keys[c]] = act.check(act.keys[c], value, sp or {})
     return out
 
 
