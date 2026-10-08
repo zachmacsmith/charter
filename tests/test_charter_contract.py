@@ -25,7 +25,10 @@ LIVE = [p for p in PR.PRIMITIVES.values() if p.status == "live"]
 
 # ---------------------------------------------------------------------- known gaps (may only shrink)
 # Checks: event        a live primitive logs no event type today (and has no why["event"])
-#         compel_vis   a law-caused instance is monitor-only (or invisible): the affected agent may never learn of it (D-5)
+#         compel_vis   a law-caused instance is monitor-only (or invisible): the affected agent may never learn of it (D-5). The check
+#                      reads compel_vis, the visibility under law.notify_parties (P3.7: on by default exactly when law.v2 is on); a row
+#                      D-5 made visible keeps its old visibility as legacy_vis="monitor", which is what every world without law.v2 sees
+#                      (test_legacy_vis_rows_are_notified_under_law_v2 holds the condition)
 #         compel       agents can cause it but no law function can, with no recorded reason
 #         compel_cls   a law function causing a change (not a rule) is classified ordinary
 #         gate         agents can cause it but no law can stop or charge it: no before-alias, no bespoke rule, no recorded reason
@@ -67,9 +70,7 @@ KNOWN_GAPS = frozenset({
     # no event logged today
     ("event", "regrow"), ("event", "burn"), ("event", "create_currency"), ("event", "create_right"), ("event", "set_title"),
     ("event", "set_camp_rule"), ("event", "set_procedure"), ("event", "create_clause"), ("event", "define_action"),
-    # law-caused change seen only by the monitor (or by nobody)
-    ("compel_vis", "move"), ("compel_vis", "mint"), ("compel_vis", "burn"), ("compel_vis", "set_title"),
-    ("compel_vis", "guard_bind"), ("compel_vis", "guard_release"), ("compel_vis", "subscribe"),
+    # law-caused change seen only by the monitor (or by nobody): closed by P3.7 under law.notify_parties (legacy_vis keeps "monitor")
     # agents can do it, no law can stop or charge it
     ("gate", "attack"), ("gate", "guard_bind"), ("gate", "guard_release"), ("gate", "fortify"),                # review 08 §3
     ("gate", "post"), ("gate", "cast_vote"), ("gate", "propose"), ("gate", "rule"),                           # after-only aliases
@@ -104,6 +105,21 @@ def current_gaps() -> set:
             if LA.LAWFNS[fn].cls == "ordinary" and p.effect not in ("rule", "status", "speech"):
                 gaps.add(("compel_cls", fn))
     return gaps
+
+
+def test_legacy_vis_rows_are_notified_under_law_v2():
+    """P3.7 closed the compel_vis gaps only where law.notify_parties is on (law.v2): a row with legacy_vis is a compel_vis="parties"
+    row with a compel face that dispatch notifies (routed through apply, or a site of dispatch.NOTIFY_SITES), and its legacy visibility
+    is the gap it closed."""
+    from charter import dispatch as D
+    legacy = {p.name for p in LIVE if p.legacy_vis is not None}
+    assert legacy == {"move", "mint", "burn", "set_title", "guard_bind", "guard_release", "subscribe"}
+    for n in legacy:
+        p = PR.PRIMITIVES[n]
+        assert p.legacy_vis == "monitor" and p.compel_vis == "parties" and p.compel and p.parties, n
+    assert set(D.NOTIFY) == {p.name for p in LIVE if p.compel and p.compel_vis == "parties"}
+    assert all(n in D.ROUTED or n in D.NOTIFY_SITES for n in D.NOTIFY), [n for n in D.NOTIFY if n not in D.ROUTED]
+    assert set(D.NOTIFY_SITES) <= set(D.NOTIFY)
 
 
 def test_known_gaps_only_shrink():

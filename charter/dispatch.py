@@ -1297,7 +1297,8 @@ def _state(k) -> dict:
     this round, accounts out of gas this round, per-law gas this round (monitor; review 09 §9.8's law_gas)."""
     st = k.w.get("law_v2")
     if st is None or st.get("round") != k.r:
-        st = k.w["law_v2"] = {"round": k.r, "account_used": {}, "out_of_gas": {}, "law_gas": {}}
+        skip = {a: k.r for a, r in sorted(((st or {}).get("unpaid") or {}).items()) if r == k.r}   # P3.8: an unpaid gas bill
+        st = k.w["law_v2"] = {"round": k.r, "account_used": {}, "out_of_gas": skip, "law_gas": {}}
     return st
 
 
@@ -2123,10 +2124,13 @@ def _apply_v2(k, cas, P, fn, p, opts) -> Outcome:
             return out
     extra = _extra(P, d)
     extra.update({x: v for x, v in v2d.directives.items() if _accepts(fn, x)})   # a new-style directive overrides a legacy one
+    note = compel_note(k, name, p, opts)                              # P3.7: who a law-caused change concerns (before it)
     with k.cause("primitive", name):
         with _unhooked(k, unhooked):
             result = fn(k, **p, **opts, **extra)
         cas.changes += 1
+        if note is not None:
+            compelled(k, note, result)
         charged = _apply_charges(k, P, p, v2d, depth, d.charged) if v2d.charges else ()
         prim_causes = list(k._causes)
     _legacy_after(k, P, p, chain, result)
@@ -2149,3 +2153,148 @@ def _enqueue(k, cas, P, payload, depth, causes, inv, hide) -> None:
             continue
         snap = snap if snap is not None else _copy.deepcopy(payload)
         cas.queue.append(AfterItem(cas.next(), depth, lid, hook, P.name, snap, causes, hide, k.current_turn_agent(), inv))
+
+
+# ====================================================================== P3.7: compel visibility (D-5; review 08 §3, review 09 §4.6)
+# Behind law.v2: spec law.notify_parties (None: follows law.v2, so every world without v2 is untouched). A change of a primitive in
+# NOTIFY (live rows with a compel face and compel_vis "parties") that a law causes -- a law frame on the cause stack: its hooks, its
+# API calls, its procedures and callbacks, and what they set off -- logs a `compelled` event to the row's agent parties: which law
+# (and the hook or function it ran in), what changed (the payload as the party may see it), why, and who the parties are. A law's
+# own before-hook charge is not repeated (its payer is told by law_charged). Redaction per recipient (D-18): concealed actors, a
+# covert attacker, an unnamed killer and the observer read as None (a party always sees itself); a law of a hidden jurisdiction
+# reads as "hidden" to non-members (its id masked everywhere in the data, the hook left out). Recipients who would read the same
+# data share one event. Rows in NOTIFY whose own event already reaches the parties (offer_loan's loan_offer) or that have no agent
+# party (create_currency, create_right, define_action, create_clause) log nothing more.
+import json as _json
+
+NOTIFY = tuple(n for n, p in PR.PRIMITIVES.items() if p.status == "live" and p.compel and p.compel_vis == "parties")
+# NOTIFY rows not routed through apply, and how their parties learn of a law-caused change (tests/test_charter_notify.py)
+NOTIFY_SITES = {"set_title": "kernel:Kernel.api_for.title calls compel_note/compelled itself",
+                "offer_loan": "its own loan_offer event reaches the lender and the borrower",
+                "create_clause": "no party: a clause is the law's own record"}
+
+
+def notify_on(k) -> bool:
+    """law.notify_parties, defaulting to law.v2 (I-8); never without law.v2."""
+    if not v2(k):
+        return False
+    x = (k.spec.get("law") or {}).get("notify_parties")
+    return True if x is None else bool(x)
+
+
+def _released(k, p, opts):
+    """guard_release by a law (why "law") clears its obligations: the pairs it releases, read before the change."""
+    if (opts or {}).get("why") != "law":
+        return None
+    pairs = [list(x) for x in ((k.w.get("conflict") or {}).get("obligations") or {}).get((opts or {}).get("lid")) or []]
+    return {"released": pairs}, [a for pair in pairs for a in pair]
+
+
+SUBJECTS = {"guard_release": _released}                              # (change, parties) where the payload does not name them
+DONE = {"move": lambda r: bool(r) and (r.get("moved") or 0) > 0}       # did the change happen (a short balance moves nothing)
+
+
+def compel_note(k, name, p, opts=None) -> dict | None:
+    """Before a change: the note compelled() logs after it, or None (notification off, not law-caused, no agent party)."""
+    if name not in NOTIFY or k.dry or not notify_on(k):
+        return None
+    f = next((f for f in reversed(k._causes) if next(iter(f)) == "law"), None)
+    if f is None or f.get("charge"):
+        return None
+    P = PR.get(name)
+    sub = SUBJECTS.get(name)
+    got = sub(k, p, opts) if sub else None
+    change, who = got if got is not None else (dict(p), [p.get(x) for x in P.parties])
+    who = [a for a in dict.fromkeys(who) if isinstance(a, str) and a in k.w["agents"]]
+    if not who:
+        return None
+    why = p.get("why") or (opts or {}).get("why") or f.get("hook")
+    return {"primitive": name, "law": f["law"], "hook": f.get("hook"), "why": why, "change": _copy.deepcopy(change),
+            "parties": who, "hide": hidden_agents(k, name, p, opts or {})}
+
+
+def _mask(x, lid):
+    """A hidden law's id out of event data (also inside "law:L7"-style strings)."""
+    if isinstance(x, str):
+        return "hidden" if x == lid else (":".join("hidden" if s == lid else s for s in x.split(":")) if ":" in x else x)
+    if isinstance(x, dict):
+        return {kk: _mask(v, lid) for kk, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_mask(v, lid) for v in x]
+    return x
+
+
+def compelled(k, note, result=None) -> None:
+    """Log the `compelled` events of a note (compel_note) once its change is made."""
+    done = DONE.get(note["primitive"])
+    if done is not None and not done(result):
+        return
+    lid = note["law"]
+    lj = J.law_jur(k, lid)
+    insiders = set(J.members(k, lj)) if "jur" in k.w and k._hidden_jur(lj) else None
+    groups: dict = {}
+    for aid in note["parties"]:
+        hide = set(note["hide"]) - {aid}
+        data = {"primitive": note["primitive"], "law": lid, "hook": note["hook"], "why": note["why"],
+                "change": note["change"], "parties": note["parties"]}
+        data = _scrub(data, hide) if hide else _copy.deepcopy(data)
+        if insiders is not None and aid not in insiders:
+            data = {**_mask(data, lid), "law": "hidden", "hook": None}
+        data = {x: v for x, v in data.items() if v is not None}
+        groups.setdefault(_json.dumps(data, sort_keys=True, default=str), (data, []))[1].append(aid)
+    for data, who in groups.values():
+        k.log("compelled", None, data, vis=who)
+
+
+# ====================================================================== P3.8: gas billed to treasuries (D-12; review 09 §9.7)
+# Off by default: spec law.gas_price {item, rate} (rate: units of item per unit of gas; or {item, qty, per}: qty per `per` gas), read
+# only under law.v2. At the end of each round (Kernel's `advance` step, before the round number moves on) every account whose laws'
+# new-style hooks used gas this round (law_v2.account_used, the per-account meter) is billed round(used * rate, 6) of the item: a
+# move from its treasury (accounts.treasury_of) to the world reserve ("reserve", J0's treasury: for J0's own laws the bill is only
+# checked against the reserve's balance, nothing moves) with why "gas", in a quiet kernel root frame {"kernel": "gas"} (no law hook
+# sees or blocks the bill). A treasury that cannot pay in full pays what it holds and the account is out of gas for the next round:
+# its hooks are skipped (law_v2.unpaid seeds that round's out_of_gas) and account_out_of_gas is logged to its members (public for J0
+# and legacy jurisdictions), as when its gas budget runs out. Each bill is a monitor `gas_billed` record.
+BILL_TO = "reserve"
+
+
+def gas_price(k) -> dict | None:
+    gp = (k.spec.get("law") or {}).get("gas_price")
+    if not gp or not v2(k):
+        return None
+    rate = gp.get("rate")
+    if rate is None:
+        rate = float(gp.get("qty", 0)) / float(gp.get("per") or 1)
+    return {"item": str(gp["item"]), "rate": float(rate)}
+
+
+def _oog_vis(k, acct):
+    j = J.jurs(k).get(acct) if "jur" in k.w else None
+    return (J.members(k, acct) or "monitor") if j and not j.get("legacy") else "public"
+
+
+def bill_gas(k) -> list:
+    """Charge every account for this round's gas (see above). Returns the bills ({account, gas, item, owed, paid})."""
+    price = gas_price(k)
+    if price is None or k.dry:
+        return []
+    st = _state(k)
+    item, bills = price["item"], []
+    with k.cause("kernel", "gas", root=True), quiet(k):
+        for acct in sorted(st["account_used"]):
+            used = int(st["account_used"][acct])
+            owed = round(used * price["rate"], 6)
+            if owed <= 0:
+                continue
+            src = AC.treasury_of(k, acct)
+            paid = round(min(owed, max(0.0, k.bal(src, item))), 6)
+            if paid > 1e-9 and src != BILL_TO and not k.move(src, BILL_TO, item, paid, why="gas"):
+                paid = 0.0
+            bill = {"account": acct, "gas": used, "item": item, "owed": owed, "paid": paid}
+            bills.append(bill)
+            k.log("gas_billed", None, bill, vis="monitor")
+            if paid + 1e-9 < owed:
+                st.setdefault("unpaid", {})[acct] = k.r + 1
+                k.log("account_out_of_gas", None, {"account": acct, "round": k.r + 1, "unpaid": round(owed - paid, 6),
+                                                   "item": item}, vis=_oog_vis(k, acct))
+    return bills

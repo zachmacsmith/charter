@@ -26,7 +26,11 @@ A row (`Primitive`) says:
   reads                   law reads about it (lawapi rows of group read/projects_read/names)
   preview                 Kernel.view paths that show a law's effect on it ("rules.forge_ban" = view()["rules"] keys starting so)
   redact                  "module:qualname" (k, payload, viewer_lid) -> payload, where some of it is secret (P2.x writes them)
-  compel_vis              who learns of a law-caused instance today: parties | public | monitor (monitor needs a why or a gap)
+  compel_vis              who learns of a law-caused instance: parties | public | monitor (monitor needs a why or a gap). "parties":
+                          dispatch.NOTIFY (P3.7, D-5) logs a `compelled` event to the row's agent parties when law.notify_parties is on
+                          (its default under law.v2), unless the change's own event already reaches them
+  legacy_vis              who learns of it with law.notify_parties off (every world without law.v2): None = compel_vis; "monitor"
+                          for the seven rows D-5 made visible (move, mint, burn, set_title, guard_bind, guard_release, subscribe)
   why                     reasons for a missing face: {"compel": ..., "gate": ..., "event": ..., "compel_vis": ...}
   notes                   authority, consent and cost, as today
   status                  live (exists today) | planned (declared by the design, no code yet: P3/P4)
@@ -83,7 +87,8 @@ class Primitive:
     reads: tuple = ()               # law reads about it
     preview: tuple = ()             # Kernel.view paths
     redact: str | None = None       # "module:qualname" (k, payload, viewer_lid) -> payload
-    compel_vis: str = "parties"     # parties | public | monitor
+    compel_vis: str = "parties"     # parties | public | monitor (under law.notify_parties, P3.7)
+    legacy_vis: str | None = None   # P3.7: the visibility with law.notify_parties off, where it differs (None: compel_vis)
     why: dict = field(default_factory=dict)
     # P1.7 additions (not in ARCHITECTURE §3.3's sketch; metadata only)
     causes: tuple = ()              # CAUSES
@@ -140,7 +145,7 @@ _ROWS = [
     # ------------------------------------------------------------------ goods and money
     P("move", "core", "move", ("src", "dst", "item", "qty", "why"), "dispatch:do_move", subject="src", parties=("src", "dst"),
       agent_params=("src", "dst"), charge=("src", "item"), event="move", blocked_event="transfer_blocked", causes=("agent", "law", "world"),
-      reads=("balance", "reserve", "holdings_value"), preview=("holdings", "reserve"), compel_vis="monitor",
+      reads=("balance", "reserve", "holdings_value"), preview=("holdings", "reserve"), compel_vis="parties", legacy_vis="monitor",
       sites=("dispatch:do_move", "kernel:Kernel.move", "actions:_send", "dispatch:legacy_hooks"),
       notes="agents move only their own goods (transfer, fees, payments); laws move members' goods and reserves (move, fine); "
             "seizure (credit.settle, bequests) is a move with its why. Today only an agent's transfer runs on_transfer."),
@@ -158,10 +163,10 @@ _ROWS = [
       why={"gate": _PHYS}),
     P("mint", "core", "create", ("currency", "qty", "to"), "dispatch:do_mint", subject="to", parties=("to",), agent_params=("to",),
       event="mint", causes=("law", "agent"), reads=("supply", "currencies", "circulation"), preview=("currencies", "holdings"),
-      compel_vis="monitor", sites=("dispatch:do_mint", "kernel:Kernel.api_for.mint", "jurisdictions:scope_api.mint", "actions:_deposit"),
+      compel_vis="parties", legacy_vis="monitor", sites=("dispatch:do_mint", "kernel:Kernel.api_for.mint", "jurisdictions:scope_api.mint", "actions:_deposit"),
       notes="laws mint their own currencies; the first deposit of a backed currency issues treasury coins to the reserve"),
     P("burn", "core", "destroy", ("currency", "qty", "frm"), "dispatch:do_burn", subject="frm", parties=("frm",),
-      agent_params=("frm",), causes=("law", "agent"), reads=("supply",), preview=("currencies", "holdings"), compel_vis="monitor",
+      agent_params=("frm",), causes=("law", "agent"), reads=("supply",), preview=("currencies", "holdings"), compel_vis="parties", legacy_vis="monitor",
       sites=("dispatch:do_burn", "kernel:Kernel.api_for.burn", "jurisdictions:scope_api.burn", "actions:_redeem", "conflict:_spoils"),
       notes="laws burn their own currencies from members; redeeming coins burns them; an attack's destroyed spoils in coins "
             "are burned (via spoils)"),
@@ -213,7 +218,7 @@ _ROWS = [
       sites=("dispatch:do_create_right", "kernel:Kernel.api_for.create_right", "projects:_new_camp", "events:h_camp_discovered",
              "roles:init_state")),
     P("set_title", "core", "status", ("agent", "text"), "kernel:Kernel.api_for.title", subject="agent", parties=("agent",),
-      agent_params=("agent",), causes=("law",), preview=("titles",), compel_vis="monitor", sites=("kernel:Kernel.api_for.title",)),
+      agent_params=("agent",), causes=("law",), preview=("titles",), compel_vis="parties", legacy_vis="monitor", sites=("kernel:Kernel.api_for.title",)),
     P("rename", "core", "status", ("entity", "name"), "kernel:Kernel.api_for.rename", event="rename", causes=("law",), reads=("name",),
       preview=("names",), compel_vis="public", sites=("kernel:Kernel.api_for.rename",)),
     P("set_dm_limit", "core", "rule", ("agent", "n"), "dispatch:do_set_dm_limit", subject="agent", parties=("agent",),
@@ -280,12 +285,12 @@ _ROWS = [
             "start: world), raze (a successful attack takes the fort apart: spoils share to the attacker, the rest to the bequest)"),
     P("guard_bind", "conflict", "relation", ("guard", "agent", "fee"), "dispatch:do_guard_bind", subject="guard", parties=("guard", "agent"),
       agent_params=("guard", "agent"), event="guard", causes=("agent", "law"), reads=("guards", "defense_of"),
-      preview=("rules.guard_obligations",), compel_vis="monitor",
+      preview=("rules.guard_obligations",), compel_vis="parties", legacy_vis="monitor",
       sites=("dispatch:do_guard_bind", "conflict:guard_bind", "conflict:act_guard", "conflict:law_api.oblige_guard"),
       notes="agreed guards are paid and accepted; a law's obligation (option lid) lasts while the law is in force"),
     P("guard_release", "conflict", "relation", ("guard", "agent"), "dispatch:do_guard_release", subject="guard",
       parties=("guard", "agent"), agent_params=("guard", "agent"), event="guard", causes=("agent", "law", "world"), reads=("guards",),
-      preview=("rules.guard_obligations",), compel_vis="monitor",
+      preview=("rules.guard_obligations",), compel_vis="parties", legacy_vis="monitor",
       sites=("dispatch:do_guard_release", "conflict:guard_release", "conflict:act_guard", "conflict:law_api.clear_obligations",
              "conflict:start_round", "conflict:_resolve"),
       notes="option why: stop (the guard's choice, logged), lapse (a party gone or a fee unpaid: world, unlogged), law (a law "
@@ -314,7 +319,7 @@ _ROWS = [
                                                              "kernel:Kernel.api_for.unhide_post")),
     P("subscribe", "media2", "relation", ("agent", "outlet", "on"), "dispatch:do_subscribe", subject="agent", parties=("agent",),
       agent_params=("agent",), event="subscribe", causes=("agent", "law", "world"), reads=("outlets",),
-      preview=("rules.compelled_subscribers",), compel_vis="monitor",
+      preview=("rules.compelled_subscribers",), compel_vis="parties", legacy_vis="monitor",
       sites=("dispatch:do_subscribe", "media:change_subscribe", "media:subscribe", "media:unsubscribe",
              "media:law_api.compel_subscription", "media:_charge_fees", "media:on_birth"),
       notes="via (a call option): agent (subscribe/unsubscribe), law (compel_subscription), lapse (a fee not paid), birth"),

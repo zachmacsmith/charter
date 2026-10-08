@@ -586,7 +586,11 @@ class Kernel:
             return k.w["names"].get(str(entity), str(entity).split(":")[-1])
 
         def title(aid, text):
-            k.agent(aid)["title"] = None if text is None else str(text)[:60]
+            rec, text = k.agent(aid), None if text is None else str(text)[:60]
+            note = D.compel_note(k, "set_title", {"agent": aid, "text": text})   # P3.7: set_title is not routed through apply
+            rec["title"] = text
+            if note is not None:
+                D.compelled(k, note)
 
         def repeal(target):
             return k.repeal(str(target), by_law=lid)
@@ -1213,6 +1217,7 @@ class Kernel:
                     self.gazette(self.round_summary())
 
         def advance():
+            D.bill_gas(self)                                           # P3.8: law.gas_price (off by default): gas billed to treasuries
             self.w["round"] += 1
             self._reset_effects()
         return {"close_ballots": close_ballots, "veto_queue": veto_queue, "regrow": regrow, "expire_cases": expire_cases,
