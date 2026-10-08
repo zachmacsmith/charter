@@ -15,7 +15,8 @@ from charter import lawapi as LA
 from charter import spec as S
 from charter.kernel import Kernel
 
-ALL_ON = ["conflict.enabled=true", "media2.enabled=true", "life.enabled=true", "shared_archive.enabled=false", "law.v2=true"]
+ALL_ON = ["conflict.enabled=true", "media2.enabled=true", "life.enabled=true", "shared_archive.enabled=false", "law.v2=true",
+          "law.publication=true"]                                        # W8c: publish, unpublish
 _INST = {}
 
 
@@ -140,6 +141,8 @@ CALLS = {
     "propose_amendment": "propose_amendment('{other}', PROPOSAL, 'tidy')",
     "settle_loan": "enable_loans()\n    settle_loan(lend_from_reserve('{a}', 'timber', 2), paid=1)",
     "set_court_rule": "set_court_rule('deadline', 5)",                    # courts v2
+    "publish": "publish('vote', 'members')",                             # review 12 WP2 (law.publication)
+    "unpublish": "publish('vote', 'members')\n    unpublish('vote')",
 }
 CALL_MODULE = '''
 def tinker(agent, *args):

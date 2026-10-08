@@ -49,6 +49,8 @@ OPTIONS = {
     # a court rule.
     "open_case": frozenset({"cited"}), "answer_case": frozenset({"cited"}), "appeal": frozenset({"reason"}),
     "set_court_rule": frozenset({"lid"}),
+    # review 12 WP2 (law.publication). lid = the law setting the row.
+    "set_publication": frozenset({"lid"}),
     # P4.4 swap and funds; P4.5 agency (memo: the transfer's purpose).
     "swap": frozenset({"lid"}), "open_fund": frozenset(),
     "authorize": frozenset(), "deauthorize": frozenset(), "act_for": frozenset({"memo"}),

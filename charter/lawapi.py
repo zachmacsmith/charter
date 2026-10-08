@@ -45,7 +45,8 @@ GROUPS = ("read", "rights", "money", "camps", "governance", "output", "names", "
 STRUCTURAL_GROUPS = ("rights", "money", "sanctions", "projects")     # a call in these makes a law structural
 STRUCTURAL_EXTRA = ("open_ballot", "repeal")                       # governance and meta, but structural (repeal: review F1, P1.4)
 PROCEDURAL = ("set_procedure", "set_conflict_rule", "propose_law", "propose_amendment",   # makes a law procedural (P3.2, P3.4: law.v2)
-              "set_court_rule")                                                          # courts v2 (law.v2)
+              "set_court_rule",                                                          # courts v2 (law.v2)
+              "publish", "unpublish")                                                    # review 12 WP2 (law.publication)
 
 # Documentation mechanisms (where a function's or hook's text lives, and when it is shown):
 DOCS = {
@@ -308,6 +309,14 @@ LAWFNS = _fns(
         "evidence",                                                     # law.v2 (review 10 #10): the event log as evidence
         F("event", "read", scope="read", docs="requires", v2=True),     # only what the law's account may know (evidence.sees)
         F("history", "read", ((1, "agent"),), scope="read", docs="requires", v2=True),   # bounded and metered by size
+    ),
+    _module(
+        "publication",                                                  # review 12 WP2 (law.v2 and law.publication)
+        F("publication", "read", scope="read", docs="requires", v2=True),   # the law's own polity's publication table
+        F("publish", "governance", scope="none", why="sets a row of the calling law's own polity's publication table (who is told "
+          "of an event type)", docs="requires", v2=True, primitive="set_publication"),
+        F("unpublish", "governance", scope="none", why="drops a row of the calling law's own polity's publication table",
+          docs="requires", v2=True, primitive="set_publication"),
     ),
     _module(
         "amendment",                                                    # law.v2 (P3.4): laws propose laws and amendments (D-16: L3)

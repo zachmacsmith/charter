@@ -41,15 +41,24 @@ An entry:  E(name, module, kind, vis, feed, renderer, act=None, flags="", also_i
   note      disagreements between the old lists and other remarks
   aliases   old names (old runs' events.jsonl)
   primitive the primitive whose change logs it (charter/primitives.py); None for outputs, look-ups and records of no change
+  natural   review 12 WP2: who perceives it by nature (NATURALS), derived from kind and vis with NATURAL's exceptions; only the
+            publication layer (charter/publication.py, spec law.publication) reads it
 
 `get(name)` fails on an unknown name (UnknownEvent): register the type here when adding a k.log call.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 KINDS = ("communication", "primitive", "legal_act", "output", "summary", "truth", "record")
 VIS = ("public", "parties", "channel", "monitor")
+# Review 12 WP2 (charter/publication.py, spec law.publication): an event's natural audience, the floor no publication rule lowers.
+# Read only with law.publication on: with it off no call site's visibility changes.
+#   given    the call site's own audience is natural (types no call site logs public: DMs, results, members-only records)
+#   public   public by nature: an act whose nature is publication (posts, a gazette) or a world event anyone observes
+#   parties  the event's agent and the agents its data names (publication.parties): the default for types logged public
+#   channel  the channel's current members, plus the parties (channel_created, channel_member, channel_closed)
+NATURALS = ("given", "public", "parties", "channel")
 FEEDS = ("post", "message", "official", "event", "silent")
 RENDERERS = ("agents", "hidden", "credit", "projects", "conflict", "media", "outside", "camptypes", "leases", "mortality", "life",
              "jurisdictions", "contracts")
@@ -77,6 +86,7 @@ class EventType:
     note: str = ""
     aliases: tuple = ()
     primitive: str | None = None    # the primitive whose change logs it (charter/primitives.py); None: an output or a record (P1.7)
+    natural: str = "given"          # review 12 WP2: who perceives it by nature (NATURALS; read only under law.publication)
 
     @property
     def visible(self) -> bool:
@@ -105,8 +115,9 @@ def register(name, module, kind, vis, feed, renderer, act=None, flags="", also_i
         raise ValueError(f"event type {name} registered twice")
     if kind in ("truth", "record") and vs != {"monitor"}:
         raise ValueError(f"event type {name}: {kind} events are monitor-only")
+    natural = "given" if "public" not in vs else ("public" if kind == "communication" else "parties")   # NATURAL overrides
     REG[name] = EventType(name, module, kind, vs, feed, renderer, act, fs, tuple(also_in), silent, note, tuple(aliases),
-                          primitive)
+                          primitive, natural)
     for a in aliases:
         ALIASES[a] = name
     return REG[name]
@@ -237,6 +248,8 @@ E("appeal", "courts", "legal_act", "public", "event", "agents", act="appeal", pr
   note="law.v2 (courts v2): a party reopens a decided case before the appeal bench")
 E("court_rule", "courts", "legal_act", "public", "event", "agents", primitive="set_court_rule",
   note="law.v2 (courts v2): a law set one of its polity's court rules")
+E("publication_set", "publication", "legal_act", "public", "event", "agents", primitive="set_publication",
+  note="review 12 WP2 (law.v2, law.publication): a law set (or, audience None, dropped) one row of its polity's publication table")
 
 # ---------------------------------------------------------------------- the law API's effects
 E("dm_limit", "kernel", "legal_act", "public", "official", "agents", act="set_dm_limit", primitive="set_dm_limit")
@@ -460,6 +473,24 @@ E("agency_used", "contracts", "primitive", "parties", "event", "contracts", act=
   note="every use of an authorization, done or not, with {grantor, grantee, auth}: shown to both")
 E("fund_closed", "contracts", "summary", "public", "event", "contracts", primitive="move",
   note="a fund whose law is out of force: its goods go to the account's treasury")
+
+
+# ---------------------------------------------------------------------- natural audiences (review 12 WP2, §4.2)
+# Exceptions to register()'s default (types logged public somewhere: communication -> public, any other kind -> parties; else
+# given). Public by nature: a law's gazette (the act is publication) and what anyone in the world observes (deaths, raids, world
+# events, births, the round, camps, outlets). Channels: their members (review 12 V2: the register of associations is law; the
+# members' own knowledge is natural).
+NATURAL = {
+    **{n: "public" for n in ("gazette", "world_event", "disabled", "attack_failed", "raid", "round_start", "tribute_demand",
+                             "tribute_met", "camp_created", "camp_round", "birth", "maker", "order_revealed", "bank_run",
+                             "outlet_opened", "outlet_closed")},
+    **{n: "channel" for n in ("channel_created", "channel_member", "channel_closed")},
+}
+for _n, _v in NATURAL.items():
+    if _v not in NATURALS or "public" not in REG[_n].vis:
+        raise ValueError(f"event type {_n}: bad natural audience {_v!r}")
+    REG[_n] = replace(REG[_n], natural=_v)
+del _n, _v
 
 
 # ---------------------------------------------------------------------- lookups

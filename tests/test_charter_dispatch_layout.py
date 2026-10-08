@@ -62,7 +62,7 @@ LAYER = {"base": 0, "options": 0, "chains": 0,
          "ranks": 1, "legacy": 1, "journal": 1, "billing": 1,
          "changes.economy": 1, "changes.status": 1, "changes.speech": 1, "changes.world": 1, "changes.lifecycle": 1,
          "changes.membership": 1, "changes.press": 1, "changes.force": 1, "changes.loans": 1, "changes.associations": 1,
-         "changes.cases": 1, "changes.agency": 1,
+         "changes.cases": 1, "changes.agency": 1, "changes.publication": 1,
          "changes.legal": 2, "checks": 2, "api": 2,
          "validity": 3, "hooks": 4, "cascade": 5, "notify": 5, "routing": 6}
 

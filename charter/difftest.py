@@ -1,7 +1,7 @@
 """Differential test: run the same scripted worlds on two code revisions and report exactly where they diverge.
 
     python -m charter difftest --base main --head WORKTREE --presets E0,E1,E2,E3,E4,E5,E6,E7,society --seeds 1,2 --rounds 3
-        [--set key=value ...] [--ignore-field cause --ignore-field id] [--ignore-type new_event]
+        [--set key=value ...] [--head-set key=value ...] [--ignore-field cause --ignore-field id] [--ignore-type new_event]
         [--rename old_key=new_key] [--rename-type old_type=new_type] [--json report.json] [--keep DIR] [--jobs N]
 
 Each revision runs from its own tree: a git revision is checked out into a temporary `git worktree` (removed afterwards); WORKTREE
@@ -301,7 +301,7 @@ def compare_dirs(base: Path, head: Path, norm: Norm | None = None) -> dict:
 # ---------------------------------------------------------------------------------------------------------------- driver
 
 def difftest(base: str, head: str, presets, seeds, rounds=None, sets=(), norm: Norm | None = None, repo: Path | None = None,
-             keep: Path | None = None, jobs: int = 0, log=print) -> dict:
+             keep: Path | None = None, jobs: int = 0, log=print, head_sets=()) -> dict:
     repo = Path(repo) if repo else repo_root()
     norm = norm or Norm()
     sets = ([f"rounds={rounds}"] if rounds else []) + list(sets)
@@ -322,9 +322,10 @@ def difftest(base: str, head: str, presets, seeds, rounds=None, sets=(), norm: N
                     out = work / rv.label / f"{p}_s{s}"
                     if out.exists():
                         shutil.rmtree(out)
-                    futs[(p, s, rv.label)] = ex.submit(run_case, rv.root, p, s, sets, out)
+                    extra = list(head_sets) if rv.label == "head" else []
+                    futs[(p, s, rv.label)] = ex.submit(run_case, rv.root, p, s, sets + extra, out)
             results = {k: f.result() for k, f in futs.items()}
-        report = {"base": revs[0].desc, "head": revs[1].desc, "sets": sets,
+        report = {"base": revs[0].desc, "head": revs[1].desc, "sets": sets, "head_sets": list(head_sets),
                   "normalise": {"ignore_fields": sorted(norm.names | {".".join(p) for p in norm.paths}),
                                 "ignore_types": sorted(norm.ignore_types), "renames": norm.renames,
                                 "type_renames": norm.type_renames, "float_tol": norm.tol},
@@ -442,6 +443,8 @@ def add_arguments(p: argparse.ArgumentParser):
     p.add_argument("--seeds", default="1,2", help="comma-separated seeds")
     p.add_argument("--rounds", type=int, default=None, help="rounds per run (default: the preset's)")
     p.add_argument("--set", action="append", default=[], help="spec override for both sides, e.g. turns=simultaneous (repeatable)")
+    p.add_argument("--head-set", action="append", default=[], help="spec override for the head side only, e.g. a new flag the "
+                   "base does not know (repeatable; add --ignore-field for its key in instance.json)")
     p.add_argument("--ignore-field", action="append", default=[], help="key name (any depth) or dotted path to drop (repeatable)")
     p.add_argument("--ignore-type", action="append", default=[], help="event type to drop (repeatable)")
     p.add_argument("--rename", action="append", default=[], help="OLD=NEW key rename applied to the base side (repeatable)")
@@ -456,7 +459,8 @@ def add_arguments(p: argparse.ArgumentParser):
 def cmd(a) -> int:
     norm = Norm(a.ignore_field, a.ignore_type, _pairs(a.rename, "--rename"), _pairs(a.rename_type, "--rename-type"), a.float_tol)
     rep = difftest(a.base, a.head, [p for p in a.presets.split(",") if p], [int(s) for s in a.seeds.split(",") if s],
-                   a.rounds, a.set, norm, keep=a.keep, jobs=a.jobs, log=lambda *x: print(*x, file=sys.stderr))
+                   a.rounds, a.set, norm, keep=a.keep, jobs=a.jobs, log=lambda *x: print(*x, file=sys.stderr),
+                   head_sets=a.head_set)
     txt = text_report(rep)
     print(txt, end="")
     if a.json:

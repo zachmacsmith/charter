@@ -140,6 +140,7 @@ PARAM_SAMPLES = {
     "by_law": None, "old_sha": "9f1c", "new_sha": "0a2b", "case": "C1", "verdict": "guilty", "judge": "a4", "clause": "L5:c",
     "accuser": "a1", "accused": "a2", "action": "census", "args": [], "power": "quill", "error": "boom", "goal": {"name": "g"},
     "seat": "a5", "contract": "K1", "remedy": "fine", "level": 1, "template": "club", "victim": "a2", "source": "contract",   # W7e
+    "audience": "public",                                                                                              # W8c
     "paid": 2.0, "owed": 4.0, "rate": 0.05,                                                              # loans (routed)
     "evidence": ["e12"], "appellant": "a2", "decides": True, "stage": 1,                                 # courts v2
     "rank": "statute", "opened_by": "L1", "proposal": "L5", "diff": "--- L5 (before)\n+++ L5 (after)\n",      # P2.3 legal acts
@@ -614,6 +615,11 @@ _ROWS = [
       parties=("jurisdiction",), legal=True, event="court_rule", causes=("law",), reads=("court_rules",), compel_vis="public",
       sites=("dispatch.changes.cases:do_set_court_rule", "courts:change_set_rule", "courts:law_api.set_court_rule"),
       notes="law.v2 (courts v2): a polity's case deadline, panel sizes, benches and appeal window; holds while its law is in force"),
+    P("set_publication", "core", "legal", ("polity", "key", "audience"), "dispatch.changes.publication:do_set_publication", routed=True, subject="polity",
+      parties=("polity",), legal=True, event="publication_set", causes=("law",), reads=("publication",), compel_vis="public",
+      sites=("dispatch.changes.publication:do_set_publication", "publication:change_set", "publication:law_api.publish_", "publication:law_api.unpublish"),
+      notes="review 12 WP2 (law.v2, law.publication): one row of a polity's publication table (event type -> audience; None "
+            "drops the row); the Publication Act's store (WP4 seeds it)"),
     P("create_clause", "core", "legal", ("law", "clause"), "kernel:Kernel.api_for.clause", legal=True, causes=("law",),
       sites=("kernel:Kernel.api_for.clause",)),
     P("define_action", "core", "legal", ("law", "action", "right"), "dispatch.changes.legal:do_define_action", routed=True, legal=True, causes=("law",),
@@ -791,8 +797,8 @@ TIER_OF = {
           "expel", "set_camp_rule", "offer_loan", "accept_loan", "repay_loan", "extend_loan", "settle_loan", "improve_camp",
           "lease", "contribute", "propose", "decide", "open_ballot", "cast_vote", "veto", "enact", "repeal", "amend",
           "set_procedure", "rule", "open_case", "answer_case", "appeal", "set_court_rule", "define_action", "set_conflict_rule",
-          "create_contract", "deposit_escrow", "set_allowance", "pull", "breach", "swap", "open_fund", "authorize", "act_for",
-          "set_company_rule"),                     # W8e: company law
+          "set_publication", "create_contract", "deposit_escrow", "set_allowance", "pull", "breach", "swap", "open_fund", "authorize",
+          "act_for", "set_company_rule"),          # W8c: publication; W8e: company law
     "L-route": ("found", "invite", "declare", "set_charter", "dissolve", "invoke", "commission", "set_will", "name_successor",
                 "licence", "set_price", "library_doc", "library_permit", "set_capacity", "share_note", "offer_lease",
                 "set_initiative", "hire_assassin",
