@@ -86,6 +86,6 @@ from charter.dispatch.changes.force import do_attack, do_fortify, do_guard_bind,
 from charter.dispatch.changes.loans import (do_accept_loan, do_default_loan, do_extend_loan, do_offer_loan, do_repay_loan,
     do_settle_loan)
 from charter.dispatch.changes.associations import (do_breach, do_create_contract, do_deposit_escrow, do_open_fund, do_pull,
-    do_set_allowance, do_swap)
+    do_set_allowance, do_set_company_rule, do_swap)
 from charter.dispatch.changes.cases import do_answer_case, do_appeal, do_open_case, do_set_court_rule
 from charter.dispatch.changes.agency import do_act_for, do_authorize, do_deauthorize

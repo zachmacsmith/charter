@@ -488,6 +488,18 @@ E += [
      "create_currency(name), mint(cur, qty, to) and burn(cur, qty, frm) its own currency only (burning only what it holds), "
      "create_right(name) and grant(member, right) / revoke(agent, right) its own rights, and define_action(right, name, fn) "
      "offices bound to them (all named \"<contract>.<name>\").", "prompt", "common"),
+    # W8e (D-28): company law
+    ("company_rule", "contracts", "Contracts", "company_rule(key, value)", "a polity's law only: sets one of its company rules, the "
+     "law the contracts incorporated under it (create_contract with \"under\") are bound by and benefit from: enforcement "
+     "(escrow | escrow_court: its courts hear their breaches | word), recognize_offices (True | False: agency to their offices), "
+     "share_valuation (\"nav\" | \"none\" | a fraction of net asset value), wind_up (a list of shareholders, members, parent: "
+     "the insolvency order), procedures (the governance forms allowed: members, two_thirds, founder, custom), registration_fee "
+     "({item: qty} paid at founding), max_laws, max_own. Its laws also see every act of its companies and outrank their code.",
+     "prompt", "common"),
+    ("company_rules", "contracts", "Contracts", "company_rules()", "the company rules in force: this polity's own, or (in an "
+     "incorporated contract's law) its parent's: {key: value}.", "common", "common"),
+    ("companies", "contracts", "Contracts", "companies()", "the contracts incorporated under this law's polity.", "common",
+     "common"),
 ]
 OPTIONAL.update({e[0]: "contracts" for e in E if e[1] == "contracts"})
 ENTRIES ={e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}

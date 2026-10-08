@@ -52,4 +52,6 @@ OPTIONS = {
     # P4.4 swap and funds; P4.5 agency (memo: the transfer's purpose).
     "swap": frozenset({"lid"}), "open_fund": frozenset(),
     "authorize": frozenset(), "deauthorize": frozenset(), "act_for": frozenset({"memo"}),
+    # W8e: company law (lid = the law setting a company rule).
+    "set_company_rule": frozenset({"lid"}),
 }

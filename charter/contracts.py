@@ -95,6 +95,7 @@ from charter import accounts as AC
 from charter import dispatch as D
 from charter import eventtypes as ET
 from charter import features as FT
+from charter import incorporation as INC                               # W8e: incorporation and company rules (D-27, D-28)
 from charter import jurisdictions as J
 from charter import lawapi as LA
 from charter import lawlang as L
@@ -112,13 +113,16 @@ DEFAULTS = {
     "scripted": True,       # dry runs: the scripted bots found, join and use contracts (own RNG stream)
     "enforcement": "escrow",    # P4.4 dial: escrow | escrow_court (a polity's courts hear breaches) | word (no escrow at all)
     "breach_cases": False,      # W7e: under escrow_court, a breach opens a courts v2 case (source "contract"; file_breach_case)
+    "max_own": 5,               # W8e (D-27): currencies, rights and offices one contract may create, each (was MAX_OWN)
+    "max_funds": 5,             # W8e (D-27): funds one law may open (was MAX_FUNDS)
 }
 PROCEDURES = ("members", "two_thirds", "founder")
 ENFORCEMENT = ("escrow", "escrow_court", "word")
-MAX_FUNDS = 5                   # funds one law may open (P4.4)
+MAX_FUNDS = 5                   # funds one law may open (P4.4); W8e: the default of spec contracts.max_funds
 WORD_REFUSED = {"pull": False, "forfeit": 0.0, "refund": {}, "fine": 0.0, "swap": False}   # what they return under "word"
 SEP = "."                       # P4.5: a contract's own currencies, rights and offices are named "<cid>.<name>" ("A1.shares")
-MAX_OWN = 5                     # P4.5: currencies, rights and offices one contract may have (each)
+MAX_OWN = 5                     # P4.5: currencies, rights and offices one contract may have (each); W8e: the default of
+                                # spec contracts.max_own, replaced for an incorporated company by its parent's company rule max_own
 MAX_AUTH = 5                    # P4.5: authorizations in force one agent may have given
 MAX_USES = 50                   # P4.5: uses kept on an authorization's record (the events keep them all)
 # P4.5 agency: what an agent may authorize another (or a contract office) to do on its behalf. vote is never authorizable (one
@@ -171,9 +175,25 @@ def recs(k) -> dict:
     return AC.assocs(k)
 
 
-def enforcement(k) -> str:
-    """The enforcement dial (P4.4): escrow | escrow_court | word."""
+def enforcement(k, cid=None) -> str:
+    """The enforcement dial (P4.4): escrow | escrow_court | word. W8e: for an association incorporated under a polity whose
+    company rule `enforcement` is set, that rule (the parent's choice); otherwise the world's dial."""
+    if cid is not None:
+        v = INC.rule(k, cid, "enforcement")
+        if v is not None:
+            return v
     return cfg(k)["enforcement"]
+
+
+def max_laws(k, rec) -> int:
+    """W8e (D-27): laws one contract may have: spec contracts.max_laws, or its parent's company rule max_laws."""
+    return INC.limit(k, rec, "max_laws", cfg(k)["max_laws"])
+
+
+def max_own(k, rec) -> int:
+    """W8e (D-27): currencies, rights and offices (each) one contract may create: spec contracts.max_own (MAX_OWN), or its parent's
+    company rule max_own."""
+    return INC.limit(k, rec, "max_own", cfg(k).get("max_own", MAX_OWN))
 
 
 def install(k) -> None:
@@ -500,10 +520,26 @@ def check_code(code) -> ast.Module:
     return tree
 
 
+def _check_incorporation(k, aid, parent, procedure) -> None:
+    """W8e: the parent's company rules a founding must meet before it is applied: its governance form (procedures) and its
+    registration fee (the founder must hold it). LawError otherwise."""
+    rules = INC.rules(k, parent)
+    allowed = rules.get("procedures")
+    if allowed is not None and INC.form_of(procedure, PROCEDURES) not in allowed:
+        raise L.LawError(f"{parent}'s company law allows companies governed by {', '.join(allowed)} only (this one: {procedure})")
+    for item, q in sorted((rules.get("registration_fee") or {}).items()):
+        if not AC.can_pay(k, aid, item, q):
+            raise L.LawError(f"founding a company under {parent} costs {_fmt(rules['registration_fee'])} (you have "
+                             f"{k.bal(aid, item):g} {item})")
+
+
 # ---------------------------------------------------------------------- actions (action_registry rows, module "contracts")
-def act_create_contract(k, aid, name=None, code=None, template=None, params=None, admission=None):
+def act_create_contract(k, aid, name=None, code=None, template=None, params=None, admission=None, under=None):
+    """W8e: under, the polity the contract is incorporated under (its company rules apply at founding: a governance form, a
+    registration fee, limits; its laws may refuse the founding: before_create_contract sees `under`)."""
     _need_on(k)
     c = cfg(k)
+    parent = None if under in (None, "") else INC.check_under(k, under)
     if sum(1 for r in recs(k).values() if r["founder"] == aid) >= int(c["max_founded"]):
         raise L.LawError(f"you have founded {c['max_founded']} contracts already")
     tname = None
@@ -522,16 +558,23 @@ def act_create_contract(k, aid, name=None, code=None, template=None, params=None
         procedure = "members"
     if admission not in (None, "open", "closed"):
         raise L.LawError("admission must be open or closed")
-    if len(codes) > int(c["max_laws"]):
-        raise L.LawError(f"a contract may have at most {c['max_laws']} laws")
+    most = int(c["max_laws"] if parent is None else INC.rules(k, parent).get("max_laws", c["max_laws"]))
+    if len(codes) > most:
+        raise L.LawError(f"a contract may have at most {most} laws" + (f" (under {parent}'s company law)" if parent else ""))
     for x in codes:
         check_code(x)
+    if parent is not None:
+        _check_incorporation(k, aid, parent, procedure)
     name = str(name or (tname or "contract").title()).strip()[:60] or "Contract"
     cid = f"A{k.w['contracts']['seq'] + 1}"
     out = k.apply("create_contract", agent=aid, contract=cid, name=name, template=tname, code=list(codes),
-                  params=dict(params or {}), admission=admission or "open")
+                  params=dict(params or {}), admission=admission or "open", **({"under": parent} if parent else {}))
+    if not out.ok:
+        raise L.LawError(f"a law refused founding {cid}" + (f" ({out.reason})" if getattr(out, "reason", None) else ""))
     laws = out.result.get("laws", [])
-    return (f"Founded {cid} '{name}' ({tname or 'own code'}; laws {', '.join(laws)}): you are its first member. Others join with "
+    return (f"Founded {cid} '{name}' ({tname or 'own code'}; laws {', '.join(laws)})"
+            + (f", incorporated under {parent} (its company law binds {cid}, above {cid}'s own code)" if parent else "")
+            + ": you are its first member. Others join with "
             f"join_contract {{\"contract\": \"{cid}\"}}; members fund it with deposit_escrow or set_allowance.")
 
 
@@ -561,15 +604,19 @@ def act_leave_contract(k, aid, contract):
             f"({_fmt(escrow_of(k, rec['id'], aid))}) and your allowances end.")
 
 
-def _need_escrow(k, what):
-    if enforcement(k) == "word":
+def _need_escrow(k, what, contract=None):
+    """W8e: contract (an id, or None): an incorporated company's parent may set its own enforcement (company rule)."""
+    rec = recs(k).get(str(contract)) if contract is not None else None
+    if enforcement(k, rec["id"] if rec else None) == "word":
+        if rec is not None and INC.parent_of(k, rec["id"]) is not None:
+            raise L.LawError(f"{what}: {rec['id']}'s polity of incorporation enforces contracts by word (no escrow, no allowances)")
         raise L.LawError(f"{what}: contracts in this world hold no escrow and take no allowances (enforcement by word: a breach is "
                          "only recorded, for everyone to see)")
 
 
 def act_deposit_escrow(k, aid, contract, item, qty):
     _need_on(k)
-    _need_escrow(k, "deposit_escrow")
+    _need_escrow(k, "deposit_escrow", contract)
     rec = _rec(k, contract)
     k.apply("deposit_escrow", agent=aid, contract=rec["id"], item=str(item), qty=qty)
     return f"Deposited {float(qty):g} {item} in escrow with {rec['id']} (your escrow there: {_fmt(escrow_of(k, rec['id'], aid))})."
@@ -577,7 +624,7 @@ def act_deposit_escrow(k, aid, contract, item, qty):
 
 def act_set_allowance(k, aid, contract, item, qty):
     _need_on(k)
-    _need_escrow(k, "set_allowance")
+    _need_escrow(k, "set_allowance", contract)
     rec = _rec(k, contract)
     k.apply("set_allowance", agent=aid, contract=rec["id"], item=str(item), qty=qty)
     q = float(qty)
@@ -600,7 +647,7 @@ def act_propose_contract_change(k, aid, contract, code=None, replaces=None, temp
     check_code(code)
     if replaces is not None and str(replaces) not in rec["laws"]:
         raise L.LawError(f"{replaces} is not a law of {cid} (its laws: {', '.join(rec['laws']) or 'none'})")
-    if replaces is None and len(rec["laws"]) >= int(cfg(k)["max_laws"]):
+    if replaces is None and len(rec["laws"]) >= max_laws(k, rec):
         raise L.LawError(f"{cid} has {len(rec['laws'])} laws, the most a contract may have: replace one")
     lid = k.new_law(str(code), aid)
     law = k.w["laws"][lid]
@@ -614,7 +661,7 @@ def act_propose_contract_change(k, aid, contract, code=None, replaces=None, temp
 
 def _decide(k, rec, pr) -> str:
     """The contract's procedure for a proposed change: adopt now, open a members' ballot (closes at the end of the round), or fail."""
-    proc, cid, lid = rec["procedure"], rec["id"], pr["law"]
+    proc, cid, lid = INC.effective_procedure(k, rec, PROCEDURES), rec["id"], pr["law"]   # W8e: bounded by the parent's forms
     law = k.w["laws"][lid]
     if proc == "founder":
         boss = rec["founder"] if rec["founder"] in rec["members"] else rec["members"][0]
@@ -843,7 +890,7 @@ def scope_api(k, lid, api: dict) -> dict:
         k.log("contract_out_of_scope", None, {"law": lid, "contract": cid, "fn": fn, "what": what}, vis="monitor")
         return False
 
-    word = enforcement(k) == "word"
+    word = enforcement(k, cid) == "word"
     esc = f"{AC.ESCROW}{cid}:"
 
     def src_key(x):
@@ -906,8 +953,15 @@ def scope_api(k, lid, api: dict) -> dict:
 
     def set_procedure(law_class, fn):
         """How the contract's changes are decided: fn(p) returns True (adopt), a ballot spec {electorate, rule, weights} or False
-        (law_class is accepted for the polity signature: a contract has one procedure)."""
-        rec["procedure"] = k._reg(lid, fn)
+        (law_class is accepted for the polity signature: a contract has one procedure). W8e (D-27): fn may also name a built-in
+        form ("members", "two_thirds", "founder"); an incorporated company's form must be one its parent allows."""
+        name = fn if isinstance(fn, str) and fn in PROCEDURES else None
+        if isinstance(fn, str) and name is None:
+            raise L.LawError(f"set_procedure: a built-in procedure is one of {', '.join(PROCEDURES)} (or pass a function)")
+        allowed = INC.allowed_forms(k, rec)
+        if allowed is not None and (name or "custom") not in allowed:
+            raise L.LawError(f"{cid}'s polity of incorporation allows companies governed by {', '.join(allowed)} only")
+        rec["procedure"] = name if name is not None else k._reg(lid, fn)
         return True
     out["set_procedure"] = set_procedure
 
@@ -948,8 +1002,8 @@ def scope_api(k, lid, api: dict) -> dict:
             if k.w["currencies"][full].get("reserve") != tk:
                 raise L.LawError(f"{full} already exists")
             return full
-        if sum(1 for c in k.w["currencies"].values() if c.get("reserve") == tk) >= MAX_OWN:
-            raise L.LawError(f"a contract may issue at most {MAX_OWN} currencies")
+        if sum(1 for c in k.w["currencies"].values() if c.get("reserve") == tk) >= max_own(k, rec):
+            raise L.LawError(f"a contract may issue at most {max_own(k, rec)} currencies")
         return k.apply("create_currency", name=full, backed=bool(backed), reserve=tk, lid=lid).result["currency"]
     out["create_currency"] = create_currency
 
@@ -977,8 +1031,8 @@ def scope_api(k, lid, api: dict) -> dict:
     def create_right(name):
         full = own_name(cid, name)
         if full not in k.w["rights"]:
-            if sum(1 for r in k.w["rights"] if r.startswith(cid + SEP)) >= MAX_OWN:
-                raise L.LawError(f"a contract may create at most {MAX_OWN} rights")
+            if sum(1 for r in k.w["rights"] if r.startswith(cid + SEP)) >= max_own(k, rec):
+                raise L.LawError(f"a contract may create at most {max_own(k, rec)} rights")
             k.apply("create_right", right=full)
         return full
     out["create_right"] = create_right
@@ -999,8 +1053,8 @@ def scope_api(k, lid, api: dict) -> dict:
         """An office of this contract: action "<cid>.<name>", usable by members holding its right (no law level: P4.5)."""
         r, act = own(right, "right"), own_name(cid, name)
         mine = [n for n, v in k.w["actions"].items() if isinstance(v, dict) and n.startswith(cid + SEP) and n != act]
-        if len(mine) >= MAX_OWN:
-            raise L.LawError(f"a contract may define at most {MAX_OWN} offices")
+        if len(mine) >= max_own(k, rec):
+            raise L.LawError(f"a contract may define at most {max_own(k, rec)} offices")
         k.apply("define_action", law=lid, action=act, right=r, key=k._reg(lid, fn))
         return act
     out["define_action"] = define_action
@@ -1036,7 +1090,7 @@ def law_api(k, lid) -> dict:
 
     def by_word(fn, rec, member) -> bool:
         """P4.4: under enforcement "word" the escrow column refuses (logged for the monitor; the law gets WORD_REFUSED[fn])."""
-        if enforcement(k) != "word":
+        if enforcement(k, rec["id"]) != "word":
             return False
         k.log("contract_out_of_scope", None, {"law": lid, "contract": rec["id"], "fn": fn, "what": member,
                                               "why": "enforcement word: no escrow"}, vis="monitor")
@@ -1119,8 +1173,9 @@ def law_api(k, lid) -> dict:
         key = AC.fund_key(lid, n)
         if key in AC.funds(k):
             return key
-        if sum(1 for f in AC.funds(k).values() if f["law"] == lid) >= MAX_FUNDS:
-            raise L.LawError(f"a law may open at most {MAX_FUNDS} funds")
+        most = int(cfg(k).get("max_funds", MAX_FUNDS))                 # W8e (D-27): spec contracts.max_funds
+        if sum(1 for f in AC.funds(k).values() if f["law"] == lid) >= most:
+            raise L.LawError(f"a law may open at most {most} funds")
         return k.apply("open_fund", law=lid, name=n).result["fund"]
 
     def shareholders_(currency):
@@ -1131,17 +1186,58 @@ def law_api(k, lid) -> dict:
             cur = own_name(rec["id"], cur)
         return shareholders(k, cur)
 
+    def actionable(c) -> bool:
+        """Under escrow_court a breach is actionable; W8e: an incorporated company's (by its parent's enforcement rule, else the
+        dial) only in its parent's courts (read by the parent's laws)."""
+        if enforcement(k, c) != "escrow_court":
+            return False
+        par = INC.parent_of(k, c)
+        return par is None or par == AC.account_of(k, lid)
+
     def breaches_(cid=None):
-        live = enforcement(k) == "escrow_court"
-        return [dict(b, contract=c, id=f"{c}:{i + 1}", actionable=live) for c, r in recs(k).items() if cid in (None, c)
+        return [dict(b, contract=c, id=f"{c}:{i + 1}", actionable=actionable(c)) for c, r in recs(k).items() if cid in (None, c)
                 for i, b in enumerate(r["breaches"])]
+
+    # W8e (D-28): company law. A polity's law sets the rules its incorporated companies are bound by and benefit from
+    # (incorporation.RULES); any law reads them; companies() lists the polity's companies.
+    def own_account():
+        acct = AC.account_of(k, lid)
+        rec = J.association(k, acct)
+        return acct if rec is None else None, rec
+
+    def company_rule(key, value):
+        acct, rec = own_account()
+        if rec is not None:
+            raise L.LawError("company_rule: only a polity's law sets company rules (a contract is bound by its parent's)")
+        key = str(key)
+        value = INC.check_rule(k, key, value)
+        k.apply("set_company_rule", jurisdiction=D.jur_of(k, lid), key=key, value=value, lid=lid)
+        return True
+
+    def company_rules():
+        """The company rules in force: this polity's own (a polity's law), or the parent's (an incorporated contract's law; {}
+        unincorporated)."""
+        acct, rec = own_account()
+        if rec is not None:
+            par = rec.get("parent")
+            return INC.rules(k, par) if par is not None else {}
+        return INC.rules(k, acct)
+
+    def companies_():
+        acct, rec = own_account()
+        return [] if rec is not None else INC.companies(k, acct)
+
+    def enforcement_():
+        acct, rec = own_account()
+        return enforcement(k, rec["id"] if rec is not None else None)
 
     return {"pull": pull, "forfeit": forfeit, "refund": refund, "breach": breach, "escrow_of": escrow_of_,
             "allowance_of": allowance_of, "contract_state": lambda cid: public_record(k, cid),
             "contracts": lambda: [c for c, r in recs(k).items() if r["status"] != "dissolved"],
             "breaches": breaches_, "swap": swap, "open_fund": open_fund,
-            "funds": lambda: AC.funds_of(k, AC.account_of(k, lid)), "enforcement": lambda: enforcement(k),
-            "reputation": lambda agent: reputation(k, agent), "shareholders": shareholders_}
+            "funds": lambda: AC.funds_of(k, AC.account_of(k, lid)), "enforcement": enforcement_,
+            "reputation": lambda agent: reputation(k, agent), "shareholders": shareholders_,
+            "company_rule": company_rule, "company_rules": company_rules, "companies": companies_}
 
 
 def _goods(x) -> dict:
@@ -1181,16 +1277,21 @@ def reputation(k, agent) -> dict:
     return {"breaches": len(hits), "contracts": sorted(set(hits), key=lambda c: int(c[1:]))}
 
 
-def breach_clause(k, member) -> str | None:
+def breach_clause(k, member, contract=None) -> str | None:
     """W7e: the polity clause a breach case is opened under: a clause named breach_of_contract (the Contract Enforcement Act's) whose
-    law is in force and binds the member, the first in clause order; None if there is none."""
+    law is in force and binds the member, the first in clause order; None if there is none. W8e: a breach of a company incorporated
+    under a polity is heard by that polity's courts only: its clause, whichever polity the member belongs to."""
+    parent = INC.parent_of(k, contract)
     for cid, cl in k.w["clauses"].items():
         if not cid.endswith(":breach_of_contract"):
             continue
         lid = cl.get("law")
         if (k.w["laws"].get(lid) or {}).get("status") != "active" or J.association(k, J.law_jur(k, lid)) is not None:
             continue
-        if J.enabled(k) and not J.binds(k, lid, member):
+        if parent is not None:
+            if AC.account_of(k, lid) != parent:
+                continue
+        elif J.enabled(k) and not J.binds(k, lid, member):
             continue
         return cid
     return None
@@ -1201,10 +1302,10 @@ def file_breach_case(k, rec, i) -> str | None:
     contracts.breach_cases on, breach record i of contract rec opens a courts v2 case through the routed open_case primitive (so
     before_open_case may refuse it), source "contract", accused the member, accuser the victim (or None), evidence the
     contract_breach event, under breach_clause(). The record keeps the case id ("case"). Off (the default): nothing happens."""
-    if enforcement(k) != "escrow_court" or not cfg(k).get("breach_cases") or not D.v2(k):
+    if enforcement(k, rec["id"]) != "escrow_court" or not cfg(k).get("breach_cases") or not D.v2(k):
         return None
     b = rec["breaches"][i]
-    clause = breach_clause(k, b["member"])
+    clause = breach_clause(k, b["member"], rec["id"])
     if clause is None:
         return None
     ev = next((e["id"] for e in reversed(k.events) if e["type"] == "contract_breach" and e["data"].get("contract") == rec["id"]),
@@ -1220,20 +1321,24 @@ def file_breach_case(k, rec, i) -> str | None:
 
 def court_breaches(k, member) -> list:
     """The integration point for courts (P4.4; courts v2 builds on it): breaches by `member` a polity's court may hear, with ids
-    as breaches() gives them. Empty unless contracts.enforcement is escrow_court."""
-    if "contracts" not in k.w or enforcement(k) != "escrow_court":
+    as breaches() gives them. Empty unless contracts.enforcement is escrow_court (W8e: for an incorporated company, its parent's
+    enforcement rule when set)."""
+    if "contracts" not in k.w:
         return []
     return [dict(b, contract=c, id=f"{c}:{i + 1}", actionable=True) for c, r in recs(k).items()
-            for i, b in enumerate(r["breaches"]) if b["member"] == member]
+            if enforcement(k, c) == "escrow_court" for i, b in enumerate(r["breaches"]) if b["member"] == member]
 
 
 def public_record(k, cid) -> dict | None:
     rec = recs(k).get(str(cid))
     if rec is None:
         return None
-    return {"id": rec["id"], "name": rec["name"], "status": rec["status"], "template": rec["template"], "params": dict(rec["params"]),
-            "founder": rec["founder"], "members": list(rec["members"]), "laws": list(rec["laws"]), "treasury": dict(rec["reserve"]),
-            "admission": rec["admission"], "breaches": [dict(b) for b in rec["breaches"]], "funds": AC.funds_of(k, rec["id"])}
+    out = {"id": rec["id"], "name": rec["name"], "status": rec["status"], "template": rec["template"], "params": dict(rec["params"]),
+           "founder": rec["founder"], "members": list(rec["members"]), "laws": list(rec["laws"]), "treasury": dict(rec["reserve"]),
+           "admission": rec["admission"], "breaches": [dict(b) for b in rec["breaches"]], "funds": AC.funds_of(k, rec["id"])}
+    if rec.get("parent") is not None:                                   # W8e: incorporated (absent otherwise: the record as before)
+        out["parent"] = rec["parent"]
+    return out
 
 
 def _allowance_left(k, rec, member) -> dict:
@@ -1302,12 +1407,16 @@ def check_allowance(k, p) -> dict:
     return {**p, "qty": q}
 
 
-def change_create(k, agent, contract, name, template, code, params, admission) -> dict:
+def change_create(k, agent, contract, name, template, code, params, admission, under=None) -> dict:
+    """W8e: under, the polity it is incorporated under (rec["parent"]; the key is absent on an unincorporated contract): its company
+    rules apply from the start (limits, governance form); its registration fee is paid into its treasury once the laws load."""
     st = k.w["contracts"]
     st["seq"] += 1
     assert contract == f"A{st['seq']}", contract
     t = TEMPLATES.get(template or "") or {}
     rec = recs(k)[contract] = _new(contract, name, agent, k.r, template, params, admission or "open", t.get("procedure", "members"))
+    if under is not None:
+        rec["parent"] = under
     installed = []
     try:
         for c in code:
@@ -1322,8 +1431,15 @@ def change_create(k, agent, contract, name, template, code, params, admission) -
         del recs(k)[contract]
         st["seq"] -= 1
         raise
+    inc = {}
+    if under is not None:                                               # W8e: the registration fee (checked payable by the action)
+        fee = {}
+        for item, q in sorted((INC.rules(k, under).get("registration_fee") or {}).items()):
+            if D._move(k, agent, AC.treasury_of(k, under), item, q, f"incorporation:{contract}", agent):
+                fee[item] = q
+        inc = {"parent": under, **({"fee": fee} if fee else {})}
     k.log("contract_created", agent, {"contract": contract, "name": rec["name"], "template": template, "params": dict(rec["params"]),
-                                      "laws": list(installed), "admission": rec["admission"]}, vis="public")
+                                      "laws": list(installed), "admission": rec["admission"], **inc}, vis="public")
     for lid in installed:
         _on_enact(k, lid)
     return {"contract": contract, "laws": installed}
@@ -1409,6 +1525,7 @@ def _dissolve(k, rec, heirs=()) -> None:
     cid = rec["id"]
     heirs = [a for a in heirs if a in k.w["agents"]]
     before = dict(rec["reserve"])
+    steps = INC.wind_up_order(k, rec)                                   # W8e (D-27): its wind-up clause, bounded by its parent's
     for lid in list(rec["laws"]):
         ns = k.ns.get(lid) or {}
         if k.w["laws"][lid]["status"] == "active" and "on_dissolve" in ns:
@@ -1420,10 +1537,31 @@ def _dissolve(k, rec, heirs=()) -> None:
     for lid in list(rec["laws"]):
         _retire(k, rec, lid)
     _close_funds(k)
-    tk = treasury_key(cid)
-    holders = _pay_shareholders(k, rec)                                 # P4.5: residual claims, pro rata to its shareholders
-    for a in list(k.w["agents"]):
-        _drop_rights(k, cid, a)
+    holders, paid, escheat = {}, {}, {}
+    if "shareholders" not in steps:
+        for a in list(k.w["agents"]):
+            _drop_rights(k, cid, a)
+    for step in steps:                                                  # default: shareholders, then the last members
+        if step == "shareholders":
+            holders = _pay_shareholders(k, rec)                         # P4.5: residual claims, pro rata to its shareholders
+            for a in list(k.w["agents"]):
+                _drop_rights(k, cid, a)
+        elif step == "members":
+            paid = _pay_heirs(k, rec, heirs)
+        elif step == "parent":
+            escheat = _escheat(k, rec)
+    rec["status"] = "dissolved"
+    if paid or holders or escheat:
+        k.log("contract_wound_up", None, {"contract": cid, "heirs": heirs, "paid": paid,
+                                          **({"shareholders": holders} if holders else {}),
+                                          **({"parent": rec["parent"], "escheat": escheat} if escheat else {})}, vis="public")
+    k.log("contract_dissolved", None, {"contract": cid, "treasury": before, "left": dict(rec["reserve"])}, vis="public")
+
+
+def _pay_heirs(k, rec, heirs) -> dict:
+    """The wind-up's equal split (P4.4): what is left in the treasury, shared equally among the heirs (the last one gets the rounding
+    rest). {heir: {item: qty}} paid."""
+    cid, tk = rec["id"], treasury_key(rec["id"])
     paid = {}
     for item, q in sorted(rec["reserve"].items()):
         if q <= 0 or not heirs:
@@ -1434,11 +1572,20 @@ def _dissolve(k, rec, heirs=()) -> None:
             got = _pay_member(k, tk, a, {item: amt}, f"wind_up:{cid}")
             if got:
                 paid.setdefault(a, {})[item] = got[item]
-    rec["status"] = "dissolved"
-    if paid or holders:
-        k.log("contract_wound_up", None, {"contract": cid, "heirs": heirs, "paid": paid,
-                                          **({"shareholders": holders} if holders else {})}, vis="public")
-    k.log("contract_dissolved", None, {"contract": cid, "treasury": before, "left": dict(rec["reserve"])}, vis="public")
+    return paid
+
+
+def _escheat(k, rec) -> dict:
+    """W8e: the wind-up step "parent": what is left in an incorporated company's treasury goes to its parent's treasury (nothing for
+    an unincorporated contract). {item: qty} moved."""
+    par = rec.get("parent")
+    if par is None:
+        return {}
+    tk, dst, out = treasury_key(rec["id"]), AC.treasury_of(k, par), {}
+    for item, q in sorted(rec["reserve"].items()):
+        if q > 0 and D._move(k, tk, dst, item, q, f"wind_up:{rec['id']}", None):
+            out[item] = q
+    return out
 
 
 def _drop_rights(k, cid, aid) -> None:
@@ -1525,7 +1672,7 @@ def change_breach(k, contract, member, clause, remedy, lid=None, victim=None) ->
         b["victim"] = victim
     rec["breaches"].append(b)
     k.log("contract_breach", member, {"contract": contract, **{x: v for x, v in b.items() if x != "member"}},
-          vis="public" if enforcement(k) == "word" else _vis(rec))            # P4.4: under "word" a breach is a public reputation
+          vis="public" if enforcement(k, contract) == "word" else _vis(rec))            # P4.4: under "word" a breach is a public reputation
     # (W7e: a victim outside the contract is not told here, so the record stays members-only and the contract's laws can read it)
     return {"breach": len(rec["breaches"])}
 
@@ -1624,6 +1771,8 @@ def act_authorize(k, aid, agent=None, office=None, action="transfer", item=None,
         grantee = str(office)
         if issuer(k, grantee) is None or grantee not in k.w["rights"] or recs(k)[issuer(k, grantee)]["status"] == "dissolved":
             raise L.LawError(f"{grantee} is not a contract office (a right a contract created, e.g. \"A1.treasurer\")")
+        if not INC.offices_recognised(k, issuer(k, grantee)):                # W8e: the parent's company rule recognize_offices
+            raise L.LawError(f"{issuer(k, grantee)}'s polity of incorporation does not recognise its offices as agents")
     tos = None if to in (None, "", []) else [str(x) for x in (to if isinstance(to, list) else [to])]
     n = None
     if rounds is not None:
@@ -1688,6 +1837,8 @@ def check_act_for(k, p) -> dict:
         raise D.PhysicsError(f"{g['id']}: its grantor {g['grantor']} is no longer in the game")
     if p["grantee"] not in _grantee_agents(k, g):
         raise D.PhysicsError(f"{g['id']} does not authorize {p['grantee']}")
+    if g["office"] and not INC.offices_recognised(k, issuer(k, g["grantee"])):   # W8e: recognize_offices False (since granted)
+        raise D.PhysicsError(f"{g['id']}: {issuer(k, g['grantee'])}'s polity of incorporation does not recognise its offices")
     if p["action"] != g["action"] or p["item"] != g["item"]:
         raise L.LawError(f"{g['id']} covers only {g['action']} of {g['item']}")
     q = _qty(p)
@@ -1734,7 +1885,7 @@ def change_act_for(k, grantor, grantee, auth, action, item, qty, to, memo=None) 
             res = A._send(k, grantor, to, item, qty, extra={"agent_for": auth, "by": grantee}, memo=memo)
             done, what = True, res
         elif action == "deposit_escrow":
-            _need_escrow(k, "deposit_escrow")
+            _need_escrow(k, "deposit_escrow", to)
             k.apply("deposit_escrow", agent=grantor, contract=to, item=item, qty=qty)
             done, what = True, f"deposited {qty:g} {item} in {grantor}'s escrow with {to}"
     except (A.ActionError, L.LawError, D.PhysicsError, D.Blocked) as e:
@@ -1825,7 +1976,8 @@ def state_lines(k, aid) -> list[str]:
     for cid, rec in recs(k).items():
         if aid in rec["members"]:
             left = " (you leave at the end of this round)" if aid in rec["leaving"] else ""
-            out.append(f"Your contract {cid} '{rec['name']}' ({rec['template'] or 'own code'}; {len(rec['members'])} members; laws "
+            inc = f"; incorporated under {rec['parent']}" if rec.get("parent") is not None else ""   # W8e
+            out.append(f"Your contract {cid} '{rec['name']}' ({rec['template'] or 'own code'}{inc}; {len(rec['members'])} members; laws "
                        f"{', '.join(rec['laws']) or 'none'}{'; SUSPENDED' if rec['status'] == 'suspended' else ''}){left}: your "
                        f"escrow {_fmt(rec['escrow'].get(aid))}; your allowance per round {_fmt(rec['allowances'].get(aid))}; its "
                        f"treasury {_fmt(rec['reserve'])}.")
@@ -1848,7 +2000,9 @@ def render_event(k, e, tag, viewer=None) -> str | None:
     d, t, who = e["data"], e["type"], e["agent"]
     c = d.get("contract")
     if t == "contract_created":
-        return f"{tag} {who} founded contract {c} '{d['name']}'" + (f" ({d['template']})" if d.get("template") else "")
+        return (f"{tag} {who} founded contract {c} '{d['name']}'" + (f" ({d['template']})" if d.get("template") else "")
+                + (f", incorporated under {d['parent']}" if d.get("parent") else "")
+                + (f" (registration fee {_fmt(d['fee'])})" if d.get("fee") else ""))
     if t == "contract_joined":
         return f"{tag} {who} joined contract {c}"
     if t == "contract_join_refused":
@@ -1886,7 +2040,11 @@ def render_event(k, e, tag, viewer=None) -> str | None:
     if t == "contract_wound_up":
         sh = d.get("shareholders") or {}                                # P4.5: residual claims first
         return f"{tag} contract {c} was wound up: " + "; ".join([f"shareholder {a} got {_fmt(g)}" for a, g in sh.items()]
-                                                                  + [f"{a} got {_fmt(g)}" for a, g in d["paid"].items()])
+                                                                  + [f"{a} got {_fmt(g)}" for a, g in d["paid"].items()]
+                                                                  + ([f"{d['parent']} got {_fmt(d['escheat'])}"]
+                                                                     if d.get("escheat") else []))
+    if t == "company_rule":                                             # W8e: a polity's company law
+        return f"{tag} {d['polity']} set its company rule {d['key']} = {d['value']!r} (law {d['law']})"
     if t == "agency_granted":
         return (f"{tag} {who} authorized {d['grantee']} ({d['auth']}) to {d['action']} up to {d['qty']:g} {d['item']} per round for "
                 f"them" + (f" (to {', '.join(d['to'])})" if d.get("to") else "") + (f" until round {d['until']}" if d.get("until")

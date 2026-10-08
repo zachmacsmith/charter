@@ -397,6 +397,8 @@ def _ann():
         "contracts.scripted": dict(types=("bool",)),
         "contracts.enforcement": dict(types=("str",), enum=("escrow", "escrow_court", "word")),     # P4.4: the enforcement dial
         "contracts.breach_cases": dict(types=("bool",)),                 # W7e (review 11 §4.1): breaches open court cases
+        "contracts.max_own": dict(types=("int",), range=NONNEG),           # W8e (D-27): was contracts.MAX_OWN
+        "contracts.max_funds": dict(types=("int",), range=NONNEG),         # W8e (D-27): was contracts.MAX_FUNDS
         "resources.placement": dict(types=("str",), enum=_placements),
         "prompts.core": dict(types=("dict",)),
         "prompts.manual": dict(types=("dict",)),
@@ -723,6 +725,9 @@ DOCS = {
     "contracts.breach_cases": "W7e (review 11 §4.1), with enforcement escrow_court: a breach a contract records opens a court case "
                               "through courts v2 (open_case, source \"contract\", accuser the victim or none) under a polity clause "
                               "breach_of_contract in force that binds the member (the Contract Enforcement Act's); default false",
+    "contracts.max_own": "W8e (D-27): currencies, rights and offices (each) one contract may create (default 5); an incorporated "
+                         "company's parent may set its own (company rule max_own)",
+    "contracts.max_funds": "W8e (D-27): funds one law may open (default 5)",
     "law.after_visibility": "law.v2 (W7e, review 11 §4.1): all (null, the default: an after-hook reacts to every change it hooks, "
                             "as before) | evidence: an after-hook runs only when its law could read the change's own event "
                             "(evidence.law_can_see, the predicate event()/history() use)",

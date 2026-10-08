@@ -542,7 +542,8 @@ R("create_contract", "found a contract (a club, company, crowdfund, cartel, exch
   doc='create_contract {"name": "...", "template": "club", "params": {"DUES": 2}} or {"name": "...", "code": "<law code>"}: found '
       'an association; you are its first member. Its code is in force at once and binds only members who join: it may tax or '
       'block what members do, take only what they deposit in its escrow or allow it each round, and pay anyone from its treasury '
-      '(templates: club, company, crowdfund, cartel, exchange; the manual lists their params)')
+      '(templates: club, company, crowdfund, cartel, exchange; the manual lists their params). Add "under": "<polity>" to '
+      'incorporate it under a polity: that polity\'s company law then binds it (above its own code) and grants it benefits')
 R("join_contract", "join a contract", "contracts", needs=("mod:contracts",),
   handler="contracts:act_join_contract", module="contracts", category="political",
   emits=("contract_joined", "contract_join_refused", "contract_applied"),

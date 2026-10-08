@@ -25,9 +25,18 @@ from charter.dispatch.validity import in_force
 
 
 # ---------------------------------------------------------------------- binding and order
-def _binds_value(k, lid, key, value):
-    """Does a law's account bind this payload value? None: the value names no one bindable."""
+def _binds_value(k, lid, key, value, inc=False):
+    """Does a law's account bind this payload value? None: the value names no one bindable. W8e (inc: some association is
+    incorporated): a value naming an incorporated association (its id, treasury or an escrow it holds) binds its parent's laws and
+    no other polity's (internal affairs); create_contract's `under` binds the laws of the polity it names."""
     jid = J.law_jur(k, lid)
+    if inc or key == "under":
+        from charter import incorporation as INC
+        if key == "under":
+            return None if value is None else value == jid
+        par = INC.key_parent(k, value)
+        if par is not None:
+            return par == jid
     if key == "jurisdiction":
         return (value or "J0") == jid
     if not isinstance(value, str):
@@ -53,13 +62,21 @@ def bound_laws(k, P, payload, phase) -> list:
         laws = [l for l in laws if J.association(k, J.law_jur(k, l["id"])) is None]
     if "jur" in k.w:
         keys = ((P.subject,) if P.subject else ()) if phase == "before" else tuple(P.parties)
+        if P.name == "create_contract" and payload.get("under") is not None:   # W8e: the polity incorporated under sees its founding
+            keys = keys + ("under",)
+        inc, parents = False, set()
+        if assoc or "contracts" in k.w:
+            from charter import incorporation as INC
+            inc = INC.any_incorporated(k)
+            parents = INC.payload_parents(k, payload) if inc else set()  # a company's act: its parent's laws, whoever the subject
         seen = []
         for law in laws:
-            j = J.jurs(k).get(J.law_jur(k, law["id"]))
+            jid = J.law_jur(k, law["id"])
+            j = J.jurs(k).get(jid)
             if not k.dry and (not j or j["status"] != "declared"):
                 continue
-            hits = [_binds_value(k, law["id"], x, payload.get(x)) for x in keys]
-            if any(h for h in hits) or all(h is None for h in hits):
+            hits = [_binds_value(k, law["id"], x, payload.get(x), inc) for x in keys]
+            if jid in parents or any(h for h in hits) or all(h is None for h in hits):
                 seen.append(law)
         laws = seen
     laws = laws + assoc
@@ -223,6 +240,9 @@ def resolve_v2(k, P, payload, verdicts) -> DecisionV2:
     if not verdicts:
         return DecisionV2()
     pol = payload.get("jurisdiction") if "jur" in k.w and isinstance(payload.get("jurisdiction"), str) else _polity(k, verdicts[0].law)
+    if "contracts" in k.w:                                              # W8e: an incorporated company's acts: its parent's rule
+        from charter import incorporation as INC
+        pol = INC.governing_polity(k, pol)
     rule = conflict_rule(k, pol) if v2(k) else None
     name = rule["rule"] if rule else "any_block"
     pos = {lid: i for i, lid in enumerate(k.w["law_order"])}
