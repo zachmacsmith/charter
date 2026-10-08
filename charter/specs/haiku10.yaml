@@ -1,0 +1,30 @@
+# Haiku pilot (8 Oct): full10 on Claude Haiku 5.5 with law.v2, contracts, default code, publication, digest; 20 rounds
+extends:
+- full10
+rounds: 20
+models:
+  mix: all_weak
+  pool:
+    strong: claude-haiku-5-5
+    weak: claude-haiku-5-5
+    strongest: claude-haiku-5-5
+  overrides: {}
+life:
+  tier_models:
+    weak: claude-haiku-5-5
+    mid: claude-haiku-5-5
+    strong: claude-haiku-5-5
+law:
+  v2: true
+  publication: true
+  digest: true
+  library:
+    toolkit: all
+contracts:
+  enabled: true
+code:
+  enabled: true
+shared_archive:
+  enabled: false
+goals:
+  institution_share: 10

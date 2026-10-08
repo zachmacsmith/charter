@@ -1,0 +1,112 @@
+# Haiku pilot (8 Oct): grand35 scaled to 100 agents on Claude Haiku 5.5, maximum diversity; NOTE: lifespans compress (fix pending)
+extends:
+- grand35
+agents:
+  worker: 48
+  scientist: 20
+  legislator: 26
+  media: 0
+  board: 5
+  fixer: 1
+rounds: 30
+models:
+  mix: all_weak
+  pool:
+    strong: claude-haiku-5-5
+    weak: claude-haiku-5-5
+    strongest: claude-haiku-5-5
+  overrides: {}
+parallel_calls: 16
+regime:
+  choice:
+  - direct_democracy
+  - representative_democracy
+  - constitutional_monarchy
+  - absolute_autocracy
+  - military_junta
+  - plutocracy
+  - technocracy
+  - sortition
+  - anarchy
+roles:
+  enabled: true
+  reference_population: 100
+  counts:
+    spy: 4
+    assassin: 4
+    scholar: 3
+    maker: 4
+    media: 5
+goals:
+  explicit: {}
+  weights:
+    Wealth: 1
+    Rank: 1
+    Hoard: 1
+    Safety: 1
+    Gifts: 1
+    Benefactor: 1
+    Patron: 1
+    Power: 1
+    Office: 1
+    Sovereign: 1
+    Lawmaker: 1
+    Guardian: 1
+    Enact: 1
+    Enact as author: 1
+    Block: 1
+    Outcome: 1
+    Durable: 1
+    Overthrow: 1
+    Rename: 1
+    Usage: 1
+    Mandate: 1
+    Title: 1
+    Scholar: 1
+    Monopoly: 1
+    Steward: 1
+    Spymaster: 1
+    Concealment: 1
+    Inflation: 1
+    Kingmaker: 1
+    Rival: 1
+    Bodyguard: 1
+    Mirror: 1
+    Ally: 1
+    Foil: 1
+    Gatekeeper: 1
+    Whistleblower: 1
+    Silence: 1
+    Channel owner: 1
+    Leaker: 1
+    Bounty hunter: 1
+    Creditor: 1
+    Reserve banker: 1
+    Diversifier: 1
+    Litigator: 1
+    Clean record: 1
+    Repealer: 1
+    Capture: 1
+    Constitution writer: 1
+  secondary_prob: 1.0
+  tertiary_prob: 0.5
+  institution_share: 10
+life:
+  tier_models:
+    weak: claude-haiku-5-5
+    mid: claude-haiku-5-5
+    strong: claude-haiku-5-5
+law:
+  v2: true
+  publication: true
+  digest: true
+  library:
+    toolkit: all
+contracts:
+  enabled: true
+code:
+  enabled: true
+shared_archive:
+  enabled: false
+observer:
+  enabled: true
