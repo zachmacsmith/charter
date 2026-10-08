@@ -178,7 +178,11 @@ def available(inst, k, a, rights=None) -> list:
     live = k is not None and aid in k.w["agents"]
     out = []
     for act in REG.values():
-        if not all(_need(inst, a, rights, n) for n in act.needs):
+        if "dir:any" in act.needs:                                      # directories: who can reach one (the live state with a
+            from charter import directories as DR                      # kernel; owners only in the system prompt written before)
+            if not (DR.enabled(k if live else inst) and (DR.has_any(inst, k, a, rights) if live else DR.static_access(inst, a))):
+                continue
+        if not all(_need(inst, a, rights, n) for n in act.needs if n != "dir:any"):
             if not (act.alt is not None and live and all(_need(inst, a, rights, n) for n in act.needs if not n.startswith("right:"))
                     and act.alt(inst, k, a, rights)):
                 continue

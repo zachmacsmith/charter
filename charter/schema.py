@@ -472,6 +472,14 @@ EXTRA = {
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
 DOCS = {
+    "chronicle.enabled": "the Historian's chronicle (a directory owned by role:historian); null: on exactly when the historian role is "
+                         "in play (roles.explicit.historian or roles.counts.historian > 0)",
+    "chronicle.namespace": "the chronicle's persistent namespace (null: directories.namespace, shared_archive.namespace, else default)",
+    "chronicle.max_bytes": "size limit of the whole chronicle, in bytes",
+    "chronicle.max_file_bytes": "size limit of one chronicle file, in bytes",
+    "chronicle.records": "at the end of each complete run, append a public digest of it as _records/<run_id>.md (read-only to agents)",
+    "directories.stores.*": "one directory: {owner: role:<r>|agent:<id>|right:<r>|class:<c>|institution:<id>, scope: run|namespace, "
+                            "namespace, max_bytes, max_file_bytes, records, title, readonly: [prefixes]} (charter/directories.py)",
     "endowment_gini": "target Gini of starting holdings (lognormal values tuned to it)",
     "veto_window": "rounds the Board has to veto a structural or procedural law",
     "fixer_per_round": "patches the Fixer may make per round",

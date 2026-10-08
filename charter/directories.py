@@ -305,6 +305,8 @@ def _pick(k, aid, name=None):
 def norm_path(path, what="path") -> str:
     """A relative file path ('people/Siv.md'): letters, digits, . _ - space and /; no '..', no leading /, at most PATH_MAX."""
     p = str(path if path is not None else "").strip().replace("\\", "/")
+    if p.startswith("/"):
+        raise _err(f"{what} {p!r}: paths are relative (no leading '/')")
     p = re.sub(r"/+", "/", p).strip("/")
     if not p:
         raise _err(f"a {what} is needed (e.g. \"rounds/r03.md\")")

@@ -57,7 +57,7 @@ def test_roles_are_drawn_independently_so_combinations_happen():
     doubles = 0
     for seed in range(40):
         h = _gen(seed, AG28, "roles.enabled=true")["roles"]["holders"]
-        ids = [x for r in R.ROLES for x in h[r]]
+        ids = [x for r in R.ROLES for x in h.get(r, [])]   # optional roles (historian) appear only where in play
         doubles += len(ids) - len(set(ids))
     assert doubles > 0
 

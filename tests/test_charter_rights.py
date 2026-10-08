@@ -130,8 +130,8 @@ def test_registry_derives_the_old_constants():
     assert KN.NEVER == {"board": None, "fixer": {"vote", "propose", "veto"}}
     assert Kernel.SECRET_RIGHTS == ("impersonate",)
     assert KN.RENAMED_RIGHTS == {"forge": "impersonate"}
-    assert R.RIGHTS == {"scholar": "scholar", "maker": "maker", "media": "press"}
-    assert RT.RIGHT_OF_ROLE["spy"] == "impersonate" and RT.ROLE_RIGHTS == {"scholar", "maker", "impersonate"}
+    assert R.RIGHTS == {"scholar": "scholar", "maker": "maker", "media": "press", "historian": "chronicle"}
+    assert RT.RIGHT_OF_ROLE["spy"] == "impersonate" and RT.ROLE_RIGHTS == {"scholar", "maker", "impersonate", "chronicle"}
     assert set(M.RIGHT_DOC) >= KN.KERNEL_RIGHTS | RT.ROLE_RIGHTS
     assert set(RT.RIGHT_OF_ROLE) <= set(R.ROLES)
 
