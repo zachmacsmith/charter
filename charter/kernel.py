@@ -23,6 +23,7 @@ from charter import accounts as AC                                     # account
 from charter import amendment as AM                                    # law.v2 (P3.4): amendment by procedure, proposals by law
 from charter import conflict as CF                                  # conflict: attacks, forts, assassin (off by default)
 from charter import credit as CR
+from charter import courts as CO                                      # law.v2 (courts v2): cases, court rules, appeals
 from charter import dispatch as D                                     # Kernel.apply: primitives, legacy hook aliases (P2.1)
 from charter.camptypes import framework as CT                    # camps: typed camps, modifiers and leases (no-op under legacy)
 from charter import hidden as H
@@ -672,6 +673,7 @@ class Kernel:
             api.update(LK.law_api(k, lid))
             api.update(D.law_api(k, lid))                              # law.v2 (P3.1): root_kind(chain) etc., law_id(), treasury()
             api.update(AM.law_api(k, lid))                             # law.v2 (P3.4): propose_law, propose_amendment (from L3)
+            api.update(CO.law_api(k, lid))                             # law.v2 (courts v2): cases, case, court_rules, set_court_rule
         return J.scope_api(k, lid, api)                                # jurisdictions: a law reaches only its members (off: unchanged);
                                                                        # a contract's law: the contract column, v2 functions included
 
@@ -1397,6 +1399,8 @@ class Kernel:
 
     # ------------------------------------------------------------------ courts
     def _expire_cases(self):
+        if D.v2(self):                                                 # courts v2: law-set deadlines, appeal windows, lapsed appeals
+            return CO.expire_cases(self)
         for c in self.w["cases"].values():
             if c["status"] == "open" and self.r >= c["deadline"]:
                 c["status"] = "dismissed"
