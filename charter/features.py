@@ -144,7 +144,8 @@ REG: dict[str, Feature] = {f.name: f for f in FEATURES}
 # Stream names used by core code (generation, prompts, the archive), owned by no feature.
 CORE_RNG = ("archetypes", "prompts", "dm_extra", "memory_turns", "conditional_goals", "strategy_prompt", "archive_split",
             "archive_required", "explicit2", "archive_sample",
-            "law", "intervention")                                     # rng_version 2: each law's rng() (kernel); an intervention's own draws
+            "law", "intervention",                                      # rng_version 2: each law's rng() (kernel); an intervention's own draws
+            "regime_laws")                                             # W6d: a regime's sampled law set (regimes.py)
 
 
 def get(name: str) -> Feature:
