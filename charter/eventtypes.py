@@ -448,6 +448,11 @@ E("contract_swap", "contracts", "legal_act", "parties", "event", "contracts", pr
 E("contract_wound_up", "contracts", "summary", "public", "event", "contracts", primitive="move",
   note="a dissolved contract's treasury paid out to its last members (pro rata, or by its laws' on_dissolve)")
 E("fund_opened", "contracts", "legal_act", "public", "event", "contracts", primitive="open_fund")
+# P4.5: agency (grantor and grantee only: the grantor sees every use)
+E("agency_granted", "contracts", "primitive", "parties", "event", "contracts", act="authorize", primitive="authorize")
+E("agency_revoked", "contracts", "primitive", "parties", "event", "contracts", act="revoke_authorization", primitive="deauthorize")
+E("agency_used", "contracts", "primitive", "parties", "event", "contracts", act="act_for", primitive="act_for",
+  note="every use of an authorization, done or not, with {grantor, grantee, auth}: shown to both")
 E("fund_closed", "contracts", "summary", "public", "event", "contracts", primitive="move",
   note="a fund whose law is out of force: its goods go to the account's treasury")
 

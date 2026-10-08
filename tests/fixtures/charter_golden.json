@@ -254,28 +254,28 @@
   "snapshots.json": "85b8781150e80512"
  },
  "contracts_small": {
-  "events.jsonl": "10bd5f3bf23abf45",
-  "instance.json": "a2b5c08eb3f5b4ef",
+  "events.jsonl": "a8d51cae988a360d",
+  "instance.json": "be86b8bfff393244",
   "score": {
-   "activity_mix": "2a5579c5c72622dc",
-   "agents": "ec1f2e0722ff7643",
+   "activity_mix": "34f8de16d7aed78e",
+   "agents": "abf18d2d206bf9dd",
    "goal_scores": {
-    "Bruna": 0.1763,
-    "Iris": 0.8931,
-    "Maya": 0.3405,
-    "Oda": 0.2833,
-    "Petra": 0.1075,
-    "Rakel": 0.4506,
-    "Siv": 0.3139,
+    "Bruna": 0.1528,
+    "Iris": 0.8941,
+    "Maya": 0.2889,
+    "Oda": 0.2822,
+    "Petra": 0.1208,
+    "Rakel": 0.4529,
+    "Siv": 0.3,
     "Valter": 0.3,
     "Wanda": 0.0,
-    "Yuri": 0.0448
+    "Yuri": 0.0436
    },
-   "goals": "b78dfe6fda80db32",
+   "goals": "5f9c2b03b4f355ad",
    "lineage": "74234e98afe7498f",
-   "summary": "a07f3b896145ed0d"
+   "summary": "6444298c274f52b2"
   },
-  "snapshots.json": "1676543e6d738416"
+  "snapshots.json": "a1705b868ec5eafa"
  },
  "prompts_E4_1": {
   "Abel": {

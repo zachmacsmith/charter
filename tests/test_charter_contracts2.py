@@ -371,14 +371,16 @@ def test_company_on_dissolve_pays_pro_rata_to_shares():
     cid = found(k, a, template="company", params={"CUT": 0.5, "DIVIDEND_EVERY": 99})
     A.act(k, b, "join_contract", {"contract": cid})
     law = k.w["laws"][rec(k, cid)["laws"][0]]
-    law["public"]["shares"] = {a: 3.0, b: 1.0}
+    for x, q in ((a, 3.0), (b, 1.0)):                                   # P4.5: shares are its currency (the kernel pays them)
+        k.apply("mint", currency=law["public"]["currency"], qty=q, to=x, via="law")
     k._add(f"assoc:{cid}", "grain", 8)
     ga, gb = k.bal(a, "grain"), k.bal(b, "grain")
     for x in (a, b):
         A.act(k, x, "leave_contract", {"contract": cid})
     next_round(k)
     assert k.bal(a, "grain") == pytest.approx(ga + 6) and k.bal(b, "grain") == pytest.approx(gb + 2)
-    assert not events(k, "contract_wound_up")                          # on_dissolve paid it all
+    w = events(k, "contract_wound_up")[-1]["data"]                     # P4.5: the shareholders' residual claims took it all
+    assert w["shareholders"] == {a: {"grain": 6.0}, b: {"grain": 2.0}} and w["paid"] == {}
 
 
 # ------------------------------------------------------------------ a dead member's escrow goes to its heirs

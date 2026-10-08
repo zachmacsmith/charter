@@ -171,7 +171,7 @@ Initial catalogue (P1.7 declares all; P2.x routes them):
 | membership | `join`, `leave`, `admit`, `expel` (polities and associations) |
 | rules of things | `set_camp_rule(camp, key, value)`, `set_dm_limit`, `set_lease_rules`, `set_birth_rules` |
 | legal acts | `propose`, `decide`, `open_ballot`, `cast_vote`, `close_ballot`, `veto`, `enact`, `repeal`, `amend`, `set_procedure`, `rule`, `define_action`, `set_conflict_rule` |
-| contracts (P4) | `create_contract`, `deposit_escrow`, `set_allowance`, `pull`, `breach`, `dissolve` |
+| contracts (P4) | `create_contract`, `deposit_escrow`, `set_allowance`, `pull`, `breach`, `dissolve`, `swap`, `open_fund` (P4.4), `authorize`, `deauthorize`, `act_for` (P4.5) |
 
 Not primitives: `gazette`, `notify`, editions, digests, the round summary, previews, reads.
 
@@ -505,7 +505,27 @@ Associations v1 (P4.3) follow review 06 §3-§4 with the changes below:
   is out of force closes into the account's treasury at the end of the round. Contracts on only.
 - Dissolution (P4.4): when the last members leave, the laws' `on_dissolve(heirs)` runs, then the treasury is shared equally among
   those last members; a dead member's escrow or share follows its estate or bequest (`mortality.settle_late`).
-- Standing orders, scripts and registries are contract templates, not kernel features (review 07).
+- Shares, own rights and offices (P4.5): `create_currency`, `mint`, `burn`, `create_right`, `grant`, `revoke`, `define_action` are
+  `escrow`-column functions for an association: everything it creates is named `<cid>.<name>`; its currencies are backed by its
+  treasury (`Kernel.price` = net asset value per unit, D-15), minted to anyone, burned only from what it holds; `shareholders(cur)`
+  is the register; at wind-up the treasury goes to the holders of its currencies pro rata (treasury stock excluded) before the
+  equal split among the last members. Its rights go to members only and are dropped when a member leaves or the contract
+  dissolves; its offices (`define_action`, no law level) are invoked by members holding the right and end with their law.
+- Agency (P4.5, review 10 #11): actions `authorize` / `revoke_authorization` / `act_for`, primitives `authorize`, `deauthorize`
+  (not blockable) and `act_for`, routed and hookable under law.v2. A grantor lets an agent or a contract office (holders of one of
+  a contract's rights) give or deposit in escrow up to `qty` of one item per round on its behalf (`contracts.AGENCY_ACTIONS`;
+  `vote` is never authorizable), optionally to listed recipients and for N rounds. "Laws never act for an agent" holds: no law
+  function causes these primitives; the grantee acts on the grantor's recorded consent, the inner transfer is an ordinary
+  transfer of the grantor's (its hooks and taxes apply), and every use is logged `{grantor, grantee, auth}` to both
+  (`agency_used`). The kernel's `has`/`move` are unchanged: the check lives in `contracts.check_act_for`.
+- Standing orders, scripts and registries are contract templates, not kernel features (review 07). P4.5: template
+  `standing_order` (one member, closed, pulls from the founder's allowance, pays `TO` every `EVERY` rounds while the founder keeps
+  `KEEP`, ends after `TIMES`) and the `standing_order` action that founds it and sets the allowance in one call.
+- Associations as holders (review 10 #13), the cheap part (P4.5): an association's law may pay or mint to another association's
+  treasury, and wind-up pays shares held by an association to its treasury. Not done: an association holding rights or
+  membership in another (rights live on agent records and `Kernel.has`; members are agent ids in ballots, hooks, escrow keys and
+  exit). It needs a member kind on association records (`{"kind": "association", "id": cid}`), an account-level `has()`, ballots
+  weighted per member account, and a rule for who acts for a member association (its office holders, through agency).
 - Exit: a member can always leave at round end; `on_exit` keeps at most the member's escrow.
 
 ### 7.3 The power table attaches the Board, the Fixer, levels and dry runs

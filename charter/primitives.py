@@ -136,6 +136,8 @@ PARAM_SAMPLES = {
     "evidence": ["e12"], "appellant": "a2", "decides": True, "stage": 1,                                 # courts v2
     "rank": "statute", "opened_by": "L1", "proposal": "L5", "diff": "--- L5 (before)\n+++ L5 (after)\n",      # P2.3 legal acts
     "a": "a1", "b": "a2", "give": {"timber": 1.0}, "get": {"grain": 2.0},                                  # P4.4: swap
+    "grantor": "a1", "grantee": "a2", "auth": "G1",                                                       # P4.5: agency
+    "scope": {"action": "transfer", "item": "grain", "qty": 2.0, "to": None, "rounds": None, "office": False},
 }
 
 
@@ -646,6 +648,25 @@ _ROWS = [
       why={"compel": "a law opens its own fund; it binds nobody"},
       notes="owner key fund:<law>:<name>, an account of the law's own account (polity or association); only that law (and its "
             "amendments, which keep the id) moves goods out of it; closed into the account's treasury once the law is out of force"),
+    # P4.5: agency (charter/contracts.py). Laws never act for an agent: no law function causes these; the grantor consents
+    # (authorize), the grantee acts (act_for), every use is logged to both.
+    P("authorize", "contracts", "relation", ("grantor", "grantee", "auth", "scope"), "dispatch:do_authorize", subject="grantor",
+      parties=("grantor", "grantee"), agent_params=("grantor",), event="agency_granted", causes=("agent",),
+      sites=("dispatch:do_authorize", "contracts:change_authorize", "contracts:act_authorize"),
+      why={"compel": _LNA, "gate": "law.v2 only: before_authorize (a polity law may regulate agency)"},
+      notes="grantee: an agent, or a contract office (a right a contract created: any holder may use it); scope: one of "
+            "contracts.AGENCY_ACTIONS, one item, qty per round, optional recipients and rounds. vote is never authorizable"),
+    P("deauthorize", "contracts", "relation", ("grantor", "grantee", "auth"), "dispatch:do_deauthorize", subject="grantor",
+      parties=("grantor", "grantee"), agent_params=("grantor",), blockable=False, event="agency_revoked", causes=("agent",),
+      sites=("dispatch:do_deauthorize", "contracts:change_deauthorize", "contracts:act_revoke_authorization"),
+      why={"compel": _LNA, "gate": "the grantor may always revoke an authorization (not blockable)"}),
+    P("act_for", "contracts", "move", ("grantor", "grantee", "auth", "action", "item", "qty", "to"), "dispatch:do_act_for",
+      subject="grantee", parties=("grantor", "grantee"), agent_params=("grantor", "grantee"), event="agency_used", causes=("agent",),
+      sites=("dispatch:do_act_for", "contracts:change_act_for", "contracts:act_act_for"),
+      why={"compel": _LNA + "; the grantee acts on the grantor's recorded consent",
+           "gate": "law.v2 only: before_act_for (and the inner transfer's or deposit's own hooks)"},
+      notes="the grantor's own transfer or escrow deposit, made by the grantee within the authorization's bounds; logged to both "
+            "(agency_used {grantor, grantee, auth}); a use a law blocks or the balance refuses counts nothing"),
 ]
 
 # ---------------------------------------------------------------------- actions -> primitives
@@ -709,6 +730,8 @@ ACTION_PRIMITIVES = {
     # contracts (P4.3)
     "create_contract": ("create_contract",), "join_contract": ("join",), "leave_contract": ("leave",),
     "deposit_escrow": ("deposit_escrow",), "set_allowance": ("set_allowance",), "propose_contract_change": ("propose",),
+    "authorize": ("authorize",), "revoke_authorization": ("deauthorize",), "act_for": ("act_for", "move", "deposit_escrow"),   # P4.5
+    "standing_order": ("create_contract", "set_allowance"),
     # powers
     "invoke": ("invoke", "use_power"),
 }

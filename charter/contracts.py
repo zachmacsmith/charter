@@ -16,9 +16,9 @@ k.w["contracts"]["assoc"][cid] so jurisdiction listings stay unchanged (P4.6 mer
      "proposals": {pid: {...}}, "template": str | None, "params": dict, "exit": {"notice": 0, "forfeit": "escrow"}}
 
 Its power set (powers.py, association column; lawapi.LawFn.contract, scope_api below):
-  - no compulsion, no lawful force, no kernel rights, no camp rules, no currencies (shares are P4.5), no J0 reserve functions, no
-    offices (define_action: agency is P4.5), no Board, no Fixer, no levels, no dry run: denied functions raise, and create_contract
-    refuses code that calls one (check_code);
+  - no compulsion, no lawful force, no kernel rights, no camp rules, no J0 reserve functions, no Board, no Fixer, no levels, no
+    dry run: denied functions raise, and create_contract refuses code that calls one (check_code); currencies, rights and offices
+    only its own (P4.5: create_currency, mint, burn, create_right, grant, revoke, define_action are "escrow"-column functions);
   - pays anyone (members or not) out of its own treasury: move(treasury(), anyone, ...);
   - takes only what members deposited (forfeit, fine and move from their escrow) or pre-authorised (pull within an allowance);
   - runs hooks over its members' changes (before_/after_ of any primitive whose subject or party is a member, its treasury or its
@@ -56,7 +56,33 @@ P4.4 (docs/ARCHITECTURE.md §7.2; review 10 §3.6, §6 #7 and #8):
     keeps its funds. A fund whose law is out of force (repealed, failed) is closed at the end of the round into its account's
     treasury (end_round). Contracts on only.
 
-Not yet (later packages): shares as a backed currency, agency (authorize), standing orders and scripts (P4.5), offices.
+P4.5 (docs/ARCHITECTURE.md §7.2; review 10 §3.6, §3.9, §3.11, §6 #11 and #13):
+  - Shares: an association's law may create its own currencies (create_currency(name) -> "<cid>.<name>", backed by its treasury:
+    Kernel.price values one at the treasury's net asset value per unit, D-15), mint them to anyone (members, outsiders, its
+    treasury, another association's treasury) and burn them only out of what it holds (its treasury, its members' escrow, its
+    funds). Shares are goods: agents transfer them like any item (conservation: mint and burn are the only sources and sinks).
+    shareholders(currency) reads the register (holders now). Residual claims: when the contract is wound up, its treasury is paid
+    to the holders of its currencies pro rata (_pay_shareholders), before the equal split among the last members. The company
+    template issues real shares.
+  - Own rights and offices: create_right(name) -> "<cid>.<name>"; grant only to its members (a non-member: refused, logged for
+    the monitor), revoke from anyone; define_action(right, name, fn) -> office "<cid>.<name>" bound to one of its own rights
+    (no law level: the association's code is its own constitution). A member who leaves loses the contract's rights (change_leave);
+    a dissolved contract's rights are revoked and the offices of a retired law go (_retire). Only members invoke its offices
+    (actions._invoke -> jurisdictions.check_invoke, which binds by membership).
+  - Agency (review 10 #11): an agent authorizes another agent, or a contract office (any holder of one of a contract's rights), to
+    do a bounded set of things on its behalf: AGENCY_ACTIONS (transfer, deposit_escrow), one item, up to qty per round, optionally
+    only to listed recipients and for N rounds. Primitives authorize / deauthorize (not blockable: the grantor may revoke at any
+    time) / act_for, routed and hookable under law.v2 (before_authorize, before_act_for, ...: a polity law may regulate agency).
+    "Laws never act for an agent" holds: no law function uses an authorization; only the authorized agent acts (act_for), on the
+    grantor's recorded consent, and every use is logged {grantor, grantee, auth} to both (agency_used); the inner transfer is an
+    ordinary transfer of the grantor's (its hooks, taxes and blocks apply). vote is not authorizable (one agent, one vote).
+  - Standing orders (review 07: templates, not kernel features): the standing_order template is a one-member closed contract that
+    pulls from its founder's allowance and pays TO every EVERY rounds (conditional on the founder keeping KEEP; TIMES payments,
+    then it ends); the standing_order action founds it and sets the allowance in one call. Its compute is its law's gas (P3.8).
+  - Associations as holders (review 10 #13, the cheap part): an association's treasury may hold goods and shares of another
+    (a contract law's move and mint may pay "assoc:<cid>"; wind-up pays shares held by an association to its treasury). Holding
+    rights or membership in another association is not here: rights live on agent records (Kernel.has) and members are agent ids
+    everywhere (ballots, hooks, escrow keys, exit); it needs a member kind on association records and an account-level has().
 """
 from __future__ import annotations
 
@@ -89,6 +115,41 @@ PROCEDURES = ("members", "two_thirds", "founder")
 ENFORCEMENT = ("escrow", "escrow_court", "word")
 MAX_FUNDS = 5                   # funds one law may open (P4.4)
 WORD_REFUSED = {"pull": False, "forfeit": 0.0, "refund": {}, "fine": 0.0, "swap": False}   # what they return under "word"
+SEP = "."                       # P4.5: a contract's own currencies, rights and offices are named "<cid>.<name>" ("A1.shares")
+MAX_OWN = 5                     # P4.5: currencies, rights and offices one contract may have (each)
+MAX_AUTH = 5                    # P4.5: authorizations in force one agent may have given
+MAX_USES = 50                   # P4.5: uses kept on an authorization's record (the events keep them all)
+# P4.5 agency: what an agent may authorize another (or a contract office) to do on its behalf. vote is never authorizable (one
+# agent, one vote); nothing else is, until a row is added here (its check and its doing in check_act_for / change_act_for).
+AGENCY_ACTIONS = {
+    "transfer": "give up to qty of item per round out of the grantor's holdings (to: the allowed recipients, or anyone)",
+    "deposit_escrow": "deposit up to qty of item per round of the grantor's in its escrow with a contract it belongs to (to: the "
+                      "allowed contracts, or any)",
+}
+
+
+def own_name(cid, name) -> str:
+    """P4.5: the name of a contract's own currency, right or office: "<cid>.<name>" (name: 1-24 letters, digits or _)."""
+    n = str(name).strip()
+    if not n or len(n) > 24 or not all(c.isalnum() or c == "_" for c in n):
+        raise L.LawError("a contract's currency, right or office name is 1-24 letters, digits or _")
+    return f"{cid}{SEP}{n}"
+
+
+def issuer(k, name):
+    """P4.5: the association that issued currency or created right `name` ("<cid>.<name>"), or None."""
+    if not isinstance(name, str) or SEP not in name:
+        return None
+    cid = name.split(SEP, 1)[0]
+    return cid if cid in recs(k) else None
+
+
+def _other_treasury(k, key) -> bool:
+    """P4.5 (review 10 #13): key is a live association's treasury (an association may hold goods and shares of another)."""
+    if not (isinstance(key, str) and key.startswith(AC.ASSOC)):
+        return False
+    rec = recs(k).get(key[len(AC.ASSOC):])
+    return rec is not None and rec["status"] != "dissolved"
 
 
 # ---------------------------------------------------------------------- basics
@@ -208,58 +269,50 @@ def on_round_end(r):
             move(treasury(), m, ITEM, pool / len(good))
         gazette("Club payout: " + str(round_to(pool, 2)) + " " + ITEM + " shared among " + str(len(good)) + " members")
 '''},
-    "company": {"admission": "open", "procedure": "members", "doc": "a share of every member's harvest goes to the company and counts "
-                "as their shares (a public register; tradable shares come later); dividends pro rata to shares; changes are "
-                "decided by shares", "code": f'''
+    "company": {"admission": "open", "procedure": "members", "doc": "a share of every member's harvest goes to the company, which "
+                "issues that member as many shares (its own currency, backed by its treasury, transferable); dividends pro rata to "
+                "shareholders; changes are decided by shares; at the end its treasury goes to the shareholders", "code": f'''
 title = "Company"
-intent = "Members pool production: CUT of every member's harvest goes to the company's treasury and is recorded as that member's shares (public register; shares as a backed currency come later). Every DIVIDEND_EVERY rounds the company pays out PAYOUT of everything it holds, pro rata to shares. Changes to its code are decided by a majority of shares."
+intent = "Members pool production: CUT of every member's harvest goes to the company's treasury, and the company issues that member as many shares (its own currency SHARES, backed by the treasury: worth its net asset value per share, transferable like any good; a public register records each issue). Every DIVIDEND_EVERY rounds the company pays out PAYOUT of everything it holds to its shareholders, members or not, pro rata. Changes to its code are decided by members weighted by their shares. When it is wound up, its treasury goes to the shareholders pro rata."
 CUT = 0.2
 DIVIDEND_EVERY = 2
 PAYOUT = 0.5
+SHARES = "shares"
 ledger = use("{_LEDGER}")
 
 def on_enact():
-    public.setdefault("shares", {{}})
     public.setdefault("register", {{}})
+    public["currency"] = create_currency(SHARES)
     set_procedure("ordinary", by_shares)
 
 def by_shares(p):
     w = {{}}
     for m in members():
-        w[m] = public["shares"].get(m, 0) + 1
+        w[m] = balance(m, public["currency"]) + 1
     return {{"electorate": members(), "rule": "majority", "weights": w}}
 
 def on_harvest(agent, camp, x, y):
     cut = y * CUT
     if cut <= 0:
         return 0
-    public["shares"][agent] = public["shares"].get(agent, 0) + cut
+    mint(public["currency"], cut, agent)
     ledger["record"](public["register"], agent, {{"camp": camp, "shares": cut}})
     return cut
 
 def on_round_end(r):
     if (r + 1) % DIVIDEND_EVERY != 0:
         return
-    shares = public["shares"]
-    holders = [m for m in members() if shares.get(m, 0) > 0]
-    total = sum([shares[m] for m in holders])
+    holders = shareholders(public["currency"])
+    total = sum([holders[h] for h in holders])
     if total <= 0:
         return
     for item, q in sorted(reserve().items()):
+        if item == public["currency"]:
+            continue
         pay = q * PAYOUT
-        for m in holders:
-            move(treasury(), m, item, pay * shares[m] / total)
+        for h in sorted(holders):
+            move(treasury(), h, item, pay * holders[h] / total)
     gazette("Dividend paid to " + str(len(holders)) + " shareholders")
-
-def on_dissolve(heirs):
-    shares = public["shares"]
-    holders = [m for m in heirs if shares.get(m, 0) > 0]
-    total = sum([shares[m] for m in holders])
-    if total <= 0:
-        return
-    for item, q in sorted(reserve().items()):
-        for m in holders:
-            move(treasury(), m, item, q * shares[m] / total)
 '''},
     "crowdfund": {"admission": "open", "procedure": "founder", "doc": "members pledge into escrow (deposit_escrow); if the pledges "
                   "reach the target by the deadline they go to the beneficiary, otherwise every pledge is refunded", "code": '''
@@ -366,6 +419,36 @@ def on_round_end(r):
     if r + 1 >= DEADLINE:
         gazette("Not exchanged by round " + str(DEADLINE) + ": both deposits refunded")
         close()
+'''},
+    "standing_order": {"admission": "closed", "procedure": "founder", "doc": "the founder's standing order (P4.5): every EVERY "
+                       "rounds QTY ITEM goes to TO out of the founder's allowance, while the founder keeps at least KEEP; after "
+                       "TIMES payments (0: no limit) it ends. The standing_order action founds one and sets the allowance",
+                       "code": '''
+title = "Standing order"
+intent = "The founder's standing order: at the end of every EVERY-th round, QTY ITEM goes to TO (an agent, or a contract's treasury assoc:<id>), taken from the founder's allowance (set_allowance), but only if the founder would still hold at least KEEP ITEM. After TIMES payments (0: no limit) the order ends: the founder leaves and the contract is wound up. The founder cancels it by leaving (leave_contract)."
+ITEM = "grain"
+QTY = 1
+TO = ""
+EVERY = 1
+KEEP = 0
+TIMES = 0
+
+def on_round_end(r):
+    me = contract_state(jurisdiction())["founder"]
+    if state.get("done") or me not in members() or TO == "":
+        return
+    start = state.setdefault("start", r)
+    if (r - start) % EVERY != 0:
+        return
+    if balance(me, ITEM) - QTY < KEEP:
+        return
+    if pull(me, ITEM, QTY):
+        move(treasury(), TO, ITEM, QTY)
+        state["paid"] = state.get("paid", 0) + 1
+        if TIMES > 0 and state["paid"] >= TIMES:
+            state["done"] = True
+            gazette("Standing order complete: " + str(state["paid"]) + " payments to " + TO)
+            expel(me)
 '''},
 }
 for _t in TEMPLATES.values():
@@ -620,6 +703,9 @@ def _retire(k, rec, lid) -> None:
     law["status"] = "repealed"
     if lid in rec["laws"]:
         rec["laws"].remove(lid)
+    for nm, act in list(k.w["actions"].items()):                       # P4.5: its offices go with it (as dispatch.do_repeal's)
+        if isinstance(act, dict) and act.get("law") == lid:
+            del k.w["actions"][nm]
     if rec["procedure"] not in PROCEDURES and k.fnreg.get(rec["procedure"], (None,))[0] == lid:
         rec["procedure"] = (TEMPLATES.get(rec["template"] or "") or {}).get("procedure", "members")
         if rec["procedure"] not in PROCEDURES:
@@ -751,7 +837,8 @@ def scope_api(k, lid, api: dict) -> dict:
         not: pay_outsiders)."""
         if x in ("treasury", "reserve", tk):
             return tk
-        if isinstance(x, str) and ((x.startswith(esc) and not word) or x.startswith(f"{AC.FUND}{lid}:") or x in k.w["agents"]):
+        if isinstance(x, str) and ((x.startswith(esc) and not word) or x.startswith(f"{AC.FUND}{lid}:") or x in k.w["agents"]
+                                   or _other_treasury(k, x)):            # P4.5 (review 10 #13): another association holds goods
             return x
         return None
 
@@ -819,6 +906,81 @@ def scope_api(k, lid, api: dict) -> dict:
             _retire(k, rec, x)
         return bool(hit)
     out["repeal"] = repeal
+
+    # P4.5: its own currencies (shares), rights and offices: the "escrow"-column rows of create_currency, mint, burn, create_right,
+    # grant, revoke and define_action. A bare name means the contract's own ("shares" -> "A1.shares").
+    def own(name, kind):
+        n = str(name).strip()
+        full = n if n.startswith(cid + SEP) else own_name(cid, n)
+        if kind == "currency" and full not in k.w["currencies"]:
+            raise L.LawError(f"{full} is not a currency of {cid} (create_currency first)")
+        if kind == "right" and full not in k.w["rights"]:
+            raise L.LawError(f"{full} is not a right of {cid} (create_right first)")
+        return full
+
+    def create_currency(name, backed=True, reserve=None):
+        """This contract's own currency "<cid>.<name>" (opened on the first call, the same name after), backed by its treasury."""
+        full = own_name(cid, name)
+        if full in k.w["currencies"]:
+            if k.w["currencies"][full].get("reserve") != tk:
+                raise L.LawError(f"{full} already exists")
+            return full
+        if sum(1 for c in k.w["currencies"].values() if c.get("reserve") == tk) >= MAX_OWN:
+            raise L.LawError(f"a contract may issue at most {MAX_OWN} currencies")
+        return k.apply("create_currency", name=full, backed=bool(backed), reserve=tk, lid=lid).result["currency"]
+    out["create_currency"] = create_currency
+
+    def mint(cur, qty, to):
+        """New units of its own currency to anyone (an agent, its treasury or escrow, another association's treasury)."""
+        c, d = own(cur, "currency"), dst_key(to)
+        if d is None:
+            return refuse("mint", to)
+        k.apply("mint", currency=c, qty=qty, to=d, lid=lid, via="law")
+        return True
+    out["mint"] = mint
+
+    def burn(cur, qty, frm):
+        """Units of its own currency destroyed out of what it holds (its treasury, a member's escrow with it, this law's funds)."""
+        c, s_ = own(cur, "currency"), src_key(frm)
+        if s_ is None:
+            return refuse("burn", frm)
+        try:
+            k.apply("burn", currency=c, qty=qty, frm=s_, via="law")
+        except D.PhysicsError:
+            return False
+        return True
+    out["burn"] = burn
+
+    def create_right(name):
+        full = own_name(cid, name)
+        if full not in k.w["rights"]:
+            if sum(1 for r in k.w["rights"] if r.startswith(cid + SEP)) >= MAX_OWN:
+                raise L.LawError(f"a contract may create at most {MAX_OWN} rights")
+            k.apply("create_right", right=full)
+        return full
+    out["create_right"] = create_right
+
+    def grant(aid, right):
+        r = own(right, "right")
+        if aid not in rec["members"]:
+            return refuse("grant", aid)                                 # its rights go to its members only
+        return bool(api["grant"](aid, r)) if "grant" in api else False
+    out["grant"] = grant
+
+    def revoke(aid, right):
+        r = own(right, "right")
+        return bool(api["revoke"](aid, r)) if "revoke" in api else False
+    out["revoke"] = revoke
+
+    def define_action(right, name, fn):
+        """An office of this contract: action "<cid>.<name>", usable by members holding its right (no law level: P4.5)."""
+        r, act = own(right, "right"), own_name(cid, name)
+        mine = [n for n, v in k.w["actions"].items() if isinstance(v, dict) and n.startswith(cid + SEP) and n != act]
+        if len(mine) >= MAX_OWN:
+            raise L.LawError(f"a contract may define at most {MAX_OWN} offices")
+        k.apply("define_action", law=lid, action=act, right=r, key=k._reg(lid, fn))
+        return act
+    out["define_action"] = define_action
 
     out["laws"] = lambda: [{"id": x, "title": k.w["laws"][x]["title"], "class": k.w["laws"][x]["cls"],
                             "author": k.w["laws"][x]["author"]} for x in rec["laws"] if k.w["laws"][x]["status"] == "active"]
@@ -933,6 +1095,14 @@ def law_api(k, lid) -> dict:
             raise L.LawError(f"a law may open at most {MAX_FUNDS} funds")
         return k.apply("open_fund", law=lid, name=n).result["fund"]
 
+    def shareholders_(currency):
+        """P4.5: who holds an association's currency now: {holder: qty} (a bare name in a contract's own law is its own)."""
+        cur = str(currency)
+        rec = J.association(k, J.law_jur(k, lid))
+        if rec is not None and SEP not in cur:
+            cur = own_name(rec["id"], cur)
+        return shareholders(k, cur)
+
     def breaches_(cid=None):
         live = enforcement(k) == "escrow_court"
         return [dict(b, contract=c, id=f"{c}:{i + 1}", actionable=live) for c, r in recs(k).items() if cid in (None, c)
@@ -943,13 +1113,38 @@ def law_api(k, lid) -> dict:
             "contracts": lambda: [c for c, r in recs(k).items() if r["status"] != "dissolved"],
             "breaches": breaches_, "swap": swap, "open_fund": open_fund,
             "funds": lambda: AC.funds_of(k, AC.account_of(k, lid)), "enforcement": lambda: enforcement(k),
-            "reputation": lambda agent: reputation(k, agent)}
+            "reputation": lambda agent: reputation(k, agent), "shareholders": shareholders_}
 
 
 def _goods(x) -> dict:
     if not isinstance(x, dict) or not x:
         raise L.LawError("give and get are objects {item: qty}, e.g. {\"timber\": 2}")
     return {str(i): q for i, q in sorted(x.items())}
+
+
+def shareholders(k, cur) -> dict:
+    """P4.5: the register of an association's currency: {holder: qty} over living agents (a member's escrow counts as the member's)
+    and other associations' treasuries; the issuer's own treasury (treasury stock), estates and funds are left out. {} for a
+    currency no association issued."""
+    cid = issuer(k, cur)
+    if cid is None or cur not in k.w["currencies"]:
+        return {}
+    out = {}
+    for key in AC.keys(k):
+        q = k.bal(key, cur) if not str(key).startswith(AC.FUND) or key in AC.funds(k) else 0.0
+        if q <= 1e-9 or key == treasury_key(cid):
+            continue
+        holder = key
+        if key.startswith(AC.ESCROW):
+            holder = key[len(AC.ESCROW):].partition(":")[2]
+        elif key in k.w["agents"]:
+            a = k.w["agents"][key]
+            if a.get("dead") is not None or a.get("departed") is not None:
+                continue
+        elif not _other_treasury(k, key):
+            continue
+        out[holder] = round(out.get(holder, 0.0) + q, 6)
+    return {h: out[h] for h in sorted(out)}
 
 
 def reputation(k, agent) -> dict:
@@ -1120,6 +1315,7 @@ def change_leave(k, agent, polity, via) -> dict:
     rec["leaving"].pop(agent, None)
     if agent in rec["members"]:
         rec["members"].remove(agent)
+    _drop_rights(k, polity, agent)                                      # P4.5: its rights (offices) are its members' only
     k.log("contract_left", agent, {"contract": polity, "why": via, "refunded": back}, vis="public")
     return {"status": "left", "refunded": back}                       # the last members' leaving dissolves it (end_round)
 
@@ -1159,8 +1355,11 @@ def _dissolve(k, rec, heirs=()) -> None:
     for lid in list(rec["laws"]):
         _retire(k, rec, lid)
     _close_funds(k)
-    paid = {}
     tk = treasury_key(cid)
+    holders = _pay_shareholders(k, rec)                                 # P4.5: residual claims, pro rata to its shareholders
+    for a in list(k.w["agents"]):
+        _drop_rights(k, cid, a)
+    paid = {}
     for item, q in sorted(rec["reserve"].items()):
         if q <= 0 or not heirs:
             continue
@@ -1171,9 +1370,56 @@ def _dissolve(k, rec, heirs=()) -> None:
             if got:
                 paid.setdefault(a, {})[item] = got[item]
     rec["status"] = "dissolved"
-    if paid:
-        k.log("contract_wound_up", None, {"contract": cid, "heirs": heirs, "paid": paid}, vis="public")
+    if paid or holders:
+        k.log("contract_wound_up", None, {"contract": cid, "heirs": heirs, "paid": paid,
+                                          **({"shareholders": holders} if holders else {})}, vis="public")
     k.log("contract_dissolved", None, {"contract": cid, "treasury": before, "left": dict(rec["reserve"])}, vis="public")
+
+
+def _drop_rights(k, cid, aid) -> None:
+    """P4.5: aid no longer holds contract cid's rights (it left, or the contract is dissolved): an exit's consequence, made by the
+    kernel (no hook; a public rights event as a law's revoke)."""
+    a = k.w["agents"].get(aid)
+    for r in sorted(x for x in (a or {}).get("rights", ()) if issuer(k, x) == cid):
+        D.do_revoke_right(k, aid, r, via="law")
+
+
+def _pay_shareholders(k, rec) -> dict:
+    """P4.5: the wind-up's residual claims: what is in the treasury (but its own currencies) goes to the holders of the contract's
+    currencies, pro rata over all of them (one unit, one claim; treasury stock excluded); an agent's share through _pay_member (its
+    estate or bequest if dead), an escrow's to its member, an association's to its treasury. {holder: {item: qty}} paid."""
+    cid, tk = rec["id"], treasury_key(rec["id"])
+    curs = sorted(c for c, v in k.w["currencies"].items() if v.get("reserve") == tk)
+    if not curs:
+        return {}
+    claims = {}
+    for key in AC.keys(k):
+        if key == tk or (str(key).startswith(AC.FUND) and key not in AC.funds(k)):
+            continue
+        q = sum(k.bal(key, c) for c in curs)
+        if q > 1e-9:
+            claims[key] = claims.get(key, 0.0) + q
+    total = sum(claims.values())
+    if total <= 1e-9:
+        return {}
+    paid = {}
+    keys = list(claims)
+    for item, q0 in sorted(rec["reserve"].items()):
+        if item in curs or q0 <= 0:
+            continue
+        for i, key in enumerate(keys):
+            amt = k.bal(tk, item) if i == len(keys) - 1 else min(round(q0 * claims[key] / total, 6), k.bal(tk, item))
+            if amt <= 0:
+                continue
+            if key in k.w["agents"] or key.startswith((AC.ESCROW, AC.ESTATE)):
+                who = key if key in k.w["agents"] else key.split(":")[-1]
+                got = _pay_member(k, tk, who, {item: amt}, f"wind_up:{cid}")
+            else:
+                who = key
+                got = {item: amt} if D._move(k, tk, key, item, amt, f"wind_up:{cid}", None) else {}
+            if got:
+                paid.setdefault(who, {})[item] = round(paid.get(who, {}).get(item, 0.0) + got[item], 6)
+    return paid
 
 
 def change_deposit(k, agent, contract, item, qty) -> dict:
@@ -1252,6 +1498,218 @@ def _close_funds(k) -> None:
         k.log("fund_closed", None, {"fund": key, "law": f["law"], "to": to, "holdings": left}, vis="public")
 
 
+# ---------------------------------------------------------------------- P4.5: agency (authorize, act_for) and standing orders
+# An authorization (k.w["contracts"]["agency"]["auth"][gid], created on the first one):
+#     {"id": "G1", "grantor": aid, "grantee": aid | "<cid>.<right>" (an office: any holder of that contract right), "office": bool,
+#      "action": one of AGENCY_ACTIONS, "item", "qty" (per round), "to": [recipients or contracts] | None (any), "round",
+#      "until": last round | None, "status": "active" | "revoked", "used": {"round": r, "qty": q}, "uses": [...] (last MAX_USES),
+#      "total": float}
+# Kernel invariant "laws never act for an agent": no law function reads or uses an authorization to act; the grantee acts (act_for),
+# on the grantor's consent recorded here, and every use is logged to both (agency_used). Polity laws regulate agency through the
+# routed primitives' hooks (before_authorize, before_act_for, after_act_for; deauthorize cannot be blocked).
+def agency(k) -> dict:
+    return k.w["contracts"].setdefault("agency", {"seq": 0, "auth": {}})
+
+
+def _auths(k) -> dict:
+    return ((k.w.get("contracts") or {}).get("agency") or {}).get("auth") or {}
+
+
+def _live_agent(k, aid) -> bool:
+    a = k.w["agents"].get(aid)
+    return bool(a) and a.get("dead") is None and a.get("departed") is None
+
+
+def _auth_live(k, g) -> bool:
+    return g["status"] == "active" and (g["until"] is None or k.r <= g["until"])
+
+
+def _auth_left(k, g) -> float:
+    used = g["used"]["qty"] if g["used"]["round"] == k.r else 0.0
+    return max(0.0, g["qty"] - used)
+
+
+def _grantee_agents(k, g) -> list:
+    """Who may use an authorization now: its agent, or the holders of its office's right."""
+    if not g["office"]:
+        return [g["grantee"]]
+    return [a for a in k.w["agents"] if k.has(a, g["grantee"])]
+
+
+def act_authorize(k, aid, agent=None, office=None, action="transfer", item=None, qty=None, to=None, rounds=None):
+    _need_on(k)
+    if (agent is None) == (office is None):
+        raise L.LawError('name either an agent ("agent") or a contract office ("office": a contract right such as "A1.treasurer")')
+    act = str(action or "transfer")
+    if act not in AGENCY_ACTIONS:
+        raise L.LawError(f"{act} cannot be authorized (only {', '.join(AGENCY_ACTIONS)}; vote never)")
+    if not item or not isinstance(item, str):
+        raise L.LawError("name the item the authorization covers")
+    q = _qty({"qty": qty})
+    if sum(1 for g in _auths(k).values() if g["grantor"] == aid and _auth_live(k, g)) >= MAX_AUTH:
+        raise L.LawError(f"you have {MAX_AUTH} authorizations in force: revoke one first (revoke_authorization)")
+    if agent is not None:
+        grantee = str(agent)
+        if grantee == aid or not _live_agent(k, grantee):
+            raise L.LawError(f"unknown agent {grantee}")
+    else:
+        grantee = str(office)
+        if issuer(k, grantee) is None or grantee not in k.w["rights"] or recs(k)[issuer(k, grantee)]["status"] == "dissolved":
+            raise L.LawError(f"{grantee} is not a contract office (a right a contract created, e.g. \"A1.treasurer\")")
+    tos = None if to in (None, "", []) else [str(x) for x in (to if isinstance(to, list) else [to])]
+    n = None
+    if rounds is not None:
+        n = int(rounds)
+        if n < 1:
+            raise L.LawError("rounds must be 1 or more (or left out: until revoked)")
+    gid = f"G{agency(k)['seq'] + 1}"
+    scope = {"action": act, "item": item, "qty": q, "to": tos, "rounds": n, "office": office is not None}
+    out = k.apply("authorize", grantor=aid, grantee=grantee, auth=gid, scope=scope)
+    if not out.ok:
+        raise L.LawError("a law blocked this authorization" + (f" ({out.reason})" if getattr(out, "reason", None) else ""))
+    return (f"Authorized {gid}: {grantee} may {act} up to {q:g} {item} per round on your behalf"
+            + (f" (to {', '.join(tos)})" if tos else "") + (f" for {n} rounds" if n else "")
+            + f". You see every use; revoke it any time with revoke_authorization {{\"auth\": \"{gid}\"}}.")
+
+
+def act_revoke_authorization(k, aid, auth):
+    _need_on(k)
+    g = _auths(k).get(str(auth))
+    if g is None or g["grantor"] != aid:
+        mine = [x for x, v in _auths(k).items() if v["grantor"] == aid and v["status"] == "active"]
+        raise L.LawError(f"you gave no authorization {auth}" + (f" (yours: {', '.join(mine)})" if mine else ""))
+    if g["status"] != "active":
+        return f"{g['id']} is already revoked."
+    k.apply("deauthorize", grantor=aid, grantee=g["grantee"], auth=g["id"])
+    return f"Revoked {g['id']}: {g['grantee']} can no longer act for you."
+
+
+def act_act_for(k, aid, auth, qty=None, to=None, contract=None, memo=None):
+    """The grantee acts under an authorization: the grantor's transfer (to) or escrow deposit (contract), within its bounds."""
+    _need_on(k)
+    g = _auths(k).get(str(auth))
+    if g is None or aid not in _grantee_agents(k, g):
+        mine = [x for x, v in _auths(k).items() if aid in _grantee_agents(k, v) and _auth_live(k, v)]
+        raise L.LawError(f"no authorization {auth} for you" + (f" (yours: {', '.join(mine)})" if mine else ""))
+    target = contract if g["action"] == "deposit_escrow" else to
+    if target is None:
+        raise L.LawError("name the recipient (to)" if g["action"] == "transfer" else "name the contract")
+    out = k.apply("act_for", grantor=g["grantor"], grantee=aid, auth=g["id"], action=g["action"], item=g["item"],
+                  qty=g["qty"] if qty is None else qty, to=str(target), **({"memo": memo} if memo is not None else {}))
+    if not out.ok:
+        raise L.LawError("a law blocked this use of " + g["id"] + (f" ({out.reason})" if getattr(out, "reason", None) else ""))
+    r = out.result
+    if not r.get("done"):
+        raise L.LawError(f"{g['id']}: {r.get('why') or 'not done'}")
+    return f"For {g['grantor']} ({g['id']}): {r['what']}. {g['grantor']} sees this use."
+
+
+def check_authorize(k, p) -> dict:
+    if not _live_agent(k, p["grantor"]):
+        raise D.PhysicsError("authorize: the grantor is not in the game")
+    return p
+
+
+def check_act_for(k, p) -> dict:
+    g = _auths(k).get(p["auth"])
+    if g is None or g["grantor"] != p["grantor"]:
+        raise L.LawError(f"no authorization {p['auth']}")
+    if not _auth_live(k, g):
+        raise D.PhysicsError(f"{g['id']} is " + ("revoked" if g["status"] != "active" else f"expired (it ran to round {g['until']})"))
+    if not _live_agent(k, g["grantor"]):
+        raise D.PhysicsError(f"{g['id']}: its grantor {g['grantor']} is no longer in the game")
+    if p["grantee"] not in _grantee_agents(k, g):
+        raise D.PhysicsError(f"{g['id']} does not authorize {p['grantee']}")
+    if p["action"] != g["action"] or p["item"] != g["item"]:
+        raise L.LawError(f"{g['id']} covers only {g['action']} of {g['item']}")
+    q = _qty(p)
+    if q > _auth_left(k, g) + 1e-9:
+        raise D.PhysicsError(f"{g['id']}: beyond its {g['qty']:g} {g['item']} per round ({_auth_left(k, g):g} left this round)")
+    if g["to"] is not None and p["to"] not in g["to"]:
+        raise D.PhysicsError(f"{g['id']} allows only {', '.join(g['to'])}")
+    if not AC.can_pay(k, g["grantor"], g["item"], q):
+        raise D.PhysicsError(f"{g['grantor']} holds {k.bal(g['grantor'], g['item']):g} {g['item']}")
+    return {**p, "qty": q}
+
+
+def change_authorize(k, grantor, grantee, auth, scope) -> dict:
+    st = agency(k)
+    st["seq"] += 1
+    n = scope.get("rounds")
+    g = st["auth"][auth] = {"id": auth, "grantor": grantor, "grantee": grantee, "office": bool(scope.get("office")),
+                            "action": scope["action"], "item": scope["item"], "qty": float(scope["qty"]),
+                            "to": list(scope["to"]) if scope.get("to") else None, "round": k.r,
+                            "until": None if n is None else k.r + int(n) - 1, "status": "active",
+                            "used": {"round": k.r, "qty": 0.0}, "uses": [], "total": 0.0}
+    k.log("agency_granted", grantor, {"auth": auth, "grantee": grantee, "action": g["action"], "item": g["item"], "qty": g["qty"],
+                                      "to": g["to"], "until": g["until"], "office": g["office"]},
+          vis=[grantor] + [a for a in _grantee_agents(k, g) if a != grantor])
+    return {"auth": auth}
+
+
+def change_deauthorize(k, grantor, grantee, auth) -> dict:
+    g = _auths(k)[auth]
+    g["status"] = "revoked"
+    k.log("agency_revoked", grantor, {"auth": auth, "grantee": grantee}, vis=[grantor] + [a for a in _grantee_agents(k, g)
+                                                                                          if a != grantor])
+    return {"auth": auth}
+
+
+def change_act_for(k, grantor, grantee, auth, action, item, qty, to, memo=None) -> dict:
+    """The use itself: the grantor's own change, made by the grantee (an ordinary transfer or deposit: its hooks, taxes and blocks
+    apply), then counted and logged to both. A use that does not happen counts nothing."""
+    from charter import actions as A
+    g = _auths(k)[auth]
+    done, why, what = False, None, ""
+    try:
+        if action == "transfer":
+            res = A._send(k, grantor, to, item, qty, extra={"agent_for": auth, "by": grantee}, memo=memo)
+            done, what = True, res
+        elif action == "deposit_escrow":
+            _need_escrow(k, "deposit_escrow")
+            k.apply("deposit_escrow", agent=grantor, contract=to, item=item, qty=qty)
+            done, what = True, f"deposited {qty:g} {item} in {grantor}'s escrow with {to}"
+    except (A.ActionError, L.LawError, D.PhysicsError, D.Blocked) as e:
+        why = str(e)
+    if done:
+        if g["used"]["round"] != k.r:
+            g["used"] = {"round": k.r, "qty": 0.0}
+        g["used"]["qty"] = round(g["used"]["qty"] + qty, 6)
+        g["total"] = round(g["total"] + qty, 6)
+        g["uses"] = (g["uses"] + [{"round": k.r, "by": grantee, "qty": qty, "to": to}])[-MAX_USES:]
+    k.log("agency_used", grantee, {"auth": auth, "grantor": grantor, "grantee": grantee, "action": action, "item": item,
+                                   "qty": qty, "to": to, "done": done, **({"why": why[:200]} if why else {})},
+          vis=[grantor] + ([grantee] if grantee != grantor else []))
+    return {"done": done, "why": why, "what": what}
+
+
+def authorizations(k, aid) -> dict:
+    """P4.5: an agent's authorizations: given (as grantor) and held (as grantee, directly or by office)."""
+    gs = _auths(k).values()
+    return {"given": [dict(g) for g in gs if g["grantor"] == aid],
+            "held": [dict(g) for g in gs if aid in _grantee_agents(k, g) and _auth_live(k, g)]}
+
+
+def act_standing_order(k, aid, to, item, qty, every=1, keep=0, times=0, name=None):
+    """A standing order (P4.5): founds the one-member standing_order contract and sets its allowance, in one call."""
+    _need_on(k)
+    _need_escrow(k, "standing_order")
+    q = _qty({"qty": qty})
+    dst = str(to)
+    if not (_live_agent(k, dst) and dst != aid) and not _other_treasury(k, dst):
+        raise L.LawError(f"unknown recipient {dst} (an agent, or a contract's treasury assoc:<id>)")
+    if int(every) < 1 or float(keep) < 0 or int(times) < 0:
+        raise L.LawError("every is 1 or more; keep and times are 0 or more")
+    params = {"ITEM": str(item), "QTY": q, "TO": dst, "EVERY": int(every), "KEEP": float(keep), "TIMES": int(times)}
+    out = act_create_contract(k, aid, name=name or f"standing order to {dst}", template="standing_order", params=params,
+                              admission="closed")
+    cid = f"A{k.w['contracts']['seq']}"
+    k.apply("set_allowance", agent=aid, contract=cid, item=str(item), qty=q)
+    return (f"Standing order {cid}: {q:g} {item} to {dst} every {int(every)} round(s)" + (f", keeping at least {float(keep):g}"
+            if float(keep) else "") + (f", {int(times)} times" if int(times) else "") + f" (from your allowance; cancel with "
+            f"leave_contract {{\"contract\": \"{cid}\"}}). " + out.split(":", 1)[0] + ".")
+
+
 # ---------------------------------------------------------------------- end of round (features.PHASES round_end)
 def end_round(k) -> None:
     """After the laws' on_round_end: contract changes whose ballots closed this round are adopted or fail; then members leave
@@ -1307,6 +1765,14 @@ def state_lines(k, aid) -> list[str]:
               for c, r in recs(k).items() if r["status"] != "dissolved" and aid not in r["members"]]
     if others:
         out.append("Contracts you could join: " + "; ".join(others) + ".")
+    for g in _auths(k).values():                                       # P4.5: agency, both sides
+        if g["grantor"] == aid and _auth_live(k, g):
+            out.append(f"You authorized {g['grantee']} ({g['id']}) to {g['action']} up to {g['qty']:g} {g['item']} per round for you "
+                       f"({_auth_left(k, g):g} left this round; {g['total']:g} used so far in {len(g['uses'])} uses).")
+        elif aid in _grantee_agents(k, g) and _auth_live(k, g) and _live_agent(k, g["grantor"]):
+            out.append(f"{g['grantor']} authorized you ({g['id']}{', as ' + g['grantee'] if g['office'] else ''}) to "
+                       f"{g['action']} up to {g['qty']:g} {g['item']} per round of theirs ({_auth_left(k, g):g} left this round): "
+                       f"act_for {{\"auth\": \"{g['id']}\", ...}}.")
     return out
 
 
@@ -1350,7 +1816,19 @@ def render_event(k, e, tag, viewer=None) -> str | None:
     if t == "contract_swap":
         return f"{tag} {c}: {d['a']} gave {_fmt(d['give'])} to {d['b']} for {_fmt(d['get'])} (exchange)"
     if t == "contract_wound_up":
-        return f"{tag} contract {c} was wound up: " + "; ".join(f"{a} got {_fmt(g)}" for a, g in d["paid"].items())
+        sh = d.get("shareholders") or {}                                # P4.5: residual claims first
+        return f"{tag} contract {c} was wound up: " + "; ".join([f"shareholder {a} got {_fmt(g)}" for a, g in sh.items()]
+                                                                  + [f"{a} got {_fmt(g)}" for a, g in d["paid"].items()])
+    if t == "agency_granted":
+        return (f"{tag} {who} authorized {d['grantee']} ({d['auth']}) to {d['action']} up to {d['qty']:g} {d['item']} per round for "
+                f"them" + (f" (to {', '.join(d['to'])})" if d.get("to") else "") + (f" until round {d['until']}" if d.get("until")
+                                                                                    is not None else ""))
+    if t == "agency_revoked":
+        return f"{tag} {who} revoked authorization {d['auth']} ({d['grantee']} can no longer act for them)"
+    if t == "agency_used":
+        what = "gave" if d["action"] == "transfer" else "deposited in escrow with"
+        return (f"{tag} {d['grantee']} acting for {d['grantor']} ({d['auth']}): {what} {d['to']} {d['qty']:g} {d['item']}"
+                + ("" if d["done"] else f" (not done: {d.get('why') or 'refused'})"))
     if t == "fund_opened":
         return f"{tag} law {d['law']} opened its fund {d['fund']}"
     if t == "fund_closed":
@@ -1389,7 +1867,15 @@ def rules_text(inst) -> str:
             "swap(a, b, give, get) (an exchange between two members' escrows, both or neither), treasury() and the hooks "
             "on_admission(agent), on_exit(agent), on_dissolve(heirs). When the last members leave, a contract is wound up: its "
             "on_dissolve may pay out of its treasury, and what is left is shared equally among those last members. Any law may "
-            "keep its own funds (open_fund(name)): only that law moves goods out of them." + _ENFORCEMENT_TEXT[cfg_of(inst["spec"])
+            "keep its own funds (open_fund(name)): only that law moves goods out of them. A contract may issue its own shares "
+            "(create_currency, mint: a currency named <contract>.<name>, backed by its treasury and worth its net asset value per "
+            "share, transferable like any good; shareholders(currency) is the register; when it is wound up, its treasury goes "
+            "to its shareholders pro rata), create its own rights and grant them to members, and define offices bound to them "
+            "(define_action: actions <contract>.<name> its members holding the right can invoke). Any agent may authorize "
+            "another, or a contract office, to give or deposit in escrow up to a set amount of one item per round on its behalf "
+            "(authorize; act_for uses it; revoke_authorization ends it at once); the grantor sees every use, and votes cannot be "
+            "delegated. standing_order sets up a regular payment (a one-member contract paying from your allowance)."
+            + _ENFORCEMENT_TEXT[cfg_of(inst["spec"])
             ["enforcement"]] + (f" Templates: {t}." if t else ""))
 
 
@@ -1451,4 +1937,12 @@ def scripted_actions(k, a, n_actions) -> list:
         for b in k.w["ballots"].values():
             if b["status"] == "open" and b.get("jurisdiction") == cid and aid in b["electorate"] and b["votes"].get(aid) is None:
                 out.append(act("vote", ballot=b["id"], choice="yes" if rng.random() < 0.8 else "no"))
+    # P4.5: a standing order, an authorization and its use (after the draws above, so the earlier plan is unchanged)
+    if r == 1 and i == 4:
+        out.append(act("standing_order", to=citizens[0], item="timber", qty=1, times=2))
+    if r == 2 and i == 5:
+        out.append(act("authorize", agent=citizens[4], action="transfer", item="timber", qty=1))
+    for g in _auths(k).values():
+        if aid in _grantee_agents(k, g) and _auth_live(k, g) and _auth_left(k, g) >= 1 and rng.random() < 0.5:
+            out.append(act("act_for", auth=g["id"], to=citizens[0] if g["grantor"] != citizens[0] else aid, qty=1))
     return out[:max(1, n_actions)]

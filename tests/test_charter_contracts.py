@@ -122,16 +122,18 @@ def test_every_law_function_is_allowed_escrowed_or_denied_for_a_contract():
     assert {"grant", "revoke", "fine", "move", "lawful_attack", "set_quota", "mint", "create_currency", "suspend", "limit_actions",
             "define_action", "enable_loans", "pull", "breach", "members", "open_ballot"} <= seen
     deny = {n for n, f in LA.LAWFNS.items() if f.contract == "deny"}
-    assert {"grant", "revoke", "suspend", "limit_actions", "censure", "set_dm_limit", "lawful_attack", "set_quota", "set_fee",
-            "mint", "burn", "create_currency", "define_action", "create_right", "enable_loans", "start_project", "oblige_guard",
-            "hide_post", "set_lease_rules", "title", "rename"} <= deny
-    assert {f.name for f in LA.LAWFNS.values() if f.contract == "escrow"} == {"move", "fine", "pull", "forfeit", "refund", "swap"}   # P4.4
+    assert {"suspend", "limit_actions", "censure", "set_dm_limit", "lawful_attack", "set_quota", "set_fee",
+            "enable_loans", "start_project", "oblige_guard", "hide_post", "set_lease_rules", "title", "rename",
+            "set_convertible"} <= deny
+    assert {f.name for f in LA.LAWFNS.values() if f.contract == "escrow"} == {"move", "fine", "pull", "forfeit", "refund", "swap",
+                                                                               "create_currency", "mint", "burn", "create_right",
+                                                                               "grant", "revoke", "define_action"}   # P4.4, P4.5
 
 
 def test_contract_code_calling_a_denied_function_is_refused_when_founded():
     k = make()
     a = people(k)[0]
-    for body in ("def on_enact():\n    grant(members()[0], 'vote')", "def on_round_end(r):\n    set_quota('c1', 1)",
+    for body in ("def on_enact():\n    suspend(members()[0], 'vote', 2)", "def on_round_end(r):\n    set_quota('c1', 1)",
                  "def on_enact():\n    lawful_attack('a', 'b', 1)"):
         with pytest.raises(A.ActionError, match="may not call"):
             A.act(k, a, "create_contract", {"name": "Bad", "code": code(body)})
@@ -423,7 +425,8 @@ def test_company_cut_shares_and_dividends():
     law = k.w["laws"][lid]
     for who, y in ((a, 4.0), (b, 2.0)):
         assert CT.run_hook(k, law, "on_harvest", who, "c1", [0], y) == [(lid, y * 0.5)]
-    assert law["public"]["shares"] == {a: 2.0, b: 1.0} and len(law["public"]["register"][a]) == 1
+    sh = law["public"]["currency"]                                      # P4.5: real shares, its own currency "<cid>.shares"
+    assert sh == f"{cid}.shares" and CT.shareholders(k, sh) == {a: 2.0, b: 1.0} and len(law["public"]["register"][a]) == 1
     k._add(f"assoc:{cid}", "grain", 3)
     ga, gb = k.bal(a, "grain"), k.bal(b, "grain")
     next_round(k)
