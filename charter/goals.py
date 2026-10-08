@@ -597,15 +597,24 @@ def _archive_shingles():
 
 
 def common_texts(inst) -> list:
-    """Text every agent already sees (world rules, law API, library titles and intents, goal list): quoting it is not a leak.
-    The runner freezes it at run start into common_text.json (P6.2), which History loads as gt["common_text"]."""
-    from charter import agents as AG
-    txt = [AG.API_DOC, AG.goal_prior()] + [f"{n} {_intent(LB.LIB[n]['code'])}" for n in LB.LIB] + [v[3] for v in CATALOGUE.values()]
-    try:
-        txt.append(AG.world_rules(inst))
-    except Exception:                                             # hand-built instances in tests
-        pass
-    return txt
+    """Text every agent sees at run start, rendered from the sections registry (charter.preview.seen_texts: the core prompt and
+    manual where the context module is on, else the legacy system prompt): the lines present in every agent's rendering, as runs
+    of consecutive lines in the first agent's order. Quoting it is not a leak. The runner freezes it at run start into
+    common_text.json (P6.2), which History loads as gt["common_text"]. Leaker version 2 (P7.2); version 1 hand-assembled the
+    old pipeline's API doc, goal prior, library intents, goal list and world rules (review 02 section 3.8)."""
+    if not inst.get("agents") or "spec" not in inst:                 # hand-built instances in tests
+        return []
+    from charter import preview as PR
+    seen = [[ln.strip() for t in PR.seen_texts(inst, a) for ln in t.splitlines()] for a in inst["agents"]]
+    common = set.intersection(*[set(x) for x in seen]) - {""}
+    runs, cur = [], []
+    for ln in seen[0] + [""]:
+        if ln in common:
+            cur.append(ln)
+        elif cur:
+            runs.append("\n".join(cur))
+            cur = []
+    return list(dict.fromkeys(runs))
 
 
 def _common_shingles(inst, texts=None) -> set:

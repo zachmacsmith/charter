@@ -509,7 +509,11 @@ _ROWS = [
               ' n = archive documents whose words (8 consecutive words not in text every agent sees) reach a post, '
               'anonymous post, story, report, digest, edition or gazette and that you were the first to pass on, in one of '
               'those or a DM, channel post or submission.',
-         slots=NOT_PRIMARY, lineage="record", params=_p_leaker, needs=frozenset({'archive', 'events', 'guesses', 'instance'})),
+         slots=NOT_PRIMARY, lineage="record", params=_p_leaker, needs=frozenset({'archive', 'events', 'guesses', 'instance'}),
+         # version 2 (P7.2): "text every agent sees" is rendered from the sections registry (goals.common_texts: the lines in every
+         # agent's core prompt and manual, or legacy prompt), not the old pipeline's hand-assembled API doc, goal prior, library
+         # intents, goal list and world rules (review 02 section 3.8). Runs with a frozen common_text.json keep the text they froze.
+         version=2),
     Goal('Bounty hunter', 'Economic', 0.7,
          text='claim as many factoring bounties as possible (against the agent with the most)',
          rule='Over the scored rounds: your factoring bounty claims divided by the largest number of any agent.',

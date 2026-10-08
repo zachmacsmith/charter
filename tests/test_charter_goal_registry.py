@@ -24,11 +24,14 @@ def test_registry_covers_the_catalogue():
         assert GR.get(name) is g
 
 
+VERSIONS = {"Leaker": 2}                                              # P7.2: common text rendered from the sections
+
+
 @pytest.mark.parametrize("name", list(GR.GOALS) + list(GR.FIXED))
 def test_every_goal_has_a_rule_and_a_version(name):
     g = GR.get(name)
     assert isinstance(g.rule, str) and len(g.rule.strip()) > 20, name
-    assert g.version == 1 and g.text and callable(g.score) and callable(g.params)
+    assert g.version == VERSIONS.get(name, 1) and g.text and callable(g.score) and callable(g.params)
     assert g.needs, name
 
 

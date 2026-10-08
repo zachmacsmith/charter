@@ -14,6 +14,8 @@
   python -m charter report RUN_DIR                                               (re)build overview.md, spec_outline.md, agents/*
   python -m charter sweep E3 --seeds 3 --vary constitution=assembly,oligarchy --vary models.mix=all_weak,strong_legislators [--dry]
   python -m charter difftest --base main --head WORKTREE --presets E2,E4 --seeds 1,2 --rounds 3   where two revisions' scripted runs diverge
+  python -m charter preview society --seed 1 [--agent ID|--class C] [--layer core|manual|legacy|observer|all] [--rounds K]
+                         [--out DIR] [--against REV]   what agents see (rendered sections, token counts; charter/preview.py)
   python -m charter spec check E3 [--set models.mix=balanced]                    validate a spec (unknown keys, bad values; did-you-mean hints)
   python -m charter spec docs --out charter/docs/spec_reference.md              write the spec reference (every key, type, default, doc)
   python -m charter explore E3 --runs 8 --perturb "endowment_gini={uniform: [0.1, 0.7]}" --perturb "conditions.fixer={choice: [honest, hidden]}" [--dry]
@@ -358,6 +360,9 @@ def main(argv=None):
     difftest.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(difftest.cmd(a)))
     __import__("charter.replay", fromlist=["add_commands"]).add_commands(sub)   # replay, rewind, fork, branches
     __import__("charter.export", fromlist=["add_command"]).add_command(sub)     # export RUN.. --out DIR [--format parquet|csv]
+    from charter import preview
+    p = sub.add_parser("preview", help="render what agents see, with token counts (charter/preview.py)")
+    preview.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(preview.cmd(a)))
     from charter import schema
     p = sub.add_parser("spec", help="spec check SPEC.. [--set k=v] | spec docs [--out F] (charter/schema.py)")
     schema.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(schema.cmd(a)))
