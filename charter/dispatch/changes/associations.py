@@ -6,9 +6,9 @@ or a balance: PhysicsError)."""
 from __future__ import annotations
 
 
-def do_create_contract(k, agent, contract, name, template, code=None, params=None, admission=None) -> dict:
+def do_create_contract(k, agent, contract, name, template, under=None, code=None, params=None, admission=None) -> dict:
     from charter import contracts as CT
-    return CT.change_create(k, agent, contract, name, template, code or [], params or {}, admission)
+    return CT.change_create(k, agent, contract, name, template, code or [], params or {}, admission, under)   # W8e: under
 
 
 def do_deposit_escrow(k, agent, contract, item, qty) -> dict:
@@ -39,3 +39,9 @@ def do_swap(k, contract, a, b, give, get, lid=None) -> dict:
 def do_open_fund(k, law, name) -> dict:
     from charter import contracts as CT
     return CT.change_open_fund(k, law, name)
+
+
+def do_set_company_rule(k, jurisdiction, key, value, lid=None) -> dict:
+    """W8e (D-28): one of a polity's company rules (charter/incorporation.py)."""
+    from charter import incorporation as INC
+    return INC.change_set_rule(k, jurisdiction, key, value, lid)

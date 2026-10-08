@@ -146,6 +146,7 @@ PARAM_SAMPLES = {
     "a": "a1", "b": "a2", "give": {"timber": 1.0}, "get": {"grain": 2.0},                                  # P4.4: swap
     "grantor": "a1", "grantee": "a2", "auth": "G1",                                                       # P4.5: agency
     "scope": {"action": "transfer", "item": "grain", "qty": 2.0, "to": None, "rounds": None, "office": False},
+    "under": "J1",                                                                                       # W8e: incorporation
 }
 
 
@@ -622,12 +623,13 @@ _ROWS = [
                                                                      "dispatch.ranks:set_conflict_rule"),
       notes="law.v2: how conflicting before-hook verdicts are resolved in a polity (any_block, superior, posterior, a function)"),
     # ------------------------------------------------------------------ contracts (P4.3: associations, charter/contracts.py)
-    P("create_contract", "contracts", "create", ("agent", "contract", "name", "template"), "dispatch.changes.associations:do_create_contract", routed=True,
+    P("create_contract", "contracts", "create", ("agent", "contract", "name", "template", "under"), "dispatch.changes.associations:do_create_contract", routed=True,
       subject="agent", parties=("agent",), agent_params=("agent",), event="contract_created", causes=("agent",),
       sites=("dispatch.changes.associations:do_create_contract", "contracts:change_create", "contracts:act_create_contract"),
       why={"compel": _LNA, "gate": "law.v2 only: a polity law binding the founder may block it (before_create_contract)"},
       notes="an association: its founder is its first member; its code (or a template's, with params) is in force at once, rank "
-            "bylaw, binding only members who join"),
+            "bylaw, binding only members who join. W8e: under, the polity it is incorporated under (None: unincorporated); the "
+            "parent's laws see the founding whoever the founder is (dispatch.hooks.bound_laws) and its company rules apply"),
     P("deposit_escrow", "contracts", "move", ("agent", "contract", "item", "qty"), "dispatch.changes.associations:do_deposit_escrow", routed=True, subject="agent",
       parties=("agent",), agent_params=("agent",), event="contract_deposit", causes=("agent",),
       sites=("dispatch.changes.associations:do_deposit_escrow", "contracts:change_deposit", "contracts:act_deposit_escrow"),
@@ -655,6 +657,14 @@ _ROWS = [
       sites=("dispatch.changes.associations:do_swap", "contracts:change_swap", "contracts:law_api.swap"),
       notes="an association's own law only: give ({item: qty}) goes from a's escrow to b and get from b's escrow to a, both legs or "
             "neither (a before_swap block stops both); refused under contracts.enforcement word"),
+    # W8e (D-28): company law. A polity's law sets the rules its incorporated companies are bound by and benefit from
+    # (charter/incorporation.py RULES); a legal act of the polity, hookable like set_court_rule.
+    P("set_company_rule", "contracts", "rule", ("jurisdiction", "key", "value"), "dispatch.changes.associations:do_set_company_rule",
+      routed=True, subject="jurisdiction", parties=("jurisdiction",), legal=True, event="company_rule", causes=("law",),
+      reads=("company_rules", "companies"), compel_vis="public",
+      sites=("dispatch.changes.associations:do_set_company_rule", "incorporation:change_set_rule", "contracts:law_api.company_rule"),
+      notes="W8e: one of a polity's company rules (enforcement, recognize_offices, share_valuation, wind_up, procedures, "
+            "registration_fee, max_laws, max_own); holds while its law is in force"),
     P("open_fund", "contracts", "create", ("law", "name"), "dispatch.changes.associations:do_open_fund", routed=True, event="fund_opened", causes=("law",),
       sites=("dispatch.changes.associations:do_open_fund", "contracts:change_open_fund", "contracts:law_api.open_fund"),
       why={"compel": "a law opens its own fund; it binds nobody"},
@@ -781,7 +791,8 @@ TIER_OF = {
           "expel", "set_camp_rule", "offer_loan", "accept_loan", "repay_loan", "extend_loan", "settle_loan", "improve_camp",
           "lease", "contribute", "propose", "decide", "open_ballot", "cast_vote", "veto", "enact", "repeal", "amend",
           "set_procedure", "rule", "open_case", "answer_case", "appeal", "set_court_rule", "define_action", "set_conflict_rule",
-          "create_contract", "deposit_escrow", "set_allowance", "pull", "breach", "swap", "open_fund", "authorize", "act_for"),
+          "create_contract", "deposit_escrow", "set_allowance", "pull", "breach", "swap", "open_fund", "authorize", "act_for",
+          "set_company_rule"),                     # W8e: company law
     "L-route": ("found", "invite", "declare", "set_charter", "dissolve", "invoke", "commission", "set_will", "name_successor",
                 "licence", "set_price", "library_doc", "library_permit", "set_capacity", "share_note", "offer_lease",
                 "set_initiative", "hire_assassin",

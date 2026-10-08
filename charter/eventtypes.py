@@ -451,6 +451,8 @@ E("contract_swap", "contracts", "legal_act", "parties", "event", "contracts", pr
 E("contract_wound_up", "contracts", "summary", "public", "event", "contracts", primitive="move",
   note="a dissolved contract's treasury paid out to its last members (pro rata, or by its laws' on_dissolve)")
 E("fund_opened", "contracts", "legal_act", "public", "event", "contracts", primitive="open_fund")
+E("company_rule", "incorporation", "legal_act", "public", "event", "contracts", primitive="set_company_rule",
+  note="W8e (D-28): a polity's law set one of its company rules (the law its incorporated companies are bound by)")
 # P4.5: agency (grantor and grantee only: the grantor sees every use)
 E("agency_granted", "contracts", "primitive", "parties", "event", "contracts", act="authorize", primitive="authorize")
 E("agency_revoked", "contracts", "primitive", "parties", "event", "contracts", act="revoke_authorization", primitive="deauthorize")

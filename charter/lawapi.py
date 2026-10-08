@@ -348,6 +348,11 @@ LAWFNS = _fns(
         F("enforcement", "read", docs="contracts"),
         F("reputation", "read", ((0, "agent"),), scope="read", docs="contracts"),
         F("shareholders", "read", docs="contracts"),                    # P4.5: the register of an association's currency
+        # W8e (D-28): company law: a polity's law sets the rules its incorporated companies are bound by and benefit from
+        F("company_rule", "governance", scope="none", why="sets a company rule of the calling law's own polity (the law its "
+          "incorporated companies are bound by)", docs="contracts", primitive="set_company_rule"),
+        F("company_rules", "read", docs="contracts"),
+        F("companies", "read", docs="contracts"),
     ),
 )
 # P4.2: the power column of the rows every polity may call today (charter/powers.py; the legacy_reserve rows carry it on their own

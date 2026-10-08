@@ -28,6 +28,7 @@ from charter import dispatch as D                                     # Kernel.a
 from charter import evidence as EVD                                   # law.v2 (review 10 #10): law-readable evidence
 from charter.camptypes import framework as CT                    # camps: typed camps, modifiers and leases (no-op under legacy)
 from charter import hidden as H
+from charter import incorporation as INC                               # W8e (D-27): share valuation of incorporated companies
 from charter import jurisdictions as J
 from charter import lawlang as L
 from charter import linker as LK                                      # law.v2: exports, use, public, versions (off: never called)
@@ -258,7 +259,9 @@ class Kernel:
         if str(res).startswith(AC.ASSOC):                               # P4.5: an association's shares, at net asset value (D-15)
             pool = AC.holdings(self, res)
             backing = sum(self.w["unit"].get(k, 0) * v for k, v in pool.items())
-            return backing / c["supply"] if c["supply"] > 1e-9 else 1.0
+            nav = backing / c["supply"] if c["supply"] > 1e-9 else 1.0
+            f = INC.valuation_factor(self, res[len(AC.ASSOC):])         # W8e (D-27): its parent's rule or its own clause (<= NAV)
+            return nav if f == 1.0 else nav * f
         pool = self.w["reserve"] if res == "reserve" else J.pool(self, res) if str(res).startswith("reserve:") \
             else self.w.setdefault("reserves", {}).setdefault(res, {})     # jurisdictions: "reserve:<jid>" is a jurisdiction's reserve
         backing = sum(self.w["unit"].get(k, 0) * v for k, v in pool.items())

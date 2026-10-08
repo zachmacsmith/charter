@@ -551,6 +551,37 @@ Associations v1 (P4.3) follow review 06 §3-§4 with the changes below:
   exit). It needs a member kind on association records (`{"kind": "association", "id": cid}`), an account-level `has()`, ballots
   weighted per member account, and a rule for who acts for a member association (its office holders, through agency).
 - Exit: a member can always leave at round end; `on_exit` keeps at most the member's escrow.
+- Incorporation (W8e, D-28; `charter/incorporation.py`): `create_contract {"under": "<polity>"}` founds a company under a polity
+  (record key `parent`, absent on an unincorporated contract, which keeps today's limits and world defaults). The founding is the
+  routed `create_contract` primitive with payload key `under`: the parent's laws see it whoever the founder is
+  (`before_create_contract`: registration, a required template) and its company rules apply (a registration fee into its
+  treasury, a required governance form, limits). Once incorporated:
+  - Binding (`dispatch.hooks.bound_laws`): the parent's laws see every change naming the company (its id as the payload's
+    contract / jurisdiction / polity, its treasury, an escrow it holds, its own currency or right), whoever the subject is. With
+    jurisdictions on, other polities' laws no longer see the company's own acts: internal affairs belong to the polity of
+    incorporation. Each member's own polity governs that member's own acts (the member is the subject or a party, as before).
+  - Ranks and conflicts: a polity's laws are statute or above and a contract's code is rank bylaw, so in canonical hook order the
+    parent's laws run first, and `resolve_v2` decides a company's change by its parent's conflict rule
+    (`incorporation.governing_polity`). Under `superior` a parent law's block of the company's own act wins over the company's
+    explicit allow (and the parent's explicit allow over the company's block); under `any_block` any block blocks, as before.
+  - Benefits and bounds from the parent's law, not world dials: `company_rule(key, value)` (a polity's law only; the routed legal
+    primitive `set_company_rule`, store `k.w["company_rules"][polity]`, held while its law is in force; reads `company_rules()`,
+    `companies()`). Keys: `enforcement` (escrow | escrow_court | word, the dial per parent: escrow_court gives the company the
+    parent's courts only, `breaches()` actionable in its laws and breach cases under its `breach_of_contract` clause),
+    `recognize_offices` (False refuses agency to the company's offices), `share_valuation`, `wind_up`, `procedures` (governance
+    forms allowed: a company's other form is replaced by the first listed when its changes are decided), `registration_fee`,
+    `max_laws`, `max_own`. Unset keys fall back to today's behaviour.
+  - D-27, first slice: share valuation (`Kernel.price` multiplies NAV by `incorporation.valuation_factor`: the parent's
+    `share_valuation`, else the company's own top-level clause `share_valuation = "nav" | "none" | 0..1`, else NAV; never above
+    NAV, so no clause can mint wealth); wind-up order (`_dissolve` runs `wind_up_order`: the parent's `wind_up`, else the
+    clause `wind_up = [...]` of shareholders / members / parent, else shareholders then members; `parent` escheats the rest to the
+    parent's treasury); built-in procedures (members, two_thirds, founder stay native default code; the library block "Contract
+    Procedures" holds the same as law code, and `set_procedure` may name a built-in form); per-contract limits (spec
+    `contracts.max_own`, `contracts.max_funds` with the old constants as defaults; the parent's `max_laws` / `max_own` replace the
+    spec for its companies). Deferred: the contract column beyond physics, breach visibility, member liability (piercing the
+    veil needs company debts), the agency action list.
+  - Not done (review 10 #14, #15): a polity under a polity, treaties, an association as a member of another; the parent link is
+    one level (a company under a polity).
 
 ### 7.3 The power table attaches the Board, the Fixer, levels and dry runs
 
@@ -880,8 +911,8 @@ contracts: P2.1 → P4.1 → P4.2 → P4.3 (needs P3.1). Critical path to forks 
 | D-24 | Can a contract (association) hook its members' legal acts in their polity? | No: associations hook only their own legal acts and their members' non-legal primitives |
 | D-25 | Kernel scope (review 12) | The kernel holds only physics (P), epistemics (E) and the experimental contract (X); every rule two real legal systems differ on (L) becomes a default law ("default code") each regime seeds, readable and amendable; existing presets seed today's behaviour and stay byte-identical (user, 8 Oct) |
 | D-26 | Exit from a polity | Law, with no kernel bound: a Nationality Act sets it (free, taxed, delayed, permitted, banned); post-exit sanctions only through agents (laws may pay bounties, never act). Supersedes review 12's "bounded" default (user, 8 Oct). Exit from a contract stays guaranteed (proposed; awaiting confirmation) |
-| D-27 | Contract defaults in the kernel (W7a/P4.3-4.5) | Move to law: share valuation (Kernel.price NAV branch), wind-up order (shareholders pro rata, then members), the built-in procedures (become library procedures), per-contract limits, the contract column beyond physics, the enforcement dial, breach visibility, member liability, the agency action list (except "never votes"). Kernel keeps accounts, escrow, allowances, atomic swap, exit, "laws never act for an agent" (user, 8 Oct) |
-| D-28 | Incorporation | Proposed: contracts may be founded under a polity (`parent`); the parent's company law outranks the contract's code and grants benefits (courts, recognition of offices, liability rules); unincorporated contracts remain. Wave 8, with the Board port (shared nesting machinery) |
+| D-27 | Contract defaults in the kernel (W7a/P4.3-4.5) | Move to law: share valuation (Kernel.price NAV branch), wind-up order (shareholders pro rata, then members), the built-in procedures (become library procedures), per-contract limits, the contract column beyond physics, the enforcement dial, breach visibility, member liability, the agency action list (except "never votes"). Kernel keeps accounts, escrow, allowances, atomic swap, exit, "laws never act for an agent" (user, 8 Oct). W8e moved the first four (and the enforcement dial, per parent) (§7.2 "Incorporation") |
+| D-28 | Incorporation | Proposed: contracts may be founded under a polity (`parent`); the parent's company law outranks the contract's code and grants benefits (courts, recognition of offices, liability rules); unincorporated contracts remain. Wave 8, with the Board port (shared nesting machinery). W8e implements it (§7.2 "Incorporation"): `under`, company rules, parent-first binding and conflict rule; member liability deferred |
 | D-29 | V18: what new-style hooks may read | A law never reads a DM's text unless conditions.law_reads_dms and the DM is unencrypted, nor a private channel post's text (dispatch.hook_payload); metadata (who, to whom, where) stays visible pending the publication layer (review 12) |
 | D-30 | Review 12's decision list | Adopted as recommended (user, 8 Oct): Board Charter with per-regime entrenchment (presets: entrenched, readable); Fixer stays X; kernel private by default with presets seeding a Publication Act that reproduces today; surveillance only within a world technology dial (law_reads_dms, channels.readable), encryption never broken; world events: laws regulate consequences only; prompt: one line per Act plus the legal digest; Land Registry Act seeded everywhere for now; dry run stays X; residual proposing rule: every member; default code runs as native code without gas until amended, ids A1..An. Exception: polity exit per D-26 (law, unbounded), not review 12's bounded default |
 | D-31 | Dispatcher layout (W8a, before review 12's WP1) | `charter/dispatch/` is a package of modules by concern (§2) and `changes/` by domain, re-exporting every old name; a primitive is routed by its row's `routed` flag, so WP1 may name an owner module's function as `fn`; every v1/v2 fork is listed in `dispatch.base.V2_SEAMS` (checked against the source); every primitive row and every review 12 inventory item carries a tier (`primitives.TIER_OF`, `charter/tiers.py`) |

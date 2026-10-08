@@ -1445,6 +1445,34 @@ def elect(question, electorate, candidates, on_result, closes_in=1):
 def carried(result):
     return result == ["yes"]
 ''')
+# W8e (D-27): a contract's built-in procedures as law code. The kernel runs the same three natively as a contract's default code
+# (contracts._decide; D-30: default code runs natively until amended); a contract that wants to amend one imports this block and
+# passes its own version to set_procedure. by_founder fails a change with "its procedure rejected the change" where the native
+# form says who may change the code; otherwise the outcomes are the same.
+block("Contract Procedures", '''
+title = "Contract Procedures"
+intent = "A contract's built-in procedures for changes to its code: by_members (a member alone decides alone; otherwise its members vote, a majority of those voting), by_two_thirds (two thirds of the members), by_founder (only the founder, or the first member once the founder has left)."
+exports = ["by_members", "by_two_thirds", "by_founder"]
+
+def by_members(p):
+    ms = members()
+    if len(ms) == 1:
+        return True
+    return {"electorate": ms, "rule": "majority_voting"}
+
+def by_two_thirds(p):
+    ms = members()
+    if len(ms) == 1:
+        return True
+    return {"electorate": ms, "rule": "two_thirds"}
+
+def by_founder(p):
+    st = contract_state(jurisdiction())
+    boss = st["founder"]
+    if boss not in st["members"]:
+        boss = st["members"][0]
+    return p.author == boss
+''')
 block("Credit Helpers", '''
 title = "Credit Helpers"
 intent = "Reading the loan book: what a loan still owes, which loans fell into default this round, and the rate a loan charges per round (its rate plus the premium of the repayment over the loan, by value, spread over its term)."

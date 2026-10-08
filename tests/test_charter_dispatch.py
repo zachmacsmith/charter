@@ -267,6 +267,7 @@ def test_routed_rows_name_dispatch_functions():
     want |= {"open_case", "answer_case", "appeal", "set_court_rule"}  # courts v2
     want |= {"swap", "open_fund"}                                     # P4.4 (W6e)
     want |= {"authorize", "deauthorize", "act_for"}                   # P4.5 (W7a): agency
+    want |= {"set_company_rule"}                                      # W8e: company law
     assert set(D.ROUTED) == want
     assert set(D.ROUTED) == {n for n, p in PR.PRIMITIVES.items() if p.routed}                    # W8a: the explicit flag
     for n in want:
