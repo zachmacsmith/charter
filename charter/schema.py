@@ -94,6 +94,7 @@ FEATURE_DEFAULTS = {
     "camps.leases": ("leases", _mod("charter.camptypes.leases"), "charter.camptypes.leases"),
     "resources": ("resources", _resources_defaults, None),
     "events.types": ("events", _event_type_defaults, None),
+    "contracts": ("contracts", _mod("charter.contracts"), "charter.contracts"),     # P4.3: associations (needs law.v2)
 }
 ALIASES = {"media": "media2", "outside": "outside_power", "camptypes": "camps.typed", "leases": "camps.leases"}
 
@@ -379,6 +380,10 @@ def _ann():
         "jurisdictions.board_scope": dict(types=("str",), enum=("founding", "all", "none")),
         "jurisdictions.admission": dict(types=("str",), enum=("ballot", "open", "closed")),
         "jurisdictions.scripted_founder": dict(types=("str", "null")),
+        "contracts.max_founded": dict(types=("int",), range=NONNEG),
+        "contracts.max_laws": dict(types=("int",), range=(1, None)),
+        "contracts.templates": dict(types=("bool",)),
+        "contracts.scripted": dict(types=("bool",)),
         "resources.placement": dict(types=("str",), enum=_placements),
         "prompts.core": dict(types=("dict",)),
         "prompts.manual": dict(types=("dict",)),
@@ -685,6 +690,8 @@ DOCS = {
     "roles": "Spy, assassin, Scholar, Maker and Media roles (charter/roles.py)",
     "roles.counts.seer": "the Spy's old name (renamed to spy)",
     "jurisdictions": "jurisdictions: laws bind members only; secret founding and declaration (charter/jurisdictions.py)",
+    "contracts": "contracts (P4.3): associations anyone may found, with their own treasury, escrow, allowances and code, binding "
+                 "only members who join; needs law.v2 (charter/contracts.py)",
     "resources": "resource placement and upkeep (charter/resources.py)",
     "resources.placement": "default | copper_solo | gold_solo: which resource the solo-science camp makes (types only)",
     "resources.upkeep": "each agent consumes `qty` of `item` every `every` rounds or loses an action until paid",

@@ -130,7 +130,7 @@ PARAM_SAMPLES = {
     "rule": "majority", "closes_round": 3, "choice": "yes", "result": "yes", "votes": {"a1": "yes"}, "member": "a1",
     "by_law": None, "old_sha": "9f1c", "new_sha": "0a2b", "case": "C1", "verdict": "guilty", "judge": "a4", "clause": "L5:c",
     "accuser": "a1", "accused": "a2", "action": "census", "args": [], "power": "quill", "error": "boom", "goal": {"name": "g"},
-    "seat": "a5", "contract": "K1", "remedy": "fine", "level": 1,
+    "seat": "a5", "contract": "K1", "remedy": "fine", "level": 1, "template": "club",
     "paid": 2.0, "owed": 4.0, "rate": 0.05,                                                              # loans (routed)
     "rank": "statute", "opened_by": "L1", "proposal": "L5", "diff": "--- L5 (before)\n+++ L5 (after)\n",      # P2.3 legal acts
 }
@@ -368,7 +368,7 @@ _ROWS = [
     P("join", "jurisdictions", "relation", ("agent", "polity", "via", "parent"), "dispatch:do_join", subject="agent",
       parties=("agent",), agent_params=("agent", "parent"), directives=("admit", "jurisdiction"), event="jur_joined",
       blocked_event="jur_join_refused", causes=("agent", "world"), reads=("members",),
-      sites=("dispatch:do_join", "dispatch:legacy_hooks", "jurisdictions:change_join", "jurisdictions:act_join",
+      sites=("dispatch:do_join", "dispatch:legacy_hooks", "jurisdictions:change_join", "jurisdictions:act_join", "contracts:change_join",
              "jurisdictions:_set_member", "jurisdictions:assign_arrival", "jurisdictions:assign_newborn"),
       why={"compel": "admission by law is `admit`"},
       notes="via: join (an application: on_admission answers; else the admission rule: open, closed or a members' ballot), pledge "
@@ -376,18 +376,20 @@ _ROWS = [
             "admitted, declaration (the member moves in at the end of the round)"),
     P("leave", "jurisdictions", "relation", ("agent", "polity", "via"), "dispatch:do_leave", subject="agent", parties=("agent",),
       agent_params=("agent",), event="jur_left", causes=("agent", "world"), reads=("members",),
-      sites=("dispatch:do_leave", "dispatch:legacy_hooks", "jurisdictions:change_leave", "jurisdictions:act_leave",
+      sites=("dispatch:do_leave", "dispatch:legacy_hooks", "jurisdictions:change_leave", "jurisdictions:act_leave", "contracts:change_leave",
              "jurisdictions:_set_member"),
       why={"compel": "removal by law is `expel`"},
       notes="via: leave (a request), unpledge (from a hidden jurisdiction), left, admitted, declaration (the member moves out at the end "
             "of the round: on_exit runs first, while the agent is still a member, so laws can tax or seize)"),
     P("admit", "jurisdictions", "relation", ("polity", "agent"), "dispatch:do_admit", subject="agent", parties=("agent",),
       agent_params=("agent",), event="channel_member", causes=("agent", "law"), preview=("rules.joining",), compel_vis="public",
-      sites=("dispatch:do_admit", "jurisdictions:change_admit", "jurisdictions:law_api.admit", "actions:_add_member"),
+      sites=("dispatch:do_admit", "jurisdictions:change_admit", "jurisdictions:law_api.admit", "actions:_add_member",
+             "contracts:change_admit"),
       notes="admit() by law bypasses on_admission (the member moves in at the end of the round); a group owner adds members"),
     P("expel", "jurisdictions", "relation", ("polity", "agent"), "dispatch:do_expel", subject="agent", parties=("agent",),
       agent_params=("agent",), event="channel_member", causes=("agent", "law"), preview=("rules.leaving",), compel_vis="public",
-      sites=("dispatch:do_expel", "jurisdictions:change_expel", "jurisdictions:law_api.expel", "actions:_remove_member")),
+      sites=("dispatch:do_expel", "jurisdictions:change_expel", "jurisdictions:law_api.expel", "actions:_remove_member",
+             "contracts:change_expel")),
     P("declare", "jurisdictions", "status", ("polity",), "jurisdictions:declare_now", event="jur_declared", causes=("agent", "world"),
       sites=("jurisdictions:act_declare", "jurisdictions:declare_now"), why={"compel": "a founder's decision"}),
     P("set_charter", "jurisdictions", "rule", ("polity", "laws"), "jurisdictions:act_set_charter", event="jur_charter", causes=("agent",),
@@ -506,7 +508,7 @@ _ROWS = [
     P("propose", "core", "legal", ("jurisdiction", "draft"), "dispatch:do_propose", subject="jurisdiction", parties=("jurisdiction",),
       legal=True, event="proposal", causes=("agent", "law"), reads=("laws", "proposer"),
       sites=("dispatch:do_propose", "actions:_propose", "jurisdictions:propose", "kernel:Kernel.new_law", "dispatch:legacy_hooks",
-             "actions:_amend", "amendment:propose_by_law"),
+             "actions:_amend", "amendment:propose_by_law", "contracts:act_propose_contract_change"),
       notes="draft: dispatch.draft (code, class, rank, calls, hooks, rights granted/revoked/suspended, imports, exports, amends); "
             "the action checks the right, the law level and the 3-round dry run before the act; then the procedure decides "
             "(decide). law.v2 (P3.4): the amend action and the law functions propose_law / propose_amendment (no dry run; the "
@@ -576,17 +578,33 @@ _ROWS = [
       legal=True, causes=("law",), sites=("dispatch:set_conflict_rule",),
       why={"gate": "set by a constitution-rank law (P3.2); not hookable yet", "event": "logs no event yet (P3.2 follow-up)"},
       notes="law.v2: how conflicting before-hook verdicts are resolved in a polity (any_block, superior, posterior, a function)"),
-    # ------------------------------------------------------------------ contracts (P4: planned)
-    P("create_contract", "contracts", "create", ("agent", "contract", "name"), None, subject="agent", agent_params=("agent",),
-      causes=(), status="planned", why={"compel": "P4", "event": "P4"}),
-    P("deposit_escrow", "contracts", "move", ("agent", "contract", "item", "qty"), None, subject="agent", agent_params=("agent",),
-      charge=("agent", "item"), causes=(), status="planned", why={"compel": "P4", "event": "P4"}),
-    P("set_allowance", "contracts", "rule", ("agent", "contract", "item", "qty"), None, subject="agent", agent_params=("agent",),
-      causes=(), status="planned", why={"compel": "P4", "event": "P4"}),
-    P("pull", "contracts", "move", ("contract", "member", "item", "qty"), None, subject="member", agent_params=("member",),
-      causes=(), status="planned", why={"compel": "P4", "event": "P4"}),
-    P("breach", "contracts", "legal", ("contract", "member", "clause", "remedy"), None, subject="member", agent_params=("member",),
-      legal=True, causes=(), status="planned", why={"compel": "P4", "event": "P4"}),
+    # ------------------------------------------------------------------ contracts (P4.3: associations, charter/contracts.py)
+    P("create_contract", "contracts", "create", ("agent", "contract", "name", "template"), "dispatch:do_create_contract",
+      subject="agent", parties=("agent",), agent_params=("agent",), event="contract_created", causes=("agent",),
+      sites=("dispatch:do_create_contract", "contracts:change_create", "contracts:act_create_contract"),
+      why={"compel": _LNA, "gate": "law.v2 only: a polity law binding the founder may block it (before_create_contract)"},
+      notes="an association: its founder is its first member; its code (or a template's, with params) is in force at once, rank "
+            "bylaw, binding only members who join"),
+    P("deposit_escrow", "contracts", "move", ("agent", "contract", "item", "qty"), "dispatch:do_deposit_escrow", subject="agent",
+      parties=("agent",), agent_params=("agent",), event="contract_deposit", causes=("agent",),
+      sites=("dispatch:do_deposit_escrow", "contracts:change_deposit", "contracts:act_deposit_escrow"),
+      why={"compel": "a contract takes from a member only within an allowance (pull) or from what was deposited (forfeit)",
+           "gate": "law.v2 only: before_deposit_escrow"},
+      notes="a member's goods move into escrow:<contract>:<member>, which the contract's code may forfeit; what is left goes back "
+            "when the member leaves"),
+    P("set_allowance", "contracts", "rule", ("agent", "contract", "item", "qty"), "dispatch:do_set_allowance", subject="agent",
+      parties=("agent",), agent_params=("agent",), event="contract_allowance", causes=("agent",),
+      sites=("dispatch:do_set_allowance", "contracts:change_allowance", "contracts:act_set_allowance"),
+      why={"compel": _LNA, "gate": "law.v2 only: before_set_allowance"},
+      notes="per round: the contract's code may pull up to qty of item from the member each round; 0 withdraws it"),
+    P("pull", "contracts", "move", ("contract", "member", "item", "qty"), "dispatch:do_pull", subject="member", parties=("member",),
+      agent_params=("member",), event="contract_pull", causes=("law",),
+      sites=("dispatch:do_pull", "contracts:change_pull", "contracts:law_api.pull"),
+      notes="only an association's own law, only from a member, only within the allowance left this round and what the member holds"),
+    P("breach", "contracts", "status", ("contract", "member", "clause", "remedy"), "dispatch:do_breach", subject="member",
+      parties=("member",), agent_params=("member",), event="contract_breach", causes=("law",),
+      sites=("dispatch:do_breach", "contracts:change_breach", "contracts:law_api.breach"),
+      notes="a record (shown to the members): the remedy is what the code itself did within escrow (forfeit, expel) or a text"),
 ]
 
 # ---------------------------------------------------------------------- actions -> primitives
@@ -646,6 +664,9 @@ ACTION_PRIMITIVES = {
     # groups
     "create_channel": ("found",), "channel_post": ("post",), "add_member": ("admit",), "remove_member": ("expel",),
     "close_channel": ("dissolve",),
+    # contracts (P4.3)
+    "create_contract": ("create_contract",), "join_contract": ("join",), "leave_contract": ("leave",),
+    "deposit_escrow": ("deposit_escrow",), "set_allowance": ("set_allowance",), "propose_contract_change": ("propose",),
     # powers
     "invoke": ("invoke", "use_power"),
 }

@@ -8,11 +8,13 @@ Owner keys (what `Kernel.bal`, `Kernel._add`, `Kernel.move` / `k.apply("move")` 
     "reserve:<jid>"      a (non-legacy) jurisdiction's treasury (k.w["jurisdictions"][jid]["reserve"]) the record's kind ("polity")
     "estate:<aid>"       a dead agent's estate (k.w["mortality"]["estates"][aid]["holdings"]),
                          open from the death phase's mark step to probate (mortality.py)                kind "estate"
-    "escrow:<cid>:<aid>" reserved for contracts (P4.3)                                                 kind "escrow"
+    "assoc:<cid>"        an association's (contract's) treasury (k.w["contracts"]["assoc"][cid]["reserve"], P4.3)  kind "association"
+    "escrow:<cid>:<aid>" a member's deposit held by association cid (its record's ["escrow"][aid], P4.3)   kind "escrow"
     "world"              reserved: the sink/source of interventions and gas (P3.8, P5.1)              kind "world"
 
-Account ids (what a law belongs to): a jurisdiction id ("J0" when jurisdictions are off). A jurisdiction record carries its
-`kind` ("polity" today; "association" and "personal" are reserved for P4.3) and its `treasury` owner key (jurisdictions._new_j).
+Account ids (what a law belongs to): a jurisdiction id ("J0" when jurisdictions are off) or an association id ("A<n>", P4.3: a
+contract's law). A record carries its `kind` ("polity" for jurisdiction records; "association" for contracts, kept in
+k.w["contracts"]["assoc"] so jurisdiction listings are unchanged; "personal" is reserved) and its `treasury` owner key.
 
 `resolve(k, key)` is the one function from an owner key to its account: `Account(key, kind, account, holdings)`. Unknown keys raise
 the same LawError the kernel always raised for them ("no such agent: <key>", "no such reserve: <key>"). New kinds register a
@@ -34,9 +36,11 @@ from charter import jurisdictions as J
 from charter import lawlang as L
 
 KINDS = ("agent", "polity", "estate", "association", "personal", "escrow", "world")
-RESERVED_KINDS = ("association", "personal", "escrow", "world")   # named now, registered by later packages (P4.3, P3.8, P5.1)
+RESERVED_KINDS = ("personal", "world")                           # named now, registered by later packages (P3.8, P5.1)
 J0_KEY = "reserve"                                                # J0's owner key forever (review 06 §9)
 ESTATE = "estate:"
+ASSOC = "assoc:"                                                  # P4.3: an association's treasury
+ESCROW = "escrow:"                                                # P4.3: a member's deposit held by an association
 
 # Where totals of an item may change: the explicit sources and sinks, as "module.function" of their Kernel._add call sites. Every
 # other change is a move between accounts, or into or out of a held escrow (`escrows`); a child's endowment comes from its parent
@@ -85,7 +89,33 @@ def _estate(k, key):
     return Account(key, "estate", aid, e["holdings"] if e else {})
 
 
-RESOLVERS = {"reserve:": _reserve, ESTATE: _estate}               # key prefix -> resolver (P4.3 adds "escrow:")
+def assocs(k) -> dict:
+    """The association records (P4.3, charter/contracts.py): {} when contracts are off."""
+    c = k.w.get("contracts")
+    return c["assoc"] if c else {}
+
+
+def _assoc(k, key):
+    cid = key[len(ASSOC):]
+    rec = assocs(k).get(cid)
+    if rec is None:
+        raise L.LawError(f"no such reserve: {key}")
+    return Account(key, "association", cid, rec["reserve"])
+
+
+def escrow_key(cid, aid) -> str:
+    return f"{ESCROW}{cid}:{aid}"
+
+
+def _escrow(k, key):
+    cid, _, aid = key[len(ESCROW):].partition(":")
+    rec = assocs(k).get(cid)
+    if rec is None or aid not in k.w["agents"]:
+        raise L.LawError(f"no such escrow: {key}")
+    return Account(key, "escrow", cid, rec["escrow"].get(aid) or {})        # written through `add` (created on first deposit)
+
+
+RESOLVERS = {"reserve:": _reserve, ESTATE: _estate, ASSOC: _assoc, ESCROW: _escrow}   # key prefix -> resolver
 
 
 def resolve(k, key) -> Account:
@@ -122,6 +152,8 @@ def add(k, key, item, qty) -> None:
         e = (k.w.get("mortality") or {}).get("estates", {}).get(a.account)
         if e is None or e.get("status") != "open":
             raise L.LawError(f"{key} is not an open estate")
+    if a.kind == "escrow":                                             # P4.3: a member's escrow exists once something is in it
+        tgt = assocs(k)[a.account]["escrow"].setdefault(key[len(ESCROW):].partition(":")[2], {})
     tgt[item] = round(tgt.get(item, 0.0) + qty, 6)
     if abs(tgt[item]) < 1e-9:
         del tgt[item]
@@ -144,20 +176,29 @@ def account_of(k, lid) -> str:
 
 
 def kind(k, account) -> str:
-    """An account id's kind: an agent -> "agent"; a jurisdiction record -> its kind ("polity"); J0 -> "polity"."""
+    """An account id's kind: an agent -> "agent"; an association -> "association"; a jurisdiction record -> its kind ("polity");
+    J0 -> "polity"."""
     if account in k.w["agents"]:
         return "agent"
+    if account in assocs(k):
+        return "association"
     rec = (k.w.get("jurisdictions") or {}).get(account)
     return (rec or {}).get("kind", "polity")
 
 
 def treasury_of(k, account) -> str:
-    """The owner key of an account's treasury: "reserve" for J0 (and whenever jurisdictions are off), else "reserve:<jid>"."""
+    """The owner key of an account's treasury: "reserve" for J0 (and whenever jurisdictions are off), "assoc:<cid>" for an
+    association, else "reserve:<jid>"."""
+    if account in assocs(k):
+        return f"{ASSOC}{account}"
     return J.reserve_key(k, account)
 
 
 def binds(k, account, aid) -> bool:
-    """Does the account's law reach aid? (J0 with jurisdictions off: everyone; a polity: its declared members.)"""
+    """Does the account's law reach aid? (J0 with jurisdictions off: everyone; a polity: its declared members; an association: its
+    members, who joined it.)"""
+    if account in assocs(k):
+        return aid in assocs(k)[account]["members"]
     if not J.enabled(k):
         return True
     j = J.jurs(k).get(account)
@@ -206,11 +247,14 @@ def keys(k) -> list:
             out.append(f"reserve:{jid}")
     for aid in sorted(((k.w.get("mortality") or {}).get("estates") or {})):
         out.append(estate_key(aid))
+    for cid, rec in assocs(k).items():                                 # P4.3: associations' treasuries and their members' escrows
+        out.append(f"{ASSOC}{cid}")
+        out += [escrow_key(cid, aid) for aid in rec["escrow"]]
     return out
 
 
 def escrows(k) -> list:
-    """Goods held in records that are not owner keys yet (kind "escrow", reserved for P4.3): (label, holdings) pairs. Life's
+    """Goods held in records that are not owner keys (contracts' escrows are, P4.3: `keys`): (label, holdings) pairs. Life's
     commission escrows (price and fee; an heir's goods reserved from an estate until its birth) and projects' pooled contributions."""
     out = []
     for cid, c in sorted(((k.w.get("life") or {}).get("commissions") or {}).items()):

@@ -642,7 +642,7 @@ class Kernel:
             if "harvest" in str(text).lower():
                 k.w["effects"]["harvests_gazetted"] += 1
 
-        api = J.scope_api(k, lid, {                                    # jurisdictions: a law reaches only its members (off: unchanged)
+        api = {
             "agents": agents, "holders": k.law_holders, "has": k.law_has, "balance": k.bal, "reserve": lambda: dict(k.w["reserve"]),
             "price": k.price, "stock": lambda c: camp_of(c)["S"], "round": lambda: k.r, "laws": laws,
             "proposer": lambda: law()["author"], "value": k.unit_value, "supply": lambda cur: k._cur(cur)["supply"],
@@ -667,12 +667,13 @@ class Kernel:
             "count": lambda t, w: str(t).count(str(w)), "starts_with": lambda t, p: str(t).startswith(str(p)),
             "lower": lambda t: str(t).lower(), "repeal": repeal,
             **FT.law_api(k, lid),                                          # every feature's law functions (features.TAILS order)
-        })
+        }
         if LK.enabled(k):                                              # law.v2: use(ref), public_of(lid) (charter/linker.py)
             api.update(LK.law_api(k, lid))
             api.update(D.law_api(k, lid))                              # law.v2 (P3.1): root_kind(chain) etc., law_id(), treasury()
             api.update(AM.law_api(k, lid))                             # law.v2 (P3.4): propose_law, propose_amendment (from L3)
-        return api
+        return J.scope_api(k, lid, api)                                # jurisdictions: a law reaches only its members (off: unchanged);
+                                                                       # a contract's law: the contract column, v2 functions included
 
     # ------------------------------------------------------------------ laws
     def active_laws(self):
@@ -727,6 +728,8 @@ class Kernel:
         repeal never reaches a law of a stricter class (review F1), nor (law.v2, P3.2: lex superior) a law of a higher rank. True if
         any was repealed."""
         hit = [l for l in self.active_laws() if l["id"] == target or l["title"].lower() == target.lower()]
+        if "contracts" in self.w:                                       # P4.3: associations' laws end only by their own procedure
+            hit = [l for l in hit if J.association(self, J.law_jur(self, l["id"])) is None]
         if by_law is not None:                                          # law-caused: never a law of a stricter class (review F1)
             rank = self.w["laws"].get(by_law, {}).get("cls")
             hit = [l for l in hit if L.CLASS_RANK.get(l["cls"], 0) <= L.CLASS_RANK.get(rank, 0)]
@@ -745,8 +748,8 @@ class Kernel:
 
     def hooks(self, hook, *args):
         """Run a hook on every active law, in enactment order. Errors suspend the law and call the Fixer."""
-        if "jur" in self.w:                                             # jurisdictions: only laws that bind the agent concerned
-            return J.hooks(self, hook, *args)
+        if "jur" in self.w or "contracts" in self.w:                    # jurisdictions: only laws that bind the agent concerned;
+            return J.hooks(self, hook, *args)                           # contracts (P4.3): associations' laws only for their members
         out = []
         for law in self.active_laws():
             ns = self.ns.get(law["id"]) or self._load(law["id"])
@@ -763,6 +766,9 @@ class Kernel:
         return out
 
     def law_error(self, lid, msg):
+        if "contracts" in self.w and not PW.has_power(self, J.law_jur(self, lid), "fixer_patch"):   # P4.3: an association's law:
+            from charter import contracts as KC                         # suspended, its members told; never the Fixer
+            return KC.law_error(self, lid, msg)
         law = self.w["laws"][lid]
         law["status"] = "suspended"
         self.log("law_error", None, {"law": lid, "error": msg}, vis="public")

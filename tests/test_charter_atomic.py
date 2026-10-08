@@ -155,7 +155,10 @@ intent = "test"
 """
 '''
 JUR_ONLY = {"admit", "expel", "lawful_attack"}
-WRITERS = sorted(n for n, f in LA.LAWFNS.items() if f.primitive)
+# A contract's own functions (pull, forfeit, refund, breach) exist only in an association's law (contracts.scope_api), which this
+# generic harness does not build; their rollback is not covered here yet (follow-up: an association variant of this test).
+CONTRACT_ONLY = {n for n, f in LA.LAWFNS.items() if f.module == "contracts"}
+WRITERS = sorted(n for n, f in LA.LAWFNS.items() if f.primitive and n not in CONTRACT_ONLY)
 
 
 def test_every_writer_has_a_call():
