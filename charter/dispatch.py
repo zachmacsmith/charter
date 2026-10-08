@@ -1354,11 +1354,11 @@ def chain_view(k, frames, viewer=None, *, implicit_root=None, concealed=(), turn
         if kind == "action" and "agent" not in f and turn_agent is not None:
             f["agent"] = turn_agent
         if viewer is not None:
-            if hide:
-                f = k._redact(f, hide)
-            if obs is not None and obs in f.values():
+            if obs is not None and obs in f.values():                    # the observer's doings read as the world's
                 out.append({"kind": "world", "id": "world"})
                 continue
+            if hide:
+                f = k._redact(f, hide)
             if kind == "intervention" and not f.get("announce"):
                 out.append({"kind": "world", "id": "world"})
                 continue

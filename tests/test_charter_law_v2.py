@@ -533,3 +533,21 @@ def test_law_gas_is_a_spec_key():
     assert SC.validate(S.apply_overrides(S.load("E4"), ["law.v2=true", "law.gas.per_cascade=3000"])) == []
     k = world(gas={"per_cascade": 3000})
     assert D.gas_cfg(k)["per_cascade"] == 3000 and D.gas_cfg(k)["per_call"] == 10_000
+
+
+def test_the_observer_never_appears_to_laws():
+    k = world(sets=["observer.enabled=true"])
+    obs = k.inst["observer"]["id"]
+    a, _, _ = agents(k)
+    spy = enact(k, law("Spy", "def after_move(p, chain):\n    state['p'] = p\n    state['c'] = chain\n"))
+    with k.cause("action", "transfer", agent=obs, root=True):
+        k.apply("move", src=obs, dst=a, item="timber", qty=1.0, why="transfer")
+    st = k.w["laws"][spy]["state"]
+    assert st["c"][0] == {"kind": "world", "id": "world"} and st["p"]["src"] is None and obs not in json.dumps(st)
+
+
+def test_a_blocked_repeal_leaves_the_law_in_force(k):
+    keep = enact(k, law("Keep", "def on_round_end(r):\n    gazette('x')\n"))
+    enact(k, law("Entrench", f"def before_repeal(p, chain):\n    if p['law'] == '{keep}':\n        return False\n"))
+    assert k.repeal(keep) is False and k.w["laws"][keep]["status"] == "active"
+    assert events(k, "primitive_blocked")[-1]["data"]["primitive"] == "repeal"
