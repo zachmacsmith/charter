@@ -262,6 +262,7 @@ def test_routed_rows_name_dispatch_functions():
     want |= {"join", "leave", "admit", "expel", "subscribe", "set_outlet_rule", "set_media_rule", "appoint", "lease",
              "improve_camp"}                                           # P2.4d: membership, media, typed camps and leases
     want |= {"offer_loan", "accept_loan", "repay_loan", "extend_loan", "default_loan", "settle_loan"}   # the credit lifecycle
+    want |= {"open_case", "answer_case", "appeal", "set_court_rule"}  # courts v2
     assert set(D.ROUTED) == want
     for n in want:
         p = PR.get(n)

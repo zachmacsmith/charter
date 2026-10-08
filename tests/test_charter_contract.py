@@ -79,7 +79,7 @@ KNOWN_GAPS = frozenset({
     ("gate", "library_doc"), ("gate", "library_permit"), ("gate", "set_capacity"), ("gate", "found"), ("gate", "invite"),
     ("gate", "admit"), ("gate", "expel"), ("gate", "declare"), ("gate", "dissolve"),
     ("gate", "improve_camp"), ("gate", "contribute"),
-    ("gate", "invoke"), ("gate", "request_fix"), ("gate", "open_case"), ("gate", "answer_case"),
+    ("gate", "invoke"), ("gate", "request_fix"),             # courts v2: open_case and answer_case are routed (before_<p> under law.v2)
 })
 KNOWN_GAPS_FROZEN = KNOWN_GAPS                                          # the P1.7 copy: never add to it
 

@@ -139,6 +139,7 @@ CALLS = {
     "propose_law": "propose_law(PROPOSAL)",
     "propose_amendment": "propose_amendment('{other}', PROPOSAL, 'tidy')",
     "settle_loan": "enable_loans()\n    settle_loan(lend_from_reserve('{a}', 'timber', 2), paid=1)",
+    "set_court_rule": "set_court_rule('deadline', 5)",                    # courts v2
 }
 CALL_MODULE = '''
 def tinker(agent, *args):
