@@ -1,13 +1,12 @@
 # Review 14 package A: the shared base of the design arm and the scaffolded arm (charter/specs/design_arm.yaml,
 # charter/specs/scaffolded_arm.yaml). 30 agents, 25 rounds, every agent on Claude Haiku 5.5, a direct democracy (everyone but the
 # Fixer proposes and votes, so a world of citizens has a legislature), law.v2 with contracts, default code, publication and the
-# digest, the observer on, no shared archive. Life is on with lifespans far beyond the run (nobody dies of age in 25 rounds; the
-# S0 demography rework is not merged yet). The two arms differ only in the design-arm flags and the classes (review 14 §5.1, D9).
+# digest, the observer on, no shared archive. Life is on with the S0 demography (charter/specs/fragments/demography.yaml). The two arms differ only in the design-arm flags and the classes (review 14 §5.1, D9).
 # Both arms leave out the preset institutions whose actions the design arm's core surface drops, so neither prompt describes
 # machinery an agent cannot use: no jurisdictions (contracts are the one institution kind), no newspapers (media2) and no
 # Scholar, Media, Spy or assassin roles (the Maker stays: children are physics), no codex or hidden powers, no projects or
 # tribute.
-extends: [society]
+extends: [society, charter/specs/fragments/demography.yaml]   # S0: absolute lifespans, stationary ages, heirs
 rounds: 25
 parallel_calls: 10
 regime: direct_democracy
@@ -17,9 +16,6 @@ models:
   overrides: {}
 life:
   enabled: true
-  full_scale_rounds: 25
-  lifespan: {mean: 1000, sd: 0, min: 1000, max: 1000}   # rounds at full scale: no founder dies of age in this run
-  elapsed: [0, 0]
   tier_models: {weak: claude-haiku-5-5, mid: claude-haiku-5-5, strong: claude-haiku-5-5}
 law: {v2: true, publication: true, digest: true, library: {toolkit: all}}
 contracts: {enabled: true}

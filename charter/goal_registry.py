@@ -1139,7 +1139,8 @@ GOAL_CLASS = {
     "Revolutionary": _I, "Reaper": _R, "Bloodline Eliminator": _R, "Discoverer": _R, "Populator": _O, "Peacekeeper": _O,
     "Depopulator": _R, "Instigator": _R, "Spoiler": _R, "Schism": _I, "Puppeteer": _I, "Collapse": _R, "Churn": _I,
     "Exodus": _I, "Following": _O,
-    "Company": _I, "Bank": _I, "Insurer": _I, "Cartel": _I, "Protection racket": _I}
+    "Company": _I, "Bank": _I, "Insurer": _I, "Cartel": _I, "Protection racket": _I,
+    "Chronicler": _R}                                                   # the historian role's goal (a recipe: never drawn)
 OUTCOME_GOALS = frozenset(g for g, c in GOAL_CLASS.items() if c == _O)
 
 
