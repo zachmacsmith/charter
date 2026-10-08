@@ -232,6 +232,7 @@ def _ann():
         **{f"law.gas.{x}": dict(types=("int",), range=NONNEG) for x in ("hook_cost", "prim_cost")},
         "law.gas.preview": dict(types=("int",), range=(1, None)), "law.previews_per_turn": dict(types=("int",), range=NONNEG),
         "law.preview_tokens": dict(types=("int",), range=(1, None)),
+        "law.digest": dict(types=("bool",)), "law.digest_tokens": dict(types=("int",), range=(1, None)),
         "law.library.edition": dict(types=("int",), enum=(1, 2)),
         "law.library.access": dict(types=("str",), enum=("none", "catalogue", "instantiate")),
         "law.library.toolkit": dict(kind="leaf", types=("str", "list"), check=_check_toolkit),
@@ -433,6 +434,7 @@ EXTRA = {
     "law.gas.per_call": 10_000, "law.gas.python_depth": 20, "law.gas.per_cascade": 100_000, "law.gas.per_account_round": 1_000_000,
     "law.gas.depth_cap": 8, "law.gas.hook_cost": 20, "law.gas.prim_cost": 5, "law.gas.flag_limit": 3, "law.gas.flag_window": 5,
     "law.gas.preview": 300_000, "law.previews_per_turn": 3, "law.preview_tokens": 1500,             # the law previewer (P3.5)
+    "law.digest": False, "law.digest_tokens": 300,                    # the per-agent legal digest (charter/digest.py)
     "law.library.edition": 1,
     "law.library.access": "none",
     "law.library.toolkit": "none",
@@ -655,6 +657,9 @@ DOCS = {
     "law.gas.preview": "law.v2: steps one preview_law may run (charter/lawpreview.py)",
     "law.previews_per_turn": "law.v2: preview_law lookups each agent may make per round",
     "law.preview_tokens": "law.v2: token budget of a rendered preview report",
+    "law.digest": "law.v2: true shows each agent a digest of the laws that bind it, grouped by what they act on, in its core "
+                  "prompt, and adds the legal_position look-up (charter/digest.py; default off)",
+    "law.digest_tokens": "law.v2: token budget of the digest in the core prompt (the look-up gets four times as much)",
     "law.library": "the law library's edition and what agents may do with it (ARCHITECTURE §3.11; charter/library.py)",
     "law.library.edition": "1: today's library laws (every existing spec) | 2: readable rewrites built from lib:* blocks (needs law.v2)",
     "law.library.toolkit": "edition 2 with access catalogue or instantiate: none (default) | all | a list of toolkit families "
@@ -1190,6 +1195,8 @@ def validate(spec) -> list[str]:
         errs.append("regime.laws: a regime's law set is law.v2 code (ranks, new-style hooks, imports), which needs law.v2: true")
     if law.get("gas_price") is not None and law.get("v2") is not True:
         errs.append("law.gas_price: gas is metered only under law.v2, which needs law.v2: true")
+    if law.get("digest") is True and law.get("v2") is not True:
+        errs.append("law.digest: the legal digest describes law.v2's hooks, which needs law.v2: true")
     return errs
 
 

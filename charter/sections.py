@@ -62,7 +62,7 @@ SECTIONS: list[Section] = []
 
 # The layers' orders (keys of rows with a place; anchored module rows are inserted after their anchor).
 LAYOUTS = {
-    "core": ("overview", "identity", "leverage", "secret", "goal", "strategy", "temperament", "memory", "lookups", "actions",
+    "core": ("overview", "laws", "identity", "leverage", "secret", "goal", "strategy", "temperament", "memory", "lookups", "actions",
              "manual_index", "reply"),
     "manual": ("World rules", "How your turn works", "Memory and files", "Your role", "Your rights", "Goals in this world", "Actions",
                "Private messages and the DM step", "Law language", "Law library", "Credit and loans", "Projects and tribute",
@@ -102,7 +102,7 @@ def load() -> None:
     if _LOADED:
         return
     from charter import features as FT
-    for m in ("charter.manual", "charter.context", "charter.agents", "charter.observer"):
+    for m in ("charter.manual", "charter.context", "charter.agents", "charter.observer", "charter.digest"):
         importlib.import_module(m)
     for f in FT.FEATURES:
         f.mod()

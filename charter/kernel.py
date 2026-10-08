@@ -25,6 +25,7 @@ from charter import conflict as CF                                  # conflict: 
 from charter import credit as CR
 from charter import courts as CO                                      # law.v2 (courts v2): cases, court rules, appeals
 from charter import dispatch as D                                     # Kernel.apply: primitives, legacy hook aliases (P2.1)
+from charter import evidence as EVD                                   # law.v2 (review 10 #10): law-readable evidence
 from charter.camptypes import framework as CT                    # camps: typed camps, modifiers and leases (no-op under legacy)
 from charter import hidden as H
 from charter import jurisdictions as J
@@ -695,6 +696,7 @@ class Kernel:
             api.update(D.law_api(k, lid))                              # law.v2 (P3.1): root_kind(chain) etc., law_id(), treasury()
             api.update(AM.law_api(k, lid))                             # law.v2 (P3.4): propose_law, propose_amendment (from L3)
             api.update(CO.law_api(k, lid))                             # law.v2 (courts v2): cases, case, court_rules, set_court_rule
+            api.update(EVD.law_api(k, lid))                            # law.v2 (review 10 #10): event(eid), history(...)
         return J.scope_api(k, lid, api)                                # jurisdictions: a law reaches only its members (off: unchanged);
                                                                        # a contract's law: the contract column, v2 functions included
 

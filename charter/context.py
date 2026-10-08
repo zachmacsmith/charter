@@ -65,11 +65,12 @@ DEFAULTS = {
     "free_scratchpad_writes": 1,      # write_scratchpad actions per turn that use no action
 }
 LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file", "read_archive", "search_archive",
-           "run_python", "preview_law")
+           "run_python", "preview_law", "legal_position")
 DM_ONLY_LOOKUPS = ("search_archive", "run_python")                    # usable as lookups in the DM step (as actions they are actions)
 FILE_ACTIONS = ("write_scratchpad", "write_file", "rename_file", "share_file", "delete_file", "pin", "unpin")
 ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file") + FILE_ACTIONS \
-    + ("preview_law",)                                                  # agent actions this module adds (preview_law: law.v2 only)
+    + ("preview_law", "legal_position")                                 # agent actions this module adds (preview_law: law.v2 only;
+                                                                        # legal_position: law.v2 with law.digest)
 BOARD_TYPES = ET.names("board")                                       # what search_board searches (posts and the gazette)
 FETCHED_HEADER = "## Lookups (fetched this turn)"
 
@@ -627,13 +628,17 @@ def lookup(k, aid, name, args: dict) -> str:
     if name == "preview_law":                                           # P3.5: law.v2 worlds only (lawpreview.lookup refuses otherwise)
         from charter import lawpreview as LP
         return LP.lookup(k, aid, args)
+    if name == "legal_position":                                        # law.v2 with law.digest (charter/digest.py)
+        from charter import digest as DG
+        return DG.act_legal_position(k, aid)
     raise _error(f"no lookup {name!r}; lookups: {', '.join(_lookups(k))}")
 
 
 def _lookups(k) -> tuple:
     """The lookups of this world (preview_law only under law.v2)."""
     from charter import lawpreview as LP
-    return LOOKUPS if LP.enabled(k) else tuple(n for n in LOOKUPS if n != "preview_law")
+    from charter import digest as DG
+    return tuple(n for n in LOOKUPS if (n != "preview_law" or LP.enabled(k)) and (n != "legal_position" or DG.enabled(k)))
 
 
 def dm_step_lookup(k, aid, q) -> str:
@@ -915,7 +920,7 @@ def core_prompt(inst, a, k=None) -> str:
     rights = k.w["agents"][aid]["rights"] if k is not None and aid in k.w["agents"] else a.get("rights", [])
     v = SC.view(inst, k, a, rights, "core")
     core = v.memo(_core)
-    parts = [(key, t) for key, t in CP.apply(inst, a, SC.render("core", v), "core", default_after="goal") if t or key == "overview"]
+    parts = [(key, t) for key, t in CP.apply(inst, a, SC.render("core", v), "core", default_after="goal") if t or key in ("overview", "laws")]
     text, cut = SC.fit("core", v, parts, int(c["budgets"]["core"]))
     if k is not None:
         _st(k, aid)["core"][aid] = {"tokens": tokens(text), "budget": int(c["budgets"]["core"]), "trimmed": cut,

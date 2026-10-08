@@ -18,9 +18,10 @@ from charter.kernel import Kernel
 
 D_HELPERS = ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")   # P3.1 (dispatch.law_api)
 W6A_FNS = ("refuse",)                                                                            # W6a (dispatch.law_api)
+EV_FNS = ("event", "history")                                                                    # review 10 #10 (evidence.law_api)
 AM_FNS = ("propose_law", "propose_amendment")                                                    # P3.4 (amendment.law_api)
 CO_FNS = ("cases", "case", "court_rules", "set_court_rule")                                       # courts v2 (courts.law_api)
-W6_V2_FNS = {*W6A_FNS, *CO_FNS}                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
+W6_V2_FNS = {*W6A_FNS, *CO_FNS, *EV_FNS}                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
 W6_FNS = {*W6_V2_FNS}                                                 # every W6 law function (contract-module ones are in CONTRACT_FNS)
 SNAPSHOT = Path(__file__).parent / "fixtures" / "charter_lawapi_snapshot.json"
 ALL_ON = ["jurisdictions.enabled=false", "conflict.enabled=true", "media2.enabled=true", "life.enabled=true",

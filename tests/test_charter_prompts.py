@@ -368,7 +368,7 @@ def test_sections_registry_is_consistent():
         have = [s.key for s in SCN.rows(layer) if s.after is None]
         assert sorted(have) == sorted(keys), layer
     assert {s.key for s in SCN.rows("manual") if s.after} >= {"Conflict", "Media", "Life and children"}
-    assert [s.key for s in SCN.rows("core") if s.cut == "clip"] == ["overview"]
+    assert [s.key for s in SCN.rows("core") if s.cut == "clip"] == ["overview", "laws"]   # laws: the legal digest (law.digest)
     assert set(FX.PIECES) <= set(FT.REG) | {"core"}
     inst = generator.generate(S.load("society"), 5)
     assert set(FX.facts(inst)) == set(FX.OWNER)

@@ -450,6 +450,13 @@ Review 09 is the normative design. Summary of the target:
 - **Gas v2**: compile-time instrumentation and size-charged builtins (closes the unmetered-builtin DoS, review 09 F2).
 - **Previewer**: `preview(k, code, requester=...)` and the `preview_law` pre-action: static facts, constitutional review, procedure
   outcome, scenarios, rounds, trace and gas, over the legal system visible to the requester.
+- **Evidence** (review 10 #10, `evidence.py`): `event(eid)` and `history(type, agent, since, limit<=50)` read redacted copies of the
+  events the law's account may know (the public record, plus a hidden polity's or an association's own members-only record; never
+  monitor-only, private or channel events), metered by size through the call's gas meter.
+- **Legal digest** (review 10 §7, `digest.py`, spec `law.digest`, default off): per agent, the laws that bind it grouped by the
+  primitive family they hook, from static facts (hooks, verdict shapes, calls, rank, class, exports, overlaps), in the core prompt
+  (a clip row, `law.digest_tokens`) and the `legal_position` look-up; visible laws only. Hooks are indexed by name
+  (`dispatch.hooked`): a primitive no law in force hooks skips the binding and ordering work.
 - **Classes and levels**: class derived transitively (calls, imports, hooks); rank orthogonal; levels are power-table presets.
 - **Bug F1**: an ordinary law can repeal the constitution today; fixed in P1.4.
 
@@ -637,7 +644,8 @@ Signatures are Python; "→ G*" marks interfaces owned by an in-progress groundw
   `public: dict`, `flags: list[{round, kind, cascade}]`, `imports: list[{ref, mode, sha}]`, `account: str`.
 - **I-12** New law API names: `use(ref)`, `public_of(lid)`, `law_id()`, `treasury()`, `root_kind(chain)`, `caused_by_agent(chain)`,
   `caused_by_law(chain, lid)`, `chain_laws(chain)`, `propose_law(code, intent=None)`, `propose_amendment(target, code, reason)`,
-  `set_conflict_rule(rule)`, `set_procedure(law_class, fn, rank=None)` (extended); each with a `LawFn` row and a lawdocs entry.
+  `set_conflict_rule(rule)`, `set_procedure(law_class, fn, rank=None)` (extended), `event(eid)`, `history(type, agent, since,
+  limit)`; each with a `LawFn` row and a lawdocs entry.
 - **I-13** `lawapi.LawFn` fields as §3.6 (→ G2 for `cls`, `module`).
 
 **Accounts, powers, contracts**

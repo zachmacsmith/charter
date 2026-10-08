@@ -293,6 +293,12 @@ R("preview_law", "try a draft law or contract against the legal system you can s
       'rights granted or revoked; whether the constitution\'s reviews would block it and what the procedure would do; the draft in force '
       'against your own transfer, harvest, post, message and an empty proposal ("scenario": "none", one of those names, or your own '
       '{"action": "...", "args": {...}}); each of the next 3 round ends; and the gas its laws use (at most 3 previews per round)')
+R("legal_position", "the laws that bind you, by what they act on", "INFORMATION", core=True, pre=True,
+  needs=("mod:context", "law:v2", "law:digest"), args='{}',
+  handler="digest:act_legal_position", module="context", category="political", legacy=False,
+  doc='legal_position {}: a digest of every law in force that binds you, grouped by what it acts on (transfers, harvests, speech, '
+      'rights, lawmaking, membership, ...): who taxes, blocks or reacts to what, with ranks, overlaps and shared definitions; '
+      'read_law gives a law\'s code')
 R("read_file", "read a file", "INFORMATION", core=True, pre=True, needs=("mod:context",), args='{"name": "..."}',
   handler="actions:_read_file", module="context", category="productive", legacy=False,
   doc='read_file {"name": "..."}: read one of your files')
@@ -618,7 +624,7 @@ ACTIONS_ORDER = (
     "send_subscriber_list", "revoke_licence", "grant_licence", "annotate", "subscribe", "unsubscribe", "buy_placement", "leak",
     "answer_poll", "buy_licence", "set_memory_price", "library_permit", "library_remove", "buy_memory", "library_deposit",
     "library_read", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance", "propose_contract_change",
-    "appeal")
+    "appeal", "legal_position")
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -632,7 +638,7 @@ DOC_ORDER = (
     "write_edition", "buy_placement", "run_placement", "leak", "poll", "answer_poll", "send_subscriber_list", "revoke_licence",
     "grant_licence", "buy_licence", "annotate", "set_memory_price", "buy_memory", "library_deposit", "library_read",
     "library_permit", "library_remove", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance",
-    "propose_contract_change", "appeal")
+    "propose_contract_change", "appeal", "legal_position")
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 
