@@ -24,6 +24,7 @@ publishes nothing until the run completes).
 from __future__ import annotations
 
 import contextlib
+import functools
 import hashlib
 import json
 import re
@@ -36,7 +37,8 @@ ROOT = Path(__file__).parent / "archive"
 AGNET = Path(__file__).resolve().parents[1]
 
 
-def _slug(name):
+@functools.lru_cache(maxsize=4096)
+def _slug(name):                                                       # pure; docs() slugs every library law per call
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
@@ -171,11 +173,21 @@ def present(spec: dict, seed) -> set:
     return keep | set(_random.Random(f"{seed}|archive_sample").sample(rest, max(0, min(n, len(rest)))))
 
 
+@functools.lru_cache(maxsize=16)
+def _index(found: frozenset, root: Path) -> tuple:
+    """The documents under root: each .md file found, in sorted path order, with its id (path without .md) and whether it sits in
+    codex/. A pure function of the files found, memoised because docs() runs on every archive read and sorting and relativising
+    the same Path objects dominated it (the directory is still listed on every call)."""
+    out = []
+    for p in sorted(found):
+        r = p.relative_to(root)
+        out.append((p, str(r.with_suffix("")), str(r).startswith("codex/")))
+    return tuple(out)
+
+
 def docs(shared: Path | None = None, gated: bool = False, spec: dict | None = None) -> dict:
     skip = set() if gated else gated_docs()                            # media2: gated documents only when asked for
-    out = {str(p.relative_to(ROOT).with_suffix("")): p for p in sorted(ROOT.rglob("*.md"))
-           if not str(p.relative_to(ROOT)).startswith("codex/") and str(p.relative_to(ROOT).with_suffix("")) not in skip
-           and applies(str(p.relative_to(ROOT).with_suffix("")), spec)}
+    out = {r: p for p, r, codex in _index(frozenset(ROOT.rglob("*.md")), ROOT) if not codex and r not in skip and applies(r, spec)}
     from charter import library as LB
     for name in LB.LIB:
         if "library/" + _slug(name) not in skip:

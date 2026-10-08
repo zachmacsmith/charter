@@ -8,73 +8,27 @@ scoring is not slower. Everything is offline (ScriptedPolicy, shared archive off
 """
 from __future__ import annotations
 
-import copy
 import json
 import time
 
 import pytest
 
-import test_charter_golden as golden                     # the golden case builders (tests/ is on sys.path under pytest)
-from charter import agents as AG
+import charter_golden_cases as golden                    # the golden cases (tests/ is on sys.path under pytest)
 from charter import events as EV
-from charter import generator, runner, scorer
+from charter import scorer
 from charter import goals as G
 from charter import history as HI
-from charter import spec as S
 from charter.history import History
 
 
-# ------------------------------------------------------------------ the golden runs, built once (with their in-memory parts)
-class _JsonSpy:
-    """Stands in for runner's `json` module: records the last ground-truth dict the runner serialises (still in memory)."""
-
-    def __init__(self, store):
-        self._store = store
-
-    def dumps(self, obj, *a, **kw):
-        if isinstance(obj, dict) and "rounds_played" in obj and "goals" in obj:
-            self._store["truth"] = copy.deepcopy(obj)
-        return json.dumps(obj, *a, **kw)
-
-    def __getattr__(self, name):
-        return getattr(json, name)
-
-
-def _build(name, tmp):
-    if name in golden.V2_CASES:                          # their start laws are test fixtures (tests/charter_law_v2_laws.py)
-        with golden.V2.registered():
-            return _build_(name, tmp)
-    return _build_(name, tmp)
-
-
-def _build_(name, tmp):
-    preset, seed, sets = golden.CASES[name]
-    sp = S.apply_overrides(S.load(preset), sets + ["shared_archive.enabled=false"])
-    inst = generator.generate(sp, seed)
-    inst["run_id"] = f"golden_{name}"
-    mem = {}
-    real_begin, real_truth = runner.PV.begin, runner._truth
-
-    def begin(out, inst_, *a, **kw):                     # the instance as it is written to instance.json (before the run edits it)
-        mem["instance"] = json.loads(json.dumps(inst_, default=str))
-        return real_begin(out, inst_, *a, **kw)
-
-    def truth(out, inst_, k, *a, **kw):
-        mem["snapshots"], mem["events"] = copy.deepcopy(k.snapshots), copy.deepcopy(k.events)
-        return real_truth(out, inst_, k, *a, **kw)
-
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(runner.PV, "begin", begin)
-        mp.setattr(runner, "_truth", truth)
-        mp.setattr(runner, "json", _JsonSpy(mem))
-        out = runner.run(inst, AG.ScriptedPolicy(seed), tmp / name, log=lambda *a: None)
-    return out, mem
+# ------------------------------------------------------------------ the golden runs (with their in-memory parts)
+pytestmark = pytest.mark.xdist_group("golden_runs")     # the session's golden runs are shared with test_charter_golden.py
 
 
 @pytest.fixture(scope="module")
-def runs(tmp_path_factory):
-    tmp = tmp_path_factory.mktemp("history_golden")
-    return {name: _build(name, tmp) for name in sorted(golden.CASES)}
+def runs(golden_runs):
+    """name -> (run directory, in-memory parts): the session's golden runs (charter_golden_cases.build), each built once."""
+    return golden_runs
 
 
 # ------------------------------------------------------------------ the scorer as it was before History (frozen reference)
@@ -197,7 +151,10 @@ def _outcome(fn, *a):
         return ("error", None)
 
 
-@pytest.mark.parametrize("name", sorted(golden.CASES))
+SLOW_WINDOWS = {"E7_events_3", "E4_observer_hidden_4"}      # every goal on every window of these takes ~10-30 s
+
+
+@pytest.mark.parametrize("name", [pytest.param(n, marks=pytest.mark.slow) if n in SLOW_WINDOWS else n for n in sorted(golden.CASES)])
 def test_native_scorers_equal_legacy_scorers_on_every_window(runs, name, monkeypatch):
     """Every goal's native scorer (goals.HSCORERS) returns exactly what its legacy s_* returns, for every agent, on the whole run,
     every window and every scoring segment's view, with the parameters drawn in the run and a generic set."""

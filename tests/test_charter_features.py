@@ -196,7 +196,7 @@ def test_state_is_owned(name):
 
 
 def test_every_golden_case_is_known():
-    from tests.test_charter_golden import CASES
+    from charter_golden_cases import CASES
     for f in FT.FEATURES:
         assert f.golden in CASES or (f.golden is None and f.name in NO_GOLDEN), f.name
 

@@ -49,6 +49,7 @@ def injected(repo, tmp_path_factory):
     return rep, keep
 
 
+@pytest.mark.slow
 def test_identical_revisions_report_no_divergence(repo):
     rep = D.difftest(repo["c1"], repo["c1"], [PRESET], [SEED], ROUNDS, repo=repo["root"], jobs=2, log=lambda *a: None)
     assert rep["identical"], D.text_report(rep)
@@ -59,6 +60,7 @@ def test_identical_revisions_report_no_divergence(repo):
     assert json.loads(json.dumps(rep, default=str))["identical"]
 
 
+@pytest.mark.slow
 def test_injected_change_is_located(injected):
     rep, keep = injected
     assert not rep["identical"]
@@ -79,6 +81,7 @@ def test_injected_change_is_located(injected):
     assert "data.cause" in txt
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("field", ["cause", "data.cause"])
 def test_ignore_field_hides_an_additive_change(injected, field):
     _, keep = injected

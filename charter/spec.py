@@ -14,6 +14,7 @@ dist_options below are its distribution checks).
 from __future__ import annotations
 
 import copy
+import functools
 import random
 from pathlib import Path
 
@@ -45,12 +46,19 @@ def _find(name: str) -> Path:
     raise FileNotFoundError(f"spec {name!r} not found (looked for {p} and {q})")
 
 
+@functools.lru_cache(maxsize=256)
+def _parse(text: str) -> dict:
+    """yaml.safe_load of a spec file's text, memoised on the text (load deep-copies it): parsing the preset chain with the pure
+    Python YAML loader dominated generating a small world, and the same few presets are loaded over and over."""
+    return yaml.safe_load(text) or {}
+
+
 def load(name_or_path: str, _seen: tuple = ()) -> dict:
     """Load a spec with its `extends` chain resolved (no sampling yet)."""
     path = _find(name_or_path)
     if str(path) in _seen:
         raise ValueError(f"circular extends: {path}")
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = copy.deepcopy(_parse(path.read_text()))
     merged: dict = {}
     for parent in raw.pop("extends", []) or []:
         merged = deep_merge(merged, load(parent, _seen + (str(path),)))

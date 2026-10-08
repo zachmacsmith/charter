@@ -10,6 +10,8 @@ and "outcome:<condition>", so scorers and post-hoc rescoring read History.probe,
 """
 from __future__ import annotations
 
+import functools
+
 from charter import credit as CR
 from charter import lawlang as L
 
@@ -1008,10 +1010,17 @@ def on_enact():
 
 def info(name: str) -> dict:
     """Class and minimum law level of a library law, computed from its code."""
-    tree = L.check(LIB[name]["code"])
-    cls = L.classify(tree)
-    level = "L4" if L.uses_define_action(tree) else {"ordinary": "L1", "structural": "L2", "procedural": "L3"}[cls]
+    cls, level = _code_class(LIB[name]["code"])
     return {**LIB[name], "cls": cls, "level": level}
+
+
+@functools.lru_cache(maxsize=4096)
+def _code_class(code: str) -> tuple[str, str]:
+    """info's class and level: a pure function of the code text (parse, whitelist check, classify), so memoised; manuals and the
+    archive call info thousands of times per run on the same few dozen laws. Errors are not cached (lru_cache re-raises)."""
+    tree = L.check(code)
+    cls = L.classify(tree)
+    return cls, "L4" if L.uses_define_action(tree) else {"ordinary": "L1", "structural": "L2", "procedural": "L3"}[cls]
 
 
 def subset(categories, law_level: str) -> list[dict]:

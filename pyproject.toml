@@ -13,10 +13,17 @@ dependencies = ["pyyaml>=6"]
 
 [project.optional-dependencies]
 api = ["anthropic>=0.70"]          # LLM_BACKEND=api; claude_code needs the `claude` CLI instead
-dev = ["pytest"]
+dev = ["pytest", "pytest-xdist"]        # python -m pytest -n auto (see README, Tests)
 
 [tool.setuptools.packages.find]
 include = ["charter*"]
 
 [tool.setuptools.package-data]
 charter = ["specs/*.yaml", "archive/**/*", "sandbox/*", "docs/*.md", "viewer/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: takes more than ~10 s (full scripted runs, resume/replay round trips); deselect with -m \"not slow\" for the quick loop",
+    "xdist_group(name): pytest-xdist keeps tests of one group on one worker (tests/conftest.py uses loadgroup)",
+]

@@ -158,6 +158,7 @@ class _Stopper:
         return self.inner.act(k, a, system, user, n, final)
 
 
+@pytest.mark.slow
 def test_resume_equals_an_uninterrupted_run_including_causes(runs, tmp_path):
     inst, seed = _inst("E4_fast_4")
     with pytest.raises(runner.RunStopped):

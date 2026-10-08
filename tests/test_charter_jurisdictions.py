@@ -550,6 +550,7 @@ def test_scripted_founder_dry_run(tmp_path, start):
     assert founded["vis"] == [founder]
 
 
+@pytest.mark.slow
 def test_resume_with_jurisdictions_matches_uninterrupted_run(tmp_path):
     _, full = _run(tmp_path, "j0", "full", rounds=5)
 

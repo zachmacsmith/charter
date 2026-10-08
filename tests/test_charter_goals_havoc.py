@@ -190,7 +190,7 @@ def test_havoc_weights_about_8_and_25_percent_and_gated():
 
 # ------------------------------------------------------------------ golden worlds untouched, dry run with havoc goals
 def test_golden_fingerprints_unchanged(tmp_path):
-    import tests.test_charter_golden as GT
+    import test_charter_golden as GT                                       # tests/ is on sys.path (conftest)
     stored = json.loads(GT.GOLDEN.read_text())
     assert GT.fingerprint("E4_fast_4", tmp_path) == stored["E4_fast_4"]
 

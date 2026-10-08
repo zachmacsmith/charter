@@ -467,6 +467,7 @@ class _Stopper:
         return self.inner.act(k, a, system, user, n, final)
 
 
+@pytest.mark.slow
 def test_resumed_life_run_equals_an_uninterrupted_one(tmp_path):
     sp = S.apply_overrides(S.load("life_pilot"), ["rounds=12", "shared_archive.enabled=false", "life.full_scale_rounds=80"])
     full = runner.run(generator.generate(sp, 2), AG.ScriptedPolicy(2), tmp_path / "full", log=lambda *a: None)
@@ -479,6 +480,7 @@ def test_resumed_life_run_equals_an_uninterrupted_one(tmp_path):
     assert ga["life"]["births"] and ga["mortality"]["dead"]
 
 
+@pytest.mark.slow
 def test_dry_run_with_children_scores_lineages(tmp_path):
     sp = S.apply_overrides(S.load("life_pilot"), ["rounds=10", "shared_archive.enabled=false"])
     inst = generator.generate(sp, 2)
