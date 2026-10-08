@@ -68,6 +68,60 @@ def draft(k, lid) -> dict:
                if law.get("amends") else {})}
 
 
+# ---------------------------------------------------------------------- duplicate proposals (law.v2: a signal, never a block)
+_PENDING = ("active", "draft", "ballot", "gated", "veto_window")
+
+
+def _norm_code(code) -> str | None:
+    """A law's code without comments, formatting, title or intent (ast round trip), or None if it does not parse."""
+    import ast
+    try:
+        tree = ast.parse(str(code))
+    except SyntaxError:
+        return None
+    tree.body = [n for n in tree.body if not (isinstance(n, ast.Assign) and len(n.targets) == 1
+                                             and isinstance(n.targets[0], ast.Name) and n.targets[0].id in ("title", "intent"))]
+    return ast.unparse(tree)
+
+
+def similar_laws(k, lid, near=0.95) -> list:
+    """law.v2: active or pending laws (same jurisdiction) whose normalised code is identical or near-identical to lid's:
+    [{"law", "title", "status", "match": identical|near}]. The haiku runs enacted two identical Harvest Quotas in one round."""
+    if not v2(k):
+        return []
+    import difflib
+    law = k.w["laws"][lid]
+    if law.get("amends") or law.get("repeal_target"):
+        return []
+    mine, jur = _norm_code(law["code"]), J.law_jur(k, lid)
+    if not mine:
+        return []
+    out = []
+    for oid, o in k.w["laws"].items():
+        if oid == lid or o.get("status") not in _PENDING or J.law_jur(k, oid) != jur or o.get("amends"):
+            continue
+        theirs = _norm_code(o.get("code"))
+        if not theirs:
+            continue
+        if theirs == mine:
+            match = "identical"
+        elif difflib.SequenceMatcher(None, mine, theirs, autojunk=False).ratio() >= near:
+            match = "near"
+        else:
+            continue
+        out.append({"law": oid, "title": o.get("title"), "status": o.get("status"), "match": match})
+    return out
+
+
+def similar_note(k, lid) -> str:
+    """The proposal result's note on similar_laws (empty when none)."""
+    sims = similar_laws(k, lid)
+    if not sims:
+        return ""
+    return (" Note: " + "; ".join(f"{s['law']} '{s['title']}' ({s['status']}) has {'the same' if s['match'] == 'identical' else 'nearly the same'} code"
+                                  for s in sims[:3]) + " (not blocked; if both are enacted, both run).")
+
+
 # ---------------------------------------------------------------------- the changes
 def do_propose(k, jurisdiction, draft, actor=None, preview=None) -> dict:
     """A checked draft goes to the procedure: the proposal is published with its dry-run preview (inline, or monitor-only when
@@ -85,6 +139,9 @@ def do_propose(k, jurisdiction, draft, actor=None, preview=None) -> dict:
     if str(law["author"]).startswith("law:"):                          # P3.4: proposed by a law; it has no dry run
         extra["by_law"] = law["author"][4:]
         preview = preview if preview is not None else []
+    sims = similar_laws(k, lid)                                        # law.v2 only: a duplicate is noted, not refused
+    if sims:
+        extra["similar_to"] = sims
     k.log("proposal", actor, {"law": lid, "title": law["title"], "intent": law["intent"], "class": law["cls"], "code": law["code"],
                               **({"jurisdiction": jurisdiction} if jurisdiction is not None else {}), **extra,
                               **({"preview": preview[:40]} if shown else {})}, vis="public")
