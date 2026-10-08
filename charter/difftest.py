@@ -20,7 +20,8 @@ Normalisation, applied to both sides before comparing:
   --rename-type OLD=NEW rename event types OLD -> NEW on the base side
   --float-tol X         numbers within X compare equal (default 0: exact)
   --ignore-code-acts    the default code (charter/code, spec code.enabled): drop the monitor-only `code_act` records and renumber
-                        the remaining events' ids (every string equal to an old id, in every file), drop the Acts' law records
+                        the remaining events' ids (whole strings and ids inside text, in every file but instance.json, which is
+                        written before any event), drop the Acts' law records
                         (ground_truth laws A1, A2, ...) and the instance's `code` record and spec `code` keys. Use it with
                         `--head-set code.enabled=true` (an override for the head side only: an older base rejects the key) to check
                         that `code: today` reproduces the code-off world.
@@ -288,9 +289,13 @@ CODE_EVENT = "code_act"
 ACT_ID = re.compile(r"^A[1-9]\d*$")
 
 
+EVENT_ID = re.compile(r"\be[1-9]\d*\b")
+
+
 def _remap(x, m: dict):
+    """Old event ids -> new ones in x: whole strings, and ids inside text (an action result's "Posted (e5)")."""
     if isinstance(x, str):
-        return m.get(x, x)
+        return m[x] if x in m else EVENT_ID.sub(lambda g: m.get(g.group(0), g.group(0)), x) if "e" in x else x
     if isinstance(x, dict):
         return {m.get(k, k) if isinstance(k, str) else k: _remap(v, m) for k, v in x.items()}
     if isinstance(x, list):
@@ -307,7 +312,8 @@ def strip_code_acts(files: dict) -> dict:
         m = {e["id"]: f"e{i}" for i, e in enumerate(kept, 1) if isinstance(e, dict) and e.get("id") not in (None, f"e{i}")}
         files["events.jsonl"] = kept
         if m:
-            files = {n: (_remap(v, m) if v is not None else None) for n, v in files.items()}
+            files = {n: (_remap(v, m) if v is not None and n != "instance.json" else v) for n, v in files.items()}   # the
+            # instance is written before any event (its texts' "e12" are examples, not ids)
     inst = files.get("instance.json")
     if isinstance(inst, dict):
         inst = {k: v for k, v in inst.items() if k != "code"}
