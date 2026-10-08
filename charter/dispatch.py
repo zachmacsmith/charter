@@ -1929,6 +1929,10 @@ def _scrub(x, hide):
 def hook_payload(k, P, payload, viewer, hide=()) -> dict:
     """A deep copy of the payload as a law may see it: the row's redact function, then hidden agents as None (anywhere in it)."""
     p = _copy.deepcopy(payload)
+    if P.name == "dm" and (not p.get("readable") or p.get("encrypted")):   # as the legacy on_dm: a law reads a DM's text only where
+        p["text"] = None                                                 # the world lets laws read DMs and it is not encrypted (V18)
+    if P.name == "post" and p.get("kind") == "channel_post":           # a private channel's text: never to laws (legacy on_post never
+        p["text"] = None                                                 # saw channel posts; V18). Who posted where stays visible.
     if P.redact and viewer is not None:
         mod, _, fn = P.redact.partition(":")
         p = getattr(importlib.import_module(f"charter.{mod}"), fn)(k, p, viewer)
