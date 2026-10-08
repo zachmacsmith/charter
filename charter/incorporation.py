@@ -111,14 +111,18 @@ def key_parent(k, value):
 
 
 PAYLOAD_KEYS = ("contract", "jurisdiction", "polity")
+OWN_KEYS = ("currency", "right")                                     # "<cid>.<name>": a company's own currency or right
 
 
 def payload_parents(k, payload) -> set:
-    """The parents of the incorporated associations a payload names as its contract, jurisdiction or polity (dispatch.hooks): their
-    laws see the change whoever its subject is."""
+    """The parents of the incorporated associations a payload names as its contract, jurisdiction or polity, or whose own currency
+    or right it names (shares issued, an office granted) (dispatch.hooks): their laws see the change whoever its subject is."""
     out = set()
-    for x in PAYLOAD_KEYS:
-        par = parent_of(k, payload.get(x))
+    for x in PAYLOAD_KEYS + OWN_KEYS:
+        v = payload.get(x)
+        if x in OWN_KEYS:
+            v = v.split(".", 1)[0] if isinstance(v, str) and "." in v else None
+        par = parent_of(k, v)
         if par is not None:
             out.add(par)
     return out

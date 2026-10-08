@@ -84,6 +84,13 @@ P4.5 (docs/ARCHITECTURE.md §7.2; review 10 §3.6, §3.9, §3.11, §6 #11 and #1
     (a contract law's move and mint may pay "assoc:<cid>"; wind-up pays shares held by an association to its treasury). Holding
     rights or membership in another association is not here: rights live on agent records (Kernel.has) and members are agent ids
     everywhere (ballots, hooks, escrow keys, exit); it needs a member kind on association records and an account-level has().
+
+W8e (D-28, D-27 first slice; charter/incorporation.py has the design): create_contract's `under` incorporates a contract under a
+polity (rec["parent"], absent otherwise). The parent's laws see and outrank the company (dispatch.hooks), and its company rules
+replace world defaults at the seams here: enforcement(k, cid) (the dial per parent: courts), _need_escrow, breaches()'s
+`actionable`, breach_clause (the parent's court), agency to offices (recognize_offices), _decide's procedure (governance forms),
+_dissolve's wind-up order, max_laws / max_own (limits), and Kernel.price (share valuation). An unincorporated contract reads
+exactly today's values, except that its own code may declare the clauses share_valuation (<= NAV) and wind_up.
 """
 from __future__ import annotations
 
@@ -525,7 +532,7 @@ def _check_incorporation(k, aid, parent, procedure) -> None:
     registration fee (the founder must hold it). LawError otherwise."""
     rules = INC.rules(k, parent)
     allowed = rules.get("procedures")
-    if allowed is not None and INC.form_of(procedure, PROCEDURES) not in allowed:
+    if allowed is not None and procedure is not None and INC.form_of(procedure, PROCEDURES) not in allowed:
         raise L.LawError(f"{parent}'s company law allows companies governed by {', '.join(allowed)} only (this one: {procedure})")
     for item, q in sorted((rules.get("registration_fee") or {}).items()):
         if not AC.can_pay(k, aid, item, q):
@@ -564,7 +571,7 @@ def act_create_contract(k, aid, name=None, code=None, template=None, params=None
     for x in codes:
         check_code(x)
     if parent is not None:
-        _check_incorporation(k, aid, parent, procedure)
+        _check_incorporation(k, aid, parent, procedure if tname else None)   # own code: its on_enact may set the form
     name = str(name or (tname or "contract").title()).strip()[:60] or "Contract"
     cid = f"A{k.w['contracts']['seq'] + 1}"
     out = k.apply("create_contract", agent=aid, contract=cid, name=name, template=tname, code=list(codes),

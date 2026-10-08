@@ -240,11 +240,36 @@ CONTRACT_CALLS = {
     "swap": "swap('{a}', '{b}', {{'timber': 1}}, {{'grain': 1}})",
     "open_fund": "move(treasury(), open_fund('works'), 'timber', 1)",
 }
-CONTRACT_WRITERS = sorted(n for n in CONTRACT_ONLY if LA.LAWFNS[n].primitive)
+CONTRACT_WRITERS = sorted(n for n in CONTRACT_ONLY if LA.LAWFNS[n].primitive and LA.LAWFNS[n].contract != "deny")
+# W8e: contracts-module writers only a polity's law may call (company law), with their polity variant below
+POLITY_CONTRACT_CALLS = {"company_rule": "company_rule('enforcement', 'escrow_court')"}
 
 
 def test_every_contract_writer_has_a_call():
     assert set(CONTRACT_CALLS) == set(CONTRACT_WRITERS)
+    assert set(POLITY_CONTRACT_CALLS) == {n for n in CONTRACT_ONLY if LA.LAWFNS[n].primitive and LA.LAWFNS[n].contract == "deny"}
+
+
+@pytest.mark.parametrize("name", sorted(POLITY_CONTRACT_CALLS))
+def test_a_killed_polity_contract_writer_leaves_no_trace(name):
+    """W8e: a polity law's company_rule, in a hook that then dies, leaves nothing but the abort record and the flag."""
+    def make(dies):
+        k = world(sets=("contracts.enabled=true", "contracts.scripted=false"))
+        src = law(f"Writer {name}", "def after_post(p, chain):\n    " + POLITY_CONTRACT_CALLS[name] + "\n    state['done'] = 1\n"
+                  + (LOOP if dies else ""))
+        return k, enact(k, src)
+    k, lid = make(False)
+    before = image(k)
+    out, ab = run_hook(k, lid)
+    assert ab is None and k.w["laws"][lid]["state"].get("done") == 1 and image(k)["w"] != before["w"]
+    k, lid = make(True)
+    before = image(k)
+    out, ab = run_hook(k, lid)
+    assert out is D.DEAD and ab is not None and ab["law"] == lid
+    after = image(k)
+    after["w"]["laws"][lid].pop("flags")
+    after["events"] = after["events"][:len(before["events"])]
+    assert after == before, name
 
 
 def contract_world(name, dies):

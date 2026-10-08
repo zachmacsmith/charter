@@ -659,7 +659,7 @@ _ROWS = [
             "neither (a before_swap block stops both); refused under contracts.enforcement word"),
     # W8e (D-28): company law. A polity's law sets the rules its incorporated companies are bound by and benefit from
     # (charter/incorporation.py RULES); a legal act of the polity, hookable like set_court_rule.
-    P("set_company_rule", "contracts", "legal", ("jurisdiction", "key", "value"), "dispatch.changes.associations:do_set_company_rule",
+    P("set_company_rule", "contracts", "rule", ("jurisdiction", "key", "value"), "dispatch.changes.associations:do_set_company_rule",
       routed=True, subject="jurisdiction", parties=("jurisdiction",), legal=True, event="company_rule", causes=("law",),
       reads=("company_rules", "companies"), compel_vis="public",
       sites=("dispatch.changes.associations:do_set_company_rule", "incorporation:change_set_rule", "contracts:law_api.company_rule"),
