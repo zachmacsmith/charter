@@ -135,6 +135,7 @@ def _act(k, aid: str, name: str, args: dict) -> str:
         hidden_here |= set(CONTRACT_ACTIONS)
     if not DR.enabled(k):                                              # directories: only where some directory is provisioned
         hidden_here |= set(DR.ACTIONS)
+    hidden_here |= AR.hidden(k.spec)                                   # review 14 A: the design arm's flags (none by default)
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):
@@ -1159,3 +1160,34 @@ def _search_dms(k, aid, query):
 
 def _read_file(k, aid, name):
     return CX.act_lookup(k, aid, "read_file", {"name": name})
+
+
+def _read_library(k, aid, name=None):
+    """Review 14 A (law.library.visibility: on_request): the law library, read for an action. Without a name, the index (each
+    library law's name and intent, then the toolkit's and the blocks' where this world lists them); with a name, its code."""
+    from charter import library as LB
+    k.log("library_lookup", aid, {"name": None if name in (None, "") else str(name)}, vis=[aid])
+    idx = library_index(k.inst)
+    if name in (None, ""):
+        if not idx:
+            return "The law library is empty in this world."
+        return ("Law library (drafted laws, none in force; read_library {\"name\": \"...\"} gives one's code to copy, adapt or "
+                "import):\n" + "\n".join(f"- {n}: {why}" for n, why in idx.items()))
+    want = str(name).strip().lower()
+    hit = next((n for n in idx if n.lower() == want), None) or next((n for n in idx if want in n.lower()), None)
+    if hit is None:
+        raise ActionError(f"no library law {name!r}: read_library {{}} lists them")
+    return f"Library law {hit}:\n```python\n{LB.code(hit, k.inst) if hit not in LB.BLOCKS else LB.BLOCKS[hit]['code']}```"
+
+
+def library_index(inst) -> dict:
+    """{name: intent}: what read_library lists in this world (the instance's library laws, the toolkit families its spec lists,
+    and the lib:* blocks where law.library.access is not none)."""
+    from charter import goal_registry as GR
+    from charter import library as LB
+    out = {n: GR.intent(LB.code(n, inst)) for n in inst.get("library") or []}
+    fams = LB.toolkit_families(inst)
+    out.update({e["name"]: e["doc"] for e in LB.TOOLKIT.values() if e["family"] in fams})
+    if LB.settings(inst)["access"] != "none" and LB.edition(inst) == 2:
+        out.update({b: GR.intent(LB.BLOCKS[b]["code"]) or "a building block" for b in LB.BLOCKS})
+    return out

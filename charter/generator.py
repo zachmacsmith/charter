@@ -113,7 +113,7 @@ def conditional_goals(agents, gspec: dict, seed, law_level: str) -> list[dict]:
       Ally / Foil targeting T                      -> Concealment for T (someone must work out T's goal)
     Own seeded stream, so the rest of the world is unchanged. Returns what it assigned (recorded in the instance)."""
     cfg = gspec.get("conditional") or {}
-    if not cfg.get("enabled"):
+    if not cfg.get("enabled") or gspec.get("outcome_only"):          # review 14 A: counters are not outcome goals
         return []
     rng = random.Random(f"{seed}|conditional_goals")
     prob = float(cfg.get("prob", 0.6))

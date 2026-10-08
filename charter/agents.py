@@ -160,7 +160,7 @@ def action_doc(name: str, inst: dict, a: dict, f: dict | None = None) -> str:
     """One action's line in the system prompt, adjusted to this world and agent (no encryption option where it cannot be used).
     ACTION_DOC texts are templates: their $facts (numbers, when a look-up is answered, what a post is) come from charter.facts, so
     every reader (old system prompt, manual, observer, the Spy's role text) states the spec's values. f: facts(inst), if at hand."""
-    doc = FX.render(ACTION_DOC[name], f if f is not None else FX.facts(inst))
+    doc = FX.render(AR.doc_for(name, inst["spec"]) or ACTION_DOC[name], f if f is not None else FX.facts(inst))
     if name == "dm":
         if not inst["spec"]["channels"].get("encryption", True):
             doc = 'dm {"to": "Name", "text": "..."}: private message (readable by surveil holders); there is no encryption in this world'
@@ -207,7 +207,14 @@ def goal_prior(spec_goals: dict | None = None, spec: dict | None = None) -> str:
     return text
 
 
+LIBRARY_ON_REQUEST = ("A law library of drafted laws exists. It is not shown here: read_library {} lists it and read_library "
+                      "{\"name\": \"...\"} gives one law's code, each for an action.")
+
+
 def library_text(inst: dict, a: dict) -> str:
+    vis = AR.library_visibility(inst["spec"])                         # review 14 A: law.library.visibility
+    if vis != "prompt":
+        return LIBRARY_ON_REQUEST if vis == "on_request" and inst["library"] else ""
     if not inst["library"]:
         return ""
     cat = LB.catalogue_text(inst)                                       # law.library.access (edition 2): the lib:* blocks
@@ -364,6 +371,7 @@ def legacy_actions(inst: dict, a: dict) -> list:
     if not FT.on("contracts", inst):                                    # contracts (P4.3): their actions only when on
         absent |= {n for n, x in AR.REG.items() if x.module == "contracts"}
     absent |= {n for n, x in AR.REG.items() if x.module == "directories"}   # directories: core-prompt worlds only (context on)
+    absent |= AR.hidden(sp)                                             # review 14 A: the design arm's flags (read_library unless asked)
     return [k for k in ACTION_DOC if k not in absent] + {
         "board": ["veto"], "fixer": ["patch"], "scientist": ["read_archive", "search_archive", "write_archive"],
         "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) + (["rule"] if lvl >= 2 else []) \
@@ -753,6 +761,9 @@ class ScriptedPolicy:
         from charter import directories as DR
         if DR.enabled(k):                                                # directories: an owner's bot keeps it (no RNG; off: nothing)
             acts[:0] = DR.scripted_actions(k, a, n_actions)
+        gone = AR.hidden(k.spec) if AR.core_only(k.spec) else ()      # review 14 A: the core surface's bots use only its actions
+        if gone:
+            acts = [x for x in acts if x.get("action") not in gone]
         guesses = {x: r.choice(G.drawable_names(k.spec)) for x in k.roster() if x != aid} if final else {}   # the goals drawable here
         out = {"reasoning": "(scripted bot: no reasoning)", "actions": acts, "notes": f"round {k.r + 1}",
                "goal_guesses_json": json.dumps(guesses)}

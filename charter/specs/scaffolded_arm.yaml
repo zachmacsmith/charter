@@ -1,0 +1,9 @@
+# Review 14 package A, the scaffolded arm: today's surface (template names, the library catalogue and toolkit in the prompt,
+# the full goal catalogue plus institution goals, every action, the preset classes). Compare with design_arm.yaml: the two
+# differ only in the design-arm flags and the classes.
+extends: [arms/base]
+agents: {worker: 14, scientist: 4, legislator: 8, media: 0, board: 3, fixer: 1}
+contracts: {offer_templates: true}         # the design-arm flags at today's values (the defaults), so the two files line up
+law: {library: {visibility: prompt}}
+goals: {outcome_only: false}
+actions: {core_only: false}

@@ -148,7 +148,7 @@ class View:
     @cached_property
     def layout(self) -> tuple:
         from charter import context as CX
-        return CX.action_layout(self.allowed, list(self.rights))
+        return CX.action_layout(self.allowed, list(self.rights), self.spec)
 
     @cached_property
     def roles(self) -> list:

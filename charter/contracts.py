@@ -563,6 +563,12 @@ def _check_incorporation(k, aid, parent, procedure) -> None:
                              f"{k.bal(aid, item):g} {item})")
 
 
+def offered(spec) -> bool:
+    """Whether agents are offered the templates by name (contracts.templates and, review 14 A, contracts.offer_templates)."""
+    from charter import action_registry as AR
+    return AR.templates_offered(spec)
+
+
 # ---------------------------------------------------------------------- actions (action_registry rows, module "contracts")
 def act_create_contract(k, aid, name=None, code=None, template=None, params=None, admission=None, under=None):
     """W8e: under, the polity the contract is incorporated under (its company rules apply at founding: a governance form, a
@@ -575,8 +581,10 @@ def act_create_contract(k, aid, name=None, code=None, template=None, params=None
     tname = None
     if template:
         tname = str(template).lower().strip()
-        if not c["templates"] or tname not in TEMPLATES:
-            raise L.LawError(f"no template {template!r}" + (f" (templates: {', '.join(TEMPLATES)})" if c["templates"] else ""))
+        if not offered(k.spec):                                         # review 14 A: code only; no template is named
+            raise L.LawError("create_contract takes the contract's own law code (\"code\"), not a template")
+        if tname not in TEMPLATES:
+            raise L.LawError(f"no template {template!r} (templates: {', '.join(TEMPLATES)})")
         if params is not None and not isinstance(params, dict):
             raise L.LawError("params must be an object {NAME: value}")
         t = TEMPLATES[tname]
@@ -670,6 +678,8 @@ def act_propose_contract_change(k, aid, contract, code=None, replaces=None, temp
     if aid not in rec["members"]:
         raise L.LawError(f"only members of {cid} propose changes to it")
     if template:
+        if not offered(k.spec):                                         # review 14 A: code only; no template is named
+            raise L.LawError("propose_contract_change takes the new law code (\"code\"), not a template")
         t = TEMPLATES.get(str(template).lower())
         if t is None:
             raise L.LawError(f"no template {template!r} (templates: {', '.join(TEMPLATES)})")
@@ -2109,7 +2119,7 @@ def rules_text(inst) -> str:
     if not FT.on("contracts", inst):
         return ""
     t = "; ".join(f"{n} ({x['doc']}; params {', '.join(f'{p}={v!r}' for p, v in constants(x['code']).items())})"
-                  for n, x in TEMPLATES.items()) if cfg_of(inst["spec"])["templates"] else ""
+                  for n, x in TEMPLATES.items()) if offered(inst["spec"]) else ""
     return ("Contracts: anyone can found a contract (create_contract), an association with its own treasury and code that binds "
             "only the agents who join it (join_contract); you may belong to many. Its code is law code that runs at once: it may tax "
             "or block what its members do (their harvests, transfers, posts), pay anyone out of its treasury, and take from a member "
@@ -2169,13 +2179,20 @@ def scripted_actions(k, a, n_actions) -> list:
     plan = {0: ("club", {"ITEM": "timber", "DUES": 1, "PAYOUT_EVERY": 2}), 1: ("cartel", {"ITEM": "timber", "QUOTA": 2,
             "BOND_ITEM": "timber", "BOND": 1, "PENALTY": 1}), 2: ("crowdfund", {"ITEM": "timber", "TARGET": 3, "DEADLINE": 4}),
             3: ("company", {"CUT": 0.25, "DIVIDEND_EVERY": 2})}
+    own = not offered(k.spec)                                          # review 14 A: the design arm's bots write (copied) code
     if r == i and i in plan:
-        out.append(act("create_contract", name=f"{aid}'s {plan[i][0]}", template=plan[i][0], params=plan[i][1]))
+        out.append(act("create_contract", name=f"{aid}'s {plan[i][0]}", template=plan[i][0], params=plan[i][1]) if not own else
+                   act("create_contract", name=f"{aid}'s {plan[i][0]}", code=instantiate(TEMPLATES[plan[i][0]]["code"], plan[i][1])))
+    if own and r == 2 and i == 6:                                       # and one contract of their own design
+        out.append(act("create_contract", name=f"{aid}'s pact", code=SCRIPTED_OWN_CODE))
     held = sorted(it for it, q in k.w["agents"][aid]["holdings"].items() if q >= 1)
     for cid, rec in sorted(recs(k).items()):
         if rec["status"] != "active":
             continue
         mine = aid in rec["members"]
+        if own and rec["template"] is None:                             # review 14 A: code-only bots: the plan behind the name
+            kind = next((t for t, _ in plan.values() if rec["name"].endswith("'s " + t)), None)
+            rec = {**rec, "template": kind, "params": next((p for t, p in plan.values() if t == kind), {})}
         if not mine and r > rec["founded_round"] and rng.random() < 0.35:
             out.append(act("join_contract", contract=cid))
         elif mine:
@@ -2184,10 +2201,14 @@ def scripted_actions(k, a, n_actions) -> list:
                 out.append(act("set_allowance", contract=cid, item=item, qty=1))
             if item and item in held and rec["template"] in ("crowdfund", "cartel") and rng.random() < 0.5:
                 out.append(act("deposit_escrow", contract=cid, item=item, qty=1))
-            if rec["template"] == "club" and r == 3 and aid == rec["founder"]:
+            if rec["template"] == "club" and r == 3 and aid == rec["founder"] and not own:
                 p = dict(rec["params"], DUES=2)
                 out.append(act("propose_contract_change", contract=cid, template="club", params=p, replaces=rec["laws"][0]
                                if rec["laws"] else None))
+            if own and rec["template"] == "club" and r == 3 and aid == rec["founder"] and rec["laws"]:
+                p = dict(rec["params"], DUES=2)                         # the design arm's founder rewrites the dues in code
+                out.append(act("propose_contract_change", contract=cid, code=instantiate(TEMPLATES["club"]["code"], p),
+                               replaces=rec["laws"][0]))
             if aid != rec["founder"] and rng.random() < 0.08:
                 out.append(act("leave_contract", contract=cid))
         for b in k.w["ballots"].values():
@@ -2202,3 +2223,21 @@ def scripted_actions(k, a, n_actions) -> list:
         if aid in _grantee_agents(k, g) and _auth_live(k, g) and _auth_left(k, g) >= 1 and rng.random() < 0.5:
             out.append(act("act_for", auth=g["id"], to=citizens[0] if g["grantor"] != citizens[0] else aid, qty=1))
     return out[:max(1, n_actions)]
+
+
+# Review 14 A: the scripted design-arm bots' own contract (not a template: tests/test_charter_design_arm.py, charter/novelty.py)
+SCRIPTED_OWN_CODE = '''
+title = "Mutual Watch"
+intent = "Members who were robbed or attacked are compensated from a pot that every member feeds with one stone a round."
+
+def on_round_start(r):
+    for m in members():
+        pull(m, "stone", 1)
+
+def on_round_end(r):
+    hurt = [m for m in members() if holdings_value(m) < 5]
+    pot = reserve().get("stone", 0)
+    if hurt and pot > 0:
+        for m in hurt:
+            move(treasury(), m, "stone", pot / len(hurt))
+'''.strip() + "\n"

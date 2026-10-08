@@ -751,21 +751,22 @@ def strategy_share(spec) -> float:
     return 1.0 if v is True else float(v or 0.0)
 
 
-def action_layout(names, rights) -> tuple:
-    """(edge, [(group, names)], [(kind, phrase, names)]): the registry's layout of these actions (action_registry.layout)."""
+def action_layout(names, rights, spec=None) -> tuple:
+    """(edge, [(group, names)], [(kind, phrase, names)]): the registry's layout of these actions (action_registry.layout); spec: the
+    world's wording of the phrases (review 14 A)."""
     from charter import action_registry as AR
     edge, groups, kinds = AR.layout([AR.REG[n] for n in names if n in AR.REG], rights)
     nm = lambda acts: [x.name for x in acts]
-    return nm(edge), [(g, nm(v)) for g, v in groups.items()], [(kd, AR.NICHE_PHRASE[kd], nm(v)) for kd, v in kinds.items()]
+    return nm(edge), [(g, nm(v)) for g, v in groups.items()], [(kd, AR.phrase(kd, spec), nm(v)) for kd, v in kinds.items()]
 
 
-def action_sections(allowed, rights, overrides=None, pre=()) -> str:
+def action_sections(allowed, rights, overrides=None, pre=(), spec=None) -> str:
     """The core prompt's actions: the edge, then the core groups (pre-actions marked), then one sentence naming the niche ones."""
     from charter import action_registry as AR
     pur = lambda n: (overrides or {}).get(n) or AR.purpose(n)
     tag = lambda n: f"{n} {AR.REG[n].args}" if n in pre and AR.REG[n].args else n
     fmt = lambda ns: "; ".join(f"{tag(n)} ({pur(n)})" + (" (pre-action)" if n in pre else "") for n in ns)
-    edge, groups, kinds = action_layout(allowed, rights)
+    edge, groups, kinds = action_layout(allowed, rights, spec)
     lines = []
     if edge:
         lines.append("YOUR EDGE (only your class or roles can do these: your comparative advantage): " + fmt(edge))
@@ -958,6 +959,7 @@ def _core(v) -> dict:
     allowed = v.allowed
     pre = [n for n in allowed if AR.REG[n].pre and not AR.REG[n].msg] if (fast or free) else []
     over = FX.purpose_overrides(f)                                      # e.g. post under media2.submissions (as in the manual)
+    over.update(AR.purpose_overrides(inst["spec"]))                     # review 14 A: no template names (none by default)
     for nm, n in unread_counts(k, a).items():                           # what the agent has not read yet, shown every turn
         over[nm] = f"{over.get(nm) or AR.purpose(nm)} [{n} unread]"
     pre_all = (pre + [n for n in allowed if AR.REG[n].msg]) if fast else pre   # where the DM step runs, messages are pre-actions too
@@ -968,7 +970,7 @@ def _core(v) -> dict:
                     "read, compute, message and then act in the same round. "
                     + (f"Each uses one of your private-message slots, not an action. " if fast else f"Up to {free} per turn are free. ")
                     + "Put in \"actions\" instead, a look-up uses an action and answers only next turn.")
-    return {"manual": secs, "acts": chr(10) + action_sections(allowed, list(v.rights), over or None, set(pre_all)), "pre_note": pre_note}
+    return {"manual": secs, "acts": chr(10) + action_sections(allowed, list(v.rights), over or None, set(pre_all), inst["spec"]), "pre_note": pre_note}
 
 
 # ------------------------------------------------------------------ the core layer's rows (sections.LAYOUTS["core"] order)

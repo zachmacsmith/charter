@@ -401,6 +401,10 @@ def _ann():
         "contracts.max_founded": dict(types=("int",), range=NONNEG),
         "contracts.max_laws": dict(types=("int",), range=(1, None)),
         "contracts.templates": dict(types=("bool",)),
+        "contracts.offer_templates": dict(types=("bool",)),             # review 14 A: the design arm
+        "law.library.visibility": dict(types=("str",), enum=("prompt", "on_request", "none")),
+        "goals.outcome_only": dict(types=("bool",)),
+        "actions.core_only": dict(types=("bool",)),
         "contracts.scripted": dict(types=("bool",)),
         "contracts.enforcement": dict(types=("str",), enum=("escrow", "escrow_court", "word")),     # P4.4: the enforcement dial
         "contracts.breach_cases": dict(types=("bool",)),                 # W7e (review 11 §4.1): breaches open court cases
@@ -471,6 +475,11 @@ EXTRA = {
     "code.select": None,                                              # None: the regime's `code`, else today
     "law.library.access": "none",
     "law.library.toolkit": "none",
+    # review 14 package A, the design arm (action_registry: CORE_SURFACE, templates_offered, library_visibility; goal_registry.GOAL_CLASS)
+    "contracts.offer_templates": True,
+    "law.library.visibility": "prompt",
+    "goals.outcome_only": False,
+    "actions.core_only": False,
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
@@ -486,6 +495,16 @@ DOCS = {
     "chronicle.records": "at the end of each complete run, append a public digest of it as _records/<run_id>.md (read-only to agents)",
     "directories.stores.*": "one directory: {owner: role:<r>|agent:<id>|right:<r>|class:<c>|institution:<id>, scope: run|namespace, "
                             "namespace, max_bytes, max_file_bytes, records, title, readonly: [prefixes]} (charter/directories.py)",
+    "contracts.offer_templates": "review 14 A: false = create_contract and propose_contract_change take code only and no template name "
+                                 "appears in any prompt, doc, manual section or error (the templates stay for scripted presets)",
+    "law.library.visibility": "review 14 A: prompt (today: the library in the manual) | on_request (one line says it exists; "
+                              "read_library lists it and shows code, each for an action) | none (no library text, no lookup)",
+    "goals.outcome_only": "review 14 A: draw only outcome goals (wealth, rank, security, influence, following, lineage, the commons; "
+                          "goal_registry.GOAL_CLASS): never a goal naming an institution or an action recipe, no institution or "
+                          "counter goals",
+    "actions": "review 14 A: the action surface",
+    "actions.core_only": "review 14 A: only the core surface (action_registry.CORE_SURFACE, ~30 actions) exists; every other action "
+                         "is unknown",
     "endowment_gini": "target Gini of starting holdings (lognormal values tuned to it)",
     "veto_window": "rounds the Board has to veto a structural or procedural law",
     "fixer_per_round": "patches the Fixer may make per round",

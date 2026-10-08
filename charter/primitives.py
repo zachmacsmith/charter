@@ -810,7 +810,7 @@ ACTION_PRIMITIVES = {
     "send_subscriber_list": ("dm",), "revoke_licence": ("licence",), "grant_licence": ("licence",), "set_memory_price": ("set_price",),
     "library_permit": ("library_permit",), "library_remove": ("library_doc",), "subscribe": ("subscribe",), "unsubscribe": ("subscribe",),
     "buy_placement": ("dm", "move"), "leak": ("dm",), "answer_poll": ("dm",), "buy_licence": ("licence", "move"), "anon_post": ("post",),
-    "library_read": LOOKUP, "library_deposit": ("library_doc",),
+    "library_read": LOOKUP, "read_library": LOOKUP, "library_deposit": ("library_doc",),
     # camps
     "survey": ("move",), "invest": ("improve_camp",), "lease": ("offer_lease",), "accept_lease": ("lease", "move"),
     # commons

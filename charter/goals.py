@@ -156,9 +156,11 @@ def weights(spec_goals: dict, cls: str, spec: dict | None = None, modules=None) 
             tot = sum(havoc.values())
             for g, x in havoc.items():
                 w[g] = share * x / tot
-    for g, x in institution_weights(sg, spec).items():               # P6.4: off (empty) unless goals.institution_share > 0
-        w[g] = x
+    for g, x in ({} if sg.get("outcome_only") else institution_weights(sg, spec)).items():   # P6.4: off (empty) unless
+        w[g] = x                                                     # goals.institution_share > 0 (never under outcome_only)
         w["Wealth"] = max(0.0, w["Wealth"] - x)
+    if sg.get("outcome_only"):                                       # review 14 A: only outcome goals (GR.GOAL_CLASS)
+        w = {g: (x if g in GR.OUTCOME_GOALS else 0.0) for g, x in w.items()}
     if sg.get("class_conditioned"):
         tilt = CLASS_TILT.get(cls, {})
         w = {g: x * tilt.get(category_of(g), 1.0) for g, x in w.items()}
