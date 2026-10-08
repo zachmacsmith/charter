@@ -50,7 +50,7 @@ DOCS = {
     "jurisdictions": "lawdocs.E, gated by lawdocs.OPTIONAL: only with jurisdictions on",
     "media2": "lawdocs.E, gated by lawdocs.OPTIONAL: only with media2 on",
     "life": "lawdocs.E, gated by lawdocs.OPTIONAL: only with life on",
-    "requires": "lawdocs.E, gated by lawdocs.REQUIRES: only with life or conflict on (mortality)",
+    "requires": "lawdocs.E, gated by lawdocs.REQUIRES: only where its condition holds (mortality: life or conflict on; linker: law.v2)",
     "leases": "lawdocs.E, gated by lawdocs._gated_off: only with leasing on (camptypes/leases.py)",
     "conflict": "conflict.LAW_DOCS, shown by conflict.prompt_section with conflict on (lawdocs.MODULE_ENTRIES: never in the mapping)",
 }
@@ -78,6 +78,7 @@ class LawFn:
     docs: str = "lawdocs"       # a DOCS key
     level: str | None = None    # a law-level constraint beyond the class
     primitive: str | None = None    # the primitive it causes (its compel face, charter/primitives.py), if it writes (P1.7)
+    v2: bool = False            # exists only in law.v2 worlds (Kernel.api_for adds it; off: the name is unknown, as before)
 
     @property
     def cls(self) -> str:
@@ -271,7 +272,14 @@ LAWFNS = _fns(
         F("publish_commissions", "output", docs="life", primitive="set_birth_rules"),
         F("publish_births", "output", docs="life", primitive="set_birth_rules"),
     ),
+    _module(
+        "linker",                                                       # law.v2 (P3.3): laws building on laws
+        F("use", "meta", scope="none", why="a law reference, binds nobody: what it links runs with the calling law's own API "
+          "(scoped as that law's calls are); a hidden jurisdiction's laws are invisible to other jurisdictions", docs="requires", v2=True),
+        F("public_of", "read", scope="read", docs="requires", v2=True),  # a hidden jurisdiction's laws read as "no such law"
+    ),
 )
+V2_ONLY = {f.name for f in LAWFNS.values() if f.v2}                    # law.v2 names: off, Kernel.api_for has none of them
 # P1.7: the primitive column of the two rows P1.4 edits (kept off their lines to avoid a merge conflict; fold in after the merge)
 LAWFNS.update({n: replace(LAWFNS[n], primitive=p) for n, p in (("repeal", "repeal"), ("set_official_editor", "appoint"))})
 
@@ -314,7 +322,7 @@ HOOKTABLE = _hooks(
     Hook("on_round_start", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run"), None),   # the round_start phase
     Hook("on_round_end", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run"), None),       # the round_end phase
     Hook("on_harvest", "(agent, camp, x, y)", "deduct",
-         ("dispatch.py:legacy_hooks", "camptypes/framework.py:pay_yield", "kernel.py:Kernel.probe"), False, jur="agent:0",
+         ("dispatch.py:legacy_hooks", "kernel.py:Kernel.probe"), False, jur="agent:0",
          note="agents' harvests only (laws cannot harvest); Kernel.probe calls it in previews"),
     Hook("on_transfer", "(src, dst, item, qty)", "block_or_tax", ("dispatch.py:legacy_hooks", "kernel.py:Kernel.probe"), False, jur="agent:0",
          note="agents' send only: move, fine, mint, burn and pay_tribute by law never run it"),
@@ -325,11 +333,11 @@ HOOKTABLE = _hooks(
     Hook("on_ruling", "(case, verdict, accuser, accused)", "ignored", ("dispatch.py:legacy_hooks",), False, jur="clause"),
     Hook("on_dm", "(sender, recipient, text, encrypted)", "ignored", ("dispatch.py:legacy_hooks",), False, jur="agent:0",
          note="only in worlds where laws may read DMs"),
-    Hook("on_admission", "(agent)", "admit_or_refuse", ("jurisdictions.py:act_join",), False, jur="own", module="jurisdictions",
+    Hook("on_admission", "(agent)", "admit_or_refuse", ("dispatch.py:legacy_hooks",), False, jur="own", module="jurisdictions",
          docs="jurisdictions", note="admit() by law bypasses it"),
-    Hook("on_exit", "(agent)", "ignored", ("jurisdictions.py:_set_member",), True, jur="own", module="jurisdictions",
+    Hook("on_exit", "(agent)", "ignored", ("dispatch.py:legacy_hooks",), True, jur="own", module="jurisdictions",
          docs="jurisdictions", note="also when a law's expel() or admit() moves a member, at the end of the round"),
-    Hook("on_birth", "(child, parent)", "jurisdiction_or_none", ("jurisdictions.py:assign_newborn",), False, jur="own",
+    Hook("on_birth", "(child, parent)", "jurisdiction_or_none", ("dispatch.py:legacy_hooks",), False, jur="own",
          module="jurisdictions", docs="jurisdictions"),
     Hook("on_commission", "(parent, maker, order)", "refuse", ("life.py:commission",), False, module="life", docs="life"),
 )

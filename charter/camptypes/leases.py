@@ -120,12 +120,7 @@ def accept(k, aid, lease) -> str:
         k.move(aid, x["holder"], i, q * (1 - tax), why="lease_fee", by=aid)
         if tax > 0:
             k.move(aid, "reserve", i, q * tax, why="lease_tax", by=aid)
-    h, t = k.agent(x["holder"]), k.agent(aid)
-    h["rights"] = [r for r in h["rights"] if r != x["right"]]
-    t["rights"] = sorted(t["rights"] + [x["right"]])
-    x.update({"status": "active", "start": k.r, "end": k.r + x["rounds"] - 1, "tax": tax})
-    k.log("lease_start", aid, {"lease": x["id"], "right": x["right"], "holder": x["holder"], "tenant": aid, "rounds": x["rounds"],
-                               "until_round": x["end"], "fee": x["fee"], "tax": tax}, vis="public")
+    k.apply("lease", lease=x["id"], lessor=x["holder"], lessee=aid, status="active")
     return f"You lease {x['right']} from {x['holder']} until the end of round {x['end'] + 1}."
 
 
@@ -145,14 +140,36 @@ def world_update(k) -> None:
     for x in k.w["leases"]["items"].values():
         if x["status"] != "active" or k.r < x["end"]:
             continue
-        t, h = k.agent(x["tenant"]), k.agent(x["holder"])
-        t["rights"] = [r for r in t["rights"] if r != x["right"]]
-        back = h.get("departed") is None
-        if back and x["right"] not in h["rights"]:
-            h["rights"] = sorted(h["rights"] + [x["right"]])
-        x["status"] = "returned" if back else "lapsed"
-        k.log("lease_end", None, {"lease": x["id"], "right": x["right"], "holder": x["holder"], "tenant": x["tenant"],
-                                  "returned": back}, vis="public")
+        back = k.agent(x["holder"]).get("departed") is None
+        k.apply("lease", lease=x["id"], lessor=x["holder"], lessee=x["tenant"], status="returned" if back else "lapsed")
+
+
+def change_lease(k, lease, lessor, lessee, status) -> dict:
+    """The lease primitive (P2.4d, through dispatch.do_lease): "active" (accept: the right moves from lessor to lessee), "returned"
+    (term over: back to the lessor) or "lapsed" (the lessor has left play). The right moves by revoke_right/grant_right with via
+    "lease": no `rights` event, the lease's own lease_start/lease_end as before."""
+    from charter import dispatch as D
+    x = _st(k)["items"][lease]
+    if status == "active":
+        tax = float(_st(k)["rules"]["tax"] or 0.0)
+        k.apply("revoke_right", agent=lessor, right=x["right"], via="lease")
+        k.apply("grant_right", agent=lessee, right=x["right"], via="lease")
+        x.update({"status": "active", "start": k.r, "end": k.r + x["rounds"] - 1, "tax": tax})
+        k.log("lease_start", lessee, {"lease": x["id"], "right": x["right"], "holder": lessor, "tenant": lessee, "rounds": x["rounds"],
+                                      "until_round": x["end"], "fee": x["fee"], "tax": tax}, vis="public")
+        return {"status": "active"}
+    k.apply("revoke_right", agent=lessee, right=x["right"], via="lease")
+    back = status == "returned"
+    if back:
+        try:
+            k.apply("grant_right", agent=lessor, right=x["right"], via="lease")
+        except D.PhysicsError as e:                                   # the lessor can no longer hold it (e.g. now on the Board)
+            k.w["effects"]["kernel_refusals"].append(e.reason)
+            back, status = False, "lapsed"
+    x["status"] = status
+    k.log("lease_end", None, {"lease": x["id"], "right": x["right"], "holder": lessor, "tenant": lessee, "returned": back},
+          vis="public")
+    return {"status": status}
 
 
 def law_api(k, lid) -> dict:

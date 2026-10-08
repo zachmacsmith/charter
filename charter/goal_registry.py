@@ -153,17 +153,67 @@ def _p_monopoly(rng, world, me=None):
 
 
 # ------------------------------------------------------------------ probes: (k, snap, params) -> JSON, what a goal reads live
-# Declared, not yet recorded per round (P6.2): today the runner stores every library predicate in snapshot["predicates"].
+# Recorded per round (P6.2): the runner evaluates, inside k.end_round, every library probe (every law of LB.PREDICATES and every
+# condition of LB.OUTCOMES, as the old snapshot["predicates"] did) and every probe of every goal held in the run, and stores them
+# under snapshot["probes"][key]. History.probe(key, r) reads them back from disk, so a scorer never needs the live kernel.
+@dataclass(frozen=True)
+class Probe:
+    """A goal probe: `fn(k, snap, params) -> JSON`, recorded each round under `key(params)` (the template formatted with the
+    goal's params). Goals that share a probe and params share one recorded value (Enact, Block, Durable on the same law)."""
+    template: str
+    fn: Callable
+
+    def key(self, params) -> str:
+        return self.template.format(**(params or {}))
+
+    def __call__(self, k, snap, params):
+        return self.fn(k, snap, params)
+
+
 def _probe_law(k, snap, p):
-    return bool(LB.PREDICATES[p["law"]](k, snap))
+    """The library effect predicate of p["law"] (False when it raises, as the old snapshot["predicates"])."""
+    try:
+        return bool(LB.PREDICATES[p["law"]](k, snap))
+    except Exception:
+        return False
 
 
 def _probe_outcome(k, snap, p):
-    return bool(LB.OUTCOMES[p["condition"]](k, snap))
+    try:
+        return bool(LB.OUTCOMES[p["condition"]](k, snap))
+    except Exception:
+        return False
 
 
-_LAW_PROBES = {"in_force": _probe_law}
-_OUTCOME_PROBES = {"holds": _probe_outcome}
+# keys: a law's predicate under the law's name, an outcome under "outcome:<condition>" (the old snapshot["predicates"] keys)
+_LAW_PROBES = {"in_force": Probe("{law}", _probe_law)}
+_OUTCOME_PROBES = {"holds": Probe("outcome:{condition}", _probe_outcome)}
+
+
+def library_probes() -> dict:
+    """{key: (Probe, params)} for every library predicate and outcome, in the old snapshot["predicates"] order."""
+    out = {}
+    for law in LB.PREDICATES:
+        out[_LAW_PROBES["in_force"].key({"law": law})] = (_LAW_PROBES["in_force"], {"law": law})
+    for c in LB.OUTCOMES:
+        out[_OUTCOME_PROBES["holds"].key({"condition": c})] = (_OUTCOME_PROBES["holds"], {"condition": c})
+    return out
+
+
+def goal_probes(goal: dict) -> dict:
+    """{key: (Probe, params)} for the probes of every catalogue goal in an agent's goal dict (primary, secondary, tertiary)."""
+    out = {}
+    for slot, pk in (("primary", "params"), ("secondary", "secondary_params"), ("tertiary", "tertiary_params")):
+        row = GOALS.get((goal or {}).get(slot)) if isinstance(goal, dict) else None
+        if row is None or not row.probes:
+            continue
+        params = goal.get(pk) or {}
+        for pr in row.probes.values():
+            try:
+                out.setdefault(pr.key(params), (pr, params))
+            except (KeyError, IndexError):                               # a goal drawn without the probe's parameter (impossible)
+                continue
+    return out
 
 
 # ------------------------------------------------------------------ the row

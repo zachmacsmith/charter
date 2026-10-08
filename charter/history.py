@@ -15,6 +15,8 @@ reads) or from the same parts held in memory (`History.from_run`), and offers:
   window(r0, r1)                                              the run restricted to rounds r0..r1 over every round-stamped table
   cached(key, fn)                                             derived tables computed once per History and shared by all goals
   gt                                                          the legacy ground-truth dict (adapter for scorers on `gt`)
+  probe(name, r) / probes(r) / roles(r) / common_text         recorded kernel probes and role holders per round, Leaker's
+                                                              frozen common text (P6.2): post-hoc rescoring needs no kernel
 
 Semantics kept from today's scorers: "alive" means entered and not dead (a departed agent keeps its frozen holdings and is still
 alive, as `goals._living` has it); "present" additionally excludes departed agents.
@@ -38,7 +40,16 @@ def read_run(run_dir) -> dict:
     truth = json.loads((d / "ground_truth.json").read_text())
     events = [json.loads(l) for l in (d / "events.jsonl").read_text().splitlines() if l.strip()]
     snaps = json.loads((d / "snapshots.json").read_text())
-    return assemble(inst, snaps, events, truth)
+    gt = assemble(inst, snaps, events, truth)
+    if (d / "common_text.json").exists():                                # Leaker's common text, frozen at run start (P6.2)
+        gt["common_text"] = json.loads((d / "common_text.json").read_text())
+    return gt
+
+
+def common_text_record(texts) -> dict:
+    """common_text.json: Leaker's common text (goals.common_texts at run start) and its sha (P6.2)."""
+    import hashlib
+    return {"sha": hashlib.sha256(json.dumps(texts).encode()).hexdigest(), "texts": list(texts)}
 
 
 def assemble(inst, snaps, events, truth) -> dict:
@@ -194,16 +205,24 @@ class History:
         return cls(read_run(run_dir))
 
     @classmethod
-    def from_run(cls, instance, snapshots, events, truth, normalize=True) -> "History":
+    def from_run(cls, instance, snapshots, events, truth, normalize=True, common_text=_UNSET) -> "History":
         """From the parts held in memory: the instance as generated (what instance.json holds; the runner's live copy also lists
         arrivals, which come from the truth), the kernel's snapshots and events, and the ground-truth dict. `normalize` passes each
-        through JSON as the runner writes it (tuples and sets become lists, keys strings), so the result equals `load`."""
+        through JSON as the runner writes it (tuples and sets become lists, keys strings), so the result equals `load`.
+        `common_text`: Leaker's frozen common text (common_text.json); by default built from the instance as the runner does at
+        run start (None: left out)."""
         if normalize:
             instance, snapshots = _as_json(instance, str), _as_json(snapshots, list)
             events, truth = [_as_json(e, list) for e in events], _as_json(truth, list)
         arrived = {x["id"] for x in truth.get("arrived_agents", []) if isinstance(x, dict)}
         instance = {**instance, "agents": [a for a in instance["agents"] if a["id"] not in arrived]}
-        return cls(assemble(instance, snapshots, events, truth))
+        gt = assemble(instance, snapshots, events, truth)
+        if common_text is _UNSET:
+            from charter import goals
+            common_text = common_text_record(goals.common_texts(instance))
+        if common_text is not None:
+            gt["common_text"] = common_text
+        return cls(gt)
 
     def __eq__(self, other):
         return isinstance(other, History) and self.gt == other.gt and self._roster == other._roster
@@ -264,6 +283,37 @@ class History:
         """One column per round: s[key], or s[key].get(agent) with an agent. Cached."""
         return self.cached(("series", key, agent), lambda h: [s.get(key) if agent is None else (s.get(key) or {}).get(agent)
                                                               for s in h.states])
+
+    # --- recorded kernel inputs (P6.2): probes and role holders per round, frozen common text
+    def probes(self, r=None) -> dict:
+        """Every probe recorded after round r (default: the last round): snapshot["probes"] (runs before P6.2: their
+        snapshot["predicates"], the library probes under the same keys). Read-only."""
+        if not self.states:
+            return {}
+        s = self.final if r is None else self.state(r)
+        return s.get("probes", s.get("predicates")) or {}
+
+    def probe(self, name, r=None):
+        """The value of probe `name` recorded after round r (None when not recorded then); with r None, its value in every
+        round, in round order (a list, like `series`). Keys: a library law's name (its effect predicate), "outcome:<condition>",
+        or a goal probe's key (goal_registry.Probe.key)."""
+        if r is not None:
+            return self.probes(r).get(name)
+        return self.cached(("probe", name), lambda h: [(s.get("probes", s.get("predicates")) or {}).get(name) for s in h.states])
+
+    def roles(self, r=None) -> dict:
+        """{role: [holders]} after round r (default: the last round), secret roles included: snapshot["roles"]. A run from before
+        P6.2 has only the end-of-run holders (ground_truth "roles"), returned for every round. {} when roles were not in play."""
+        if self.states:
+            s = self.final if r is None else self.state(r)
+            if "roles" in s:
+                return s["roles"]
+        return ((self.gt.get("roles") or {}).get("holders")) or {}
+
+    @property
+    def common_text(self) -> dict | None:
+        """Leaker's common text frozen at run start ({"sha", "texts"}; common_text.json), or None for runs before P6.2."""
+        return self.gt.get("common_text")
 
     # --- records
     def _index(self) -> _Index:

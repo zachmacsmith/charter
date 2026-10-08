@@ -285,7 +285,19 @@ E += [
      "model, timing, stats, payment); return False to refuse it. With move(...) it can charge a fee.", "prompt", "common"),
 ]
 OPTIONAL.update({e[0]: "life" for e in E if e[1] == "life"})
-ENTRIES = {e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
+# linker (charter/linker.py, P3.3): documented only in law.v2 worlds (REQUIRES), so every other world's prompt and codex are unchanged
+E += [
+    ("use", "linker", "Meta", "use(ref)", "links another law's exports into this law, as a read-only mapping: at the top level only, "
+     "tax = use(\"L3\") follows L3's current version, use(\"L3@<sha>\") pins one version, use(\"lib:<name>@<sha>\") a library entry; "
+     "then tax[\"tax_due\"](qty). The imported code runs as this law's own (its powers, its jurisdiction, its gas), and counts in its "
+     "class. A law offers names with exports = [\"RATE\", \"tax_due\"] (defs and constants, a declarative top level; exported code may "
+     "not use state or public). If L3 is repealed or stops exporting what you use, a following import is pinned to its last good version.",
+     "prompt", "common"),
+    ("public_of", "linker", "Read", "public_of(law_id)", "a copy of another law's public dict. Every law has `public` (JSON data only) "
+     "next to `state`: what it writes there others can read.", "prompt", "common"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("use", "public_of")})
+ENTRIES ={e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers",
                "Jurisdictions", "Media", "Life"]
 ALWAYS_ARTICLE = {"disclose_capability_use", "capability_holders", "revoke_capability"}     # new with the powers: never in the old prompt

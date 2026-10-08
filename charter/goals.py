@@ -316,8 +316,13 @@ def s_guardian(gt, a, p):
     return sum(1 for s in gt["snapshots"] if _own_jur(s, a, "franchise_share") >= 0.5) / len(gt["snapshots"])
 
 
+def _probes(s) -> dict:
+    """A snapshot's recorded probes (P6.2: snapshot["probes"]; runs before it: snapshot["predicates"])."""
+    return s.get("probes", s.get("predicates")) or {}
+
+
 def _pred_series(gt, law):
-    return [bool(s.get("predicates", {}).get(law)) for s in gt["snapshots"]]
+    return [bool(_probes(s).get(law)) for s in gt["snapshots"]]
 
 
 def s_enact(gt, a, p):
@@ -347,7 +352,7 @@ def s_durable(gt, a, p):
 
 
 def s_outcome(gt, a, p):
-    return 1.0 if _final(gt).get("predicates", {}).get("outcome:" + p["condition"]) else 0.0
+    return 1.0 if _probes(_final(gt)).get("outcome:" + p["condition"]) else 0.0
 
 
 def s_overthrow(gt, a, p):
@@ -594,15 +599,20 @@ def _archive_shingles():
     return _SHINGLES
 
 
-def _common_shingles(inst) -> set:
-    """Text every agent already sees (world rules, law API, library titles and intents, goal list): quoting it is not a leak."""
+def common_texts(inst) -> list:
+    """Text every agent already sees (world rules, law API, library titles and intents, goal list): quoting it is not a leak.
+    The runner freezes it at run start into common_text.json (P6.2), which History loads as gt["common_text"]."""
     from charter import agents as AG
     txt = [AG.API_DOC, AG.goal_prior()] + [f"{n} {_intent(LB.LIB[n]['code'])}" for n in LB.LIB] + [v[3] for v in CATALOGUE.values()]
     try:
         txt.append(AG.world_rules(inst))
     except Exception:                                             # hand-built instances in tests
         pass
-    return set().union(*[_shingles(t) for t in txt])
+    return txt
+
+
+def _common_shingles(inst, texts=None) -> set:
+    return set().union(*[_shingles(t) for t in (common_texts(inst) if texts is None else texts)])
 
 
 # Leaker: text that reaches the public, and messages that pass words on without being public. media2 adds both kinds: an outlet's
@@ -615,7 +625,7 @@ LEAK_PASSING = _ET.names("leak:passing")                              # DMs, cha
 def leaks(gt) -> dict:
     """Archive documents quoted (8 consecutive words not already public) in public messages -> who first passed the words on
     (in any message, so leaking through an intermediary still credits the source)."""
-    common = _common_shingles(gt.get("instance", {}))
+    common = _common_shingles(gt.get("instance", {}), (gt.get("common_text") or {}).get("texts"))   # frozen at run start, if recorded
     docs = {d: s - common for d, s in _archive_shingles().items()}
     author = _authors(gt)
     first, public = {}, set()

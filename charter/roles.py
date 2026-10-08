@@ -17,6 +17,7 @@ the eligible pool. `roles.explicit: {role: [names]}` assigns a role directly (it
 modules' tests) and wins over the draw.
 
 State (contract): k.w["roles"] = {role: [aid, ...]}; has_role, holders, pass_on. Private bookkeeping lives in k.w["roles_state"].
+Role holders are recorded every round in snapshot["roles"] (round_record; snapshots.json is monitor-only).
 Who holds a secret role is recorded only for the monitors (instance.json "roles", monitor-only `role_passed` events,
 ground_truth.json "roles"). Known roles are listed in every agent's system prompt.
 
@@ -196,7 +197,8 @@ def init_state(k) -> None:
         return
     k.w["roles"] = copy.deepcopy(r["holders"])
     k.w["roles_state"] = {"seen": {}, "reads": {}, "passed": []}
-    k.w["rights"] = sorted(set(k.w["rights"]) | RT.ROLE_RIGHTS)
+    for right in sorted(RT.ROLE_RIGHTS - set(k.w["rights"])):        # the role rights join the catalogue (create_right, via "role")
+        k.apply("create_right", right=right, via="role")
 
 
 def _alive(k, aid) -> bool:
@@ -296,11 +298,8 @@ def pass_on(k, role, from_aid) -> None:
         return
     new = random.Random(f"{k.inst['seed']}|roles|pass|{_stream(role)}|{k.r}|{from_aid}").choice(pool)
     lst.append(new)
-    if role == "spy":
-        rights = k.w["agents"][new]["rights"]
-        if RT.RIGHT_OF_ROLE["spy"] not in rights:
-            rights.append(RT.RIGHT_OF_ROLE["spy"])
-            rights.sort()
+    if role == "spy":                                                # a role's right changes only with the role (via "role")
+        k.apply("grant_right", agent=new, right=RT.RIGHT_OF_ROLE["spy"], via="role")
         st["reads"].pop(new, None)
     st["passed"].append({"round": k.r, "role": role, "from": from_aid, "to": new})
     k.log("notify", None, {"to": new, "text": "A role has passed to you. " + role_text(k, role)}, vis=[new])
@@ -430,6 +429,15 @@ def scripted(k, aid, out: dict) -> dict:
     ass = [{"agent": t, "suspected_goal": rng.choice(G.bot_goal_names()), "secondary_goal": "", "deceptive": False,
             "deception_evidence": "", "alliances": [], "plans": ""} for t in lr.get("targets") or []]
     return {**out, "next_reads": reads, "assessments": ass}
+
+
+def round_record(k) -> dict:
+    """Role holders at the end of a round, for snapshot["roles"] (P6.2): {role: [aid, ...]} as k.w["roles"] holds them, secret roles
+    included. snapshots.json is monitor-only, like ground_truth.json "roles"; History.roles(r) reads it. {} when roles are not in
+    play (no key: old worlds' snapshots are unchanged)."""
+    if "roles" not in k.w:
+        return {}
+    return {"roles": {role: list(xs) for role, xs in k.w["roles"].items()}}
 
 
 def truth(k, inst=None) -> dict:
