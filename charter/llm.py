@@ -71,7 +71,8 @@ def _api(model, system, user, schema, thinking_budget, max_tokens):
               system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
               messages=[{"role": "user", "content": user}],
               output_config={"format": {"type": "json_schema", "schema": schema}})
-    if "haiku" in model:                                         # Haiku 4.5: fixed budget only (no adaptive thinking)
+    if "haiku-4" in model:                                       # Haiku 4.5: fixed budget only (no adaptive thinking); Haiku 5.5
+                                                                 # takes adaptive like Sonnet/Opus 5.x (budget_tokens is a 400 there)
         if thinking_budget:
             kw["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
     else:                                                        # Sonnet/Opus 5.x: adaptive thinking with summarised text
