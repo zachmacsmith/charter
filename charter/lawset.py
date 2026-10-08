@@ -331,6 +331,14 @@ def _summary(fn, defs, consts) -> dict:
             out["decree"] = f"right:{vals[0]}" if vals else "right:?"
         elif isinstance(v, ast.Dict):
             d = {k.value: x for k, x in zip(v.keys, v.values) if isinstance(k, ast.Constant)}
+            st = d.get("stages")
+            if isinstance(st, ast.List) and st.elts and isinstance(st.elts[0], ast.Dict):   # a stage plan (W6c): read its first
+                out["stages"] = len(st.elts)                                                # stage; the count and an assent are
+                out["assent"] = "assent" in d                                               # recorded, not keyed (key())
+                gate = d.get("gate")
+                d = {k.value: x for k, x in zip(st.elts[0].keys, st.elts[0].values) if isinstance(k, ast.Constant)}
+                if gate is not None:
+                    d["gate"] = gate
             out["electorate"] = _electorate(d.get("electorate"), fn, defs, consts)
             rv = _values(d["rule"], consts, {}) if "rule" in d else ["majority"]
             out["rule"] = rv[0] if rv else "unknown"
@@ -356,7 +364,9 @@ def procedures(code: str) -> dict:
         ranks = [None]
         for kw in c.keywords:
             if kw.arg == "rank":
-                ranks = _values(kw.value, consts, loops) or ["?"]
+                ranks = _values(kw.value, consts, loops)
+                if not ranks and not (isinstance(kw.value, ast.Name) and kw.value.id in loops):
+                    ranks = ["?"]                                        # unknown; a loop over an empty list sets none
         fn = defs.get(getattr(c.args[1], "id", None))
         summ = _summary(fn, defs, consts) if fn is not None else {"electorate": "unknown", "rule": "unknown", "weighted": None,
                                                                   "gated": False, "decree": None}

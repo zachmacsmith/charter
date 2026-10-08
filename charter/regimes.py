@@ -527,6 +527,81 @@ REGIMES: dict[str, dict] = {
     },
 }
 
+# ------------------------------------------------------------------ example regimes as law sets (W7d; review 10 §5.1, §5.2, §5.4)
+# Concrete legal systems composed from the toolkit, in pairs that sit at the same derived dimension point (lawset.key of their
+# starting laws is equal) but differ in their specifics (lawset.distance of their fingerprints > 0): the experiment for "do the
+# specifics matter?". law.v2 worlds only (the succession laws need a world where agents die: mortality on). Selected by name like
+# REGIMES (`regime: common_law_democracy`) but kept apart from it, so no legacy regime list, preset or golden sees them.
+LAW_SET_REGIMES: dict[str, dict] = {
+    "common_law_democracy": {
+        "base": "representative_democracy",
+        "summary": "A bicameral representative democracy with judicial review and a common-law court system: juries, an appeal "
+                   "court, binding precedent, tort damages, conveyancing of titles, primogeniture and a progressive income tax.",
+        "description": "a representative democracy of the common-law family. Laws pass the elected Legislators and then a Senate; a "
+                       "Constitutional Court may strike down ordinary laws. Juries decide cases, rulings can be appealed, and the court "
+                       "follows its own precedents. Titles to harvest rights can be sold through a registry, the eldest child "
+                       "inherits, and harvest income is taxed progressively.",
+        "laws": [{"template": "Bicameral Procedure"},
+                 {"template": "Constitutional Court"},
+                 {"template": "Precedent Register"},
+                 {"template": "Stare Decisis"},
+                 {"template": "Court of Appeal"},
+                 {"template": "Jury Panel", "params": {"JURORS": 3}},
+                 {"template": "Compensation Act"},
+                 {"template": "Title Registry"},
+                 {"template": "Primogeniture"},
+                 {"template": "Progressive Income Tax"}],
+    },
+    "civil_code_democracy": {
+        "base": "representative_democracy",
+        "summary": "A unicameral representative democracy with a constitutional council and a codified system: a penal code with a "
+                   "public prosecutor and limitation periods, judge-graded damages, Ostrom commons, forced heirship and a VAT.",
+        "description": "a representative democracy of the civil-law family. The elected Legislators alone pass laws; a constitutional "
+                       "council of three may strike down ordinary laws. Offences are listed in a penal code and punished at once; the "
+                       "public prosecutor alone brings cases of fraud, and old claims are time-barred. Judges grade damages. The camps "
+                       "are commons with quotas, children inherit a reserved share, and sales are taxed.",
+        "laws": [{"template": "Constitutional Court", "params": {"JUSTICES": 3, "PRE_REVIEW": False}},
+                 {"template": "Definitions and Citizenship Act"},
+                 {"template": "Penal Code"},
+                 {"template": "Prosecution Office", "params": {"PUBLIC_CLAUSES": ["misstatement"]}},
+                 {"template": "Limitation Act", "params": {"LIMIT": 8}},
+                 {"template": "Graded Remedies"},
+                 {"template": "Administrative Procedure Act"},
+                 {"template": "Commons Charter"},
+                 {"template": "Forced Heirship"},
+                 {"template": "Value Added Tax"}],
+    },
+    "creditor_market": {
+        "base": "free_market",
+        "summary": "A free-market order that favours creditors: loans are enforced by seizure, secured by collateral and guaranteed by "
+                   "sureties; agreements are registered; titles sell; the treasury issues bonds and a rule-bound central bank "
+                   "manages the crown.",
+        "description": "a free-market order that favours creditors. Debts past due are seized, a borrower may pledge collateral that "
+                       "goes to the lender at default, and a surety's guarantee is enforced. Agreements can be registered and sued on, "
+                       "titles to harvest rights can be sold, the treasury sells bonds, and a Governor issues crowns within a cap.",
+        "laws": [{"template": "Secured Lending"},
+                 {"template": "Guarantee"},
+                 {"template": "Contract Registry", "params": {"DAMAGES": 5}},
+                 {"template": "Title Registry"},
+                 {"template": "Treasury Bonds"},
+                 {"template": "Central Bank Charter"}],
+    },
+    "debtor_market": {
+        "base": "free_market",
+        "statutes": ["Crown Currency", "Handshake Loans"],
+        "summary": "A free-market order that protects debtors: nothing is seized on default, usury is refused and repeat usurers are "
+                   "barred, idle titles can be claimed by others, agreements are registered, and the treasury borrows at no interest.",
+        "description": "a free-market order that protects debtors. A debt is only as good as the borrower's word: nothing is seized "
+                       "on default. Interest above 5% per round is usury and refused; repeat usurers may not lend. A harvest right left "
+                       "idle for 10 rounds can be claimed by another. Agreements can be registered and sued on, and the treasury "
+                       "sells bonds that repay their price without interest.",
+        "laws": [{"template": "Usury Ceiling", "params": {"CAP": 0.05}},
+                 {"template": "Prescription"},
+                 {"template": "Contract Registry", "params": {"DAMAGES": 1}},
+                 {"template": "Treasury Bonds", "params": {"COUPON": 0}}],
+    },
+}
+
 FIELDS = ("constitution", "statutes", "rights", "spec", "no_vote_needed", "expect", "summary", "description", "laws", "drop", "amend")
 LAW_ENTRY_KEYS = ("template", "rank", "params")
 
@@ -562,12 +637,14 @@ def level_of(code: str) -> str:
 def definition(value) -> tuple[str, dict]:
     """(name, definition) for a regime given by name or inline dict (with optional `base`)."""
     if isinstance(value, str):
+        if value in LAW_SET_REGIMES:                                  # W7d: an example law-set regime is an inline one, named
+            return value, definition({**LAW_SET_REGIMES[value], "name": value})[1]
         if value not in REGIMES:
-            raise KeyError(f"unknown regime {value!r}; known: {', '.join(REGIMES)}")
+            raise KeyError(f"unknown regime {value!r}; known: {', '.join(list(REGIMES) + list(LAW_SET_REGIMES))}")
         return value, copy.deepcopy(REGIMES[value])
     if isinstance(value, dict):
         base = value.get("base")
-        d = copy.deepcopy(REGIMES[base]) if base else {}
+        d = definition(base)[1] if base else {}                       # a named base (W7d: an example law-set regime too)
         d.update({k: copy.deepcopy(v) for k, v in value.items() if k not in ("base", "name", "laws")})
         if value.get("laws"):                                         # a law set adds to the base regime's laws
             d["laws"] = list(d.get("laws") or []) + copy.deepcopy(list(value["laws"]))

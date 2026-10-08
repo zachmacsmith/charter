@@ -288,8 +288,15 @@ Runs the same scripted worlds on two code revisions and reports where they first
   Strict Liability for Attacks, Title Registry, Commons Charter, Eminent Domain, Intestacy, Primogeniture, Forced Heirship, Estate
   Tax, Slayer Rule, Central Bank Charter, Progressive Income Tax, Precedent Register, Recognition of Judgments; each tagged with a
   family and topic, its top-level constants are its parameters (`python -m charter library list`, `library show NAME --set K=V`).
-  `library.PENDING` lists the items waiting on another package (emergency powers, bicameralism, juries, appeals, exchange, funds,
-  VAT, ...). A regime may name laws made from templates: `regime: {base, laws: [{template, rank, params}], drop: [...], amend:
+  The second slice (W7d) builds on W6: Emergency Powers (a declaration office under a declared sunset, in_force_until),
+  Bicameral Procedure, Executive Assent with Override and Quorum Procedure (stage plans and ballot rule functions), the
+  Administrative Procedure Act (no self-dealing through an office), Limitation Act, Jury Panel, Court of Appeal, Graded Remedies
+  and Stare Decisis (courts v2: cases(), court rules, remedies, appeals), Value Added Tax (move memos), Exchange and Deposit
+  Insurance Fund (per-law funds: `needs` contracts), Treasury Bonds, Prescription, Secured Lending, Guarantee, Contract Registry,
+  Exemptions List, Extradition (`needs` jurisdictions) and Usury Ceiling; every office refuses bad arguments with `refuse`.
+  `library.PENDING` is empty (the Contract Enforcement Act is W6e's library law). `regimes.LAW_SET_REGIMES` holds four example
+  law-set regimes in two pairs at one dimension point each (common_law_democracy / civil_code_democracy, creditor_market /
+  debtor_market), selectable by name and used by no preset. A regime may name laws made from templates: `regime: {base, laws: [{template, rank, params}], drop: [...], amend:
   {name: {PARAM: v}}}`; templates and parameters may be distributions (`{choice: [...]}`, `{randint: [a, b]}`, ...) drawn from the
   regime's own law stream, so replicates vary the law set while the world and the derived dimensions stay put. The set is checked
   at generation (`lawset.check`: level, rank, import DAG, overlaps; a law that can never fire is an error) and its dimensions are
