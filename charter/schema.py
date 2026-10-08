@@ -302,6 +302,7 @@ def _ann():
         "goals.score_weights.three": dict(types=("list",)),
         "goals.slot_rules": dict(types=("bool", "null")),
         "goals.havoc_share": dict(types=("number", "null"), range=(0, 100)),
+        "goals.institution_share": dict(types=("number",), range=(0, 100)),
         "personality.traits": dict(types=("list",), items=_traits),
         "personality.dist": dict(range=PROB),
         "personality.explicit": dict(kind="map"),
@@ -415,6 +416,7 @@ EXTRA = {
     "goals.slot_rules": None,
     "goals.havoc_mix": False,
     "goals.havoc_share": None,
+    "goals.institution_share": 0,
     "archive_split.show_others": True,
     "observer.mode": None,
     "outside_power.first": None,
@@ -686,6 +688,8 @@ DOCS = {
     "goals.slot_rules": "true/false: which goals may fill which slot; null: on wherever the New Features are",
     "goals.havoc_mix": "true: the Havoc goals take a larger default share (25%)",
     "goals.havoc_share": "percent of all draws for the Havoc goals (overrides havoc_mix)",
+    "goals.institution_share": "percent of all draws for the institution goals (Company, Bank, Insurer, Cartel, Protection "
+                               "racket; P6.4), out of Wealth's share; 0 (default): never drawn (goals.explicit can still assign one)",
     "goals.score_weights.two": "primary / secondary weights",
     "goals.score_weights.three": "primary / secondary / third weights",
     "personality": "trait draws and archetypes",
@@ -920,9 +924,14 @@ def _check_goal_weights(path, v) -> list:
     return errs
 
 
+def _explicit_goal_names():
+    from charter import goal_registry as GR
+    return _goal_names() + tuple(GR.INSTITUTION)                     # P6.4: institution goals are assigned explicitly
+
+
 def _check_explicit_goal(path, v) -> list:
     """goal name / {primary, params?, secondary?, secondary_params?}"""
-    names = _goal_names()
+    names = _explicit_goal_names()
     if isinstance(v, str):
         return [] if v in names else [f"{path}: unknown goal {v!r}{_close(v, names)}"]
     if not isinstance(v, dict):
@@ -938,6 +947,10 @@ def _check_explicit_goal(path, v) -> list:
     for p in ("params", "secondary_params"):
         if v.get(p) is not None and not isinstance(v[p], dict):
             errs.append(f"{path}.{p}: expected a mapping, got {v[p]!r}")
+    from charter import institution_goals as IG
+    for slot, p in (("primary", "params"), ("secondary", "secondary_params")):
+        if v.get(slot) in IG.DEFAULTS and isinstance(v.get(p), dict):
+            errs += [f"{path}.{p}: {e}" for e in IG.check_params(v[slot], v[p])]
     return errs
 
 

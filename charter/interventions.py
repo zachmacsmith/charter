@@ -296,7 +296,7 @@ def _set_goal(k, inst, rs, agent, primary, params=None, secondary=None, secondar
                            ("tertiary", tertiary, tertiary_params)):
         if not name:
             continue
-        if name not in G.CATALOGUE:
+        if name not in G.CATALOGUE and name not in G.GR.INSTITUTION:          # P6.4: institution goals too
             raise InterventionError(f"unknown goal {name}")
         g[slot] = name
         g["params" if slot == "primary" else f"{slot}_params"] = dict(ps) if ps is not None else EV._relational(k, inst, agent, name, rng, world)

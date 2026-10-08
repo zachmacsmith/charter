@@ -328,7 +328,7 @@ def _goal_row(name):
     from charter import goal_registry as GR
     if not name:
         return None
-    return GR.GOALS.get(name) or GR.FIXED.get(name)
+    return GR.find(name)                                              # catalogue, institution (P6.4) or fixed
 
 
 def _goal_version(name):

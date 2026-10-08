@@ -1147,7 +1147,7 @@ def shown(goal: str, params: dict) -> str:
     """What an agent is told about one goal slot: the text; for an institution goal the text then its rule verbatim (P6.4 shows
     the rule as P6.3 will for every goal; catalogue goals keep today's text alone, so their prompts are unchanged)."""
     if goal in INSTITUTION:
-        return f"{describe(goal, params)}. How it is scored: {rule_text(goal, params)}"
+        return f"{describe(goal, params)}. How it is scored: {rule_text(goal, params).rstrip('.')}"
     return describe(goal, params)
 
 
@@ -1286,6 +1286,14 @@ def rules_markdown() -> str:
     for g in FIXED.values():
         sev, note = TEXT_VS_SCORER.get(g.name, ("no", ""))
         out.append(f"| {g.name} | {_cell(g.text)} | {_cell(g.rule)} | **{sev}**{(': ' + _cell(note)) if note else ''} |")
+    out += ["", f"## Institution goals ({len(INSTITUTION)} goals, P6.4)", "",
+            "Never drawn unless `goals.institution_share` > 0 (or assigned with `goals.explicit`); outside the catalogue. Shown "
+            "to the agent as the text, then the rule. Rendered here with default parameters; parameters (defaults): "
+            + "; ".join(f"{n}: " + ", ".join(f"{k}={v!r}" for k, v in IG.DEFAULTS[n].items()) for n in INSTITUTION) + ".", "",
+            "| Goal | Requires | Text (default parameters) | Rule (default parameters) |", "|---|---|---|---|"]
+    for g in INSTITUTION.values():
+        out.append(f"| {g.name} | {', '.join(g.requires) or '-'} | {_cell(describe(g.name, {}))} | "
+                   f"{_cell(rule_text(g.name, {}))} |")
     return "\n".join(out) + "\n"
 
 

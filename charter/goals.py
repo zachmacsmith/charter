@@ -89,6 +89,10 @@ def enabled_modules(sp: dict | None) -> set:
 
 def goal_on(goal: str, spec_goals: dict, spec: dict | None = None) -> bool:
     """Whether a goal can be drawn: the update's goals need the update's features and their own module."""
+    if goal in GR.INSTITUTION:                                       # P6.4: only with goals.institution_share > 0 and their modules
+        sg = spec_goals or (spec or {}).get("goals") or {}
+        return float(sg.get("institution_share") or 0) > 0 and all(
+            bool(((spec or {}).get(m) or {}).get("enabled")) for m in GR.INSTITUTION[goal].requires)
     if goal in OPT_IN and not (spec_goals or (spec or {}).get("goals") or {}).get("eliminator_variants"):
         return False                                                 # opt-in: drawn only with goals.eliminator_variants (explicit always)
     if goal in EXTRA_GATES:                                          # goals: features on and every module the goal uses
@@ -152,13 +156,34 @@ def weights(spec_goals: dict, cls: str, spec: dict | None = None, modules=None) 
             tot = sum(havoc.values())
             for g, x in havoc.items():
                 w[g] = share * x / tot
+    for g, x in institution_weights(sg, spec).items():               # P6.4: off (empty) unless goals.institution_share > 0
+        w[g] = x
+        w["Wealth"] = max(0.0, w["Wealth"] - x)
     if sg.get("class_conditioned"):
         tilt = CLASS_TILT.get(cls, {})
-        w = {g: x * tilt.get(CATALOGUE[g][0], 1.0) for g, x in w.items()}
+        w = {g: x * tilt.get(category_of(g), 1.0) for g, x in w.items()}
     for g in sg.get("exclude") or []:                                # never drawn (primary, secondary, third or goal change)
         if g in w:
             w[g] = 0.0
     return w
+
+
+def category_of(goal: str) -> str:
+    """A goal's category: the catalogue's, or an institution goal's ("Institution")."""
+    return CATALOGUE[goal][0] if goal in CATALOGUE else GR.get(goal).category
+
+
+def institution_weights(spec_goals: dict, spec: dict | None = None) -> dict:
+    """P6.4: draw weights (percent of all draws) of the institution goals that can be drawn here: goals.institution_share
+    (default 0: never drawn) split by their row weights among those whose modules are on (goal_on), taken out of Wealth's share
+    like the other direct-share goals. {} when off."""
+    sg = spec_goals or {}
+    share = float(sg.get("institution_share") or 0)
+    if share <= 0:
+        return {}
+    on = {g: GR.INSTITUTION[g].weight for g in GR.INSTITUTION if goal_on(g, sg, spec)}
+    tot = sum(on.values())
+    return {g: share * x / tot for g, x in on.items()} if tot > 0 else {}
 
 
 def havoc_share(spec_goals: dict) -> float:
@@ -188,7 +213,7 @@ def slot_weights(w: dict, slot: str, spec: dict | None) -> dict:
 
 
 def reachable(goal: str, params: dict, law_level: str, agent: dict) -> bool:
-    need = CATALOGUE[goal][2]
+    need = CATALOGUE[goal][2] if goal in CATALOGUE else GR.get(goal).min_level      # P6.4: institution goals too
     if need == "law":
         need = params.get("law_level", "L2")
     if goal == "Office" and "vote" in agent["rights"]:

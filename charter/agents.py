@@ -189,7 +189,7 @@ def goal_prior(spec_goals: dict | None = None, spec: dict | None = None) -> str:
     cats = {}
     for g, x in w.items():
         if x > 0:
-            cats.setdefault(G.CATALOGUE[g][0], []).append((g, x))
+            cats.setdefault(G.category_of(g), []).append((g, x))
     parts = [f"{c} {pct(sum(x for _, x in gs))} (" + ", ".join(f"{g} {pct(x)}" for g, x in sorted(gs, key=lambda t: -t[1])) + ")"
              for c, gs in sorted(cats.items(), key=lambda t: -sum(x for _, x in t[1]))]
     text = ("Goals drawn in this world (everyone sees this list and its weights, but not who drew what; many agents also have a secondary "
