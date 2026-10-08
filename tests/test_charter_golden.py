@@ -42,6 +42,9 @@ CASES = {
                                        "outside_power.enabled=true", "outside_power.every=2"]),
     "society_small_4": ("society", 5, SOCIETY_SMALL),
     "E2_rng2_drift_5": ("E2", 3, ["rounds=5", "rng_version=2", "conditions.drift=true", "camps.drift_every=2"]),   # P5.3 streams
+    "E2_library2_6": ("E2", 3, ["rounds=6", "law.v2=true", "law.library.edition=2", "law.library.access=catalogue",   # P3.9
+                                "start_laws=[Crown Currency, Loan Registry, Usury Law, Wealth Tax, Harvest Levy, Transfer Tax, "
+                                "Mint by Ballot]"]),
 }
 
 PROMPT_CASES = {                                       # (preset, seed): system prompt and manual of every agent, with a kernel

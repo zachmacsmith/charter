@@ -524,16 +524,19 @@ def constitution_code(name: str) -> str:
     raise KeyError(f"unknown constitution {name!r}; known: {sorted(LB.CONSTITUTIONS) + sorted(CONSTITUTIONS)}")
 
 
-def statute_code(name: str) -> str:
+def statute_code(name: str, sp: dict | None = None) -> str:
+    """A statute's code; a library law's in the edition of the spec `sp` (law.library.edition, P3.9)."""
     if name in LB.LIB:
-        return LB.LIB[name]["code"]
+        return LB.code(name, sp)
     if name in STATUTES:
         return STATUTES[name].strip() + "\n"
     raise KeyError(f"unknown statute {name!r} (not in the library or regimes.STATUTES)")
 
 
 def level_of(code: str) -> str:
-    """Lowest law level at which a law could be proposed (same rule as library.info)."""
+    """Lowest law level at which a law could be proposed (same rule as library.info; with what lib:* imports can do)."""
+    if "use(" in code:
+        return LB.classify_code(code)["level"]
     tree = L.check(code)
     if L.uses_define_action(tree):
         return "L4"
@@ -601,7 +604,7 @@ def finish(sp: dict, reg: dict | None) -> None:
         return
     lvl = sp["law_level"]
     for s in reg["statute_names"]:
-        code = statute_code(s)
+        code = statute_code(s, sp)
         need = level_of(code)
         if LEVELS.index(need) > LEVELS.index(lvl):
             reg["notes"].append(f"regime {reg['name']}: dropped starting statute '{s}' (needs {need}; this world is {lvl})")

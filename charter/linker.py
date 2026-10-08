@@ -74,9 +74,9 @@ def lib_name(name: str) -> str:
 
 
 def lib_ref(name: str) -> str:
-    """The pinned ref of a library entry: use(lib_ref("Loan Registry"))."""
+    """The pinned ref of a library entry: use(lib_ref("Loan Registry")) (a block's, else the edition-1 law's code)."""
     from charter import library as LB
-    return f"lib:{lib_name(name)}@{sha(LB.LIB[name]['code'])}"
+    return f"lib:{lib_name(name)}@{sha(LB.entry_code(name))}"
 
 
 # ---------------------------------------------------------------------- resolution
@@ -110,13 +110,11 @@ def resolve(k, declarer: str | None, ref: str, overrides: dict | None = None) ->
     kind, ident, pin = parse_ref(ref)
     if kind == "lib":
         from charter import library as LB
-        name = next((n for n in LB.LIB if lib_name(n) == ident), None)
-        if name is None:
+        code, s = LB.lib_code(ident, pin)                              # edition-1 laws, edition-2 laws and blocks (P3.9)
+        if code is None and not s:
             raise LawError(f"use({ref!r}): no library entry {ident}")
-        code = LB.LIB[name]["code"]
-        s = sha(code)
-        if not s.startswith(pin):
-            raise LawError(f"use({ref!r}): lib:{ident} has no version {pin} (its version is {s})")
+        if code is None:
+            raise LawError(f"use({ref!r}): lib:{ident} has no version {pin} (its versions: {', '.join(s)})")
         if not getattr(k, "dry", False):
             code_store(k).setdefault(s, code)
         return f"lib:{ident}@{s}", code, {"target": f"lib:{ident}", "mode": "pinned", "sha": s}

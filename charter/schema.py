@@ -216,6 +216,8 @@ def _ann():
         "turns": dict(types=("str",), enum=("sequential", "simultaneous")),
         "rng_version": dict(types=("int",), enum=(1, 2)),
         "law.v2": dict(types=("bool",)),
+        "law.library.edition": dict(types=("int",), enum=(1, 2)),
+        "law.library.access": dict(types=("str",), enum=("none", "catalogue", "instantiate")),
         "parallel_calls": dict(types=("int",), range=(1, None)),
         "actions_per_turn": dict(types=("int",), range=NONNEG),
         "actions_jitter": dict(range=NONNEG),
@@ -402,6 +404,8 @@ EXTRA = {
     "prompts.profiles": {},
     "prompts.assign": [],
     "law.v2": False,
+    "law.library.edition": 1,
+    "law.library.access": "none",
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
@@ -599,6 +603,10 @@ DOCS = {
     "rounds": "rounds in the run",
     "law": "the legal system (docs/review/09_law_composition.md)",
     "law.v2": "true: the legal system v2 (exports, use and public state between laws, versions; ARCHITECTURE §6); false: as before",
+    "law.library": "the law library's edition and what agents may do with it (ARCHITECTURE §3.11; charter/library.py)",
+    "law.library.edition": "1: today's library laws (every existing spec) | 2: readable rewrites built from lib:* blocks (needs law.v2)",
+    "law.library.access": "none | catalogue: agents see the lib:* blocks (refs, exports, code) | instantiate: catalogue, and library "
+                          "laws may be copied with their constants changed (edition 2)",
     "rng_version": "1: one kernel random stream (every existing run) | 2: named streams per purpose (turn order per round, harvest "
                    "noise per agent/camp/harvest, drift per camp, rng() per law and round), so one extra draw shifts no other",
     "unit_values": "value of one unit of each resource (scoring and welfare)",
@@ -1021,6 +1029,10 @@ def validate(spec) -> list[str]:
         return [f"spec: expected a mapping, got {type(spec).__name__}"]
     errs: list[str] = []
     _section(keys()[""], "", spec, errs)
+    law = spec.get("law") if isinstance(spec.get("law"), dict) else {}
+    lib = law.get("library") if isinstance(law.get("library"), dict) else {}
+    if lib.get("edition") == 2 and law.get("v2") is not True:
+        errs.append("law.library.edition: edition 2 builds laws from lib:* blocks with use(), which needs law.v2: true")
     return errs
 
 

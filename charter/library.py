@@ -1029,6 +1029,14 @@ def subset(categories, law_level: str) -> list[dict]:
 
 # ------------------------------------------------------------------ effect predicates: judged from what the world does
 # (k, snap) -> bool, evaluated inside Kernel.end_round as goal probes (goal_registry.Probe) and recorded in snapshot["probes"]
+def _published_cap(k, cap) -> bool:
+    """Edition 2 (P3.9): a law in force publishes an interest cap it enforces itself (the Usury Law rewrite: public["interest_cap"])."""
+    if edition(k) != 2:
+        return False
+    return any(isinstance((l.get("public") or {}).get("interest_cap"), (int, float)) and l["public"]["interest_cap"] <= cap + 1e-9
+               for l in k.active_laws())
+
+
 def _non_officials(k):
     return [a for a, v in k.w["agents"].items() if v["cls"] not in ("board", "fixer", "observer")]
 
@@ -1058,7 +1066,7 @@ PREDICATES = {
     "Surveillance Office": lambda k, s: bool(k.holders("surveil")),
     "Court of Justice": lambda k, s: bool(k.holders("judge")),
     "Bribery Disclosure": lambda k, s: k.probe("transfer_to_official")["gazetted"] > 0,
-    "Usury Law": lambda k, s: (CR.interest_cap(k) is not None) and CR.interest_cap(k) <= 0.05 + 1e-9,
+    "Usury Law": lambda k, s: ((CR.interest_cap(k) is not None) and CR.interest_cap(k) <= 0.05 + 1e-9) or _published_cap(k, 0.05),
     "Reserve Bank Act": lambda k, s: any(c.get("par") for c in k.w["currencies"].values()),
 }
 
@@ -1159,3 +1167,627 @@ def on_round_end(r):
         if x["round"] == r and x["success"] and x["attacker"] is not None and x["target"] in aggressors:
             move("reserve", x["attacker"], "timber", min(10, reserve().get("timber", 0)))
 ''')
+
+
+# ====================================================================== edition 2 (P3.9): building blocks and readable implementations
+# Spec `law.library: {edition: 1|2, access: none|catalogue|instantiate}` (schema.py; the top-level `library` key is the category
+# list and `library_access` the archive visibility, so the two keys live under `law`, next to law.v2, which edition 2 needs).
+#
+#   edition 1   LIB above, unchanged: today's laws, several of them switches into module mechanisms (enable_loans, set_interest_cap,
+#               set_birth_rules, official_stream, ...). Every existing spec runs it, byte for byte.
+#   edition 2   the same law names, rewritten (LIB2) as readable law-language code built from `lib:*` building blocks (BLOCKS) that
+#               the law imports by hash with use("lib:<name>@<sha>") (charter/linker.py). Only the law API is used: no new kernel
+#               mechanism. A name without an edition-2 rewrite keeps its edition-1 code. Where the law API cannot express what the
+#               edition-1 switch does, the rewrite is the closest faithful version and GAPS[name] says exactly what differs (input
+#               for later primitive work; tests/test_charter_library2.py checks each claim on a scripted scenario).
+#   access      none: blocks are importable by hash but not advertised; catalogue: every agent's library text also lists the
+#               blocks (ref, exports, code) to copy or import; instantiate: as catalogue, plus `instantiate(name, params)` (a copy of
+#               a library law with its top-level constants replaced; the agent-facing action is a later package).
+#
+# Blocks hold no state of their own (exported code may not name `state` or `public`, review 09 §6.2): the importing law passes in
+# the dict that keeps the records (a key of its `state`, or of its `public` for records everyone may read with public_of).
+# Not written: an inheritance block. There is no law hook at a death (mortality.end runs the kernel's bequest; the "death" phase
+# has no ("law", ...) step), so a law cannot reach an estate; a roster diff in on_round_start sees the death only after probate.
+BLOCKS: dict[str, dict] = {}
+LIB2: dict[str, dict] = {}
+GAPS: dict[str, str] = {}
+EDITIONS = (1, 2)
+ACCESS = ("none", "catalogue", "instantiate")
+
+
+def _sha(src: str) -> str:
+    from charter import linker as LK
+    return LK.sha(src)
+
+
+def _slug(name: str) -> str:
+    from charter import linker as LK
+    return LK.lib_name(name)
+
+
+def block(name, src):
+    src = src.strip() + "\n"
+    BLOCKS[name] = {"name": name, "category": "block", "kind": "block", "edition": 2, "code": src, "sha": _sha(src)}
+
+
+def ref(name: str) -> str:
+    """The pinned reference of a block: use(ref("Escrow")) is use("lib:escrow@<16 hex digits>")."""
+    return f"lib:{_slug(name)}@{BLOCKS[name]['sha']}"
+
+
+def law2(name, src, gap=""):
+    """An edition-2 implementation of library law `name` (same name and category as edition 1)."""
+    assert name in LIB, name
+    src = src.strip() + "\n"
+    LIB2[name] = {"name": name, "category": LIB[name]["category"], "kind": "law", "rank": "statute", "edition": 2, "code": src,
+                  "sha": _sha(src)}
+    if gap:
+        GAPS[name] = " ".join(gap.split())
+
+
+# ---------------------------------------------------------------------- the blocks
+block("Ledger", '''
+title = "Ledger"
+intent = "A register of records: rows appended under a key, each stamped with the round and its writer; only the listed writers may write. Keep the book in public to make it a public register."
+exports = ["record", "entries", "last", "allowed"]
+
+def allowed(writer, writers):
+    return writers is None or writer in writers
+
+def record(book, key, entry, writer=None, writers=None):
+    if not allowed(writer, writers):
+        return False
+    row = dict(entry)
+    row["round"] = round()
+    if writer is not None:
+        row["by"] = writer
+    book.setdefault(key, []).append(row)
+    return True
+
+def entries(book, key=None):
+    if key is not None:
+        return list(book.get(key, []))
+    out = []
+    for name in sorted(book):
+        out.extend(book[name])
+    return out
+
+def last(book, key):
+    rows = book.get(key, [])
+    if rows:
+        return rows[-1]
+    return None
+''')
+block("Schedule", '''
+title = "Schedule"
+intent = "Things to do at a round, or every few rounds: call pop_due(book, r) from on_round_start or on_round_end."
+exports = ["every", "add", "pop_due"]
+
+def every(r, period, offset=0):
+    return period > 0 and r % period == offset % period
+
+def add(book, key, at, period=0, data=None):
+    book[key] = {"at": at, "every": period, "data": data}
+
+def pop_due(book, r):
+    out = []
+    for key in sorted(book):
+        item = book[key]
+        if item["at"] <= r:
+            out.append([key, item["data"]])
+            if item["every"] > 0:
+                item["at"] = item["at"] + item["every"] * (1 + (r - item["at"]) // item["every"])
+            else:
+                book.pop(key)
+    return out
+''')
+block("Seize", '''
+title = "Seize"
+intent = "Take what is owed from a holder, as much as it holds, and say why in the gazette; or charge a fee that is paid in full or not at all."
+exports = ["seize", "charge"]
+
+def seize(who, to, item, qty, reason=""):
+    take = min(qty, balance(who, item))
+    if take <= 0 or not move(who, to, item, take):
+        return 0
+    if reason:
+        gazette("Seized " + str(round_to(take, 4)) + " " + item + " from " + who + " for " + to + ": " + reason)
+    return take
+
+def charge(who, to, item, qty):
+    return move(who, to, item, qty)
+''')
+block("Escrow", '''
+title = "Escrow"
+intent = "Hold an agent's goods in a treasury under a key until a condition is met, then release them to someone or refund them."
+exports = ["hold", "release", "refund", "held"]
+
+def hold(book, key, owner, item, qty, holder="reserve"):
+    if qty <= 0 or not move(owner, holder, item, qty):
+        return False
+    e = book.setdefault(key, {"owner": owner, "holder": holder, "items": {}})
+    e["items"][item] = e["items"].get(item, 0) + qty
+    return True
+
+def release(book, key, to):
+    e = book.pop(key, None)
+    if e is None:
+        return {}
+    if to == e["holder"]:
+        return dict(e["items"])
+    paid = {}
+    for item in sorted(e["items"]):
+        q = min(e["items"][item], balance(e["holder"], item))
+        if q > 0 and move(e["holder"], to, item, q):
+            paid[item] = q
+    return paid
+
+def refund(book, key):
+    e = book.get(key)
+    if e is None:
+        return {}
+    return release(book, key, e["owner"])
+
+def held(book, key):
+    e = book.get(key)
+    if e is None:
+        return {}
+    return dict(e["items"])
+''')
+block("Tax Schedules", '''
+title = "Tax Schedules"
+intent = "How much tax is due: a flat rate, the fraction owed on the part of a value above a threshold, progressive brackets, and the median of a list."
+exports = ["flat", "above", "median", "progressive"]
+
+def flat(base, rate):
+    return rate * base
+
+def above(value, threshold, rate):
+    if value > threshold and value > 0:
+        return rate * (value - threshold) / value
+    return 0
+
+def median(values):
+    vals = sorted(values)
+    return vals[len(vals) // 2]
+
+def progressive(base, brackets):
+    due = 0
+    for i, b in enumerate(brackets):
+        top = base
+        if i + 1 < len(brackets):
+            top = min(base, brackets[i + 1][0])
+        if top > b[0]:
+            due = due + (top - b[0]) * b[1]
+    return due
+''')
+block("Ballot Helpers", '''
+title = "Ballot Helpers"
+intent = "Common ballots: a yes/no question, an election among candidates, and whether a yes/no ballot carried."
+exports = ["yes_no", "elect", "carried"]
+
+def yes_no(question, electorate, on_result, rule="majority", closes_in=1):
+    return open_ballot(question, electorate, ["yes", "no"], rule, closes_in, on_result)
+
+def elect(question, electorate, candidates, on_result, closes_in=1):
+    return open_ballot(question, electorate, candidates, "plurality", closes_in, on_result)
+
+def carried(result):
+    return result == ["yes"]
+''')
+block("Credit Helpers", '''
+title = "Credit Helpers"
+intent = "Reading the loan book: what a loan still owes, which loans fell into default this round, and the rate a loan charges per round (its rate plus the premium of the repayment over the loan, by value, spread over its term)."
+exports = ["owed", "defaulted_now", "premium", "per_round_rate"]
+
+def owed(ln):
+    return max(0, ln["repay_qty"] - ln["repaid"])
+
+def defaulted_now(book, r):
+    return [i for i in book if book[i]["status"] == "defaulted" and book[i].get("defaulted_round") == r]
+
+def premium(ln):
+    v0 = ln["qty"] * value(ln["item"])
+    v1 = ln.get("principal", ln["repay_qty"]) * value(ln["repay_item"])
+    if v0 <= 0:
+        return 0
+    return max(0, v1 / v0 - 1) / max(1, ln["due_in"])
+
+def per_round_rate(ln):
+    return premium(ln) + ln.get("rate", 0)
+''')
+
+
+# ---------------------------------------------------------------------- edition-2 laws
+law2("Loan Registry", f'''
+title = "Loan Registry"
+intent = "Agents may lend to each other; debts past due are seized from the borrower's holdings."
+rank = "statute"
+credit = use("{ref("Credit Helpers")}")
+take = use("{ref("Seize")}")
+
+def on_enact():
+    enable_loans(False)                      # loans exist: agents offer, accept and repay them; this law does the enforcing
+
+def on_round_start(r):
+    book = loans()
+    for i in credit["defaulted_now"](book, r):
+        ln = book[i]
+        due = credit["owed"](ln)
+        got = take["seize"](ln["borrower"], ln["lender"], ln["repay_item"], due, "loan " + i + " is past due")
+        if got > 0:
+            restructure_loan(i, due - got)   # the record now owes only what the seizure did not cover
+''', gap='''
+Holdings match edition 1 when the seizure covers the debt: at the due round the lender gets what the borrower holds of the repayment
+item. Differences: (1) the loan record first shows a default (loan_defaulted, seized false; credit record `defaults` +1) and then a
+loan_restructured to repaid, because a law can neither enforce at settlement time nor record a repayment on a loan (only
+restructure_loan and forgive_loan exist); (2) a partial seizure re-activates the remaining debt (restructure_loan sets status
+active), so it accrues interest for one more round, defaults again and is seized again every round until paid, where edition 1 seizes
+once and leaves the loan defaulted; (3) each seizure is announced in the gazette. Missing primitives: a loan-settlement hook or a
+`settle_loan(loan, paid)` that records a repayment, and loans as a contract that exists without a switch (enable_loans stays).''')
+
+law2("Handshake Loans", f'''
+title = "Handshake Loans"
+intent = "Agents may lend to each other; nothing is seized on default, and a debt is only as good as the borrower's word."
+rank = "statute"
+credit = use("{ref("Credit Helpers")}")
+reg = use("{ref("Ledger")}")
+
+def on_enact():
+    enable_loans(False)                      # loans exist; nothing is enforced
+
+def on_round_start(r):
+    book = loans()
+    broken = public.setdefault("broken_words", {{}})
+    for i in credit["defaulted_now"](book, r):
+        ln = book[i]
+        reg["record"](broken, ln["borrower"], {{"loan": i, "lender": ln["lender"], "owed": credit["owed"](ln), "item": ln["repay_item"]}})
+''', gap='''
+Same behaviour as edition 1 (loans exist, nothing is seized); in addition the law keeps a public register of defaults
+(public["broken_words"], readable by other laws with public_of). The switch enable_loans(False) stays: loans exist only while a law
+enables them.''')
+
+law2("Usury Law", f'''
+title = "Usury Law"
+intent = "No loan may charge more than 5% per round, counting both its rate and any premium of the repayment over the loan."
+rank = "statute"
+credit = use("{ref("Credit Helpers")}")
+CAP = 0.05
+
+def cap_loans():
+    book = loans()
+    done = state.setdefault("cut", [])
+    for i in book:
+        ln = book[i]
+        if ln["status"] != "active" or i in done or credit["per_round_rate"](ln) <= CAP + 1e-9:
+            continue
+        p = credit["premium"](ln)
+        if p <= CAP:
+            restructure_loan(i, None, None, CAP - p)            # lower the rate so that rate + premium = CAP
+        else:
+            fair = ln["qty"] * value(ln["item"]) / value(ln["repay_item"]) * (1 + CAP * ln["due_in"])
+            restructure_loan(i, max(0, fair - ln["repaid"]), None, 0)   # cut the repayment to the most CAP allows, no rate
+            done.append(i)
+        gazette("Usury Law: loan " + i + " now charges at most " + str(CAP) + " per round.")
+
+def on_enact():
+    public["interest_cap"] = CAP
+    cap_loans()
+
+def on_round_end(r):
+    cap_loans()
+''', gap='''
+Edition 1 (set_interest_cap) makes the kernel refuse any loan offer or acceptance above the cap and caps older loans' rates as they
+accrue. A law cannot refuse a loan offer (there is no loan hook, like on_transfer for transfers), so edition 2 lets the offer be made
+and accepted and rewrites the loan at the end of the round it became active, before any interest accrues: the rate is lowered so that
+rate + premium = 5%, or, when the premium alone is above 5%, the repayment is cut to the most 5% per round allows and the rate set to
+0; each rewrite is gazetted (and logged as loan_restructured). Offers still open are not touched. The cap is published as
+public["interest_cap"]; the Usury Law effect predicate accepts it in edition-2 worlds. Missing primitive: an on_loan(offer) hook that
+can refuse.''')
+
+law2("Debtor Sanctions", f'''
+title = "Debtor Sanctions"
+intent = "Loans are enforced by sanction, not seizure: a borrower in default is limited in what they can do and cannot borrow again until they repay."
+rank = "statute"
+credit = use("{ref("Credit Helpers")}")
+ACTIONS = 2
+ROUNDS = 3
+
+def on_enact():
+    enable_loans(False)                      # loans exist; nothing is seized
+
+def on_round_start(r):
+    book = loans()
+    for i in credit["defaulted_now"](book, r):
+        b = book[i]["borrower"]
+        if class_of(b) not in ["board", "fixer"]:
+            limit_actions(b, ACTIONS, ROUNDS)
+''', gap='''
+The sanction is the same (limit_actions: 2 actions for 3 rounds at the default; edition 1 reads credit.sanction_actions and
+credit.sanction_rounds from the spec, edition 2 has them as constants), but a law cannot bar a borrower in default from taking new
+loans: there is no hook on a loan acceptance. Missing primitive: an on_loan hook (or a borrowing right a law can suspend).''')
+
+law2("Harvest Levy", f'''
+title = "Harvest Levy"
+intent = "10% of every harvest goes to the reserve."
+rank = "statute"
+exports = ["RATE"]
+tax = use("{ref("Tax Schedules")}")
+RATE = 0.1
+
+def on_harvest(agent, camp, x, y):
+    return tax["flat"](y, RATE)
+''')
+
+law2("Transfer Tax", f'''
+title = "Transfer Tax"
+intent = "3% of every transfer goes to the reserve."
+rank = "statute"
+exports = ["RATE"]
+tax = use("{ref("Tax Schedules")}")
+RATE = 0.03
+
+def on_transfer(src, dst, item, qty):
+    return tax["flat"](qty, RATE)
+''')
+
+law2("Wealth Tax", f'''
+title = "Wealth Tax"
+intent = "1% of holdings above the median goes to the reserve each round."
+rank = "statute"
+exports = ["RATE"]
+tax = use("{ref("Tax Schedules")}")
+RATE = 0.01
+ITEMS = ["timber", "stone", "copper", "silver", "gold"]
+
+def on_round_end(r):
+    med = tax["median"]([holdings_value(a) for a in agents()])
+    for a in agents():
+        frac = tax["above"](holdings_value(a), med, RATE)
+        if frac > 0:
+            for item in ITEMS + currencies():
+                q = balance(a, item) * frac
+                if q > 0:
+                    move(a, "reserve", item, q)
+''')
+
+law2("Mint by Ballot", f'''
+title = "Mint by Ballot"
+intent = "Each issue of new coins needs its own legislative vote."
+rank = "statute"
+ballot = use("{ref("Ballot Helpers")}")
+when = use("{ref("Schedule")}")
+SHARE = 0.05
+
+def issue(result):
+    if ballot["carried"](result):
+        leg = holders("vote")
+        for a in leg:
+            mint("crown", SHARE * supply("crown") / max(1, len(leg)), a)
+        gazette("Mint by Ballot: a 5% issue was approved.")
+
+def on_round_end(r):
+    if when["every"](r, 5, 4) and "crown" in currencies():
+        ballot["yes_no"]("Issue 5% new crowns to the legislature?", holders("vote"), issue)
+''')
+
+law2("Licence Auction", f'''
+title = "Licence Auction"
+intent = "Harvest rights are auctioned every 10 rounds; proceeds go to the reserve."
+rank = "statute"
+esc = use("{ref("Escrow")}")
+when = use("{ref("Schedule")}")
+PRICE_ITEM = "timber"
+
+def bid(agent, camp, qty):
+    q = float(qty)
+    book = state.setdefault("escrow", {{}})
+    key = camp + "/" + agent
+    esc["refund"](book, key)                  # a new bid replaces the old one: its deposit comes back first
+    bids = state.setdefault("bids", {{}}).setdefault(camp, {{}})
+    if not esc["hold"](book, key, agent, PRICE_ITEM, q):
+        bids.pop(agent, None)
+        return "you hold less than " + str(q) + " " + PRICE_ITEM
+    bids[agent] = q
+    return "bid recorded; " + str(q) + " " + PRICE_ITEM + " held in escrow until the auction"
+
+def on_enact():
+    create_right("bidder")
+    for a in agents():
+        grant(a, "bidder")
+    define_action("bidder", "bid", bid)
+
+def on_round_end(r):
+    if not when["every"](r, 10, 9):
+        return
+    book = state.setdefault("escrow", {{}})
+    for c, bids in state.get("bids", {{}}).items():
+        ranked = sorted(bids, key=lambda a: -bids[a])
+        right = "harvest:" + c
+        for a in holders(right):
+            revoke(a, right)
+        for a in ranked[:2]:
+            esc["release"](book, c + "/" + a, "reserve")    # the winning bid is the price
+            grant(a, right)
+        for a in ranked[2:]:
+            esc["refund"](book, c + "/" + a)
+    state["bids"] = {{}}
+''', gap='''
+Edition 1 records a bid as a promise and collects it at the auction (a winner who can no longer pay gets nothing). Edition 2 holds
+each bid in escrow when it is made (a bid the bidder cannot cover is refused), pays the winners' deposits to the reserve and refunds
+the others. The escrow is kept in the reserve and tracked by the law's book: there is no law-owned escrow account yet (accounts.py
+reserves "escrow:<cid>:<aid>" for P4.3), so another law paying out a share of the reserve can spend escrowed goods, and a refund then
+pays what is left.''')
+
+law2("Media Licensing", f'''
+title = "Media Licensing"
+intent = "Every private outlet pays 1 timber per round to the reserve for its licence; an outlet that cannot pay is suspended for a round."
+rank = "statute"
+fee = use("{ref("Seize")}")
+FEE_ITEM = "timber"
+FEE = 1
+
+def on_round_end(r):
+    for o in outlets():
+        if not o["official"] and o["status"] == "open":
+            if not fee["charge"](o["editor"], "reserve", FEE_ITEM, FEE):
+                suspend_outlet(o["id"], 1)
+''')
+
+law2("Official Stream", '''
+title = "Official Stream"
+intent = "The public posts of the Board and the Legislators are published verbatim, not as submissions to the outlets."
+rank = "statute"
+CLASSES = ["board", "legislator"]
+
+def on_post(agent, text):
+    if agent != "anonymous" and class_of(agent) in CLASSES:
+        gazette(name(agent) + " (official): " + text)
+''', gap='''
+Edition 1 (official_stream) routes these posts around the outlets into the official stream. A law cannot route a post, only react to
+it: edition 2 prints each public post of a Board member or Legislator verbatim in the gazette, and the post still goes to the outlets
+as a submission. The class changes too: official_stream is a rights call (structural, law level L2); gazette is output (ordinary,
+L1). Missing primitive: a post-routing rule a law can set per author (the media rule official_stream applies is that switch).''')
+
+law2("Two Child Limit", '''
+title = "Two Child Limit"
+intent = "No agent may have more than two children, born or ordered."
+rank = "statute"
+LIMIT = 2
+PENDING = ["open", "waiting", "due"]
+
+def on_commission(parent, maker, order):
+    pending = [c for c in commissions() if c["parent"] == parent and c["status"] in PENDING]
+    if len(children_of(parent)) + len(pending) >= LIMIT:
+        return False
+    return True
+''', gap='''
+Same rule, checked by the law's own on_commission hook instead of set_birth_rules(max_children=2): an order that would make a third
+child is refused (the agent reads "law L refuses this commission" instead of "law L forbids this: at most 2 children per parent").
+The class changes: set_birth_rules is a rights call (structural, L2); a hook that refuses is ordinary (L1), so in an L1 world the law
+could be proposed but the generator's library list (computed from edition 1) does not show it.''')
+
+law2("No Soldiers", '''
+title = "No Soldiers"
+intent = "No child may be made with extra attack."
+rank = "statute"
+MAX_ATTACK = 0
+
+def on_commission(parent, maker, order):
+    if order["stats"]["attack"] > MAX_ATTACK:
+        return False
+    return True
+''', gap='''
+Same rule through on_commission instead of set_birth_rules(max_stats={"attack": 0}); the refusal message and the class differ as for
+Two Child Limit (ordinary, L1, instead of structural, L2).''')
+
+
+# ---------------------------------------------------------------------- edition lookups
+def settings(x=None) -> dict:
+    """{edition, access} of a kernel, an instance or a spec (None: edition 1, access none)."""
+    sp = getattr(x, "spec", None)
+    if sp is None and isinstance(x, dict):
+        sp = x["spec"] if isinstance(x.get("spec"), dict) else x
+    lib = ((sp or {}).get("law") or {}).get("library") or {}
+    return {"edition": int(lib.get("edition") or 1), "access": lib.get("access") or "none"}
+
+
+def edition(x=None) -> int:
+    return settings(x)["edition"]
+
+
+def code(name: str, x=None) -> str:
+    """The code of library law `name` in the edition of x (a kernel, an instance or a spec): edition 2 uses its rewrite if any."""
+    if name in LIB2 and edition(x) == 2:
+        return LIB2[name]["code"]
+    return LIB[name]["code"]
+
+
+def entries(name: str) -> list[dict]:
+    """Every library entry (edition-1 law, edition-2 law, block) whose ref name is `name` (as in use("lib:<name>@<sha>"))."""
+    out = [{**LIB[n], "kind": LIB[n].get("kind", "law"), "edition": 1} for n in LIB if _slug(n) == name]
+    out += [e for e in LIB2.values() if _slug(e["name"]) == name]
+    out += [e for e in BLOCKS.values() if _slug(e["name"]) == name]
+    return out
+
+
+def lib_code(name: str, pin: str) -> tuple:
+    """For the linker: (code, sha) of the library entry `name` whose sha starts with `pin`; (None, [the shas it has]) when there
+    is none ([] when no entry has that name)."""
+    shas = []
+    for e in entries(name):
+        s = _sha(e["code"])
+        if s.startswith(pin):
+            return e["code"], s
+        shas.append(s)
+    return None, shas
+
+
+def entry_code(name: str) -> str:
+    """The code linker.lib_ref(name) pins: a block's, else the edition-1 law's."""
+    return BLOCKS[name]["code"] if name in BLOCKS else LIB[name]["code"]
+
+
+def classify_code(src: str) -> dict:
+    """Class and minimum law level of law code, counting what its lib:* imports can do (what linker.classify does in a world,
+    for library references only)."""
+    from charter import linker as LK
+    v2 = "use(" in src
+    tree = L.check(src, v2=v2)
+    imported = []
+    if v2:
+        used = L.used_exports(tree)
+        for alias, r in L.use_refs(tree).items():
+            kind, ident, pin = LK.parse_ref(r)
+            sub = lib_code(ident, pin)[0] if kind == "lib" else None
+            if sub is None:
+                raise L.LawError(f"use({r!r}): not a library entry")
+            imported.append(L.export_closure(L.check(sub, v2=True), used.get(alias))[0])
+    cls = L.classify(tree, imported)
+    l4 = L.uses_define_action(tree) or any(L.uses_define_action(t) for t in imported)
+    return {"cls": cls, "level": "L4" if l4 else {"ordinary": "L1", "structural": "L2", "procedural": "L3"}[cls]}
+
+
+def info2(name: str, x=None) -> dict:
+    """info(name) in the edition of x: the code agents see, its class and level, and (edition 2) its documented gap."""
+    if name in LIB2 and edition(x) == 2:
+        return {**LIB2[name], **classify_code(LIB2[name]["code"]), "gap": GAPS.get(name, "")}
+    return info(name)
+
+
+# ---------------------------------------------------------------------- access: catalogue and instantiate
+def catalogue_text(x=None) -> str:
+    """Edition 2 with access catalogue or instantiate: the building blocks agents can import or copy (ref, exports, code)."""
+    st = settings(x)
+    if st["access"] == "none" or st["edition"] != 2:
+        return ""
+    parts = ["Library building blocks (import one with name = use(\"<ref>\") at the top level of a law: an imported function runs "
+             "with your law's own powers; or copy its code into your law):"]
+    for b in BLOCKS.values():
+        ex = L.exports_of(L.check(b["code"], v2=True)) or []
+        parts.append(f"- {ref(b['name'])} ({b['name']}): exports {', '.join(ex)}\n```python\n{b['code']}```")
+    if st["access"] == "instantiate":
+        parts.append("Any library law can be copied with its top-level constants changed (RATE, CAP, LIMIT, ...) and proposed as your own.")
+    return "\n".join(parts)
+
+
+def instantiate(name: str, params: dict | None = None, x=None) -> str:
+    """A copy of library law `name` (in the edition of x) with top-level constants replaced: params {NAME: value}. Only names
+    assigned a constant at the top level can be set; the result is checked like any law."""
+    import ast
+    src = code(name, x)
+    tree = ast.parse(src)
+    fixed = ("title", "intent", "rank", "exports")
+    consts = {n.targets[0].id: n for n in tree.body if isinstance(n, ast.Assign) and len(n.targets) == 1
+              and isinstance(n.targets[0], ast.Name) and n.targets[0].id not in fixed and L.const_expr(n.value)}
+    lines = src.split("\n")
+    for k, v in (params or {}).items():
+        if k not in consts:
+            raise L.LawError(f"{name} has no constant {k} to set (it has {', '.join(sorted(consts)) or 'none'})")
+        n = consts[k]
+        if n.lineno != n.end_lineno:
+            raise L.LawError(f"{k} spans several lines; edit the code instead")
+        lines[n.lineno - 1] = f"{k} = {v!r}"
+    out = "\n".join(lines)
+    L.check(out, v2="use(" in out)
+    return out

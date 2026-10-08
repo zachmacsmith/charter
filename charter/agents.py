@@ -202,17 +202,22 @@ def goal_prior(spec_goals: dict | None = None, spec: dict | None = None) -> str:
 def library_text(inst: dict, a: dict) -> str:
     if not inst["library"]:
         return ""
+    cat = LB.catalogue_text(inst)                                       # law.library.access (edition 2): the lib:* blocks
+    return _library_text(inst, a) + ("\n\n" + cat if cat else "")
+
+
+def _library_text(inst: dict, a: dict) -> str:
     if a["cls"] == "scientist":
         mine = [d for d in (a.get("archive_docs") or []) if d.startswith("library/")]
         return (f"Library: you hold the code of {len(mine)} library laws in your part of the archive (library/*); other Scientists hold the rest. "
                 "Titles and intents of every library law visible in this world: "
                 + "; ".join(f"{n} ({G._intent(LB.info(n)['code'])})" for n in inst["library"]))
     if inst["library_access"] == "titles_for_others":
-        items = [LB.info(n) for n in inst["library"]]
+        items = [LB.info2(n, inst) for n in inst["library"]]
         return ("Library of drafted laws (titles and intents only; Scientists hold the code in their archive):\n"
                 + "\n".join(f"- {i['name']} [{i['category']}, {i['cls']}]: {G._intent(i['code'])}" for i in items))
     return "Library of drafted laws (none enacted; propose as written, edit, or write your own):\n" + "\n\n".join(
-        LB.info(n)["code"] for n in inst["library"])
+        LB.code(n, inst) for n in inst["library"])
 
 
 def class_brief(inst: dict, a: dict, archive_index: bool = True) -> str:
@@ -604,7 +609,7 @@ class ScriptedPolicy:
                 x = [r.randint(2, min(c["max"], 10**6))] if c.get("compute") in ("factoring", "pow") else [r.randint(0, c["max"]) for _ in range(c["dials"])]
                 acts.append({"action": "harvest", "args_json": json.dumps({"camp": c["id"], "x": x})})
             elif cls == "legislator" and k.inst["library"] and roll < 0.75 and k.has(aid, "propose"):
-                acts.append({"action": "propose", "args_json": json.dumps({"code": LB.LIB[r.choice(k.inst["library"])]["code"]})})
+                acts.append({"action": "propose", "args_json": json.dumps({"code": LB.code(r.choice(k.inst["library"]), k.inst)})})
             elif roll < 0.8 and any(b["status"] == "open" and aid in b["electorate"] for b in k.w["ballots"].values()):
                 b = r.choice([b for b in k.w["ballots"].values() if b["status"] == "open" and aid in b["electorate"]])
                 ch = r.choice(b["options"]) if not b["rule"].startswith("approval") else r.sample(b["options"], min(3, len(b["options"])))
