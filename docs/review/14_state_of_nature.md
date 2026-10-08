@@ -6,24 +6,21 @@ power."), and the owner's notes after watching Haiku runs. Section 6 lists the d
 
 ## Executive summary
 
-The anarchy regime is not a state of nature. It is a world-wide J0 with a single hard-coded exit: more than half of all agents must
-post `#convention` within three rounds (`regimes.CONSTITUTIONS["anarchy"]`). In the 100-agent run, 35-42 agents posted every round
-and nothing happened, because a coalition of 40 had no way to bind itself. Meanwhile the 26 contracts were mostly the offered
-templates (club, company, insurer, cartel), founded to satisfy goals that say "build a company". When their founders died, the
-contracts died too, because one-member contracts dissolve when the last member leaves. The agents chose from a menu. They did not
-design.
+The anarchy regime is not a state of nature. It is a world-wide J0 whose only exit is that more than half of all agents post
+`#convention` within three rounds. In the 100-agent run, about 40 agents posted it every round and nothing happened, because a
+coalition of 40 could not bind itself. The 26 contracts were mostly offered templates, founded for goals that say "build a
+company", and they died with their founders. The agents chose from a menu. They did not design.
 
 Proposal:
 
-1. **Start in chaos.** At round 0 there are agents, physics and a communication substrate: DMs, plus a square (D1). There is no J0,
-   no procedure and no default code. The anarchy constitution and `#convention` are frozen for old runs and leave new presets.
-2. **One institution kind.** Polity, company, club, channel owner and outlet are all the same kind of account. An institution
-   becomes a polity by *accumulating* powers, not by changing kind: members consent to compulsion, then non-members are reached
-   through recognition by other institutions or by force. Regime presets become seeded institution trees, and J0 is simply the root
-   a preset seeds.
-3. **Channels are institutions' organs.** They can be owned by an account, have reader and writer selectors (members, offices),
-   carry an addressable inbox, and be posted to "as" an institution through an office. The press gate and media2 outlets become
-   library law over these primitives.
+1. **Start in chaos.** At round 0 there are agents, physics, DMs and a square (D1). There is no J0, procedure or default code.
+   `anarchy` and `#convention` are frozen for old runs.
+2. **One institution kind.** An institution becomes a polity by accumulating powers, not by changing kind: members consent to
+   compulsion, and non-members are reached through recognition or force. Presets become seeded institution trees, and J0 is
+   simply the root a preset seeds.
+3. **Channels are institutions' organs.** Each is account-owned, with reader and writer selectors (members, offices) and an
+   addressable inbox, and can be posted to "as" an institution through an office. The press gate and media2 outlets become
+   library law.
 4. **A design arm.** No template names, no institution goals, the library only on request, outcome goals. Novelty is measured
    against the library by fingerprint. A scaffolded arm is kept for comparison.
 
