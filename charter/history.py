@@ -142,8 +142,8 @@ class Span:
 
 
 class _Index:
-    """The event log indexed once, lazily: by type on first use; by agent and by (agent, type) on the first query by agent. Each
-    list is in log order and shared (read-only)."""
+    """The event log indexed once, lazily: by type on the first query by type; by agent and by (agent, type) on the first query
+    by agent. Each list is in log order and shared (read-only)."""
     __slots__ = ("all", "_type", "_agent", "_at", "pos")
 
     def __init__(self, events):
@@ -151,14 +151,13 @@ class _Index:
         self._type = self._agent = self._at = self.pos = None
 
     def of_type(self, t) -> list:
-        """Events of one type: one filtering pass the first time the type is asked for, then the stored list."""
+        """Events of one type: the log is grouped by type in one pass the first time any type is asked for."""
         if self._type is None:
-            self._type = {}
-        try:
-            return self._type[t]
-        except KeyError:
-            v = self._type[t] = [e for e in self.all if e["type"] == t]
-            return v
+            by_type = {}
+            for e in self.all:
+                by_type.setdefault(e["type"], []).append(e)
+            self._type = by_type
+        return self._type.get(t, ())
 
     def _agents(self):
         by_agent, by_at = {}, {}
@@ -532,11 +531,51 @@ def _children_table(h) -> dict:
 
 
 # ------------------------------------------------------------------ scoring
+_ALLY_FOIL = ("Ally", "Foil")
+
+
 class Ctx:
-    """One per scoring pass: the History being scored, the span (r0, r1) when scoring a segment, and a memo for scorers."""
+    """One per scoring pass: the History being scored, the span (r0, r1) when scoring a segment, and a memo for scorers.
+
+    score_of(agent, slot, span) is how a goal reads another agent's score (Ally, Foil; Spoiler and Mirror read their tables from
+    History): that agent's `slot` goal (as `goals` records it) scored natively on the same History, following chains of Ally and
+    Foil with a cycle guard (a slot met twice in one chain is not computable: None). Leaf scores are memoised per pass."""
 
     def __init__(self, history, span=None):
         self.history, self.span, self.memo = history, span, {}
+
+    def at(self, span) -> "Ctx":
+        """A Ctx over the window `span` = (r0, r1) of this pass's History (None: this Ctx)."""
+        if span is None:
+            return self
+        return Ctx(self.history.window(*span), tuple(span))
+
+    def score_of(self, agent, slot="primary", span=None, _seen=frozenset()):
+        """`agent`'s score on its `slot` goal (primary / secondary / tertiary) on this History (or its window `span`); None when
+        the slot is empty, names no catalogue goal, or closes a cycle of Ally / Foil goals."""
+        if span is not None:
+            return self.at(span).score_of(agent, slot, None, _seen)
+        h = self.history
+        g = (h.gt.get("goals") or {}).get(agent, {})
+        name = g.get(slot) if slot != "primary" else g.get("primary")
+        params = g.get("params", {}) if slot == "primary" else g.get(f"{slot}_params", {})
+        _goals()
+        if not name or name not in _G.HSCORERS or (agent, slot) in _seen:
+            return None
+        if name in _ALLY_FOIL:
+            sub = self.score_of(params.get("target"), params.get("slot", "primary"), None, _seen | {(agent, slot)})
+            return None if sub is None else (sub if name == "Ally" else 1 - sub)
+        key = ("score_of", agent, slot)
+        try:
+            return self.memo[key]
+        except KeyError:
+            v = self.memo[key] = _G.HSCORERS[name](h, agent, params, self)
+            return v
+
+
+def ctx_for(h, ctx):
+    """`ctx` when it scores `h`, else a fresh Ctx over `h` (a native scorer may be called without one)."""
+    return ctx if ctx is not None and ctx.history is h else Ctx(h)
 
 
 def legacy(fn):
@@ -547,25 +586,27 @@ def legacy(fn):
     return score
 
 
-def scorer_for(name):
-    """score(h, a, p, ctx) for a catalogue goal: its native port (goals.HSCORERS) or the legacy scorer through `legacy`."""
-    from charter import goals as G
-    fn = G.SCORERS[name]                                                  # unknown name: KeyError, as before
-    return G.HSCORERS.get(name) or legacy(fn)
-
-
 _G = None
 
 
-def score_goal(h, name, agent, params, ctx=None):
-    """scorer_for(name)(h, agent, params, ctx), without building the adapter (scorer.goal_scores calls this per goal slot)."""
+def _goals():
     global _G
     if _G is None:
         from charter import goals
         _G = goals
-    fn = _G.SCORERS[name]                                                 # unknown name: KeyError, as before
-    native = _G.HSCORERS.get(name)
-    return native(h, agent, params, ctx) if native is not None else fn(h.gt, agent, params)
+    return _G
+
+
+def scorer_for(name):
+    """score(h, a, p, ctx) for a catalogue goal: its native port (goals.HSCORERS). KeyError for an unknown name."""
+    G = _goals()
+    G.SCORERS[name]                                                       # unknown name: KeyError, as before
+    return G.HSCORERS[name]
+
+
+def score_goal(h, name, agent, params, ctx=None):
+    """scorer_for(name)(h, agent, params, ctx) (scorer.goal_scores calls this per goal slot)."""
+    return (_G or _goals()).HSCORERS[name](h, agent, params, ctx)
 
 
 def by_rounds(parts) -> float | None:

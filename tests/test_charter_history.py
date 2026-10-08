@@ -165,28 +165,81 @@ def test_golden_runs_cover_segments_and_life(runs):
     assert any(life.life(a).how == "birth" for a in life.ever())
 
 
+def _param_sets(h):
+    """Parameters to score every goal with on a run: those its agents drew (every slot, every segment) and one generic set that
+    names a resource, a library law, an outcome, an entity, a camp, a target, a partner and a right of this world."""
+    from charter import library as LB
+    out = {}
+    goals = list(h.goals.values()) + [b[k] for b in (h.gt.get("world_events") or {}).get("goal_boundaries") or [] for k in ("old", "new")]
+    for g in goals:
+        for slot, pk in (("primary", "params"), ("secondary", "secondary_params"), ("tertiary", "tertiary_params")):
+            if g.get(slot):
+                out.setdefault(g[slot], []).append(g.get(pk) or {})
+    camps = sorted(h.camp_resource) or ["c1"]
+    agents = h.agents
+    generic = {"resource": h.camp_resource.get(camps[0], "timber"), "law": sorted(LB.PREDICATES)[0], "condition": sorted(LB.OUTCOMES)[0],
+               "entity": "board", "name": "the Elders", "word": "Archon", "camp": camps[0], "target": agents[1], "partner": agents[2],
+               "slot": "primary", "right": "vote", "classes": "worker"}
+    return {name: out.get(name, []) + [generic] for name in G.SCORERS}
+
+
+def _outcome(fn, *a):
+    try:
+        return ("ok", fn(*a))
+    except Exception as e:                                       # e.g. Wealth for an agent not in the final values: both must fail
+        return ("error", None)
+
+
 @pytest.mark.parametrize("name", sorted(golden.CASES))
-def test_native_ports_equal_legacy_scorers_on_every_window(runs, name):
+def test_native_scorers_equal_legacy_scorers_on_every_window(runs, name, monkeypatch):
+    """Every goal's native scorer (goals.HSCORERS) returns exactly what its legacy s_* returns, for every agent, on the whole run,
+    every window and every scoring segment's view, with the parameters drawn in the run and a generic set."""
+    cache = {}
+    common = G._common_shingles
+    monkeypatch.setattr(G, "_common_shingles", lambda inst, texts=None: cache[(id(inst), id(texts))] if (id(inst), id(texts)) in cache
+                        else cache.setdefault((id(inst), id(texts)), common(inst, texts)))
     h = History.load(runs[name][0])
-    assert set(G.HSCORERS) == {"Wealth", "Gifts", "Steward", "Lineage Wealth"}
+    assert set(G.HSCORERS) == set(G.SCORERS) and len(G.HSCORERS) == 70
+    params = _param_sets(h)
+    n = 0
     for v in [h] + _windows(h):
         agents = sorted(set(v.final["values"]) | set(v.start_values))
+        ctx = HI.Ctx(v)
         for goal, native in G.HSCORERS.items():
-            for a in agents:
-                try:
-                    want = G.SCORERS[goal](v.gt, a, {})
-                except KeyError:                               # e.g. Wealth for an agent not in the final values
-                    with pytest.raises(KeyError):
-                        native(v, a, {})
-                    continue
-                assert native(v, a, {}) == want, (goal, a, v)
+            for p in params[goal]:
+                for a in agents:
+                    want = _outcome(G.SCORERS[goal], v.gt, a, p)
+                    got = _outcome(native, v, a, p, ctx)
+                    assert got == want, (goal, a, p, v)
+                    n += 1
+        for a in agents:
+            for fixed, legacy_fn in ((G.h_board, G.board_score), (G.h_fixer, G.fixer_score)):
+                assert _outcome(fixed, v, a) == _outcome(legacy_fn, v.gt, a)
+    assert n > 1000
 
 
-def test_scorer_for_adapts_legacy_scorers(runs):
+def test_ctx_score_of_follows_ally_and_foil_chains():
+    from charter import goal_registry as GR
+    h = GR.fixture(goals={"B": "Wealth"}, final={"values": {"A": 1.0, "B": 5.0, "C": 10.0, "D": 0.0}})
+    h.gt["goals"]["C"] = {**h.gt["goals"]["C"], "primary": "Ally", "params": {"target": "B"}}
+    h.gt["goals"]["D"] = {**h.gt["goals"]["D"], "primary": "Foil", "params": {"target": "C"}}
+    ctx = HI.Ctx(h)
+    assert ctx.score_of("B") == 0.5 and ctx.score_of("C") == 0.5 and ctx.score_of("D") == 0.5
+    assert G.h_ally(h, "A", {"target": "D"}, ctx) == 0.5 == G.s_ally(h.gt, "A", {"target": "D"})
+    h.gt["goals"]["B"] = {**h.gt["goals"]["B"], "primary": "Ally", "params": {"target": "C"}}   # B -> C -> B: a cycle
+    ctx = HI.Ctx(h)
+    assert ctx.score_of("C") is None and G.h_foil(h, "A", {"target": "C"}, ctx) is None is G.s_foil(h.gt, "A", {"target": "C"})
+    assert ctx.score_of("A", "secondary") is None and ctx.score_of(None) is None
+    w = ctx.at((1, 2))
+    assert w.history is h.window(1, 2) and w.span == (1, 2) and ctx.at(None) is ctx
+
+
+def test_scorer_for_returns_the_native_scorer(runs):
     h = History.load(runs["E2_seq_6"][0])
     fn = HI.scorer_for("Rank")
     a = h.agents[0]
-    assert fn.legacy is G.s_rank and fn(h, a, {}, HI.Ctx(h)) == G.s_rank(h.gt, a, {})
+    assert fn is G.h_rank and fn(h, a, {}, HI.Ctx(h)) == G.s_rank(h.gt, a, {})
+    assert HI.legacy(G.s_rank)(h, a, {}) == G.s_rank(h.gt, a, {}) and HI.legacy(G.s_rank).legacy is G.s_rank
     assert HI.scorer_for("Wealth") is G.h_wealth
     with pytest.raises(KeyError):
         HI.scorer_for("No such goal")
