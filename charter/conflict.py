@@ -713,12 +713,27 @@ def act_buy_initiative(k, aid, n):
     item = c["initiative"]["item"]
     if n < 1 or k.bal(aid, item) + 1e-9 < n:
         raise _err(f"initiative costs 1 {item} per place, and you have {k.bal(aid, item):g}")
+    total = k.apply("set_initiative", agent=aid, n=n, item=item).result["total"]                    # W8b: routed
+    return (f"Spent {n} {item}: next round you act {total} places earlier than the published order shows "
+            "(the true order is revealed after the round).")
+
+
+def change_set_initiative(k, agent, n, item) -> dict:
+    """W8b (review 12 §2.14): the set_initiative primitive: an agent buys places in the next round's order; the spent goods
+    (destroy, cause initiative) are part of the change."""
+    aid = agent
     k.apply("destroy", owner=aid, item=item, qty=float(n), cause="initiative")   # spent: paid to nobody
     st = k.w["conflict"]
     st["initiative"][aid] = st["initiative"].get(aid, 0) + n
     k.log("initiative_bought", aid, {"n": n, "item": item, "total": st["initiative"][aid]}, vis="monitor")
-    return (f"Spent {n} {item}: next round you act {st['initiative'][aid]} places earlier than the published order shows "
-            "(the true order is revealed after the round).")
+    return {"total": st["initiative"][aid]}
+
+
+def change_arms_rule(k, key, value, lid=None) -> dict:
+    """W8b (review 12 §2.14): the set_arms_rule primitive (key "forge_ban": a law bans forging weapons while it is in force)."""
+    k.w["conflict"]["forge_ban"][lid] = value
+    k.log("forge_ban", None, {"on": value, "law": lid}, vis="public")
+    return {"on": value}
 
 
 def act_contract(k, aid, to, target, item=None, qty=0, text=""):
@@ -731,6 +746,17 @@ def act_contract(k, aid, to, target, item=None, qty=0, text=""):
     pay = qty not in (None, 0, "") and bool(item)
     if pay and k.bal(aid, item) + 1e-9 < float(qty):
         raise _err(f"you have only {k.bal(aid, item):g} {item}")
+    terms = {"item": item, "qty": float(qty)} if pay else None
+    return k.apply("hire_assassin", agent=aid, assassin=to, target=target, terms=terms, text=text).result["text"]   # W8b
+
+
+def change_hire_assassin(k, agent, assassin, target, terms, text="") -> dict:
+    """W8b (review 12 R2): the hire_assassin primitive: a sealed contract (a DM to the hired agent, and its payment, part of the
+    change). Laws that hook it never see the hirer or the hired (dispatch.hooks.HIDE), nor the message."""
+    from charter import actions as A
+    aid, to = agent, assassin
+    pay = terms is not None
+    item, qty = (terms["item"], terms["qty"]) if pay else (None, 0)
     st = k.w["conflict"]
     st["contract_seq"] += 1
     cid = f"H{st['contract_seq']}"                                  # H: hire (K is a Life commission)
@@ -741,7 +767,7 @@ def act_contract(k, aid, to, target, item=None, qty=0, text=""):
     st["contracts"][cid] = {"id": cid, "hirer": aid, "to": to, "target": target, "payment": {"item": item, "qty": float(qty)} if pay else None,
                             "round": k.r, "dm": eid, "to_assassin": R.has_role(k, to, "assassin"), "fulfilled": None}
     k.log("contract_truth", aid, dict(st["contracts"][cid]), vis="monitor")
-    return f"Sealed contract {cid} sent to {to} ({eid})" + (f"; {tx}" if tx else ".")
+    return {"contract": cid, "text": f"Sealed contract {cid} sent to {to} ({eid})" + (f"; {tx}" if tx else ".")}
 
 
 # ------------------------------------------------------------------ the archive guarantee and conflict articles
@@ -853,8 +879,7 @@ def law_api(k, lid) -> dict:
         if not module_on(k):
             return False
         v = bool(on if on_ is None else on_)
-        k.w["conflict"]["forge_ban"][lid] = v
-        k.log("forge_ban", None, {"on": v, "law": lid}, vis="public")
+        k.apply("set_arms_rule", key="forge_ban", value=v, lid=lid)                                   # W8b: routed
         return True
 
     def oblige_guard(guard, agent):

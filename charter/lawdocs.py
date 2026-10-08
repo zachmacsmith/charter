@@ -606,6 +606,11 @@ def v2_article(contracts: bool = False) -> dict:
                                  ("a number charges " + (P.charge or ("",))[0], bool(P.charge)),
                                  ("a change to the rule system: hooking it makes a law procedural", P.legal)) if on]
         lines.append(f"- `{n}`: {what}" + (f" ({'; '.join(notes)})" if notes else ""))
+    lines += ["", "Groups and offices: found, admit, expel and dissolve carry p['kind'] (\"channel\" for a private group: p['polity'] is "
+              "its name; \"outlet\"; \"jurisdiction\" for a founding, which only that hidden jurisdiction's own laws ever see; None "
+              "for a polity's or an association's membership). invoke is an office's use (p['action'], p['law'], p['args']; "
+              "after_invoke also gets p['result']). Laws' own rule setters (set_title, rename, set_money_rule, ...) are changes "
+              "too: a constitution's before-hook may refuse them."]
     lines += ["", "These work in any law of a world with law.v2, whether or not the rules you were given mention them."]
     return {"tier": "common", "title": "Hooks on any change (law.v2)", "text": "\n".join(lines) + "\n", "documents": []}
 

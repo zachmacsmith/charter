@@ -332,8 +332,8 @@ def settle(k):
         rate = ln.get("rate", 0.0)
         if rate and k.r > ln.get("accrued_round", k.r):
             if cap is not None and rate > cap:
-                ln["rate"] = rate = cap
-                k.log("loan_rate_capped", None, {"loan": ln["id"], "rate": cap}, vis="public")
+                k.apply("loan_terms", loan=ln["id"], terms={"rate": cap, "capped": True})              # W8b: routed
+                rate = cap
             base = outstanding(ln) if ln.get("compound") else ln.get("principal", ln["repay_qty"])
             add = round(rate * base, 6)
             ln["repay_qty"] += add
@@ -440,17 +440,89 @@ def reserve_ratio(k, cur) -> float:
 
 
 def suspend(k, cur, rounds, why, by=None):
-    rounds = int(rounds)
-    s = st(k)["redemption"].setdefault(cur, {})
-    if rounds <= 0:
-        if not redemption_open(k, cur):
-            s["until"] = None
-            k.log("redemption_resumed", None, {"currency": cur, "why": why, "law": by}, vis="public")
-        return True
-    s["until"] = k.r + rounds
-    k.log("redemption_suspended", None, {"currency": cur, "until": s["until"], "why": why, "law": by,
-                                         "reserve_ratio": reserve_ratio(k, cur)}, vis="public")
+    k.apply("set_money_rule", currency=cur, key="redemption", value=int(rounds), why=why, lid=by)     # W8b: routed
     return True
+
+
+# W8b (review 12 §2.14): the set_money_rule primitive, the rules of a currency and of credit. key: "par" (value {item, rate}, or
+# None to drop it; a law's set_par), "convertible" (value True or one resource; Kernel.api_for.set_convertible, no event),
+# "redemption" (value: rounds of suspension, 0 or less resumes; a law's suspend_redemption, or a bank run's), "interest_cap" (value:
+# the rate or None; currency None), "default_consequence" (value: a CONSEQUENCES kind; currency None), "loans" (value {"enforce":
+# bool}: loans exist while the law is in force; currency None; no event).
+def change_money_rule(k, currency, key, value, lid=None, why=None) -> dict:
+    cur = currency
+    if key == "par":
+        c = k.w["currencies"][cur]
+        if value is None:
+            c.pop("par", None)
+            k.log("par_set", None, {"currency": cur, "par": None, "law": lid}, vis="public")
+        else:
+            c["par"] = {"item": value["item"], "rate": value["rate"]}
+            c["convertible"] = True if value["item"] == "value" else value["item"]
+            k.log("par_set", None, {"currency": cur, "par": dict(c["par"]), "law": lid}, vis="public")
+    elif key == "convertible":
+        k.w["currencies"][cur]["convertible"] = value
+    elif key == "redemption":
+        rounds = value
+        s = st(k)["redemption"].setdefault(cur, {})
+        if rounds <= 0:
+            if not redemption_open(k, cur):
+                s["until"] = None
+                k.log("redemption_resumed", None, {"currency": cur, "why": why, "law": lid}, vis="public")
+        else:
+            s["until"] = k.r + rounds
+            k.log("redemption_suspended", None, {"currency": cur, "until": s["until"], "why": why, "law": lid,
+                                                 "reserve_ratio": reserve_ratio(k, cur)}, vis="public")
+    elif key == "interest_cap":
+        st(k)["cap"] = None if value is None else {"rate": value, "law": lid}
+        k.log("interest_cap", None, {"rate": value, "law": lid}, vis="public")
+    elif key == "default_consequence":
+        st(k)["consequence"] = {"kind": value, "law": lid}
+        k.log("default_consequence", None, {"kind": value, "law": lid}, vis="public")
+    elif key == "loans":
+        k.w["loan_law"], k.w["loan_enforce"] = lid, bool(value["enforce"])
+    else:
+        raise ValueError(f"set_money_rule: no key {key}")
+    return {"key": key, "value": value}
+
+
+def change_loan_terms(k, loan, terms, lid=None) -> dict:
+    """W8b (review 12 §2.14): the loan_terms primitive. A law's restructure_loan (terms: repay_qty, due_in, rate, any of them; a
+    loan left owing nothing is settled, how "restructure") or the interest cap's cut of a loan's rate (terms {"rate", "capped":
+    True}, at settlement)."""
+    ln = k.w["loans"][loan]
+    if terms.get("capped"):
+        ln["rate"] = terms["rate"]
+        k.log("loan_rate_capped", None, {"loan": ln["id"], "rate": terms["rate"]}, vis="public")
+        return {"rate": terms["rate"]}
+    if terms.get("repay_qty") is not None:
+        ln["repay_qty"] = ln["repaid"] + max(0.0, float(terms["repay_qty"]))
+    if terms.get("due_in") is not None:
+        ln["due"] = k.r + max(1, int(terms["due_in"]))
+    if terms.get("rate") is not None:
+        ln["rate"] = max(0.0, min(float(terms["rate"]), cfg(k)["max_rate"]))
+    if outstanding(ln) <= 1e-9:                                     # nothing left owed: the loan is settled
+        k.apply("settle_loan", loan=ln["id"], paid=0.0, how="restructure", lid=lid)
+    else:
+        ln["status"] = "active"
+    ln["accrued_round"] = k.r
+    k.log("loan_restructured", None, {"loan": ln["id"], "borrower": ln["borrower"], "owed": outstanding(ln), "due": ln["due"],
+                                      "rate": ln["rate"], "law": lid}, vis="public")
+    return {"owed": outstanding(ln)}
+
+
+def change_loan_assign(k, loan, to, lid=None) -> dict:
+    """W8b (review 12 §2.14): the loan_assign primitive: a law's buy_loan (to "reserve"): the reserve pays the lender what is owed
+    (a move, part of the change) and becomes the lender. {"bought": False} when the reserve cannot pay."""
+    ln = k.w["loans"][loan]
+    pay = outstanding(ln)
+    if not k.move("reserve", ln["lender"], ln["repay_item"], pay, why=f"bailout:{ln['id']}"):
+        return {"bought": False}
+    ln["sale"] = {"lender": ln["lender"], "paid": pay, "repaid_before": ln["repaid"], "round": k.r, "law": lid}
+    k.log("loan_bought", None, {"loan": ln["id"], "from": ln["lender"], "borrower": ln["borrower"], "paid": pay,
+                                "item": ln["repay_item"], "law": lid}, vis="public")
+    ln["lender"] = to
+    return {"bought": True, "paid": pay}
 
 
 def _start_redemption_round(k):
@@ -536,16 +608,13 @@ def law_api(k, lid) -> dict:
         if c is None or not c["backed"]:
             raise L.LawError(f"{cur} must be an existing backed currency")
         if not rate:
-            c.pop("par", None)
-            k.log("par_set", None, {"currency": cur, "par": None, "law": lid}, vis="public")
+            k.apply("set_money_rule", currency=cur, key="par", value=None, lid=lid)                     # W8b: routed
             return True
         if item != "value" and item not in k.w["unit"]:
             raise L.LawError(f"par item must be a resource or \"value\", not {item}")
         if float(rate) <= 0:
             raise L.LawError("par rate must be positive")
-        c["par"] = {"item": str(item), "rate": float(rate)}
-        c["convertible"] = True if item == "value" else str(item)
-        k.log("par_set", None, {"currency": cur, "par": dict(c["par"]), "law": lid}, vis="public")
+        k.apply("set_money_rule", currency=cur, key="par", value={"item": str(item), "rate": float(rate)}, lid=lid)
         return True
 
     def suspend_redemption(cur, rounds):
@@ -553,32 +622,18 @@ def law_api(k, lid) -> dict:
         return suspend(k, cur, rounds, "by law", by=lid)
 
     def set_interest_cap(rate):
-        st(k)["cap"] = None if rate is None else {"rate": float(rate), "law": lid}
-        k.log("interest_cap", None, {"rate": None if rate is None else float(rate), "law": lid}, vis="public")
+        k.apply("set_money_rule", currency=None, key="interest_cap", value=None if rate is None else float(rate), lid=lid)  # W8b
 
     def set_default_consequence(kind):
         if kind not in CONSEQUENCES:
             raise L.LawError(f"consequence must be one of {', '.join(CONSEQUENCES)}")
-        st(k)["consequence"] = {"kind": kind, "law": lid}
-        k.log("default_consequence", None, {"kind": kind, "law": lid}, vis="public")
+        k.apply("set_money_rule", currency=None, key="default_consequence", value=kind, lid=lid)       # W8b: routed
 
     def restructure_loan(loan, repay_qty=None, due_in=None, rate=None):
         ln = k.w["loans"].get(str(loan))
         if not ln or ln["status"] not in ("active", "defaulted"):
             return False
-        if repay_qty is not None:
-            ln["repay_qty"] = ln["repaid"] + max(0.0, float(repay_qty))
-        if due_in is not None:
-            ln["due"] = k.r + max(1, int(due_in))
-        if rate is not None:
-            ln["rate"] = max(0.0, min(float(rate), cfg(k)["max_rate"]))
-        if outstanding(ln) <= 1e-9:                                     # nothing left owed: the loan is settled
-            k.apply("settle_loan", loan=ln["id"], paid=0.0, how="restructure", lid=lid)
-        else:
-            ln["status"] = "active"
-        ln["accrued_round"] = k.r
-        k.log("loan_restructured", None, {"loan": ln["id"], "borrower": ln["borrower"], "owed": outstanding(ln), "due": ln["due"],
-                                          "rate": ln["rate"], "law": lid}, vis="public")
+        k.apply("loan_terms", loan=ln["id"], terms={"repay_qty": repay_qty, "due_in": due_in, "rate": rate}, lid=lid)   # W8b
         return True
 
     def lend_from_reserve(borrower, item, qty, repay_qty=None, due_in=5, rate=0.0, compound=False):
@@ -589,14 +644,7 @@ def law_api(k, lid) -> dict:
         ln = k.w["loans"].get(str(loan))
         if not ln or ln["status"] not in ("active", "defaulted") or ln["lender"] == "reserve":
             return False
-        pay = outstanding(ln)
-        if not k.move("reserve", ln["lender"], ln["repay_item"], pay, why=f"bailout:{ln['id']}"):
-            return False
-        ln["sale"] = {"lender": ln["lender"], "paid": pay, "repaid_before": ln["repaid"], "round": k.r, "law": lid}
-        k.log("loan_bought", None, {"loan": ln["id"], "from": ln["lender"], "borrower": ln["borrower"], "paid": pay,
-                                    "item": ln["repay_item"], "law": lid}, vis="public")
-        ln["lender"] = "reserve"
-        return True
+        return k.apply("loan_assign", loan=ln["id"], to="reserve", lid=lid).result["bought"]             # W8b: routed
 
     def settle_loan(loan, paid=0, how="paid"):
         """law.v2: record a payment on a loan that the law collected itself (with move or a seizure): `paid` of its repayment item,

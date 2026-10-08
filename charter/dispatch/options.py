@@ -30,8 +30,9 @@ OPTIONS = {
     "regrow": frozenset(), "drift": frozenset(), "destroy": frozenset(), "set_camp_state": frozenset(),
     "create_camp": frozenset({"made"}), "contribute": frozenset(), "settle_project": frozenset({"record"}),
     # P2.4d membership, media, typed camps and leases. lid = the law causing it; via (subscribe) = agent (subscribe/unsubscribe), law
-    # (compel_subscription), lapse (a fee not paid), birth (a newcomer's subscriptions). Membership's `via` is payload.
-    "join": frozenset(), "leave": frozenset(), "admit": frozenset({"lid"}), "expel": frozenset({"lid"}),
+    # (compel_subscription), lapse (a fee not paid), birth (a newcomer's subscriptions). Membership's `via` is payload. actor (W8b:
+    # admit, expel) = a channel's owner.
+    "join": frozenset(), "leave": frozenset(), "admit": frozenset({"lid", "actor"}), "expel": frozenset({"lid", "actor"}),
     "subscribe": frozenset({"via", "lid"}), "set_outlet_rule": frozenset({"lid"}), "set_media_rule": frozenset({"lid"}),
     "appoint": frozenset({"lid"}), "lease": frozenset(), "improve_camp": frozenset(),
     # P2.4a conflict (changes.force documents each).
@@ -56,4 +57,22 @@ OPTIONS = {
     "authorize": frozenset(), "deauthorize": frozenset(), "act_for": frozenset({"memo"}),
     # W8e: company law (lid = the law setting a company rule).
     "set_company_rule": frozenset({"lid"}),
+    # W8b (review 12 WP1): the 31 rows routed. actor = the agent the event names (a channel's owner, a jurisdiction's founder, an
+    # editor, a Scholar); lid = the law causing it; found: open (a channel), name and laws (a jurisdiction's name and charter code);
+    # set_price: outlet (an outlet's id); licence: fee (an offer's), via "buy" (the agent buys an offered licence back); library_doc:
+    # scholar, title, text (a deposit's); set_capacity: scholar; set_initiative: item (what is spent); hire_assassin: text (the sealed
+    # message, never shown to hooks); commission: ordered (the full order) and payment; set_money_rule: why (a suspension's reason);
+    # start_project: record (the drawn project); create_clause: name, text, key (its penalty's fnreg key).
+    "found": frozenset({"open", "name", "laws"}), "invite": frozenset({"actor"}), "declare": frozenset(),
+    "set_charter": frozenset({"actor"}), "dissolve": frozenset(), "invoke": frozenset(),
+    "commission": frozenset({"ordered", "payment"}), "set_will": frozenset(), "name_successor": frozenset(),
+    "licence": frozenset({"actor", "fee", "via"}), "set_price": frozenset({"outlet"}),
+    "library_doc": frozenset({"scholar", "title", "text"}), "library_permit": frozenset({"actor"}),
+    "set_capacity": frozenset({"scholar"}), "share_note": frozenset(), "offer_lease": frozenset(),
+    "set_initiative": frozenset({"item"}), "hire_assassin": frozenset({"text"}),
+    "set_money_rule": frozenset({"lid", "why"}), "set_title": frozenset(), "rename": frozenset({"lid"}),
+    "set_arms_rule": frozenset({"lid"}), "set_lease_rules": frozenset({"lid"}), "set_birth_rules": frozenset({"lid"}),
+    "set_succession_rule": frozenset({"lid"}), "set_project_rule": frozenset({"lid"}), "set_power_rule": frozenset({"lid"}),
+    "loan_terms": frozenset({"lid"}), "loan_assign": frozenset({"lid"}), "create_clause": frozenset({"name", "text", "key"}),
+    "start_project": frozenset({"record", "lid"}),
 }

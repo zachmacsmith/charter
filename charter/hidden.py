@@ -537,12 +537,19 @@ def render(k, e, render_event):
 
 
 # ------------------------------------------------------------------ law API (classified in lawlang)
+def change_power_rule(k, key, value, lid=None) -> dict:
+    """W8b (review 12 §2.14): the set_power_rule primitive (key "disclose": uses of hidden powers are made public), a law's rule
+    setter."""
+    k.w["hidden_caps"]["disclose"] = value
+    k.log("powers_disclosure", None, {"on": value, "law": lid}, vis="public")
+    return {"on": value}
+
+
 def law_api(k, lid) -> dict:
     def disclose_capability_use(on=True):
         if not enabled(k):
             return False
-        k.w["hidden_caps"]["disclose"] = bool(on)
-        k.log("powers_disclosure", None, {"on": bool(on), "law": lid}, vis="public")
+        k.apply("set_power_rule", key="disclose", value=bool(on), lid=lid)                              # W8b: routed
         return True
 
     def capability_holders(name=None):

@@ -107,6 +107,8 @@ def test_imports_run_one_way():
 
 
 def test_routed_changes_live_in_dispatch_changes():
+    """Routed changes live in dispatch.changes, except W8b's: an owner module's change_<...> may be the apply function itself."""
     for n in D.ROUTED:
         mod, _, qual = PR.get(n).fn.partition(":")
-        assert mod.startswith("dispatch.changes.") or (mod, qual) == ("dispatch.ranks", "do_set_conflict_rule"), (n, mod)
+        assert (mod.startswith("dispatch.changes.") or (mod, qual) == ("dispatch.ranks", "do_set_conflict_rule")
+                or (n in PR.TIER_OF["L"] and not mod.startswith("dispatch") and qual.startswith("change_"))), (n, mod)

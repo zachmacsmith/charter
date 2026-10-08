@@ -250,8 +250,8 @@ def _blocked_vis(k, P, p):
 def on_block(k, cas, P, p, d: DecisionV2, chain):
     """A block that stands (D-18: the affected agents see the blocking laws and the reason): logged, then delivered to its cause:
     move, enact, repeal and an amend via procedure (P3.4) return Outcome(ok=False) (an enactment or amendment is struck down, a
-    repeal leaves the law in force); a proposal is marked blocked; a refusable cause gets Blocked. None: the cause cannot be refused
-    and the change goes ahead (logged, monitor)."""
+    repeal leaves the law in force), and so does a declaration (W8b: the jurisdiction stays hidden); a proposal is marked blocked; a
+    refusable cause gets Blocked. None: the cause cannot be refused and the change goes ahead (logged, monitor)."""
     name = P.name
     data = {"primitive": name, "by": list(d.blocked_by), **({"reason": d.reason} if d.reason else {})}
     if name == "propose":
@@ -264,6 +264,9 @@ def on_block(k, cas, P, p, d: DecisionV2, chain):
         if name == "enact":
             k.w["laws"][p["law"]]["status"] = "struck_down"
         k.log("primitive_blocked", None, {**data, "law": p["law"]}, vis="public")
+        return Outcome(ok=False, blocked_by=d.blocked_by, refused="blocked", reason=d.reason)
+    if name == "declare":                                               # W8b: the jurisdiction stays hidden (declare_now tells its
+        k.log("primitive_blocked", None, {**data, "polity": p["polity"]}, vis=_blocked_vis(k, P, p))   # members); the founder sees it
         return Outcome(ok=False, blocked_by=d.blocked_by, refused="blocked", reason=d.reason)
     if name == "move":
         k.log("primitive_blocked", None, {**data, "src": p["src"], "dst": p["dst"], "item": p["item"], "qty": p["qty"],

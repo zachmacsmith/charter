@@ -259,8 +259,7 @@ def open_project(k, kind, threshold, deadline_in, refund=True, params=None, sour
             pr["min_share"] = min(1.0, max(0.0, float(pr.get("min_share", 0.6))))
             pr["min_each"] = max(0.0, float(pr.get("min_each", 1)))
     deadline_in = max(1, int(deadline_in))
-    k.w["project_seq"] += 1
-    pid = f"P{k.w['project_seq']}"
+    pid = f"P{k.w['project_seq'] + 1}"
     p = {"id": pid, "kind": kind, "threshold": _norm_threshold(k, threshold), "opened": k.r, "deadline": k.r + deadline_in - 1,
          "refund": bool(refund), "params": pr, "contributions": {}, "pooled": {}, "status": "open", "source": source,
          "beneficiaries": None, "funded_round": None, "effect": None}
@@ -269,10 +268,31 @@ def open_project(k, kind, threshold, deadline_in, refund=True, params=None, sour
     elif kind == "discovery":
         p["beneficiaries"] = eligible(k)
     p["description"] = _describe(k, p)
-    k.w["projects"][pid] = p
-    k.log("project_open", None, {"project": pid, "kind": kind, "threshold": p["threshold"], "deadline": p["deadline"], "refund": p["refund"],
-                                 "params": pr, "source": source, "description": p["description"]}, vis="public")
+    k.apply("start_project", project=pid, kind=kind, threshold=p["threshold"], record=p,
+            **({"lid": source[4:]} if source.startswith("law:") else {}))                            # W8b: routed
     return pid
+
+
+def change_start_project(k, project, kind, threshold, record, lid=None) -> dict:
+    """W8b (review 12 §2.14): the start_project primitive: a project opens (a world event, or a law's start_project; open_project
+    has drawn and checked it: `record`)."""
+    p = record
+    k.w["project_seq"] += 1
+    k.w["projects"][project] = p
+    k.log("project_open", None, {"project": project, "kind": kind, "threshold": p["threshold"], "deadline": p["deadline"],
+                                 "refund": p["refund"], "params": p["params"], "source": p["source"], "description": p["description"]},
+          vis="public")
+    return {"project": project}
+
+
+def change_project_rule(k, project, key, value, lid=None) -> dict:
+    """W8b (review 12 §2.14): the set_project_rule primitive (key "refund": whether an open project refunds its contributors if it
+    fails), a law's rule setter."""
+    p = k.w["projects"][project]
+    p["refund"] = value
+    p["description"] = _describe(k, p)
+    k.log("project_refund_rule", None, {"project": p["id"], "refund": p["refund"], "law": lid}, vis="public")
+    return {"refund": value}
 
 
 def spawn_random_project(k, rng: random.Random) -> str | None:
@@ -549,9 +569,7 @@ def law_api(k, lid) -> dict:
         if not p or p["status"] != "open":
             return False
         if p["refund"] != bool(refund):
-            p["refund"] = bool(refund)
-            p["description"] = _describe(k, p)
-            k.log("project_refund_rule", None, {"project": p["id"], "refund": p["refund"], "law": lid}, vis="public")
+            k.apply("set_project_rule", project=p["id"], key="refund", value=bool(refund), lid=lid)       # W8b: routed
         return True
 
     return {"start_project": start_project, "contribute_project": contribute_project, "set_refund": set_refund,

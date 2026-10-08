@@ -457,7 +457,8 @@ HOOKTABLE = _hooks(
          docs="jurisdictions", note="also when a law's expel() or admit() moves a member, at the end of the round"),
     Hook("on_birth", "(child, parent)", "jurisdiction_or_none", ("dispatch/legacy.py:legacy_hooks",), False, jur="own",
          module="jurisdictions", docs="jurisdictions"),
-    Hook("on_commission", "(parent, maker, order)", "refuse", ("life.py:commission",), False, module="life", docs="life"),
+    Hook("on_commission", "(parent, maker, order)", "refuse", ("dispatch/legacy.py:legacy_hooks",), False, module="life", docs="life",
+         note="W8b: the commission primitive's legacy before-alias (an agent's commission action)"),
 )
 HOOKS = tuple(HOOKTABLE)
 

@@ -28,7 +28,10 @@ Layout (module -> contents):
   api           the dispatcher's law-API functions (law_api, is_number, is_text)
   changes/      the primitives' changes (the rows' `fn`), by domain: economy, status (rights and sanctions), speech, world (camps
                 and leases), lifecycle, legal (legal acts and the propose draft), membership, press (media2), force (conflict),
-                loans, associations (contracts, swap, funds), cases (courts v2), agency, publication (review 12 WP2)
+                loans, associations (contracts, swap, funds), cases (courts v2), agency, publication (review 12 WP2). W8b (review 12 WP1): a primitive one
+                owner module makes is routed to that module's change_<...> directly (actions:change_invoke, media:change_licence,
+                credit:change_money_rule, ...); changes/ keeps those several owners share (membership: found, dissolve; press:
+                set_price) and the kernel's (status: set_title, rename; legal: create_clause)
 Imports run one way (tests/test_charter_dispatch_layout.py checks the layers): base, options, chains <- ranks, legacy, journal,
 billing, changes.* <- changes.legal, checks, api <- validity <- hooks <- cascade, notify <- routing <- this package."""
 from __future__ import annotations
@@ -58,7 +61,7 @@ from charter.dispatch.legacy import (_after_context, ALIASES_AFTER, ALIASES_BEFO
 from charter.dispatch.routing import (_accepts, apply, _apply_charges, _apply_v2, apply_v2, _blocked_vis, _check,
     ENTRENCHED_WHEN, _fail_closed, _fn, _FNS, _law_caused, on_block, _refusable, _run_before, _unhooked)
 from charter.dispatch.hooks import (_binds_value, bound_laws, DecisionV2, hidden_agents, HIDE, _hook_fn, _hook_index,
-    hook_payload, hooked, normalise, resolve_v2, _rule_function, _scrub, _specificity, Verdict)
+    hook_payload, hooked, normalise, resolve_v2, _rule_function, _scrub, SECRET, _specificity, Verdict)
 from charter.dispatch.ranks import (check_procedure_rank, check_propose, CLASSES, conflict_rule, _conflict_rule_arg,
     declared_rank, do_set_conflict_rule, law_rank, law_set_conflict_rule, may_change, _polity, procedure_lookup, rank_of,
     RankRefused, set_conflict_rule, _targets)
@@ -73,15 +76,16 @@ from charter.dispatch.billing import bill_gas, BILL_TO, gas_price, _oog_vis
 from charter.dispatch.api import is_number, is_text, law_api
 from charter.dispatch.changes.economy import (do_burn, do_contribute, do_convert, do_create_currency, do_destroy, do_harvest,
     do_mint, do_move, do_settle_project, _move)
-from charter.dispatch.changes.status import do_create_right, do_grant_right, do_limit_actions, do_revoke_right, do_suspend_right
+from charter.dispatch.changes.status import (do_create_right, do_grant_right, do_limit_actions, do_rename, do_revoke_right,
+    do_set_title, do_suspend_right)
 from charter.dispatch.changes.speech import do_dm, do_hide_post, do_post, do_set_dm_limit
 from charter.dispatch.changes.world import (do_create_camp, do_drift, do_improve_camp, do_lease, do_regrow, do_set_camp_rule,
     do_set_camp_state)
 from charter.dispatch.changes.lifecycle import do_begin_life, do_end_life, LIFE_CAUSES, LIFE_HOWS
-from charter.dispatch.changes.legal import (do_amend, do_cast_vote, do_close_ballot, do_decide, do_define_action, do_enact,
-    do_open_ballot, do_propose, do_repeal, do_rule, do_set_procedure, do_veto, draft, jur_of, _RIGHT_CALLS, sha, via_of)
-from charter.dispatch.changes.membership import do_admit, do_expel, do_join, do_leave
-from charter.dispatch.changes.press import do_appoint, do_set_media_rule, do_set_outlet_rule, do_subscribe
+from charter.dispatch.changes.legal import (do_amend, do_cast_vote, do_close_ballot, do_create_clause, do_decide, do_define_action,
+    do_enact, do_open_ballot, do_propose, do_repeal, do_rule, do_set_procedure, do_veto, draft, jur_of, _RIGHT_CALLS, sha, via_of)
+from charter.dispatch.changes.membership import do_admit, do_dissolve, do_expel, do_found, do_join, do_leave
+from charter.dispatch.changes.press import do_appoint, do_set_media_rule, do_set_outlet_rule, do_set_price, do_subscribe
 from charter.dispatch.changes.force import do_attack, do_fortify, do_guard_bind, do_guard_release
 from charter.dispatch.changes.loans import (do_accept_loan, do_default_loan, do_extend_loan, do_offer_loan, do_repay_loan,
     do_settle_loan)

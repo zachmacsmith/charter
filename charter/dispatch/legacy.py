@@ -1,5 +1,5 @@
-"""Legacy hook aliases (P2.1-P2.4): today's change hooks (on_transfer, on_harvest, on_post, on_dm, on_proposal, on_vote,
-on_ruling, on_admission, on_exit, on_birth), dispatched by apply exactly as their old call sites did, with or without law.v2 (R5).
+"""Legacy hook aliases (P2.1-P2.4; W8b): today's change hooks (on_transfer, on_harvest, on_post, on_dm, on_proposal, on_vote,
+on_ruling, on_admission, on_exit, on_birth, on_commission), dispatched by apply exactly as their old call sites did, with or without law.v2 (R5).
 
 For a routed primitive, apply runs the BEFORE aliases (primitives.ALIASES) whose filter matches the payload and the cause chain,
 through Kernel.hooks (enactment order; with jurisdictions on, J.hooks' binding), in canonical order. `resolve` reads their verdicts
@@ -50,6 +50,8 @@ def legacy_hooks(k, name: str, args: tuple, p: dict | None = None) -> list:
         return J.hooks_of(k, p["polity"], "on_exit", *args)
     if name == "on_birth":
         return J.hooks_of(k, p["polity"], "on_birth", *args) if p["polity"] else []
+    if name == "on_commission":                                      # W8b: life (commission is routed)
+        return k.hooks("on_commission", *args)
     raise NotRouted(f"legacy hook {name} is not dispatched by k.apply yet")
 
 
@@ -100,9 +102,14 @@ def _read_ignored(out):
     return None, None
 
 
+def _read_refuse(out):
+    """on_commission (refuse, W8b): False refuses the order (a block); anything else is no answer."""
+    return ("block", None) if out is False else (None, None)
+
+
 # Readers by alias name; a (name, payload via) key overrides one for a variant of a primitive (typed camps' harvests).
 READERS = {"on_transfer": _read_transfer, "on_harvest": _read_harvest, ("on_harvest", "typed"): _read_typed_harvest,
-           "on_admission": _read_admission, "on_birth": _read_birth, "on_exit": _read_ignored}
+           "on_admission": _read_admission, "on_birth": _read_birth, "on_exit": _read_ignored, "on_commission": _read_refuse}
 
 
 # A directive value a verdict may set, checked when it is resolved (not valid: the verdict is ignored, as today).

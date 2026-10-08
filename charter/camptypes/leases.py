@@ -90,13 +90,19 @@ def offer(k, aid, right, to, rounds, fee=None) -> str:
             raise ActionError(f"unknown fee item {i}")
     if rules["max_fee"] is not None and _fee_value(k, fee) > float(rules["max_fee"]) + 1e-9:
         raise ActionError(f"the fee is worth more than the legal maximum ({float(rules['max_fee']):g})")
+    return k.apply("offer_lease", lessor=aid, lessee=to, right=right, rounds=rounds, fee=fee).result["text"]   # W8b: routed
+
+
+def change_offer_lease(k, lessor, lessee, right, rounds, fee) -> dict:
+    """W8b (review 12 §2.14): the offer_lease primitive (offer has checked the right, the tenant and the lease rules)."""
+    st, aid, to = _st(k), lessor, lessee
     st["seq"] += 1
     lid = f"LS{st['seq']}"
     st["items"][lid] = {"id": lid, "right": right, "holder": aid, "tenant": to, "rounds": rounds, "fee": fee, "status": "offered",
                         "offered": k.r, "start": None, "end": None}
     k.log("lease_offer", aid, {"lease": lid, "right": right, "tenant": to, "rounds": rounds, "fee": fee}, vis=[aid, to])
-    return f"Lease {lid} offered to {to}: {right} for {rounds} round(s) for " + (", ".join(f"{q:g} {i}" for i, q in fee.items()) or "no fee") + \
-        f"; {to} takes it with accept_lease {{\"lease\": \"{lid}\"}}."
+    return {"lease": lid, "text": f"Lease {lid} offered to {to}: {right} for {rounds} round(s) for "
+            + (", ".join(f"{q:g} {i}" for i, q in fee.items()) or "no fee") + f"; {to} takes it with accept_lease {{\"lease\": \"{lid}\"}}."}
 
 
 def accept(k, aid, lease) -> str:
@@ -172,14 +178,21 @@ def change_lease(k, lease, lessor, lessee, status) -> dict:
     return {"status": status}
 
 
+def change_lease_rules(k, key, value, lid=None) -> dict:
+    """W8b (review 12 §2.14): the set_lease_rules primitive (key "rules": allowed, tax, max_rounds, max_fee), a law's rule setter."""
+    _st(k)["rules"] = dict(value)
+    k.log("lease_rules", None, {**_st(k)["rules"], "law": lid}, vis="public")
+    return {"rules": dict(value)}
+
+
 def law_api(k, lid) -> dict:
     def set_lease_rules(allowed=True, tax=0.0, max_rounds=None, max_fee=None):
         tax = float(tax or 0.0)
         if not 0.0 <= tax <= 1.0:
             raise L.LawError("tax must be a fraction between 0 and 1")
-        _st(k)["rules"] = {"allowed": bool(allowed), "tax": tax, "max_rounds": None if max_rounds is None else max(1, int(max_rounds)),
-                           "max_fee": None if max_fee is None else float(max_fee)}
-        k.log("lease_rules", None, {**_st(k)["rules"], "law": lid}, vis="public")
+        rules = {"allowed": bool(allowed), "tax": tax, "max_rounds": None if max_rounds is None else max(1, int(max_rounds)),
+                 "max_fee": None if max_fee is None else float(max_fee)}
+        k.apply("set_lease_rules", key="rules", value=rules, lid=lid)                                 # W8b: routed
         return True
 
     def leases():

@@ -1,5 +1,6 @@
-"""Rights and sanctions (P2.1, P2.4c, P2.4d): grant_right, revoke_right, suspend_right, limit_actions, create_right. The only
-writers of an agent's rights list and the rights catalogue outside the kernel (tests/test_charter_rights_writes.py). Call options:
+"""Rights and sanctions (P2.1, P2.4c, P2.4d): grant_right, revoke_right, suspend_right, limit_actions, create_right (the only
+writers of an agent's rights list and the rights catalogue outside the kernel, tests/test_charter_rights_writes.py); W8b: a law's
+titles and names (set_title, rename). Call options:
 via (grant/revoke: "law", or the module whose own change carries the right: "lease", "role", "hidden"), quiet (a new camp's harvest
 right, granted without a `rights` event, as today), why (a loan default's sanction says why)."""
 from __future__ import annotations
@@ -45,3 +46,18 @@ def do_create_right(k, right, via="law") -> dict:
     if right not in k.w["rights"]:
         k.w["rights"] = sorted(k.w["rights"] + [right])
     return {"right": right}
+
+
+# W8b (review 12 §2.14): a law's titles and names, routed (constitutions can review them: before_set_title, before_rename).
+def do_set_title(k, agent, text) -> dict:
+    """A law's title(agent, text): the agent's title (None removes it). No event of its own; under law.notify_parties (law.v2) the
+    agent is told (P3.7, as before; now by dispatch.notify)."""
+    k.agent(agent)["title"] = text
+    return {"title": text}
+
+
+def do_rename(k, entity, name, lid=None) -> dict:
+    """A law's rename(entity, name): the name agents and laws read for an entity (an agent, a camp, an item)."""
+    k.w["names"][entity] = name
+    k.log("rename", None, {"entity": entity, "name": name, "law": lid}, vis="public")
+    return {"name": name}

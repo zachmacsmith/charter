@@ -74,13 +74,11 @@ KNOWN_GAPS = frozenset({
     # agents can do it, no law can stop or charge it
     ("gate", "attack"), ("gate", "guard_bind"), ("gate", "guard_release"), ("gate", "fortify"),                # review 08 §3
     ("gate", "post"), ("gate", "cast_vote"), ("gate", "propose"), ("gate", "rule"),                           # after-only aliases
-    ("gate", "mint"), ("gate", "burn"), ("gate", "destroy"), ("gate", "set_dm_limit"), ("gate", "set_initiative"),
-    ("gate", "set_will"), ("gate", "name_successor"), ("gate", "subscribe"), ("gate", "licence"), ("gate", "set_price"),
-    ("gate", "library_doc"), ("gate", "library_permit"), ("gate", "set_capacity"), ("gate", "found"), ("gate", "invite"),
-    ("gate", "admit"), ("gate", "expel"), ("gate", "declare"), ("gate", "dissolve"),
-    ("gate", "improve_camp"), ("gate", "contribute"),
-    ("gate", "invoke"), ("gate", "request_fix"),             # courts v2: open_case and answer_case are routed (before_<p> under law.v2)
-})
+    ("gate", "mint"), ("gate", "burn"), ("gate", "destroy"), ("gate", "set_dm_limit"), ("gate", "subscribe"),
+    ("gate", "admit"), ("gate", "expel"), ("gate", "improve_camp"), ("gate", "contribute"),
+    ("gate", "request_fix"),             # courts v2: open_case and answer_case are routed (before_<p> under law.v2); W8b: set_initiative,
+})                                       # set_will, name_successor, licence, set_price, library_doc, library_permit, set_capacity,
+                                         # found, invite, declare, dissolve and invoke are routed (their why names before_<p>)
 KNOWN_GAPS_FROZEN = KNOWN_GAPS                                          # the P1.7 copy: never add to it
 
 

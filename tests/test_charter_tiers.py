@@ -34,10 +34,11 @@ def test_every_primitive_row_has_a_tier(p):
 
 
 def test_the_unrouted_primitives_are_review_12_s_list():
-    """§2.14: 38 unrouted primitives: 31 L-route, 1 P, 2 E, 4 X."""
+    """§2.14: 38 unrouted primitives: 31 L-route, 1 P, 2 E, 4 X. W8b (WP1) routed the 31 L-route rows: 7 remain."""
     unrouted = [p for p in PR.PRIMITIVES.values() if not p.routed]
     by = {t: sorted(p.name for p in unrouted if p.tier == t) for t in T.PRIMITIVE_TIERS}
-    assert len(unrouted) == 38 and {t: len(v) for t, v in by.items() if v} == {"L-route": 31, "P": 1, "E": 2, "X": 4}
+    assert len(unrouted) == 7 and {t: len(v) for t, v in by.items() if v} == {"P": 1, "E": 2, "X": 4}
+    assert not PR.TIER_OF["L-route"]
     assert by["P"] == ["demand_tribute"] and by["E"] == ["use_power", "write_note"]
     assert by["X"] == ["request_fix", "set_goal", "set_role", "suspend_law"]
 
@@ -58,11 +59,13 @@ def test_rules_are_review_12_s_inventory():
 
 
 def test_rule_counts_are_review_12_s():
-    """§2.15: P 16, E 13, X 25, L 58 (11 already law; of the 47 to move, 5 L-route and 42 L-rule)."""
+    """§2.15: P 16, E 13, X 25, L 58 (11 already law; of the 47 to move, 5 L-route and 42 L-rule). W8b (WP1) routed the 5 L-route
+    rows: C2, D6, I6 and R6 are law now (L), N1's world rule (declare cost, minimum members) remains (L-rule)."""
     n = {t: sum(1 for r in T.RULES if r.tier == t) for t in T.TIERS}
     assert (n["P"], n["E"], n["X"]) == (16, 13, 25)
-    assert n["L"] + n["L-route"] + n["L-rule"] == 58 and n["L"] == 11 and n["L-route"] == 5 and n["L-rule"] == 42
-    assert sorted(r.id for r in T.RULES if r.tier == "L-route") == ["C2", "D6", "I6", "N1", "R6"]
+    assert n["L"] + n["L-route"] + n["L-rule"] == 58 and n["L"] == 15 and n["L-route"] == 0 and n["L-rule"] == 43
+    assert sorted(r.id for r in T.RULES if r.note == "L-route until W8b") == ["C2", "D6", "I6", "R6"]
+    assert T.RULE["N1"].tier == "L-rule"
 
 
 _DEFS: dict = {}

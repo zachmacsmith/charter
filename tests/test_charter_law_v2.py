@@ -64,7 +64,7 @@ def test_r5_new_style_hooks_are_a_check_error_without_law_v2():
     with pytest.raises(L.LawError, match="cannot be hooked before"):
         new.new_law(law("X", "def before_regrow(p, chain):\n    return False\n"), "a")
     with pytest.raises(L.LawError, match="not routed"):
-        new.new_law(law("X", "def after_commission(p, chain):\n    return None\n"), "a")
+        new.new_law(law("X", "def after_use_power(p, chain):\n    return None\n"), "a")   # W8b routed commission
     with pytest.raises(L.LawError, match=r"\(p, chain\)"):
         new.new_law(law("X", "def after_move(p):\n    return None\n"), "a")
     # a helper named like no primitive is just a function, in either world

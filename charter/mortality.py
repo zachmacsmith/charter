@@ -240,10 +240,15 @@ def set_bequest(k, aid, terms: dict) -> str:
             raise L.LawError("if_disabled must be an object like {\"holdings\": {...}, \"files\": \"Name\"}")
         clean["if_disabled"] = {"holdings": _shares(sw.get("holdings")) if sw.get("holdings") is not None else None,
                                 "files": _recipient(sw.get("files")) if "files" in sw else None, "has_files": "files" in sw}
-    st = state(k)
-    st["bequests"][aid] = clean
-    k.log("bequest", aid, {"terms": clean}, vis="public" if clean["public"] else "monitor")
+    k.apply("set_will", agent=aid, terms=clean)                                                      # W8b: routed
     return "Bequest recorded" + (" and published" if clean["public"] else " (private: only you and the record know it)") + "."
+
+
+def change_set_will(k, agent, terms) -> dict:
+    """W8b (review 12 I6): the set_will primitive: an agent's bequest (terms as set_bequest cleaned them)."""
+    state(k)["bequests"][agent] = terms
+    k.log("bequest", agent, {"terms": terms}, vis="public" if terms["public"] else "monitor")
+    return {"public": bool(terms["public"])}
 
 
 def _shares(x) -> dict:
@@ -428,11 +433,17 @@ def name_successor(k, aid, agent) -> str:
         raise L.LawError(f"{agent} is not an agent in the game")
     if k.w["agents"][agent]["cls"] in ("board", "fixer"):
         raise L.LawError("a successor must be an agent not on the Board (and not the Fixer)")
-    st = state(k)
-    st["successors"][aid] = agent
-    pub = st["succession_public"]
-    k.log("successor_named", aid, {"successor": agent}, vis="public" if pub else "monitor")
+    pub = k.apply("name_successor", member=aid, successor=agent).result["public"]                     # W8b: routed
     return f"{agent} is now your named successor" + (" (namings are public by law)." if pub else " (private: nobody else is told).")
+
+
+def change_name_successor(k, member, successor) -> dict:
+    """W8b (review 12 I6, B5): the name_successor primitive: a Board member names who takes its seat."""
+    st = state(k)
+    st["successors"][member] = successor
+    pub = st["succession_public"]
+    k.log("successor_named", member, {"successor": successor}, vis="public" if pub else "monitor")
+    return {"public": pub}
 
 
 def _succeed(k, aid):
@@ -504,14 +515,21 @@ def board_at(truth: dict, rnd: int) -> list:
 # ---------------------------------------------------------------------- law API, rendering, truth
 def law_api(k, lid) -> dict:
     def set_succession_public(public=True):
-        st = state(k)
-        st["succession_public"] = bool(public)
-        k.log("succession_rule", None, {"public": bool(public), "law": lid}, vis="public")
-        if public:
-            for m, s in sorted(st["successors"].items()):
-                k.log("successor_named", m, {"successor": s, "law": lid}, vis="public")
+        k.apply("set_succession_rule", key="public", value=bool(public), lid=lid)                      # W8b: routed
         return True
     return {"set_succession_public": set_succession_public}
+
+
+def change_succession_rule(k, key, value, lid=None) -> dict:
+    """W8b (review 12 §2.14): the set_succession_rule primitive (key "public": namings of successors are public; the ones already
+    made are published at once)."""
+    st = state(k)
+    st["succession_public"] = value
+    k.log("succession_rule", None, {"public": value, "law": lid}, vis="public")
+    if value:
+        for m, s in sorted(st["successors"].items()):
+            k.log("successor_named", m, {"successor": s, "law": lid}, vis="public")
+    return {"public": value}
 
 
 EVENT_TYPES = ET.rendered_by("mortality")                            # this module renders them; "disabled" is conflict's

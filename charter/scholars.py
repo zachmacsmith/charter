@@ -86,9 +86,15 @@ def set_memory_price(k, aid, kind, item, qty):
     q = float(qty)
     if q < 0:
         raise _err("a price cannot be negative")
-    k.w["scholars"]["prices"].setdefault(aid, {})[kind] = {"item": str(item), "qty": q}
-    k.log("memory_price", aid, {"kind": kind, "item": str(item), "qty": q}, vis="public")
+    k.apply("set_price", owner=aid, what=kind, item=str(item), qty=q)                                   # W8b: routed
     return f"Your price per {kind} is now {q:g} {item}."
+
+
+def change_memory_price(k, owner, what, item, qty) -> dict:
+    """W8b: the set_price primitive for a Scholar's price of memory (what "file" or "pin")."""
+    k.w["scholars"]["prices"].setdefault(owner, {})[what] = {"item": item, "qty": qty}
+    k.log("memory_price", owner, {"kind": what, "item": item, "qty": qty}, vis="public")
+    return {"what": what, "item": item, "qty": qty}
 
 
 def buy_memory(k, aid, scholar, kind="file", n=1):
@@ -111,6 +117,15 @@ def buy_memory(k, aid, scholar, kind="file", n=1):
         have = int((k.w.get("pin_slots") or {}).get(aid, 0))
         if have + n > int(cfg["max_pin_slots"]):
             raise _err(f"you may hold at most {cfg['max_pin_slots']} pin slots (you have {have})")
+    return k.apply("set_capacity", agent=aid, what=kind, n=n, scholar=s).result["text"]                  # W8b: routed
+
+
+def change_set_capacity(k, agent, what, n, scholar) -> dict:
+    """W8b (review 12 D6): the set_capacity primitive: an agent buys file space (what "file") or pin slots ("pin") from a Scholar;
+    the payment is part of the change. buy_memory has checked the Scholar, the kind and the limits."""
+    aid, s, kind = agent, scholar, what
+    st = k.w["scholars"]
+    tok = n * int(_cfg(k)["file_tokens"])
     p = price(k, s, kind)
     total = p["qty"] * n
     if total > 0 and not k.move(aid, s, p["item"], total, why="memory", by=aid):
@@ -126,11 +141,26 @@ def buy_memory(k, aid, scholar, kind="file", n=1):
         got = f"{n} pin slot(s)"
     k.log("memory_sale", aid, {"scholar": s, "kind": kind, "n": n, "item": p["item"], "paid": total}, vis=[aid, s])
     from charter import context as CTX
-    return f"Bought {got} from {s} for {total:g} {p['item']}; file space left: {CTX.space_left(k, aid)} tokens."
+    return {"text": f"Bought {got} from {s} for {total:g} {p['item']}; file space left: {CTX.space_left(k, aid)} tokens."}
 
 
 # ------------------------------------------------------------------ libraries
 def _new_doc(k, scholar, author, title, text, origin):
+    did = f"D{k.w['scholars']['seq'] + 1}"
+    k.apply("library_doc", agent=author, doc=did, op=origin, scholar=scholar, title=title, text=text)   # W8b: routed
+    return did
+
+
+# W8b (review 12 D6): the library_doc primitive: a document deposited in a Scholar's library (op "deposit", or "bequest" from a
+# dying agent's files: mortality) or removed by the Scholar (op "remove").
+def change_library_doc(k, agent, doc, op, scholar=None, title=None, text=None) -> dict:
+    if op == "remove":
+        d = k.w["scholars"]["docs"][doc]
+        d["removed"], d["removed_round"] = True, k.r
+        k.log("library_removed", agent, {"doc": d["id"], "title": d["title"], "author": d["author"]},
+              vis=sorted({agent} | ({d["author"]} if d["author"] in k.w["agents"] else set())))
+        return {"doc": doc}
+    author, origin = agent, op
     st = k.w["scholars"]
     st["seq"] += 1
     did = f"D{st['seq']}"
@@ -140,7 +170,7 @@ def _new_doc(k, scholar, author, title, text, origin):
                        "removed": False}
     k.log("library_deposit", author, {"doc": did, "scholar": scholar, "title": str(title)[:120], "origin": origin,
                                       "text": str(text)[:lim]}, vis=[author, scholar] if author in k.w["agents"] else [scholar])
-    return did
+    return {"doc": did}
 
 
 def library_deposit(k, aid, scholar, title, text):
@@ -193,19 +223,26 @@ def library_permit(k, aid, doc, agent, allow=True):
     if not d or d["scholar"] != aid or d["removed"]:
         raise _err(f"no document {doc} in your library")
     allow = bool(allow)
-    if str(agent).lower() == "all":
+    if str(agent).lower() != "all" and str(agent) not in k.players():
+        raise _err(f"no agent {agent}")
+    k.apply("library_permit", doc=d["id"], agent=str(agent), allow=allow, actor=aid)                    # W8b: routed
+    return f"{d['id']}: " + ("open to everyone" if d["open"] else "closed except to those you allow") + \
+        (f"; {agent} {'may' if allow else 'may not'} read it" if str(agent).lower() != "all" else "") + "."
+
+
+def change_library_permit(k, doc, agent, allow, actor=None) -> dict:
+    """W8b (review 12 D6): the library_permit primitive: the Scholar lets an agent (or "all") read a document, or not."""
+    d = k.w["scholars"]["docs"][doc]
+    if agent.lower() == "all":
         d["open"] = allow
         if allow:
             d["deny"] = []
     else:
-        if str(agent) not in k.players():
-            raise _err(f"no agent {agent}")
-        a = str(agent)
+        a = agent
         d["allow"] = sorted((set(d["allow"]) | {a}) if allow else (set(d["allow"]) - {a}))
         d["deny"] = sorted((set(d["deny"]) - {a}) if allow else (set(d["deny"]) | {a}))
-    k.log("library_permit", aid, {"doc": d["id"], "agent": str(agent), "allow": allow}, vis="monitor")
-    return f"{d['id']}: " + ("open to everyone" if d["open"] else "closed except to those you allow") + \
-        (f"; {agent} {'may' if allow else 'may not'} read it" if str(agent).lower() != "all" else "") + "."
+    k.log("library_permit", actor, {"doc": d["id"], "agent": agent, "allow": allow}, vis="monitor")
+    return {"doc": doc}
 
 
 def library_remove(k, aid, doc):
@@ -213,9 +250,7 @@ def library_remove(k, aid, doc):
     d = k.w["scholars"]["docs"].get(str(doc))
     if not d or d["scholar"] != aid or d["removed"]:
         raise _err(f"no document {doc} in your library")
-    d["removed"], d["removed_round"] = True, k.r
-    k.log("library_removed", aid, {"doc": d["id"], "title": d["title"], "author": d["author"]},
-          vis=sorted({aid} | ({d["author"]} if d["author"] in k.w["agents"] else set())))
+    k.apply("library_doc", agent=aid, doc=d["id"], op="remove")                                       # W8b: routed
     return f"Removed {d['id']} '{d['title']}' from your library (logged)."
 
 

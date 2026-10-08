@@ -269,13 +269,24 @@ def test_routed_rows_name_dispatch_functions():
     want |= {"swap", "open_fund"}                                     # P4.4 (W6e)
     want |= {"authorize", "deauthorize", "act_for"}                   # P4.5 (W7a): agency
     want |= {"set_company_rule"}                                      # W8e: company law
+    w8b = {"found", "invite", "declare", "set_charter", "dissolve", "invoke", "commission", "set_will", "name_successor", "licence",
+           "set_price", "library_doc", "library_permit", "set_capacity", "share_note", "offer_lease", "set_initiative",
+           "hire_assassin", "set_money_rule", "set_title", "rename", "set_arms_rule", "set_lease_rules", "set_birth_rules",
+           "set_succession_rule", "set_project_rule", "set_power_rule", "loan_terms", "loan_assign", "create_clause",
+           "start_project"}                                            # W8b (review 12 WP1): the 31 L-route rows
+    assert len(w8b) == 31
+    want |= w8b
     assert set(D.ROUTED) == want
     assert set(D.ROUTED) == {n for n, p in PR.PRIMITIVES.items() if p.routed}                    # W8a: the explicit flag
     for n in want:
         p = PR.get(n)
         mod, _, qual = p.fn.partition(":")
-        assert p.routed and mod.startswith("dispatch.") and qual == f"do_{n}" and p.fn in p.sites, p.fn
-        assert D._fn(p) is getattr(D, f"do_{n}") and callable(D._fn(p))                         # the package re-exports it
+        assert p.routed and p.fn in p.sites, p.fn
+        if mod.startswith("dispatch."):
+            assert qual == f"do_{n}", p.fn
+            assert D._fn(p) is getattr(D, f"do_{n}") and callable(D._fn(p))                     # the package re-exports it
+        else:                                                           # W8b: the owner module's change is the apply function
+            assert n in w8b and qual.startswith("change_") and callable(D._fn(p)), p.fn
         assert set(D.OPTIONS[n]).isdisjoint(p.params), n
     assert not any(p.routed for n, p in PR.PRIMITIVES.items() if n not in want)
 
@@ -297,7 +308,7 @@ def test_apply_returns_an_outcome_and_refuses_with_physics_errors(k):
     with pytest.raises(TypeError, match="unexpected payload keys: colour"):
         k.apply("move", src=a, dst=b, item="timber", qty=1, why="gift", colour="red")
     with pytest.raises(D.NotRouted):
-        k.apply("hire_assassin", agent=a, assassin=b, target=a, terms={})
+        k.apply("use_power", agent=a, power="quill", args=[])           # E: secret by nature, never routed (review 12 §2.14)
     with pytest.raises(D.PR.UnknownPrimitive):
         k.apply("teleport", agent=a)
 
