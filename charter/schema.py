@@ -131,6 +131,13 @@ def _laws():
     return tuple(LB.LIB)
 
 
+def _templates():
+    """Names a regime law set may instantiate (W6d): toolkit templates, library laws, regimes.STATUTES."""
+    from charter import library as LB
+    from charter import regimes as RG
+    return tuple(LB.TOOLKIT) + tuple(LB.LIB) + tuple(RG.STATUTES)
+
+
 def _archetypes():
     from charter import archetypes as AR
     return tuple(AR.ARCHETYPES)
@@ -227,6 +234,7 @@ def _ann():
         "law.preview_tokens": dict(types=("int",), range=(1, None)),
         "law.library.edition": dict(types=("int",), enum=(1, 2)),
         "law.library.access": dict(types=("str",), enum=("none", "catalogue", "instantiate")),
+        "law.library.toolkit": dict(kind="leaf", types=("str", "list"), check=_check_toolkit),
         "parallel_calls": dict(types=("int",), range=(1, None)),
         "actions_per_turn": dict(types=("int",), range=NONNEG),
         "actions_jitter": dict(range=NONNEG),
@@ -426,6 +434,7 @@ EXTRA = {
     "law.gas.preview": 300_000, "law.previews_per_turn": 3, "law.preview_tokens": 1500,             # the law previewer (P3.5)
     "law.library.edition": 1,
     "law.library.access": "none",
+    "law.library.toolkit": "none",
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
@@ -647,6 +656,9 @@ DOCS = {
     "law.preview_tokens": "law.v2: token budget of a rendered preview report",
     "law.library": "the law library's edition and what agents may do with it (ARCHITECTURE §3.11; charter/library.py)",
     "law.library.edition": "1: today's library laws (every existing spec) | 2: readable rewrites built from lib:* blocks (needs law.v2)",
+    "law.library.toolkit": "edition 2 with access catalogue or instantiate: none (default) | all | a list of toolkit families "
+                           "(library.FAMILIES): the catalogue also lists those toolkit templates (name, doc, parameters) to copy or "
+                           "instantiate (charter/library.py, W6d)",
     "law.library.access": "none | catalogue: agents see the lib:* blocks (refs, exports, code) | instantiate: catalogue, and library "
                           "laws may be copied with their constants changed (edition 2)",
     "rng_version": "1: one kernel random stream (every existing run) | 2: named streams per purpose (turn order per round, harvest "
@@ -791,12 +803,77 @@ def _check_start_laws(path, v) -> list:
         return []
     if not isinstance(v, list):
         return [f"{path}: expected a list of library law names, got {v!r}"]
-    names = _laws()
+    from charter import library as LB
+    names = _laws() + tuple(LB.TOOLKIT)                                # W6d: toolkit templates too (law.v2 worlds)
     return [f"{path}: unknown start_laws {n!r}{_close(n, names)}" for n in v if n not in names]
 
 
+def _check_toolkit(path, v) -> list:
+    """none / all / list of toolkit families"""
+    from charter import library as LB
+    if v in (None, "none", "all"):
+        return []
+    if isinstance(v, str):
+        return [f"{path}: {v!r} is not none, all or a list of families{_close(v, ('none', 'all'))}"]
+    if not isinstance(v, list):
+        return [f"{path}: expected none | all | a list of toolkit families, got {v!r}"]
+    return [f"{path}: unknown toolkit family {f!r}{_close(f, LB.FAMILIES)}; families: {', '.join(LB.FAMILIES)}"
+            for f in v if f not in LB.FAMILIES]
+
+
+def _check_law_set(p, x) -> list:
+    """An inline regime's law set (W6d): laws [{template, rank, params}], drop [names], amend {name: {CONSTANT: value}}."""
+    from charter import library as LB
+    from charter import lawlang as L
+    from charter import regimes as RG
+    errs = []
+    laws = x.get("laws")
+    if laws is not None and not isinstance(laws, list):
+        return [f"{p}.laws: expected a list of {{template, rank, params}}, got {laws!r}"]
+    tpls = _templates()
+    for i, e in enumerate(laws or []):
+        q = f"{p}.laws[{i}]"
+        if not isinstance(e, dict) or "template" not in e:
+            errs.append(f"{q}: expected {{template, rank, params}}, got {e!r}")
+            continue
+        errs += [f"{q}.{k}: unknown key{_close(k, RG.LAW_ENTRY_KEYS)}" for k in e if k not in RG.LAW_ENTRY_KEYS]
+        names = S.dist_options(e["template"]) if S.is_dist(e["template"]) else [e["template"]]
+        if S.is_dist(e["template"]) and S.dist_error(e["template"]):
+            errs.append(f"{q}.template: {S.dist_error(e['template'])}")
+            continue
+        bad = [n for n in names if n not in tpls]
+        errs += [f"{q}.template: unknown law template {n!r}{_close(n, tpls)}" for n in bad]
+        ranks = tuple(r for r in L.RANKS if r != "charter")
+        rk = e.get("rank")
+        for r in (S.dist_options(rk) if S.is_dist(rk) else [rk]):
+            if r is not None and r not in ranks:
+                errs.append(f"{q}.rank: unknown rank {r!r}{_close(r, ranks)}; ranks: {', '.join(ranks)}")
+        prm = e.get("params") or {}
+        if not isinstance(prm, dict):
+            errs.append(f"{q}.params: expected {{CONSTANT: value}}, got {prm!r}")
+            continue
+        for n in names:
+            if n in bad:
+                continue
+            consts = LB.params(n) if n in LB.TOOLKIT or n in LB.LIB else {}
+            if n not in LB.TOOLKIT and n not in LB.LIB:
+                continue
+            for k_, val in prm.items():
+                if k_ not in consts:
+                    errs.append(f"{q}.params.{k_}: {n} has no constant {k_}{_close(k_, consts)}; it has {', '.join(consts) or 'none'}")
+                elif S.is_dist(val) and S.dist_error(val):
+                    errs.append(f"{q}.params.{k_}: {S.dist_error(val)}")
+    drop = x.get("drop")
+    if drop is not None and not (isinstance(drop, list) and all(isinstance(d, str) for d in drop)):
+        errs.append(f"{p}.drop: expected a list of law names, got {drop!r}")
+    amend = x.get("amend")
+    if amend is not None and not (isinstance(amend, dict) and all(isinstance(v, dict) for v in amend.values())):
+        errs.append(f"{p}.amend: expected {{law name: {{CONSTANT: value}}}}, got {amend!r}")
+    return errs
+
+
 def _check_regime(path, v) -> list:
-    """null / regime name / distribution over names / inline {base?, constitution, ...}"""
+    """null / regime name / distribution over names / inline {base?, constitution, laws?, drop?, amend?, ...}"""
     names = _regimes()
 
     def one(p, x):
@@ -813,7 +890,9 @@ def _check_regime(path, v) -> list:
             c = x.get("constitution")
             if c is not None and c not in _constitutions():
                 return [f"{p}.constitution: unknown constitution {c!r}{_close(c, _constitutions())}"]
-            return []
+            from charter import regimes as RG
+            fields = RG.FIELDS + ("base", "name", "cantons_text")
+            return [f"{p}.{k}: unknown regime field{_close(k, fields)}" for k in x if k not in fields] + _check_law_set(p, x)
         return [f"{p}: expected a regime name, a distribution over names, an inline definition or null, got {x!r}"]
     return _values(path, v, one)
 
@@ -1097,6 +1176,14 @@ def validate(spec) -> list[str]:
     lib = law.get("library") if isinstance(law.get("library"), dict) else {}
     if lib.get("edition") == 2 and law.get("v2") is not True:
         errs.append("law.library.edition: edition 2 builds laws from lib:* blocks with use(), which needs law.v2: true")
+    from charter import library as LB
+    tk = [n for n in (spec.get("start_laws") or []) if isinstance(n, str) and n in LB.TOOLKIT] if isinstance(spec.get("start_laws"), list) else []
+    if tk and law.get("v2") is not True:
+        errs.append(f"start_laws: toolkit templates ({', '.join(tk)}) are law.v2 code, which needs law.v2: true")
+    reg = spec.get("regime")
+    if isinstance(reg, dict) and not S.is_dist(reg) and reg.get("laws") and law.get("v2") is not True \
+            and (reg.get("spec") or {}).get("law.v2") is not True:
+        errs.append("regime.laws: a regime's law set is law.v2 code (ranks, new-style hooks, imports), which needs law.v2: true")
     if law.get("gas_price") is not None and law.get("v2") is not True:
         errs.append("law.gas_price: gas is metered only under law.v2, which needs law.v2: true")
     return errs

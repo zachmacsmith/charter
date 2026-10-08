@@ -18,6 +18,7 @@
                          [--out DIR] [--against REV]   what agents see (rendered sections, token counts; charter/preview.py)
   python -m charter spec check E3 [--set models.mix=balanced]                    validate a spec (unknown keys, bad values; did-you-mean hints)
   python -m charter spec docs --out charter/docs/spec_reference.md              write the spec reference (every key, type, default, doc)
+  python -m charter library list [--family F] | library show NAME [--set K=V]    the legal toolkit: templates, parameters, code
   python -m charter explore E3 --runs 8 --perturb "endowment_gini={uniform: [0.1, 0.7]}" --perturb "conditions.fixer={choice: [honest, hidden]}" [--dry]
 
 SPEC is a preset name (E0..E7, base, example_E3) or a path to a YAML spec. --set applies explicit choices (they win over draws).
@@ -363,6 +364,9 @@ def main(argv=None):
     from charter import preview
     p = sub.add_parser("preview", help="render what agents see, with token counts (charter/preview.py)")
     preview.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(preview.cmd(a)))
+    from charter import lawset
+    p = sub.add_parser("library", help="library list [--family F] | library show NAME [--set K=V] (charter/library.py toolkit)")
+    lawset.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(lawset.cmd(a)))
     from charter import schema
     p = sub.add_parser("spec", help="spec check SPEC.. [--set k=v] | spec docs [--out F] (charter/schema.py)")
     schema.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(schema.cmd(a)))
