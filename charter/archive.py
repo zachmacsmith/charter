@@ -37,7 +37,8 @@ ROOT = Path(__file__).parent / "archive"
 AGNET = Path(__file__).resolve().parents[1]
 
 
-def _slug(name):
+@functools.lru_cache(maxsize=4096)
+def _slug(name):                                                       # pure; docs() slugs every library law per call
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 

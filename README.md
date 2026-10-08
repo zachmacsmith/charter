@@ -121,6 +121,24 @@ docs/assets/        README header (python docs/assets/make_headers.py; --candida
 
 Feature-by-feature documentation, known gaps and loopholes still in play: [charter/README.md](charter/README.md).
 
+## Tests
+
+Everything is offline (scripted bots, no model calls). `pip install -e ".[dev]"` brings pytest and pytest-xdist.
+
+```bash
+python -m pytest -m "not slow" -n auto     # the quick loop: everything except the long scripted runs
+python -m pytest -n auto                   # the full suite
+python -m pytest tests/test_charter_golden.py tests/test_charter_history.py   # one area, serially
+```
+
+`slow` marks tests that take more than about 10 s on their own: full scripted runs, resume and replay round trips, the
+History-versus-legacy scorer comparisons. Golden runs (tests/charter_golden_cases.py) are built once per session and shared by
+the golden and History tests; under `-n` they stay on one worker (tests/conftest.py turns `--dist load` into `loadgroup`).
+Timings (4-core container, October 2026): the full suite is about 14 CPU-minutes (it was about 50 before the caches in
+library.info, archive.docs and spec.load and the shared golden runs), about 9.5 minutes with `-n 4` on a busy machine and
+roughly 4-5 on an idle one; the quick loop is about 10 CPU-minutes, about 3 minutes with `-n 4` on an idle machine. pytest
+also deletes the oldest of its kept temporary directories (scripted runs write many files) when a session starts.
+
 ## Citation
 
 ```bibtex
