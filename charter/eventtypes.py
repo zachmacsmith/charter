@@ -419,7 +419,8 @@ E("contract_expelled", "contracts", "legal_act", "parties", "event", "contracts"
 E("contract_deposit", "contracts", "primitive", "parties", "event", "contracts", act="deposit_escrow", primitive="deposit_escrow")
 E("contract_allowance", "contracts", "primitive", "parties", "event", "contracts", act="set_allowance", primitive="set_allowance")
 E("contract_pull", "contracts", "legal_act", "parties", "event", "contracts", primitive="pull")
-E("contract_breach", "contracts", "legal_act", "parties", "event", "contracts", primitive="breach")
+E("contract_breach", "contracts", "legal_act", "parties|public", "event", "contracts", primitive="breach",
+  note="public under contracts.enforcement word (a breach is a reputation), else its members (P4.4)")
 E("contract_notice", "contracts", "summary", "parties", "event", "contracts", note="a contract law's gazette, shown to its members")
 E("contract_law_error", "contracts", "summary", "parties|monitor", "event", "contracts",
   note="an association's law failed: it is suspended and its members told; the Fixer is not called")
@@ -427,6 +428,13 @@ E("contract_changed", "contracts", "legal_act", "public", "event", "contracts", 
 E("contract_change_failed", "contracts", "summary", "parties", "event", "contracts")
 E("contract_dissolved", "contracts", "summary", "public", "event", "contracts", primitive="dissolve")
 E("contract_out_of_scope", "contracts", "record", "monitor", "silent", None, note="a contract law's call beyond its power set")
+# P4.4: atomic exchange, wind-up at dissolution, per-law funds
+E("contract_swap", "contracts", "legal_act", "parties", "event", "contracts", primitive="swap")
+E("contract_wound_up", "contracts", "summary", "public", "event", "contracts", primitive="move",
+  note="a dissolved contract's treasury paid out to its last members (pro rata, or by its laws' on_dissolve)")
+E("fund_opened", "contracts", "legal_act", "public", "event", "contracts", primitive="open_fund")
+E("fund_closed", "contracts", "summary", "public", "event", "contracts", primitive="move",
+  note="a fund whose law is out of force: its goods go to the account's treasury")
 
 
 # ---------------------------------------------------------------------- lookups

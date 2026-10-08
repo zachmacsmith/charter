@@ -133,6 +133,7 @@ PARAM_SAMPLES = {
     "seat": "a5", "contract": "K1", "remedy": "fine", "level": 1, "template": "club",
     "paid": 2.0, "owed": 4.0, "rate": 0.05,                                                              # loans (routed)
     "rank": "statute", "opened_by": "L1", "proposal": "L5", "diff": "--- L5 (before)\n+++ L5 (after)\n",      # P2.3 legal acts
+    "a": "a1", "b": "a2", "give": {"timber": 1.0}, "get": {"grain": 2.0},                                  # P4.4: swap
 }
 
 
@@ -605,6 +606,17 @@ _ROWS = [
       parties=("member",), agent_params=("member",), event="contract_breach", causes=("law",),
       sites=("dispatch:do_breach", "contracts:change_breach", "contracts:law_api.breach"),
       notes="a record (shown to the members): the remedy is what the code itself did within escrow (forfeit, expel) or a text"),
+    # P4.4: atomic exchange and per-law funds (charter/contracts.py)
+    P("swap", "contracts", "move", ("contract", "a", "b", "give", "get"), "dispatch:do_swap", subject="a", parties=("a", "b"),
+      agent_params=("a", "b"), event="contract_swap", causes=("law",),
+      sites=("dispatch:do_swap", "contracts:change_swap", "contracts:law_api.swap"),
+      notes="an association's own law only: give ({item: qty}) goes from a's escrow to b and get from b's escrow to a, both legs or "
+            "neither (a before_swap block stops both); refused under contracts.enforcement word"),
+    P("open_fund", "contracts", "create", ("law", "name"), "dispatch:do_open_fund", event="fund_opened", causes=("law",),
+      sites=("dispatch:do_open_fund", "contracts:change_open_fund", "contracts:law_api.open_fund"),
+      why={"compel": "a law opens its own fund; it binds nobody"},
+      notes="owner key fund:<law>:<name>, an account of the law's own account (polity or association); only that law (and its "
+            "amendments, which keep the id) moves goods out of it; closed into the account's treasury once the law is out of force"),
 ]
 
 # ---------------------------------------------------------------------- actions -> primitives

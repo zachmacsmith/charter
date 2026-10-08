@@ -370,6 +370,8 @@ def check_move(k, p):
         for key in (p["src"], p["dst"]):
             if not AC.law_key_allowed(k, key) and not estate_access(k, str(p["why"])[4:], key):
                 raise L.LawError(f"no such agent: {key}")
+    if isinstance(p["src"], str) and p["src"].startswith(AC.FUND):    # P4.4: only a fund's own law moves goods out of it
+        AC.check_fund_move(k, p["src"], p["why"])
     if not AC.can_pay(k, p["src"], p["item"], qty):
         raise PhysicsError("insufficient")
     return {**p, "qty": qty}
@@ -498,7 +500,7 @@ def _move(k, src, dst, item, qty, why, actor) -> bool:
     e = k.w["effects"]
     if dst == "reserve" and src != "reserve":
         e["to_reserve"][why] = e["to_reserve"].get(why, 0.0) + qty * k._v(item)
-    if src == "reserve" and dst != "reserve":
+    if src == "reserve" and dst != "reserve" and not str(dst).startswith((AC.FUND, AC.ASSOC)):   # P4.4: into an account
         cls = k.cls_of(dst)
         e["from_reserve_by_class"][cls] = e["from_reserve_by_class"].get(cls, 0.0) + qty * k._v(item)
         e["from_reserve_recipients"].add(dst)
@@ -2672,3 +2674,25 @@ def do_pull(k, contract, member, item, qty, lid=None) -> dict:
 def do_breach(k, contract, member, clause, remedy, lid=None) -> dict:
     from charter import contracts as CT
     return CT.change_breach(k, contract, member, clause, remedy, lid)
+
+
+# P4.4: swap (an atomic exchange between two members' escrows: both legs or neither) and open_fund (a per-law fund account).
+OPTIONS.update({"swap": frozenset({"lid"}), "open_fund": frozenset()})
+
+
+def check_swap(k, p):
+    from charter import contracts as CT
+    return CT.check_swap(k, p)
+
+
+CHECKS.update({"swap": check_swap})
+
+
+def do_swap(k, contract, a, b, give, get, lid=None) -> dict:
+    from charter import contracts as CT
+    return CT.change_swap(k, contract, a, b, give, get, lid)
+
+
+def do_open_fund(k, law, name) -> dict:
+    from charter import contracts as CT
+    return CT.change_open_fund(k, law, name)

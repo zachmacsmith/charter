@@ -52,7 +52,7 @@ NICHE_PHRASE = {"your role": "use your role's other tools", "camps": "survey, im
                 "commons": "fund projects or pay the tribute", "files": "keep files, pin them or buy memory from a Scholar",
                 "press": "subscribe to outlets, buy placements, leak, answer polls, post anonymously or use the library",
                 "finance": "lend, borrow and use coins", "jurisdictions": "found, fund or join jurisdictions",
-                "contracts": "found, join or leave contracts (clubs, companies, crowdfunds, cartels)",
+                "contracts": "found, join or leave contracts (clubs, companies, crowdfunds, cartels, exchanges)",
                 "courts": "go to court or call the Fixer", "force, more": "guard others, join attacks, hire the assassin or buy initiative",
                 "inheritance": "decide your inheritance or copy an agent", "groups": "run private groups", "powers": "use a word of power or an action a law defined"}
 UNIVERSAL_RIGHTS = ()                                                   # rights everyone holds (none at present): never an edge
@@ -518,13 +518,13 @@ R("set_charter", "change your hidden jurisdiction's starting laws", "jurisdictio
   handler="jurisdictions:act_set_charter", module="jurisdictions", category="political", emits=("jur_charter",),
   doc='set_charter {"jurisdiction": "J2", "laws": ["<law code>", ...]}: founder only, before it is declared: replace its charter (the starting laws enacted at declaration)')
 # contracts (P4.3: associations, charter/contracts.py)
-R("create_contract", "found a contract (a club, company, crowdfund, cartel)", "contracts", needs=("mod:contracts",),
+R("create_contract", "found a contract (a club, company, crowdfund, cartel, exchange)", "contracts", needs=("mod:contracts",),
   handler="contracts:act_create_contract", module="contracts", category="political", emits=("contract_created",),
   aliases={"laws": "code", "type": "template", "kind": "template"},
   doc='create_contract {"name": "...", "template": "club", "params": {"DUES": 2}} or {"name": "...", "code": "<law code>"}: found '
       'an association; you are its first member. Its code is in force at once and binds only members who join: it may tax or '
       'block what members do, take only what they deposit in its escrow or allow it each round, and pay anyone from its treasury '
-      '(templates: club, company, crowdfund, cartel; the manual lists their params)')
+      '(templates: club, company, crowdfund, cartel, exchange; the manual lists their params)')
 R("join_contract", "join a contract", "contracts", needs=("mod:contracts",),
   handler="contracts:act_join_contract", module="contracts", category="political",
   emits=("contract_joined", "contract_join_refused", "contract_applied"),

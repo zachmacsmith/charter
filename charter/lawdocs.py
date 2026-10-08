@@ -378,7 +378,23 @@ E += [
     ("contract_state", "contracts", "Contracts", "contract_state(cid)", "a contract's public record: name, template, founder, "
      "members, laws, treasury, breaches.", "common", "common"),
     ("contracts", "contracts", "Contracts", "contracts()", "the ids of the contracts in force.", "common", "common"),
-    ("breaches", "contracts", "Contracts", "breaches(cid=None)", "breach records (of one contract, or of all).", "common", "common"),
+    ("breaches", "contracts", "Contracts", "breaches(cid=None)", "breach records (of one contract, or of all), each with its id and "
+     "`actionable`: True where this world lets a polity's courts hear contract breaches (enforcement() == \"escrow_court\").",
+     "common", "common"),
+    # P4.4
+    ("swap", "contracts", "Contracts", "swap(a, b, give, get)", "a contract's law only: an atomic exchange between two members' "
+     "escrows: give ({item: qty}) goes from a's escrow to b and get from b's escrow to a, both or neither; True or False.",
+     "prompt", "common"),
+    ("open_fund", "contracts", "Contracts", "open_fund(name)", "opens (or returns) this law's own fund, an account with owner key "
+     "fund:<law>:<name> belonging to this law's polity or contract: move goods into it like any account; only this law (and its "
+     "amendments) can move them out. When the law leaves force its funds go to the treasury. Structural.", "prompt", "common"),
+    ("funds", "contracts", "Contracts", "funds()", "this law's polity's or contract's open funds: {key: holdings}.", "common",
+     "common"),
+    ("enforcement", "contracts", "Contracts", "enforcement()", "how this world enforces contracts: \"escrow\" (by their own escrow), "
+     "\"escrow_court\" (and a polity's courts hear breaches) or \"word\" (no escrow: only breach records and reputation).",
+     "common", "common"),
+    ("reputation", "contracts", "Contracts", "reputation(agent)", "an agent's breach record across every contract: {\"breaches\": n, "
+     "\"contracts\": [ids]}.", "common", "common"),
 ]
 OPTIONAL.update({e[0]: "contracts" for e in E if e[1] == "contracts"})
 ENTRIES ={e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}

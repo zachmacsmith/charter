@@ -59,7 +59,7 @@ def test_every_reachable_function_has_a_row_and_every_row_is_reachable():
     k = _kernel()
     api = k.api_for("_")
     assert set(api) == set(LA.LAWFNS), (sorted(set(api) - set(LA.LAWFNS)), sorted(set(LA.LAWFNS) - set(api)))
-    assert len(LA.LAWFNS) == 129 + len(CONTRACT_FNS) == 138          # P3.2: set_conflict_rule; P3.4: propose_law, propose_amendment; settle_loan; P4.3
+    assert len(LA.LAWFNS) == 129 + len(CONTRACT_FNS) == 143          # P3.2: set_conflict_rule; P3.4: propose_law, propose_amendment; settle_loan; P4.3; P4.4 (5)
     mods = {f.module for f in LA.LAWFNS.values()} - {"kernel"}
     from_modules = set()
     for m in sorted(mods):
@@ -136,5 +136,5 @@ def test_hooks_table_matches_the_dispatch_sites_and_jurisdiction_routing():
 
 def test_rows_render():
     rows = LA.rows()
-    assert len([r for r in rows if r["kind"] == "function"]) == 138 and len([r for r in rows if r["kind"] == "hook"]) == 15
+    assert len([r for r in rows if r["kind"] == "function"]) == 143 and len([r for r in rows if r["kind"] == "hook"]) == 15
     assert all(r["dispatch"] for r in rows if r["kind"] == "hook")

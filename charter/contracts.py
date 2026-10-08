@@ -31,11 +31,32 @@ with propose_contract_change.
 
 Exit: a member can always leave (leave_contract), at the end of the round: its laws' on_exit(agent) runs first (it can forfeit
 from the member's escrow, nothing else), then what is left in the escrow goes back and its allowances end. A member who leaves the
-world leaves at the end of that round. A contract whose last member leaves is dissolved (its treasury stays in its account: residual
-claims are P4.5's shares).
+world leaves at the end of that round; a dead member's escrow goes into its estate while that is open, else it is handed on by
+its bequest (mortality.settle_late), never left on the dead agent's record. A contract whose last members leave is dissolved and
+wound up (P4.4): its laws' on_dissolve(heirs) runs first (heirs: the members who left in that last round; it may pay out of the
+treasury, e.g. the company template pro rata to shares), then what is left in the treasury is shared equally among the heirs.
 
-Not in v1 (later packages): the enforcement dial and the Contract Enforcement Act (P4.4: courts over breaches; `breach` here only
-records), shares as a backed currency, agency (authorize), standing orders and scripts (P4.5), offices.
+P4.4 (docs/ARCHITECTURE.md §7.2; review 10 §3.6, §6 #7 and #8):
+  - The enforcement dial, spec `contracts.enforcement` (ENFORCEMENT):
+      escrow        (default) a contract enforces itself through what members deposit or allow; breach() only records;
+      escrow_court  the same, and a polity's courts may hear breaches: breaches() marks every record `actionable`, which the library
+                    law "Contract Enforcement Act" (a polity law) sanctions, by a judge's ruling on its clause breach_of_contract
+                    or automatically. Integration point for courts v2 (kept small on purpose): `court_breaches(k, member)` and
+                    the `actionable` flag; a case is an ordinary accuse under the Act's clause, the penalty reads breaches();
+      word          no escrow at all: every escrow-column function refuses what touches an escrow or an allowance (pull,
+                    forfeit, refund, fine, swap; move from or to an escrow), deposit_escrow and set_allowance are refused;
+                    contracts keep breach records, which are public (a reputation: reputation(agent)).
+  - Atomic exchange: the `swap` primitive (an association's law: both legs between two members' escrows or neither, hookable as
+    before_swap/after_swap, conserving) and the `exchange` template built on it (two deposits, released both at once or refunded
+    both at the deadline).
+  - Per-law funds: open_fund(name) opens owner key "fund:<lid>:<name>" (accounts.FUND; record in k.w["contracts"]["funds"],
+    created on first use): an account of the law's own account (a polity or an association), listed by funds() and
+    accounts.funds_of, counted in accounts.keys and conservation. Anyone's law may pay into it; only law lid moves goods out
+    (accounts.check_fund_move in dispatch.check_move: why must be "law:<lid>"), and an amendment keeps the id, so the amended law
+    keeps its funds. A fund whose law is out of force (repealed, failed) is closed at the end of the round into its account's
+    treasury (end_round). Contracts on only.
+
+Not yet (later packages): shares as a backed currency, agency (authorize), standing orders and scripts (P4.5), offices.
 """
 from __future__ import annotations
 
@@ -61,8 +82,12 @@ DEFAULTS = {
     "max_laws": 3,          # laws (code modules) one contract may have in force or suspended
     "templates": True,      # agents may found contracts from the templates (club, company, crowdfund, cartel)
     "scripted": True,       # dry runs: the scripted bots found, join and use contracts (own RNG stream)
+    "enforcement": "escrow",    # P4.4 dial: escrow | escrow_court (a polity's courts hear breaches) | word (no escrow at all)
 }
 PROCEDURES = ("members", "two_thirds", "founder")
+ENFORCEMENT = ("escrow", "escrow_court", "word")
+MAX_FUNDS = 5                   # funds one law may open (P4.4)
+WORD_REFUSED = {"pull": False, "forfeit": 0.0, "refund": {}, "fine": 0.0, "swap": False}   # what they return under "word"
 
 
 # ---------------------------------------------------------------------- basics
@@ -82,12 +107,22 @@ def recs(k) -> dict:
     return AC.assocs(k)
 
 
+def enforcement(k) -> str:
+    """The enforcement dial (P4.4): escrow | escrow_court | word."""
+    return cfg(k)["enforcement"]
+
+
 def install(k) -> None:
     """Kernel init (features.PHASES "init"). Off: nothing."""
     if not FT.get("contracts").spec_on(k.spec):
         return
     if not (k.spec.get("law") or {}).get("v2"):
         raise ValueError("contracts.enabled needs law.v2: true (contract code runs on the law.v2 hooks and accounts)")
+    if cfg(k)["enforcement"] not in ENFORCEMENT:
+        import difflib
+        hit = difflib.get_close_matches(str(cfg(k)["enforcement"]), ENFORCEMENT, 1, 0.6)
+        raise ValueError(f"contracts.enforcement must be one of {', '.join(ENFORCEMENT)}"
+                         + (f" (did you mean {hit[0]!r}?)" if hit else ""))
     k.w["contracts"] = {"seq": 0, "assoc": {}}
 
 
@@ -214,6 +249,16 @@ def on_round_end(r):
         for m in holders:
             move(treasury(), m, item, pay * shares[m] / total)
     gazette("Dividend paid to " + str(len(holders)) + " shareholders")
+
+def on_dissolve(heirs):
+    shares = public["shares"]
+    holders = [m for m in heirs if shares.get(m, 0) > 0]
+    total = sum([shares[m] for m in holders])
+    if total <= 0:
+        return
+    for item, q in sorted(reserve().items()):
+        for m in holders:
+            move(treasury(), m, item, q * shares[m] / total)
 '''},
     "crowdfund": {"admission": "open", "procedure": "founder", "doc": "members pledge into escrow (deposit_escrow); if the pledges "
                   "reach the target by the deadline they go to the beneficiary, otherwise every pledge is refunded", "code": '''
@@ -281,6 +326,45 @@ def on_round_end(r):
     for item, q in sorted(reserve().items()):
         for m in ms:
             move(treasury(), m, item, q / len(ms))
+'''},
+    "exchange": {"admission": "open", "procedure": "founder", "doc": "an atomic exchange between the founder and one counterparty: "
+                 "both deposit their side in escrow (deposit_escrow); once both are in, both change hands at once (swap), and if "
+                 "they are not in by the deadline both are refunded", "code": '''
+title = "Exchange"
+intent = "An atomic exchange between the founder and one counterparty (COUNTERPARTY, or the first agent to join). The founder deposits GIVE_QTY GIVE_ITEM in escrow and the counterparty GET_QTY GET_ITEM (deposit_escrow). At the end of the first round in which both deposits are in, both change hands at once (swap: both or neither); if they are not in by the end of round DEADLINE, both are refunded. Either way the exchange then closes."
+GIVE_ITEM = "timber"
+GIVE_QTY = 1
+GET_ITEM = "grain"
+GET_QTY = 1
+COUNTERPARTY = ""
+DEADLINE = 3
+
+def on_admission(agent):
+    if COUNTERPARTY != "":
+        return agent == COUNTERPARTY
+    return len(members()) < 2
+
+def close():
+    state["done"] = True
+    for m in members():
+        refund(m)
+        expel(m)
+
+def on_round_end(r):
+    if state.get("done"):
+        return
+    a = contract_state(jurisdiction())["founder"]
+    others = [m for m in members() if m != a]
+    if a in members() and len(others) > 0:
+        b = others[0]
+        if escrow_of(a).get(GIVE_ITEM, 0) >= GIVE_QTY and escrow_of(b).get(GET_ITEM, 0) >= GET_QTY:
+            if swap(a, b, {GIVE_ITEM: GIVE_QTY}, {GET_ITEM: GET_QTY}):
+                gazette("Exchanged: " + a + " gave " + str(GIVE_QTY) + " " + GIVE_ITEM + " for " + b + "'s " + str(GET_QTY) + " " + GET_ITEM)
+                close()
+                return
+    if r + 1 >= DEADLINE:
+        gazette("Not exchanged by round " + str(DEADLINE) + ": both deposits refunded")
+        close()
 '''},
 }
 for _t in TEMPLATES.values():
@@ -391,8 +475,15 @@ def act_leave_contract(k, aid, contract):
             f"({_fmt(escrow_of(k, rec['id'], aid))}) and your allowances end.")
 
 
+def _need_escrow(k, what):
+    if enforcement(k) == "word":
+        raise L.LawError(f"{what}: contracts in this world hold no escrow and take no allowances (enforcement by word: a breach is "
+                         "only recorded, for everyone to see)")
+
+
 def act_deposit_escrow(k, aid, contract, item, qty):
     _need_on(k)
+    _need_escrow(k, "deposit_escrow")
     rec = _rec(k, contract)
     k.apply("deposit_escrow", agent=aid, contract=rec["id"], item=str(item), qty=qty)
     return f"Deposited {float(qty):g} {item} in escrow with {rec['id']} (your escrow there: {_fmt(escrow_of(k, rec['id'], aid))})."
@@ -400,6 +491,7 @@ def act_deposit_escrow(k, aid, contract, item, qty):
 
 def act_set_allowance(k, aid, contract, item, qty):
     _need_on(k)
+    _need_escrow(k, "set_allowance")
     rec = _rec(k, contract)
     k.apply("set_allowance", agent=aid, contract=rec["id"], item=str(item), qty=qty)
     q = float(qty)
@@ -641,19 +733,24 @@ def scope_api(k, lid, api: dict) -> dict:
         k.log("contract_out_of_scope", None, {"law": lid, "contract": cid, "fn": fn, "what": what}, vis="monitor")
         return False
 
+    word = enforcement(k) == "word"
+    esc = f"{AC.ESCROW}{cid}:"
+
     def src_key(x):
-        """An owner this contract may take from: its treasury ("treasury", "reserve" or its key) or a member's escrow with it."""
+        """An owner this contract may take from: its treasury ("treasury", "reserve" or its key), a member's escrow with it (not
+        under enforcement "word") or this law's own funds (P4.4)."""
         if x in ("treasury", "reserve", tk):
             return tk
-        if isinstance(x, str) and x.startswith(f"{AC.ESCROW}{cid}:"):
+        if isinstance(x, str) and ((x.startswith(esc) and not word) or x.startswith(f"{AC.FUND}{lid}:")):
             return x
         return None
 
     def dst_key(x):
-        """Where it may pay: its treasury, an escrow with it, or any agent (members or not: pay_outsiders)."""
+        """Where it may pay: its treasury, an escrow with it (not under "word"), this law's own funds, or any agent (members or
+        not: pay_outsiders)."""
         if x in ("treasury", "reserve", tk):
             return tk
-        if isinstance(x, str) and (x.startswith(f"{AC.ESCROW}{cid}:") or x in k.w["agents"]):
+        if isinstance(x, str) and ((x.startswith(esc) and not word) or x.startswith(f"{AC.FUND}{lid}:") or x in k.w["agents"]):
             return x
         return None
 
@@ -747,12 +844,22 @@ def law_api(k, lid) -> dict:
         rec = J.association(k, J.law_jur(k, lid))
         if rec is None:
             raise L.LawError(f"{fn} works only in a contract's own law")
-        if not PW.has_power(k, rec["id"], "take_deposits") and fn in ("pull", "forfeit", "refund"):
+        if not PW.has_power(k, rec["id"], "take_deposits") and fn in ("pull", "forfeit", "refund", "swap"):
             raise L.LawError(PW.refusal("take_deposits", fn))
         return rec
 
+    def by_word(fn, rec, member) -> bool:
+        """P4.4: under enforcement "word" the escrow column refuses (logged for the monitor; the law gets WORD_REFUSED[fn])."""
+        if enforcement(k) != "word":
+            return False
+        k.log("contract_out_of_scope", None, {"law": lid, "contract": rec["id"], "fn": fn, "what": member,
+                                              "why": "enforcement word: no escrow"}, vis="monitor")
+        return True
+
     def pull(member, item, qty):
         rec = mine("pull")
+        if by_word("pull", rec, member):
+            return WORD_REFUSED["pull"]
         try:
             return bool(k.apply("pull", contract=rec["id"], member=member, item=str(item), qty=qty, lid=lid).ok)
         except D.PhysicsError as e:                                     # beyond the allowance or the balance (or blocked)
@@ -761,6 +868,8 @@ def law_api(k, lid) -> dict:
 
     def forfeit(member, item, qty, to=None):
         rec = mine("forfeit")
+        if by_word("forfeit", rec, member):
+            return WORD_REFUSED["forfeit"]
         key = AC.escrow_key(rec["id"], member)
         if member not in k.w["agents"]:
             return 0.0
@@ -774,6 +883,8 @@ def law_api(k, lid) -> dict:
 
     def refund(member, item=None):
         rec = mine("refund")
+        if by_word("refund", rec, member):
+            return dict(WORD_REFUSED["refund"])
         key = AC.escrow_key(rec["id"], member)
         if member not in k.w["agents"]:
             return {}
@@ -798,10 +909,61 @@ def law_api(k, lid) -> dict:
         rec = J.association(k, J.law_jur(k, lid))
         return _allowance_left(k, rec, member) if rec else {}
 
+    def swap(a, b, give, get):
+        """P4.4: an atomic exchange between two members' escrows (the swap primitive): both legs or neither."""
+        rec = mine("swap")
+        if by_word("swap", rec, a):
+            return WORD_REFUSED["swap"]
+        try:
+            return bool(k.apply("swap", contract=rec["id"], a=a, b=b, give=_goods(give), get=_goods(get), lid=lid).ok)
+        except D.PhysicsError as e:                                     # not members, or an escrow short of its leg
+            k.w["effects"]["kernel_refusals"].append(e.reason)
+            return False
+
+    def open_fund(name):
+        """P4.4: this law's own fund (opened on the first call; the same key after): its owner key."""
+        n = str(name).strip()
+        if not n or len(n) > 24 or not all(c.isalnum() or c == "_" for c in n):
+            raise L.LawError("a fund's name is 1-24 letters, digits or _")
+        key = AC.fund_key(lid, n)
+        if key in AC.funds(k):
+            return key
+        if sum(1 for f in AC.funds(k).values() if f["law"] == lid) >= MAX_FUNDS:
+            raise L.LawError(f"a law may open at most {MAX_FUNDS} funds")
+        return k.apply("open_fund", law=lid, name=n).result["fund"]
+
+    def breaches_(cid=None):
+        live = enforcement(k) == "escrow_court"
+        return [dict(b, contract=c, id=f"{c}:{i + 1}", actionable=live) for c, r in recs(k).items() if cid in (None, c)
+                for i, b in enumerate(r["breaches"])]
+
     return {"pull": pull, "forfeit": forfeit, "refund": refund, "breach": breach, "escrow_of": escrow_of_,
             "allowance_of": allowance_of, "contract_state": lambda cid: public_record(k, cid),
             "contracts": lambda: [c for c, r in recs(k).items() if r["status"] != "dissolved"],
-            "breaches": lambda cid=None: [dict(b, contract=c) for c, r in recs(k).items() if cid in (None, c) for b in r["breaches"]]}
+            "breaches": breaches_, "swap": swap, "open_fund": open_fund,
+            "funds": lambda: AC.funds_of(k, AC.account_of(k, lid)), "enforcement": lambda: enforcement(k),
+            "reputation": lambda agent: reputation(k, agent)}
+
+
+def _goods(x) -> dict:
+    if not isinstance(x, dict) or not x:
+        raise L.LawError("give and get are objects {item: qty}, e.g. {\"timber\": 2}")
+    return {str(i): q for i, q in sorted(x.items())}
+
+
+def reputation(k, agent) -> dict:
+    """An agent's breach record across every contract (P4.4: public under enforcement "word")."""
+    hits = [c for c, r in recs(k).items() for b in r["breaches"] if b["member"] == agent]
+    return {"breaches": len(hits), "contracts": sorted(set(hits), key=lambda c: int(c[1:]))}
+
+
+def court_breaches(k, member) -> list:
+    """The integration point for courts (P4.4; courts v2 builds on it): breaches by `member` a polity's court may hear, with ids
+    as breaches() gives them. Empty unless contracts.enforcement is escrow_court."""
+    if "contracts" not in k.w or enforcement(k) != "escrow_court":
+        return []
+    return [dict(b, contract=c, id=f"{c}:{i + 1}", actionable=True) for c, r in recs(k).items()
+            for i, b in enumerate(r["breaches"]) if b["member"] == member]
 
 
 def public_record(k, cid) -> dict | None:
@@ -810,7 +972,7 @@ def public_record(k, cid) -> dict | None:
         return None
     return {"id": rec["id"], "name": rec["name"], "status": rec["status"], "template": rec["template"], "params": dict(rec["params"]),
             "founder": rec["founder"], "members": list(rec["members"]), "laws": list(rec["laws"]), "treasury": dict(rec["reserve"]),
-            "admission": rec["admission"], "breaches": [dict(b) for b in rec["breaches"]]}
+            "admission": rec["admission"], "breaches": [dict(b) for b in rec["breaches"]], "funds": AC.funds_of(k, rec["id"])}
 
 
 def _allowance_left(k, rec, member) -> dict:
@@ -842,6 +1004,23 @@ def check_pull(k, p) -> dict:
     if not AC.can_pay(k, m, item, q):
         raise D.PhysicsError("insufficient")
     return {**p, "qty": q}
+
+
+def check_swap(k, p) -> dict:
+    """Both parties are members and each escrow holds its whole leg (PhysicsError otherwise: nothing moves)."""
+    rec = _rec(k, p["contract"])
+    a, b = p["a"], p["b"]
+    if a == b or a not in rec["members"] or b not in rec["members"]:
+        raise D.PhysicsError(f"swap: {a} and {b} must be two members of {rec['id']}")
+    legs = {}
+    for who, goods in ((a, p["give"]), (b, p["get"])):
+        out = {}
+        for item, q in sorted(goods.items()):
+            out[item] = _qty({"qty": q})
+            if not AC.can_pay(k, AC.escrow_key(rec["id"], who), item, out[item]):
+                raise D.PhysicsError(f"swap: {who}'s escrow with {rec['id']} holds less than {out[item]:g} {item}")
+        legs[who] = out
+    return {**p, "give": legs[a], "get": legs[b]}
 
 
 def check_deposit(k, p) -> dict:
@@ -933,10 +1112,7 @@ def change_leave(k, agent, polity, via) -> dict:
         k.log("contract_leave_pending", agent, {"contract": polity}, vis=_vis(rec, agent))
         return {"status": "pending"}
     key = AC.escrow_key(polity, agent)
-    back = {}
-    for item, q in sorted((rec["escrow"].get(agent) or {}).items()):
-        if q > 0 and D._move(k, key, agent, item, q, f"refund:{polity}", None):
-            back[item] = q
+    back = _pay_member(k, key, agent, dict(rec["escrow"].get(agent) or {}), f"refund:{polity}")
     rec["escrow"].pop(agent, None)
     rec["allowances"].pop(agent, None)
     rec["pulled"].pop(agent, None)
@@ -944,16 +1120,59 @@ def change_leave(k, agent, polity, via) -> dict:
     if agent in rec["members"]:
         rec["members"].remove(agent)
     k.log("contract_left", agent, {"contract": polity, "why": via, "refunded": back}, vis="public")
-    if not rec["members"]:
-        _dissolve(k, rec)
-    return {"status": "left", "refunded": back}
+    return {"status": "left", "refunded": back}                       # the last members' leaving dissolves it (end_round)
 
 
-def _dissolve(k, rec) -> None:
+def _pay_member(k, src, aid, goods, why) -> dict:
+    """Goods owed to a (former) member: to the agent; for a dead one (P4.4 fix: never to the dead agent's record, where they would
+    stay forever) into its estate while that is open, else through its bequest (mortality.settle_late). What was paid."""
+    paid = {}
+    dead = (k.w["agents"].get(aid) or {}).get("dead") is not None
+    est = ((k.w.get("mortality") or {}).get("estates") or {}).get(aid) if dead else None
+    dst = AC.estate_key(aid) if est and est.get("status") == "open" else aid
+    for item, q in sorted(goods.items()):
+        if q > 0 and D._move(k, src, dst, item, q, why, None):
+            paid[item] = q
+    if dead and dst == aid and paid:
+        from charter import mortality as MO
+        MO.settle_late(k, aid)
+    return paid
+
+
+def _dissolve(k, rec, heirs=()) -> None:
+    """The last members have left (end_round): the contract is wound up (P4.4) and dissolved. Its laws' on_dissolve(heirs) runs
+    first (heirs: the members who left in this last round; it may pay out of the treasury); its laws end (their funds close into
+    the treasury); what is left in the treasury is shared equally among the heirs (the last one gets the rounding rest). With no
+    heir the treasury stays in its account."""
+    cid = rec["id"]
+    heirs = [a for a in heirs if a in k.w["agents"]]
+    before = dict(rec["reserve"])
+    for lid in list(rec["laws"]):
+        ns = k.ns.get(lid) or {}
+        if k.w["laws"][lid]["status"] == "active" and "on_dissolve" in ns:
+            try:
+                k.call(lid, ns["on_dissolve"], list(heirs))
+            except L.LawError as e:
+                with k.cause("law", lid, hook="on_dissolve"):
+                    law_error(k, lid, str(e))
     for lid in list(rec["laws"]):
         _retire(k, rec, lid)
+    _close_funds(k)
+    paid = {}
+    tk = treasury_key(cid)
+    for item, q in sorted(rec["reserve"].items()):
+        if q <= 0 or not heirs:
+            continue
+        share = round(q / len(heirs), 6)
+        for i, a in enumerate(heirs):
+            amt = k.bal(tk, item) if i == len(heirs) - 1 else min(share, k.bal(tk, item))
+            got = _pay_member(k, tk, a, {item: amt}, f"wind_up:{cid}")
+            if got:
+                paid.setdefault(a, {})[item] = got[item]
     rec["status"] = "dissolved"
-    k.log("contract_dissolved", None, {"contract": rec["id"], "treasury": dict(rec["reserve"])}, vis="public")
+    if paid:
+        k.log("contract_wound_up", None, {"contract": cid, "heirs": heirs, "paid": paid}, vis="public")
+    k.log("contract_dissolved", None, {"contract": cid, "treasury": before, "left": dict(rec["reserve"])}, vis="public")
 
 
 def change_deposit(k, agent, contract, item, qty) -> dict:
@@ -991,8 +1210,45 @@ def change_breach(k, contract, member, clause, remedy, lid=None) -> dict:
     rec = recs(k)[contract]
     b = {"round": k.r, "member": member, "clause": clause, "remedy": remedy, "law": lid}
     rec["breaches"].append(b)
-    k.log("contract_breach", member, {"contract": contract, **{x: v for x, v in b.items() if x != "member"}}, vis=_vis(rec))
+    k.log("contract_breach", member, {"contract": contract, **{x: v for x, v in b.items() if x != "member"}},
+          vis="public" if enforcement(k) == "word" else _vis(rec))            # P4.4: under "word" a breach is a public reputation
     return {"breach": len(rec["breaches"])}
+
+
+def change_swap(k, contract, a, b, give, get, lid=None) -> dict:
+    """Both legs of an exchange at once (checked by check_swap: each escrow holds its whole leg, so neither move can fail)."""
+    rec = recs(k)[contract]
+    ka, kb = AC.escrow_key(contract, a), AC.escrow_key(contract, b)
+    for item, q in give.items():
+        D._move(k, ka, b, item, q, f"swap:{contract}", None)
+    for item, q in get.items():
+        D._move(k, kb, a, item, q, f"swap:{contract}", None)
+    k.log("contract_swap", None, {"contract": contract, "a": a, "b": b, "give": dict(give), "get": dict(get), "law": lid},
+          vis=_vis(rec, a, b))
+    return {"swapped": True}
+
+
+def change_open_fund(k, law, name) -> dict:
+    key = AC.fund_key(law, name)
+    acct = AC.account_of(k, law)
+    k.w["contracts"].setdefault("funds", {})[key] = {"key": key, "law": law, "name": name, "account": acct, "holdings": {},
+                                                    "opened": k.r, "status": "open"}
+    k.log("fund_opened", None, {"fund": key, "law": law, "name": name, "account": acct}, vis="public")
+    return {"fund": key}
+
+
+def _close_funds(k) -> None:
+    """End of round (P4.4): a fund whose law is out of force (repealed, failed; suspended laws keep theirs) is closed and its goods go
+    to its account's treasury."""
+    for key, f in sorted(AC.funds(k).items()):
+        if f["status"] != "open" or (k.w["laws"].get(f["law"]) or {}).get("status") in ("active", "suspended"):
+            continue
+        to = AC.treasury_of(k, f["account"])
+        left = dict(f["holdings"])
+        for item, q in sorted(left.items()):
+            D._move(k, key, to, item, q, f"fund_closed:{f['law']}", None)
+        f["status"] = "closed"
+        k.log("fund_closed", None, {"fund": key, "law": f["law"], "to": to, "holdings": left}, vis="public")
 
 
 # ---------------------------------------------------------------------- end of round (features.PHASES round_end)
@@ -1016,6 +1272,7 @@ def end_round(k) -> None:
         for m in list(rec["members"]):
             if (k.w["agents"].get(m) or {}).get("departed") is not None:
                 rec["leaving"].setdefault(m, "departed")
+        batch = []
         for aid, why in sorted(rec["leaving"].items(), key=lambda t: order(t[0])):
             if aid not in rec["members"]:
                 rec["leaving"].pop(aid, None)
@@ -1023,8 +1280,10 @@ def end_round(k) -> None:
             out = k.apply("leave", agent=aid, polity=cid, via=why)     # on_exit (its laws, escrow only), then change_leave
             if not out.ok and aid in rec["members"]:                   # exit is a right: a block cannot keep a member in
                 change_leave(k, aid, cid, why)
-            if rec["status"] == "dissolved":
-                break
+            batch.append(aid)
+        if batch and not rec["members"] and rec["status"] != "dissolved":
+            _dissolve(k, rec, batch)                                    # P4.4: wound up among the last members
+    _close_funds(k)                                                     # P4.4: funds whose law is out of force
 
 
 # ---------------------------------------------------------------------- prompts, state lines, events, snapshots
@@ -1087,16 +1346,28 @@ def render_event(k, e, tag, viewer=None) -> str | None:
         return f"{tag} a change to {c} failed: {d['why']}"
     if t == "contract_dissolved":
         return f"{tag} contract {c} dissolved (no members left)"
+    if t == "contract_swap":
+        return f"{tag} {c}: {d['a']} gave {_fmt(d['give'])} to {d['b']} for {_fmt(d['get'])} (exchange)"
+    if t == "contract_wound_up":
+        return f"{tag} contract {c} was wound up: " + "; ".join(f"{a} got {_fmt(g)}" for a, g in d["paid"].items())
+    if t == "fund_opened":
+        return f"{tag} law {d['law']} opened its fund {d['fund']}"
+    if t == "fund_closed":
+        return f"{tag} fund {d['fund']} closed (its law is out of force): {_fmt(d['holdings'])} went to {d['to']}"
     return None
 
 
 def snapshot_fields(k) -> dict:
     if "contracts" not in k.w:
         return {}
-    return {"contracts": {cid: {"status": r["status"], "members": list(r["members"]), "laws": list(r["laws"]),
-                                "treasury": dict(r["reserve"]), "escrow": {a: dict(v) for a, v in r["escrow"].items() if v},
-                                "allowances": {a: dict(v) for a, v in r["allowances"].items()}, "breaches": len(r["breaches"])}
-                          for cid, r in recs(k).items()}}
+    out = {"contracts": {cid: {"status": r["status"], "members": list(r["members"]), "laws": list(r["laws"]),
+                               "treasury": dict(r["reserve"]), "escrow": {a: dict(v) for a, v in r["escrow"].items() if v},
+                               "allowances": {a: dict(v) for a, v in r["allowances"].items()}, "breaches": len(r["breaches"])}
+                         for cid, r in recs(k).items()}}
+    if AC.funds(k):                                                     # P4.4: per-law funds, by account (only once one exists)
+        out["funds"] = {key: {"account": f["account"], "law": f["law"], "status": f["status"], "holdings": dict(f["holdings"])}
+                        for key, f in AC.funds(k).items()}
+    return out
 
 
 def rules_text(inst) -> str:
@@ -1114,7 +1385,20 @@ def rules_text(inst) -> str:
             "An error in a contract's code suspends that law and tells its members; the Fixer does not fix contracts. Laws of a "
             "contract can also use pull(member, item, qty), forfeit(member, item, qty, to=None), refund(member, item=None), "
             "breach(member, clause, remedy), escrow_of(member), allowance_of(member), members(), expel(agent), admit(agent), "
-            "treasury() and the hooks on_admission(agent), on_exit(agent)." + (f" Templates: {t}." if t else ""))
+            "swap(a, b, give, get) (an exchange between two members' escrows, both or neither), treasury() and the hooks "
+            "on_admission(agent), on_exit(agent), on_dissolve(heirs). When the last members leave, a contract is wound up: its "
+            "on_dissolve may pay out of its treasury, and what is left is shared equally among those last members. Any law may "
+            "keep its own funds (open_fund(name)): only that law moves goods out of them." + _ENFORCEMENT_TEXT[cfg_of(inst["spec"])
+            ["enforcement"]] + (f" Templates: {t}." if t else ""))
+
+
+_ENFORCEMENT_TEXT = {
+    "escrow": "",
+    "escrow_court": " Breaches of contract can also be taken to a polity's courts where a law lets them (the Contract Enforcement "
+                    "Act: accuse the member under its clause breach_of_contract).",
+    "word": " In this world contracts hold no escrow and take no allowances (enforcement by word): their code cannot take anything "
+            "from a member; a breach is only recorded, publicly, as that member's reputation.",
+}
 
 
 from charter import sections as _SC                                    # noqa: E402  (registered after the module is defined)

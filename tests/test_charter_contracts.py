@@ -125,7 +125,7 @@ def test_every_law_function_is_allowed_escrowed_or_denied_for_a_contract():
     assert {"grant", "revoke", "suspend", "limit_actions", "censure", "set_dm_limit", "lawful_attack", "set_quota", "set_fee",
             "mint", "burn", "create_currency", "define_action", "create_right", "enable_loans", "start_project", "oblige_guard",
             "hide_post", "set_lease_rules", "title", "rename"} <= deny
-    assert {f.name for f in LA.LAWFNS.values() if f.contract == "escrow"} == {"move", "fine", "pull", "forfeit", "refund"}
+    assert {f.name for f in LA.LAWFNS.values() if f.contract == "escrow"} == {"move", "fine", "pull", "forfeit", "refund", "swap"}   # P4.4
 
 
 def test_contract_code_calling_a_denied_function_is_refused_when_founded():

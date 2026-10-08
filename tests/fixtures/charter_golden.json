@@ -254,8 +254,8 @@
   "snapshots.json": "85b8781150e80512"
  },
  "contracts_small": {
-  "events.jsonl": "d7ac536af821294d",
-  "instance.json": "729f59b0f1c8a9ac",
+  "events.jsonl": "fc1962feba32e0c8",
+  "instance.json": "a1baa3f21260565e",
   "score": {
    "activity_mix": "2a5579c5c72622dc",
    "agents": "ec1f2e0722ff7643",

@@ -330,6 +330,16 @@ def _give(k, src, dst, item, qty, why):
         k.move(src, dst, item, qty, why=why)
 
 
+def settle_late(k, aid) -> dict:
+    """Goods that reach a dead agent after its probate (a contract's escrow refund or wind-up share, contracts.py P4.4) are handed
+    on by its bequest like the rest of its estate (with no attacker named: an @attacker share falls to the reserve), never left on
+    its record."""
+    v = k.w["agents"].get(aid) or {}
+    if v.get("dead") is None or not any(q > 0 for q in v["holdings"].values()):
+        return {}
+    return _run_bequest(k, aid, v["dead"]["cause"], None)
+
+
 def _run_bequest(k, aid, cause, by) -> dict:
     st = state(k)
     b = st["bequests"].get(aid) or {}
