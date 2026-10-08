@@ -218,6 +218,7 @@ def _ann():
         "law.v2": dict(types=("bool",)),
         "law.notify_parties": dict(types=("bool", "null")),
         "law.gas_price": dict(kind="leaf", types=("dict", "null"), check=_check_gas_price),
+        "law.atomic": dict(types=("bool", "null")),
         **{f"law.gas.{x}": dict(types=("int",), range=(1, None)) for x in ("per_call", "python_depth", "per_cascade", "per_account_round",
                                                                             "depth_cap", "flag_limit", "flag_window")},
         **{f"law.gas.{x}": dict(types=("int",), range=NONNEG) for x in ("hook_cost", "prim_cost")},
@@ -413,6 +414,7 @@ EXTRA = {
     "law.v2": False,
     "law.notify_parties": None,                                       # P3.7 (D-5): null follows law.v2
     "law.gas_price": None,                                            # P3.8 (D-12): gas billing off
+    "law.atomic": None,                                                # P3.6: None = on when law.v2 is (dispatch.atomic)
     # law.v2 budgets (P3.1, review 09 §9.2, I-8, D-12): read by dispatch.gas_cfg only when law.v2 is on
     "law.gas.per_call": 10_000, "law.gas.python_depth": 20, "law.gas.per_cascade": 100_000, "law.gas.per_account_round": 1_000_000,
     "law.gas.depth_cap": 8, "law.gas.hook_cost": 20, "law.gas.prim_cost": 5, "law.gas.flag_limit": 3, "law.gas.flag_window": 5,
@@ -623,6 +625,8 @@ DOCS = {
                           "compelled subscriptions) is told to it as a `compelled` event; null: on exactly when law.v2 is on",
     "law.gas_price": "law.v2 (P3.8): null (off) | {item, rate} or {item, qty, per}: at round end each account pays its laws' gas for "
                      "the round from its treasury to the reserve; an account that cannot pay has its hooks skipped next round",
+    "law.atomic": "law.v2: a hook invocation that dies (gas, depth, an error) is rolled back -- its changes and events are undone, "
+                  "a monitor-only hook_aborted records what was; false: its earlier changes stand (P3.1). Default: on with law.v2",
     "law.gas": "law.v2 gas budgets (review 09 §9.2): a hook that runs out dies, its law is flagged (charter/dispatch.py)",
     "law.gas.per_call": "law.v2: steps one hook invocation may run (today's per-call limit)",
     "law.gas.python_depth": "law.v2: law function frames one invocation may nest",

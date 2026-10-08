@@ -202,6 +202,8 @@ E("compelled", "dispatch", "summary", "parties", "event", "agents",
        "parties: the law (\"hidden\" to non-members of a hidden jurisdiction), its hook, what changed (concealed actors as None), why")
 E("gas_billed", "dispatch", "record", "monitor", "silent", None, primitive="move",
   note="P3.8 (law.gas_price): an account's gas for the round billed to its treasury (owed, paid); the move to the reserve is logged too")
+E("hook_aborted", "dispatch", "record", "monitor", "silent", None,
+  note="law.atomic (P3.6): a dead invocation was rolled back; its events were dropped and this records what was undone")
 E("patch_submitted", "actions", "legal_act", "public", "official", "agents", act="patch", primitive="amend")
 E("patched", "kernel", "legal_act", "public", "official", "agents", primitive="amend")
 E("patch_failed", "kernel", "legal_act", "public", "official", "agents", primitive="amend")

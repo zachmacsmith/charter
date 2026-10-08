@@ -310,6 +310,30 @@ class Kernel:
         self.events.append(e)
         return e["id"]
 
+    def truncate_events(self, n: int) -> list:
+        """Drop the events logged after the first n (law.v2 atomic invocations, dispatch.rollback: a dead invocation's events are a
+        contiguous suffix); returns them. Later events reuse the ids."""
+        out = self.events[n:]
+        del self.events[n:]
+        return out
+
+    # ------------------------------------------------------------------ journal helpers (law.v2, P3.6)
+    # A dying invocation's writes are undone by dispatch's journal, which images every container a law can reach when the invocation
+    # starts, so every write is journaled whichever way it is made. These helpers are plain writes for writers that prefer to say so.
+    @staticmethod
+    def j_set(container, key, value):
+        container[key] = value
+        return value
+
+    @staticmethod
+    def j_del(container, key):
+        container.pop(key, None)
+
+    @staticmethod
+    def j_append(container, value):
+        container.append(value)
+        return value
+
     # ------------------------------------------------------------------ provenance: the cause stack
     # Every event carries "cause": the chain of frames active when it was logged, outermost (the round) first. A frame is a small
     # dict whose first key is its kind (cause_kind), holding the frame's main value; any further keys are details:
