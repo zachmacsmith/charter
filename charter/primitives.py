@@ -1,22 +1,27 @@
 """The primitive registry (ARCHITECTURE §3.3, review 09 §4, review 08 §3): every kind of state change in the world, declared once,
 named by WHAT changes, not by who changes it. P1.7 declared the metadata (the derived lawlang.HOOKS is byte-identical to the old
-hand list); P2.1 routes the first primitives through `Kernel.apply(name, **payload)` (charter/dispatch.py): a row whose `fn` is
-"dispatch:do_<name>" is routed (dispatch.ROUTED: move, harvest, mint, burn, create_currency, grant_right, revoke_right,
+hand list); P2.1 routes the first primitives through `Kernel.apply(name, **payload)` (charter/dispatch/): a row with `routed=True`
+(W8a: an explicit flag, no longer read from a "dispatch:" fn prefix) is routed, its `fn` the change Kernel.apply makes
+(dispatch.changes.<domain>:do_<name>) (dispatch.ROUTED: move, harvest, mint, burn, create_currency, grant_right, revoke_right,
 suspend_right, limit_actions, create_right, post, dm, hide_post, set_camp_rule, set_dm_limit; P2.3's legal acts: propose, decide,
 open_ballot, cast_vote, close_ballot, veto, enact, repeal, amend, set_procedure, rule, define_action, with on_proposal still receiving
 None; P2.4b: begin_life, end_life; P2.4c's world causes: regrow, drift, destroy, set_camp_state, create_camp, contribute,
 settle_project; P2.4d's membership, media, typed camps and leases: join, leave, admit, expel, subscribe, set_outlet_rule,
 set_media_rule, appoint, lease, improve_camp; P2.4a's conflict: attack, fortify, convert, guard_bind, guard_release; the credit
 lifecycle: offer_loan, accept_loan, repay_loan, extend_loan, default_loan, settle_loan; courts v2: open_case, answer_case, appeal,
-set_court_rule), and its legacy
-ALIASES are dispatched by dispatch.apply under exactly today's conditions; the other rows still name the function making the change
-today.
+set_court_rule; P3.2: set_conflict_rule; contracts: create_contract, deposit_escrow, set_allowance, pull, breach, swap, open_fund;
+agency: authorize, deauthorize, act_for), and its legacy ALIASES are dispatched by dispatch.apply under exactly today's
+conditions; the other rows still name the function making the change today. Every row has a review 12 tier (TIER_OF;
+charter/tiers.py).
 
 A row (`Primitive`) says:
   name, feature, effect   the change and its effect class (EFFECTS)
   params                  the payload keys, in order (each has a JSON sample in PARAM_SAMPLES)
   fn                      "module:qualname" of the function that makes the change (modules relative to charter/); routed rows
-                          name dispatch.do_<name>, (k, **payload, **options) -> dict result
+                          name dispatch.changes.<domain>:do_<name> (or another apply function), (k, **payload, **options) ->
+                          dict result
+  routed                  W8a: Kernel.apply makes the change (dispatch.ROUTED reads it)
+  tier                    W8a, review 12 WP0: P | E | X | L | L-route (set from TIER_OF; charter/tiers.py)
   sites                   every "module:qualname" where the change is made today (tests/test_charter_contract.py resolves each one)
   causes                  who may cause it today: agent (an action), law (a law function or a hook verdict), world (a kernel phase,
                           world events, ageing), kernel (procedures and veto windows, Fixer patches); "planned" rows have none yet
@@ -433,7 +438,7 @@ _ROWS = [
       causes=("law",), reads=("capability_holders",), preview=("rules.powers_disclosed",), compel_vis="public",
       sites=("hidden:law_api.disclose_capability_use",)),
     # ------------------------------------------------------------------ loans (credit): the lifecycle is routed through Kernel.apply
-    # (dispatch.py, the loans block). terms: the loan's terms as offered (id, item, qty, repay_item, repay_qty, due_in, offered,
+    # (dispatch.changes.loans). terms: the loan's terms as offered (id, item, qty, repay_item, repay_qty, due_in, offered,
     # rate, compound, refinance), so a before-hook judges an offer without a look-up. settle_loan records `paid` against a loan (the
     # goods were moved by its cause) and closes it when nothing is owed; how: repay (the borrower's payment), seize (enforcement),
     # due (nothing left owed at the due round), paid (a law recorded a payment it collected), forgive, restructure (a law's rewrite

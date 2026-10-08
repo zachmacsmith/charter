@@ -641,7 +641,7 @@ DOCS = {
     "law": "the legal system (docs/review/09_law_composition.md)",
     "law.v2": "true: the legal system v2 (exports, use and public state between laws, versions; ARCHITECTURE §6; new-style hooks "
               "before_<primitive>(p, chain) / after_<primitive>(p, chain) for every change whatever caused it, cascades drained at "
-              "the end of each root cause, gas per call, cascade and account, depth cap 8, flags: charter/dispatch.py, P3.1); "
+              "the end of each root cause, gas per call, cascade and account, depth cap 8, flags: charter/dispatch/cascade.py, P3.1); "
               "false: as before",
     "law.notify_parties": "law.v2 (P3.7, D-5): a law-caused change to an agent (fines, moves, mints, burns, titles, guard obligations, "
                           "compelled subscriptions) is told to it as a `compelled` event; null: on exactly when law.v2 is on",
@@ -649,7 +649,7 @@ DOCS = {
                      "the round from its treasury to the reserve; an account that cannot pay has its hooks skipped next round",
     "law.atomic": "law.v2: a hook invocation that dies (gas, depth, an error) is rolled back -- its changes and events are undone, "
                   "a monitor-only hook_aborted records what was; false: its earlier changes stand (P3.1). Default: on with law.v2",
-    "law.gas": "law.v2 gas budgets (review 09 §9.2): a hook that runs out dies, its law is flagged (charter/dispatch.py)",
+    "law.gas": "law.v2 gas budgets (review 09 §9.2): a hook that runs out dies, its law is flagged (charter/dispatch/cascade.py)",
     "law.gas.per_call": "law.v2: steps one hook invocation may run (today's per-call limit)",
     "law.gas.python_depth": "law.v2: law function frames one invocation may nest",
     "law.gas.per_cascade": "law.v2: steps all invocations of one cascade may run; the cascade halts when they are spent",

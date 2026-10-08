@@ -1,4 +1,4 @@
-"""P3.6: atomic invocations under law.v2 (charter/dispatch.py, the P3.6 block; review 09 §9.5; ARCHITECTURE D-7). A law.v2 hook
+"""P3.6: atomic invocations under law.v2 (charter/dispatch/journal.py; review 09 §9.5; ARCHITECTURE D-7). A law.v2 hook
 invocation that dies (gas, depth cap, a LawError) is rolled back: its world changes, law state, public and module data, the events
 it logged and the reactions it queued are undone, leaving one monitor-only hook_aborted record (and its flag). Offline."""
 from __future__ import annotations

@@ -4,7 +4,7 @@ Contract (docs/parallel_build_contracts.md):
     disable(k, aid, cause, by=None, public=True, named=True) -> bool
     alive(k, aid) -> bool
 Other modules (Conflict, Jurisdictions, Life's old-age deaths) call `disable`, or `k.apply("end_life", agent=aid, cause=cause,
-by=by, public=..., named=...)` directly (dispatch.py documents the primitive); it is the only way an agent dies. `end` is the
+by=by, public=..., named=...)` directly (dispatch.changes.lifecycle documents the primitive); it is the only way an agent dies. `end` is the
 change (P2.4b), `estate`/`estate_bal`/`estate_take` the estate account.
 
 What end_life does for a death, in order (the death phase, features.PHASES["death"]):

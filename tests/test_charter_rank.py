@@ -1,4 +1,4 @@
-"""P3.2: rank, lex superior, procedures per rank, canonical order, conflict rules (charter/dispatch.py's P3.2 block, kernel.py,
+"""P3.2: rank, lex superior, procedures per rank, canonical order, conflict rules (charter/dispatch/ranks.py and hooks.py, kernel.py,
 jurisdictions.py, lawlang.check_rank; review 09 §8, §13.1; ARCHITECTURE D-13). Offline: no model calls."""
 from __future__ import annotations
 

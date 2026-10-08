@@ -4,7 +4,7 @@ A law module sets `title` and `intent`, may keep persistent data in `state` (a d
 on_enact, on_repeal, on_round_start(r), on_round_end(r), on_harvest(agent, camp, x, y) (return a deduction),
 on_transfer(src, dst, item, qty) (return False to block, or a number to tax), on_proposal(p), on_vote(ballot, agent, choice),
 on_post(agent, text) and the module hooks in charter/lawapi.py; with law.v2 also before_<p>(p, chain) and after_<p>(p, chain) for every
-routed primitive p (V2_HOOKS, check_hooks: a check error without law.v2, R5; dispatch.py runs them). It calls the kernel API (see API_GROUPS, generated from the table in
+routed primitive p (V2_HOOKS, check_hooks: a check error without law.v2, R5; charter/dispatch/ runs them). It calls the kernel API (see API_GROUPS, generated from the table in
 charter/lawapi.py); nothing else is reachable: no imports, no I/O, no dunders, no global/nonlocal, no try, no classes.
 
 Static class (by which API calls appear, so it cannot be misstated):

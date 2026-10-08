@@ -1,4 +1,4 @@
-"""P2.1: Kernel.apply, charter/dispatch.py and the legacy hook aliases (ARCHITECTURE §3.3, §5, §10 I-1..I-3; review 09 §4, §9.3).
+"""P2.1: Kernel.apply, charter/dispatch/ (routing, legacy) and the legacy hook aliases (ARCHITECTURE §3.3, §5, §10 I-1..I-3; review 09 §4, §9.3).
 
 Behaviour preservation is checked two ways:
   - a scripted scenario (every routed primitive, every legacy alias of a routed primitive, both through actions and through the law

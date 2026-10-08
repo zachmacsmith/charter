@@ -315,7 +315,7 @@ E += [
      "next to `state`: what it writes there others can read.", "prompt", "common"),
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("use", "public_of")})
-# chain reads and the law's own id and treasury (charter/dispatch.py, P3.1): documented only in law.v2 worlds (REQUIRES), next to
+# chain reads and the law's own id and treasury (charter/dispatch/chains.py and api.py, P3.1): documented only in law.v2 worlds (REQUIRES), next to
 # the new-style hooks (V2_PROMPT, codex/law/v2-hooks)
 E += [
     ("root_kind", "chains", "Read", "root_kind(chain)", "the kind of the change's first cause: \"action\" (an agent), \"law\", "
@@ -332,7 +332,7 @@ E += [
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2")))
                  for n in ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")})
-# rank and conflict rules (charter/dispatch.py, P3.2): documented only in law.v2 worlds (REQUIRES)
+# rank and conflict rules (charter/dispatch/ranks.py, P3.2): documented only in law.v2 worlds (REQUIRES)
 E += [
     ("set_conflict_rule", "ranks", "Governance", "set_conflict_rule(rule)", 'how conflicting before-hook verdicts are resolved in '
      'this law\'s polity: "any_block", "superior", "posterior", "specialis", or a function fn(verdicts) returning {"block": bool, '
@@ -391,7 +391,7 @@ E += [
      "double majority or supermajority. It runs as your law's call, under the step limit; an error or a non-option counts as None.", "common", "uncommon"),
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("procedure_stages", "ballot_rule_function")})
-# loans as primitives (credit.py, dispatch.py's loans block): a law-run registry records what it collected; documented only in law.v2
+# loans as primitives (credit.py, dispatch.changes.loans): a law-run registry records what it collected; documented only in law.v2
 # worlds (REQUIRES), where the loan hooks exist (before_offer_loan, before_accept_loan, before_default_loan, after_settle_loan, ...)
 E += [
     ("settle_loan", "credit", "Money", 'settle_loan(loan, paid=0, how="paid")',

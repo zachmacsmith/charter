@@ -1,4 +1,4 @@
-"""P3.7 (compel visibility, D-5) and P3.8 (gas billed to treasuries, D-12): charter/dispatch.py's P3.7/P3.8 blocks. Under law.v2 a
+"""P3.7 (compel visibility, D-5) and P3.8 (gas billed to treasuries, D-12): charter/dispatch/notify.py and billing.py. Under law.v2 a
 law-caused change of every primitive whose row has compel_vis "parties" reaches its agent parties (a `compelled` event, or the row's
 own event); law.gas_price bills each account's gas at round end. Offline: no model calls."""
 from __future__ import annotations

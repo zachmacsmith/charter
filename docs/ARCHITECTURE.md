@@ -56,7 +56,20 @@ identity, capital and durable goods.
 charter/
   kernel.py          physics: k.w, accounts, apply(), cause stack, log/visibility, phases loop, transactions, checkpoint
   primitives.py      NEW  Primitive registry + HookAlias table + apply functions for core primitives
-  dispatch.py        NEW  hook dispatch: cascades, invocations, verdict resolution, meters, journal, flags
+  dispatch/          NEW  the primitive dispatcher (W8a: a package; D.<name> re-exports every old name)
+    base.py               errors, records (Outcome, Cascade, Invocation), ROUTED, law.v2 switches and V2_SEAMS, gas budgets
+    chains.py             cause frames as chains, D-18 redaction, chain sugar for laws
+    options.py checks.py  call options (OPTIONS) and physics checks (CHECKS) of every routed primitive
+    legacy.py             legacy hook aliases (on_transfer, ...) and their verdict readers
+    routing.py            apply (P2.x path) and apply_v2 (law.v2) side by side; blocks and charges
+    hooks.py              binding and canonical order, hook index, payload redaction, verdicts, conflict-rule resolution
+    ranks.py validity.py  rank, lex superior, procedures per rank, conflict rules; declared in-force windows
+    cascade.py            invocations, limited death, flags, the after-queue and its drain
+    journal.py            atomic invocations (rollback) and refuse(reason)
+    notify.py billing.py  compelled notices (P3.7); gas billed to treasuries (P3.8)
+    api.py                the dispatcher's law-API functions
+    changes/              the primitives' changes (rows' fn) by domain: economy, status, speech, world, lifecycle, legal,
+                          membership, press, force, loans, associations, cases, agency
   lawlang.py         law language: check, instrument (gas v2), classify (derived), static_info, load
   linker.py          NEW  exports, use(), public state, code store, versions, auto-pinning
   lawapi.py          LawFn table (G2) + powers column + derived API_GROUPS / HOOKS / scoping
@@ -79,6 +92,7 @@ charter/
   replay.py          (G6) Replay policy, per-round checkpoints
   library.py         library v1 (today) + v2 building blocks (lib:*) and implementations + the legal toolkit (TOOLKIT, PENDING)
   lawset.py          law sets: composability checks, derived dimensions, legal fingerprints (W6d)
+  tiers.py           review 12 WP0 (W8a): tier codes and the hard-coded rules registry (one row per inventory item)
   <feature modules>  conflict, life, mortality, media, jurisdictions, credit, projects, outside, hidden, roles, camptypes, context, ...
 ```
 
@@ -153,6 +167,8 @@ class Primitive:
     redact: str | None = None       # "module:function" (k, payload, viewer_lid) -> payload
     compel_vis: str = "parties"     # who sees a law-caused instance on a non-consenting agent: parties | public | monitor
     why: dict = field(default_factory=dict)   # reasons for missing faces {"compel": "...", "gate": "..."}
+    routed: bool = False            # W8a: Kernel.apply makes the change (dispatch.ROUTED); no "dispatch:" fn prefix test
+    tier: str = ""                  # W8a (review 12 WP0): P | E | X | L | L-route, from primitives.TIER_OF
 
 @dataclass(frozen=True)
 class HookAlias:                    # a legacy hook name with today's exact firing condition (review 09 §4.3)
@@ -401,7 +417,7 @@ with a frozen copy):
 | Life and death | `begin_life`, `end_life`, probate | one primitive per life event, whatever the cause |
 | Visibility | `log(..., vis=)`, `can_see`, `redact` | explicit `vis=` on every call |
 | Randomness | string-seeded streams per purpose | `rng_version: 2` splits order/harvest/drift/law streams |
-| Legal machinery | `dispatch.py`, procedures lookup, ballots, veto queue, transactions | gas, depth, halting, flags |
+| Legal machinery | `dispatch/` (routing, hooks, ranks, cascade, journal), procedures lookup, ballots, veto queue, transactions | gas, depth, halting, flags |
 | Transactions | `_snapshot/_restore`, journal | dry runs, previews, atomic invocations |
 | Checkpoint | `checkpoint_state/restore_state` | per round (G6); law code re-executed, callbacks marshalled |
 | Entrenched invariants | power table entries with `entrenched=True` | Board veto, Fixer patch, laws never act for an agent |
@@ -868,6 +884,7 @@ contracts: P2.1 → P4.1 → P4.2 → P4.3 (needs P3.1). Critical path to forks 
 | D-28 | Incorporation | Proposed: contracts may be founded under a polity (`parent`); the parent's company law outranks the contract's code and grants benefits (courts, recognition of offices, liability rules); unincorporated contracts remain. Wave 8, with the Board port (shared nesting machinery) |
 | D-29 | V18: what new-style hooks may read | A law never reads a DM's text unless conditions.law_reads_dms and the DM is unencrypted, nor a private channel post's text (dispatch.hook_payload); metadata (who, to whom, where) stays visible pending the publication layer (review 12) |
 | D-30 | Review 12's decision list | Adopted as recommended (user, 8 Oct): Board Charter with per-regime entrenchment (presets: entrenched, readable); Fixer stays X; kernel private by default with presets seeding a Publication Act that reproduces today; surveillance only within a world technology dial (law_reads_dms, channels.readable), encryption never broken; world events: laws regulate consequences only; prompt: one line per Act plus the legal digest; Land Registry Act seeded everywhere for now; dry run stays X; residual proposing rule: every member; default code runs as native code without gas until amended, ids A1..An. Exception: polity exit per D-26 (law, unbounded), not review 12's bounded default |
+| D-31 | Dispatcher layout (W8a, before review 12's WP1) | `charter/dispatch/` is a package of modules by concern (§2) and `changes/` by domain, re-exporting every old name; a primitive is routed by its row's `routed` flag, so WP1 may name an owner module's function as `fn`; every v1/v2 fork is listed in `dispatch.base.V2_SEAMS` (checked against the source); every primitive row and every review 12 inventory item carries a tier (`primitives.TIER_OF`, `charter/tiers.py`) |
 
 ---
 

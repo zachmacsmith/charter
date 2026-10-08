@@ -1469,7 +1469,7 @@ def per_round_rate(ln):
 
 
 # ---------------------------------------------------------------------- edition-2 laws
-# Loans in edition 2 use the loan primitives' hooks (law.v2; dispatch.py's loans block): before_offer_loan and before_accept_loan
+# Loans in edition 2 use the loan primitives' hooks (law.v2; dispatch.changes.loans): before_offer_loan and before_accept_loan
 # refuse, before_default_loan runs at the due round before an unpaid loan defaults, settle_loan(loan, paid, how) records what a law
 # collected, after_settle_loan sees every repayment.
 # Loans without the enable_loans switch (investigated, not done): whether loans exist at all is the world's own state

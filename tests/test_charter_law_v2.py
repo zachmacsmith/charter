@@ -1,5 +1,5 @@
-"""P3.1: law.v2 -- new-style before_<p>/after_<p> hooks from any cause, cascades and limited death (charter/dispatch.py, the P3.1
-block; review 09 §4, §9, §13.2, §13.3; ARCHITECTURE §5, §6, D-6, D-12, D-18, D-21). Offline: scripted bots, no model calls."""
+"""P3.1: law.v2 -- new-style before_<p>/after_<p> hooks from any cause, cascades and limited death (charter/dispatch/: cascade,
+hooks, routing; review 09 §4, §9, §13.2, §13.3; ARCHITECTURE §5, §6, D-6, D-12, D-18, D-21). Offline: scripted bots, no model calls."""
 from __future__ import annotations
 
 import json

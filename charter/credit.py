@@ -16,7 +16,7 @@ Loans (exist only while a law enables them, as before)
   `lend` with `refinance` = an outstanding loan of the borrower; on acceptance the new money pays off the old lender first.
   Laws can cap interest (`set_interest_cap`), `restructure_loan`, `forgive_loan`, lend from the reserve (`lend_from_reserve`,
   an offer the borrower must accept) and buy a loan for the reserve (`buy_loan`: the reserve pays the lender, then is owed).
-  The lifecycle is primitives (primitives.py's loans rows, routed through Kernel.apply: dispatch.py's loans block): offer_loan,
+  The lifecycle is primitives (primitives.py's loans rows, routed through Kernel.apply: dispatch.changes.loans): offer_loan,
   accept_loan, repay_loan, extend_loan, default_loan (at the due round) and settle_loan(loan, paid, how) (every repayment, a
   seizure, a forgiveness, a restructuring that leaves nothing owed). The functions below check, then apply; change_* make the
   changes. Under law.v2 laws hook them (before_offer_loan may refuse a usurious offer, before_accept_loan a defaulter's borrowing,
