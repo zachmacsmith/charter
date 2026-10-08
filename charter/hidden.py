@@ -202,7 +202,7 @@ def _event(k, eid):
 # ------------------------------------------------------------------ prompts
 def api_doc(inst: dict, original: str) -> str:
     if not enabled_inst(inst):
-        return original
+        return lawdocs.v2_doc(inst["spec"], original)                  # law.v2 worlds: plus the new-style hooks line (P3.1)
     return lawdocs.api_doc(inst["hidden"]["law_docs"], original)
 
 

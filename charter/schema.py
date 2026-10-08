@@ -216,6 +216,9 @@ def _ann():
         "turns": dict(types=("str",), enum=("sequential", "simultaneous")),
         "rng_version": dict(types=("int",), enum=(1, 2)),
         "law.v2": dict(types=("bool",)),
+        **{f"law.gas.{x}": dict(types=("int",), range=(1, None)) for x in ("per_call", "python_depth", "per_cascade", "per_account_round",
+                                                                            "depth_cap", "flag_limit", "flag_window")},
+        **{f"law.gas.{x}": dict(types=("int",), range=NONNEG) for x in ("hook_cost", "prim_cost")},
         "parallel_calls": dict(types=("int",), range=(1, None)),
         "actions_per_turn": dict(types=("int",), range=NONNEG),
         "actions_jitter": dict(range=NONNEG),
@@ -402,6 +405,9 @@ EXTRA = {
     "prompts.profiles": {},
     "prompts.assign": [],
     "law.v2": False,
+    # law.v2 budgets (P3.1, review 09 §9.2, I-8, D-12): read by dispatch.gas_cfg only when law.v2 is on
+    "law.gas.per_call": 10_000, "law.gas.python_depth": 20, "law.gas.per_cascade": 100_000, "law.gas.per_account_round": 1_000_000,
+    "law.gas.depth_cap": 8, "law.gas.hook_cost": 20, "law.gas.prim_cost": 5, "law.gas.flag_limit": 3, "law.gas.flag_window": 5,
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
@@ -598,7 +604,20 @@ DOCS = {
     "agents": "agents per class (worker, scientist, legislator, media, board, fixer); `a+b: n` gives n agents holding both classes",
     "rounds": "rounds in the run",
     "law": "the legal system (docs/review/09_law_composition.md)",
-    "law.v2": "true: the legal system v2 (exports, use and public state between laws, versions; ARCHITECTURE §6); false: as before",
+    "law.v2": "true: the legal system v2 (exports, use and public state between laws, versions; ARCHITECTURE §6; new-style hooks "
+              "before_<primitive>(p, chain) / after_<primitive>(p, chain) for every change whatever caused it, cascades drained at "
+              "the end of each root cause, gas per call, cascade and account, depth cap 8, flags: charter/dispatch.py, P3.1); "
+              "false: as before",
+    "law.gas": "law.v2 gas budgets (review 09 §9.2): a hook that runs out dies, its law is flagged (charter/dispatch.py)",
+    "law.gas.per_call": "law.v2: steps one hook invocation may run (today's per-call limit)",
+    "law.gas.python_depth": "law.v2: law function frames one invocation may nest",
+    "law.gas.per_cascade": "law.v2: steps all invocations of one cascade may run; the cascade halts when they are spent",
+    "law.gas.per_account_round": "law.v2: steps one account's (jurisdiction's) laws may run per round; then its hooks are skipped",
+    "law.gas.depth_cap": "law.v2: how many reactions deep a law may cause changes",
+    "law.gas.hook_cost": "law.v2: steps charged for each hook invocation",
+    "law.gas.prim_cost": "law.v2: steps charged for each change a hook causes",
+    "law.gas.flag_limit": "law.v2: flags within flag_window rounds that suspend a law",
+    "law.gas.flag_window": "law.v2: rounds over which flags are counted",
     "rng_version": "1: one kernel random stream (every existing run) | 2: named streams per purpose (turn order per round, harvest "
                    "noise per agent/camp/harvest, drift per camp, rng() per law and round), so one extra draw shifts no other",
     "unit_values": "value of one unit of each resource (scoring and welfare)",

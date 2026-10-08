@@ -11,8 +11,8 @@ P2.1 is the skeleton WITHOUT new semantics. For a routed primitive `apply`:
      on_harvest: a positive number, True counting 1, deducts); charges go to the charging law's treasury (accounts.charge_destination, P4.1), capped by the change;
   5. makes the change: the row's `fn` ("dispatch:do_<name>", (k, **payload, **options) -> dict result);
   6. runs the legacy AFTER aliases synchronously, as today (on_post with current_post set, on_dm).
-New-style before_<p>/after_<p> hooks are not live (law.v2, P3.1): the after-queue of a cascade therefore stays empty, and `drain`
-has nothing to do yet. Root frames: Kernel.cause(..., root=True) opens a Cascade (actions.act per action item); a primitive applied
+New-style before_<p>/after_<p> hooks are live only with spec law.v2 (P3.1, the block at the end: apply_v2); without it the after-queue
+of a cascade stays empty and `drain` has nothing to do. Root frames: Kernel.cause(..., root=True) opens a Cascade (actions.act per action item); a primitive applied
 outside any root frame sees the implicit root {"kind": "kernel", "id": "kernel:<name>"}. Frames are not added to events: an event's
 `cause` is exactly what it was before P2.1 (no `primitive` frame yet; P3.1 adds it with the v2 golden).
 
@@ -93,6 +93,8 @@ class Invocation:                   # one call of one hook of one law (P3.1 runs
     hook: str
     depth: int = 0
     parent: "Invocation | None" = None
+    account: str | None = None      # P3.1: the law's account (accounts.account_of)
+    budget: object = None           # P3.1: the account's gas.Budget for this round, shared with enclosing invocations of the account
 
 
 @dataclass
@@ -104,6 +106,14 @@ class Cascade:
     seq: int = 0
     halted: str | None = None
     dropped: int = 0
+    implicit: bool = False          # P3.1: opened by apply for a primitive applied outside any root frame (root is kernel:<name>)
+    budget: object = None           # P3.1: the cascade's gas.Budget (per_cascade), created on its first invocation
+    finalizers: list = field(default_factory=list)    # P3.1: (causes, fn) run after the queue drains (probate: at_end)
+    changes: int = 0                # P3.1: changes applied in it so far (can a block still refuse the root action?)
+
+    def at_end(self, k, fn) -> None:
+        """Run fn() when the cascade's queue has drained (in the cause context of now): review 09 §13.3's probate."""
+        self.finalizers.append((list(k._causes), fn))
 
     def next(self) -> int:
         self.seq += 1
@@ -127,9 +137,10 @@ def chain_for(k, name: str) -> tuple:
 
 
 def drain(k, cas: Cascade) -> None:
-    """Run the queued after-items of a cascade (FIFO) when its root frame exits. Nothing is queued before law.v2 (P3.1)."""
-    while cas.queue and not cas.halted:
-        cas.queue.popleft()                                         # P3.1: invoke(k, cas, item.law, item.hook, ...)
+    """Run the queued after-items of a cascade (FIFO) when its root frame exits, then its finalizers. Nothing is queued without
+    law.v2 (the queue stays empty and this returns at once); with it, drain_v2 (the P3.1 block)."""
+    if cas.queue or cas.finalizers or cas.halted:
+        drain_v2(k, cas)
 
 
 # ---------------------------------------------------------------------- legacy aliases
@@ -261,28 +272,51 @@ def apply(k, name: str, payload: dict) -> Outcome:
         raise TypeError(f"{name}() got unexpected payload keys: {', '.join(unknown)}")
     p = {x: payload.get(x) for x in P.params}
     opts = {x: payload[x] for x in allowed if x in payload}
+    if hooks_live(k):                                               # law.v2 (P3.1): new-style hooks, cascades, gas (apply_v2)
+        return apply_v2(k, P, fn, p, opts)
     try:
-        p = (CHECKS[name](k, p, **{x: opts[x] for x in CHECK_OPTIONS.get(name, ()) if x in opts}) if name in CHECKS else p)
+        p = _check(k, name, p, opts)
     except _Noop as n:
         return Outcome(ok=True, result=n.result)
-    before = [a for a in ALIASES_BEFORE.get(name, ()) if P.before]
-    after = [a for a in ALIASES_AFTER.get(name, ()) if P.after]
-    chain = chain_for(k, name) if before or after else ()
-    verdicts = []
-    for a in before:
-        if a.when(p, chain):
-            verdicts.extend((a, lid, out) for lid, out in legacy_hooks(k, a.name, a.args(p), p))
-    d = resolve(k, P, p, verdicts) if verdicts else Decision()
+    chain = chain_for(k, name) if (P.before and ALIASES_BEFORE.get(name)) or (P.after and ALIASES_AFTER.get(name)) else ()
+    d = _legacy_before(k, P, p, chain)
     if d.block and P.blockable:
         return Outcome(ok=False, blocked_by=d.blocked_by, charges=d.charges)
+    result = fn(k, **p, **opts, **_extra(P, d))
+    _legacy_after(k, P, p, chain, result)
+    return Outcome(ok=True, result=result, charges=d.charges)
+
+
+def _check(k, name, p, opts) -> dict:
+    """The primitive's physics check (CHECKS): the checked payload; raises PhysicsError, LawError or _Noop."""
+    return CHECKS[name](k, p, **{x: opts[x] for x in CHECK_OPTIONS.get(name, ()) if x in opts}) if name in CHECKS else p
+
+
+def _legacy_before(k, P, p, chain) -> Decision:
+    """The legacy BEFORE aliases whose filter matches, resolved: exactly as before P3.1, with or without law.v2 (R5)."""
+    verdicts = []
+    for a in (ALIASES_BEFORE.get(P.name, ()) if P.before else ()):
+        if a.when(p, chain):
+            verdicts.extend((a, lid, out) for lid, out in legacy_hooks(k, a.name, a.args(p), p))
+    return resolve(k, P, p, verdicts) if verdicts else Decision()
+
+
+def _extra(P, d: Decision) -> dict:
+    """What the change gets from the legacy decision: the capped charge and its plan (rows with `charge`), and the directives set."""
     extra = {"charged": d.charged, "charge_to": AC.charge_plan(d.charges, d.charged)} if P.charge else {}
     extra.update(d.directives)                                      # the verdicts' directives (only those set) reach the change
-    result = fn(k, **p, **opts, **extra)
-    with _after_context(k, name, p, result):
+    return extra
+
+
+def _legacy_after(k, P, p, chain, result) -> None:
+    """The legacy AFTER aliases whose filter matches, synchronously, as today."""
+    after = ALIASES_AFTER.get(P.name, ()) if P.after else ()
+    if not after:
+        return
+    with _after_context(k, P.name, p, result):
         for a in after:
             if a.when(p, chain):
                 legacy_hooks(k, a.name, a.args(p), p)
-    return Outcome(ok=True, result=result, charges=d.charges)
 
 
 _FNS: dict = {}
@@ -334,7 +368,7 @@ def check_move(k, p):
         raise _Noop({"moved": 0.0})
     if str(p["why"]).startswith("law:"):                            # accounts: a law's move names agents and treasuries only
         for key in (p["src"], p["dst"]):
-            if not AC.law_key_allowed(k, key):
+            if not AC.law_key_allowed(k, key) and not estate_access(k, str(p["why"])[4:], key):
                 raise L.LawError(f"no such agent: {key}")
     if not AC.can_pay(k, p["src"], p["item"], qty):
         raise PhysicsError("insufficient")
@@ -474,8 +508,9 @@ def _move(k, src, dst, item, qty, why, actor) -> bool:
 
 def do_harvest(k, agent, camp, x, item, qty, via=None, charged=0.0, charge_to=None) -> dict:
     """A harvest's yield reaches the harvester, less the laws' deductions, which go to charge_to (its home reserve). via "typed": a
-    typed camp's yield (camptypes.framework.pay_yield), whose deductions have always gone to the world reserve."""
-    if via == "typed":
+    typed camp's yield (camptypes.framework.pay_yield), whose deductions have always gone to the world reserve; under law.v2 (P3.1)
+    they go to the taxing laws' treasuries (accounts.charge_destination) like every other charge."""
+    if via == "typed" and not v2(k):
         charge_to = "reserve"
     if qty - charged > 0:
         k._add(agent, item, qty - charged)
@@ -1144,3 +1179,766 @@ def do_guard_bind(k, guard, agent, fee, lid=None) -> dict:
 def do_guard_release(k, guard, agent, lid=None, why="stop") -> dict:
     from charter import conflict as CF
     return CF.guard_release(k, guard, agent, lid, why)
+
+
+# ====================================================================== P3.1: law.v2 -- primitive hooks from any cause, cascades, limited death
+# Behind spec `law.v2` (default false: nothing below runs, and apply is the P2.x code above). Review 09 §4, §9; ARCHITECTURE §5, §6.
+#
+# Hooks. A law under law.v2 may define before_<p>(p, chain) and after_<p>(p, chain) for every routed primitive p with that phase
+# (primitives.HOOKS rows of kind before/after; lawlang.check_hooks). They fire for every application of p, whatever caused it: an
+# agent's action, a law (its API calls, its hooks, procedures, penalties), the world (phases, events, deaths), an intervention.
+#   - p is a deep copy of the payload (after its physics check), redacted for the viewing law (the row's `redact`; concealed actors,
+#     the observer, a covert attacker and an unnamed killer read as None, also inside p["result"]). chain is the redacted cause
+#     chain, root first (chain_view). Mutating either changes nothing.
+#   - before-hooks run synchronously, in canonical order (rank descending, then enactment, then id), for the laws whose account binds
+#     the payload's subject. Verdicts: None/True (no objection), False (block), a number > 0 (a charge of the row's item to its payer,
+#     paid to the hooking law's treasury after the change), a dict {block, charge, reason, exempt, **the row's directives}.
+#   - after-hooks are queued on the cascade (FIFO; one item per bound law, in canonical order) and run when the root frame exits
+#     (drain_v2), each in the cause context of the change it reacts to. Their return value is ignored.
+# Cascades. Every root frame (actions, world steps, kernel round steps) opens one; a primitive applied outside any root frame opens an
+# implicit one (root kernel:<name>) that drains when apply returns. A root frame inside an open cascade joins it.
+# Re-entrancy (R1-R5): R1 a law's before-hooks never see a primitive whose cause stack holds a frame of that law (its own doings,
+# including the charges it caused); R2 (L, after_p) is not queued for a change made directly by (L, after_p) (the innermost law frame:
+# no direct self-feedback; L -> M -> L cycles are legal, bounded by depth and gas); R3 on_enact/on_repeal run inside enact/repeal's
+# change; R4 no new-style hook runs while the kernel is quiet (Kernel.probe, procedure_spec, so decisive_set); R5 legacy aliases fire
+# exactly as before, and new-style hooks are a check error without law.v2 (lawlang.check_hooks from Kernel.new_law/_exec).
+# Limited death (review 09 §9.4): invoke() and die(). Budgets: GAS, overridden by spec law.gas.
+import copy as _copy
+import math as _math
+
+from charter import gas as G
+
+GAS = {"per_call": 10_000, "python_depth": 20, "per_cascade": 100_000, "per_account_round": 1_000_000, "depth_cap": 8,
+       "hook_cost": 20, "prim_cost": 5, "flag_limit": 3, "flag_window": 5}
+RANKS = {"charter": 4, "constitution": 3, "statute": 2, "regulation": 1, "bylaw": 0}
+FLAG_KINDS = {"call": "gas_call", "cascade": "gas_cascade", "account": "gas_round"}
+
+
+class Blocked(PhysicsError):
+    """A primitive blocked by a law's before-hook (law.v2). An agent's action fails (actions.act turns it into an ActionError), a law's
+    call ends quietly (Kernel.call and invoke return None; the law API's refusal-aware calls return False). move, enact and repeal
+    never raise it: they return Outcome(ok=False)."""
+    def __init__(self, primitive: str, by: tuple, reason: str | None):
+        self.primitive, self.by, self.why = primitive, tuple(by), reason
+        super().__init__(f"{primitive} blocked by law {', '.join(by)}" + (f": {reason}" if reason else ""))
+
+
+class Halted(G.LawError):
+    """A law-caused change in a cascade that has halted (its per-cascade budget ran out): refused, and the invocation dies."""
+    kind = "halted"
+
+
+class DepthCapExceeded(G.LawError):
+    """A law tried to cause a change deeper than depth_cap (a primitive's depth: 0 when no invocation runs, else the running
+    invocation's depth + 1)."""
+    kind = "depth"
+
+    def __init__(self, cap: int):
+        super().__init__(f"law exceeded the cascade depth cap of {cap}")
+
+
+def v2(k) -> bool:
+    return bool((k.spec.get("law") or {}).get("v2"))
+
+
+def hooks_live(k) -> bool:
+    """New-style hooks run: law.v2 on and the kernel not quiet (R4: internal probes)."""
+    return v2(k) and not getattr(k, "quiet", False)
+
+
+def gas_cfg(k) -> dict:
+    """The budgets (review 09 §9.2, I-8): GAS overridden by spec law.gas (None values keep the default)."""
+    over = (k.spec.get("law") or {}).get("gas") or {}
+    return {**GAS, **{x: v for x, v in over.items() if v is not None}}
+
+
+def account_of(k, lid) -> str:
+    return AC.account_of(k, lid)
+
+
+def treasury_of(k, lid) -> str:
+    """The owner key of a law's treasury (accounts.treasury_of its account): where its charges go."""
+    return AC.treasury_of(k, AC.account_of(k, lid))
+
+
+def estate_access(k, lid, key) -> bool:
+    """law.v2: may law `lid`'s move name the owner key `key` although accounts.law_key_allowed refuses it? An open estate of a deceased
+    the law's account binds (review 09 §13.3: an inheritance law's after_end_life; the power estate_access until P4.2's table)."""
+    if not (v2(k) and isinstance(key, str) and key.startswith(AC.ESTATE) and lid in k.w["laws"]):
+        return False
+    aid = key[len(AC.ESTATE):]
+    e = ((k.w.get("mortality") or {}).get("estates") or {}).get(aid)
+    return bool(e) and e.get("status") == "open" and AC.binds(k, AC.account_of(k, lid), aid)
+
+
+def _invs(k) -> list:
+    return k.__dict__.setdefault("_invs", [])
+
+
+def invocation(k):
+    """The running new-style invocation (or charge frame), or None."""
+    s = _invs(k)
+    return s[-1] if s else None
+
+
+def _state(k) -> dict:
+    """law.v2's per-world bookkeeping (k.w["law_v2"], created on first use, so worlds without v2 never have it): per-account gas used
+    this round, accounts out of gas this round, per-law gas this round (monitor; review 09 §9.8's law_gas)."""
+    st = k.w.get("law_v2")
+    if st is None or st.get("round") != k.r:
+        st = k.w["law_v2"] = {"round": k.r, "account_used": {}, "out_of_gas": {}, "law_gas": {}}
+    return st
+
+
+@contextmanager
+def isolated(k):
+    """A transaction (dry run, probe) gets its own cascades and invocations: nothing it queues leaks into the enclosing cascade."""
+    if not v2(k):
+        yield
+        return
+    saved = (k.__dict__.get("_cascades"), k.__dict__.get("_invs"))
+    k._cascades, k._invs = [], []
+    try:
+        yield
+    finally:
+        k._cascades = saved[0] if saved[0] is not None else []
+        k._invs = saved[1] if saved[1] is not None else []
+
+
+@contextmanager
+def quiet(k):
+    """R4: an internal probe (Kernel.probe, procedure_spec): no new-style hook runs inside; nests."""
+    prev = getattr(k, "quiet", False)
+    k.quiet = True
+    try:
+        yield
+    finally:
+        k.quiet = prev
+
+
+@contextmanager
+def _implicit(k, name):
+    cs = k._cascade_stack()
+    if cs:
+        yield cs[-1]
+        return
+    cas = Cascade(root={"kind": "kernel", "id": f"kernel:{name}"}, index=len(k._causes), implicit=True)
+    cs.append(cas)
+    try:
+        yield cas
+    finally:
+        try:
+            drain(k, cas)
+        finally:
+            cs.pop()
+
+
+# ---------------------------------------------------------------------- chains (D-18: redacted for the viewing law)
+def _observer(k):
+    o = k.inst.get("observer")
+    return o.get("id") if isinstance(o, dict) else None
+
+
+def chain_view(k, frames, viewer=None, *, implicit_root=None, concealed=(), turn_agent=None) -> tuple:
+    """Raw kernel frames (from the cascade's root inward) as chain frames {"kind", "id", ...}. An action frame names its agent (the
+    turn's agent when the frame leaves it out). With a viewer (a law id): no turn call key; concealed actors read as None; the
+    observer's doings and unannounced interventions read as {"kind": "world", "id": "world"}; a law of a hidden jurisdiction the
+    viewer does not belong to reads as {"kind": "law", "id": "hidden"}. A law frame is {"kind": "law", "id": "law:<lid>", "hook", ...}."""
+    out = [dict(implicit_root)] if implicit_root else []
+    obs = _observer(k) if viewer is not None else None
+    hide = set(concealed or ())
+    vj = J.law_jur(k, viewer) if viewer is not None and "jur" in k.w else None
+    for f in frames:
+        f = dict(f)
+        kind = next(iter(f))
+        if kind == "action" and "agent" not in f and turn_agent is not None:
+            f["agent"] = turn_agent
+        if viewer is not None:
+            if obs is not None and obs in f.values():                    # the observer's doings read as the world's
+                out.append({"kind": "world", "id": "world"})
+                continue
+            if hide:
+                f = k._redact(f, hide)
+            if kind == "intervention" and not f.get("announce"):
+                out.append({"kind": "world", "id": "world"})
+                continue
+            if kind == "law" and "jur" in k.w and f.get("law"):
+                lj = J.law_jur(k, f["law"])
+                if lj != vj and k._hidden_jur(lj):
+                    out.append({"kind": "law", "id": "hidden"})
+                    continue
+        out.append(frame_view(f, viewer))
+    return tuple(out)
+
+
+def _raw_laws(frames) -> list:
+    """(law id, hook) of every law frame among raw kernel frames (unredacted: R1 and R2)."""
+    return [(f["law"], f.get("hook")) for f in frames if next(iter(f)) == "law"]
+
+
+# Law-API reads put into law.v2 namespaces (Kernel.api_for; lawapi rows of module "dispatch", I-12): sugar over the chain (review 09
+# §4.4), the law's own id and its treasury's owner key. Off: the names are unknown, as before.
+def root_kind(chain):
+    return chain[0].get("kind") if chain else None
+
+
+def _law_of(f):
+    """The law id of a chain frame ("law:L7" -> "L7"), or None (not a law frame, or a hidden one)."""
+    if f.get("kind") != "law":
+        return None
+    lid = str(f.get("id", "")).split(":", 1)[1] if ":" in str(f.get("id", "")) else None
+    return lid
+
+
+def caused_by_agent(chain):
+    return next((f.get("agent") for f in reversed(chain) if f.get("kind") == "action"), None)
+
+
+def caused_by_law(chain, lid):
+    return any(_law_of(f) == lid for f in chain)
+
+
+def chain_laws(chain):
+    out = []
+    for f in chain:
+        lid = _law_of(f)
+        if lid and lid not in out:
+            out.append(lid)
+    return out
+
+
+HELPERS = ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")
+
+
+def law_api(k, lid) -> dict:
+    return {"root_kind": root_kind, "caused_by_agent": caused_by_agent, "caused_by_law": caused_by_law, "chain_laws": chain_laws,
+            "law_id": lambda: lid, "treasury": lambda: treasury_of(k, lid)}
+
+
+# ---------------------------------------------------------------------- binding and order
+def rank_of(k, lid) -> str:
+    """A law's rank: its record's (P3.2), else its module's top-level `rank` constant, else statute."""
+    law = k.w["laws"].get(lid) or {}
+    r = law.get("rank") or (k.ns.get(lid) or {}).get("rank")
+    return r if isinstance(r, str) and r in RANKS else "statute"
+
+
+def _binds_value(k, lid, key, value):
+    """Does a law's account bind this payload value? None: the value names no one bindable."""
+    jid = J.law_jur(k, lid)
+    if key == "jurisdiction":
+        return (value or "J0") == jid
+    if not isinstance(value, str):
+        return None
+    if value.startswith(AC.ESTATE):
+        value = value[len(AC.ESTATE):]
+    if value in k.w["agents"]:
+        return J.binds(k, lid, value)
+    if value == "reserve" or value.startswith("reserve:"):
+        return J.reserve_key(k, jid) == value
+    return None
+
+
+def bound_laws(k, P, payload, phase) -> list:
+    """Active laws whose account binds the payload (review 09 §4.5), in canonical order (§8.1: rank descending, then enactment, then
+    id). Without jurisdictions: every active law. With them: laws of declared jurisdictions (any in a dry run) binding the subject
+    (before) or any party (after); a payload naming nothing bindable is seen by all of them."""
+    laws = k.active_laws()
+    if "jur" in k.w:
+        keys = ((P.subject,) if P.subject else ()) if phase == "before" else tuple(P.parties)
+        seen = []
+        for law in laws:
+            j = J.jurs(k).get(J.law_jur(k, law["id"]))
+            if not k.dry and (not j or j["status"] != "declared"):
+                continue
+            hits = [_binds_value(k, law["id"], x, payload.get(x)) for x in keys]
+            if any(h for h in hits) or all(h is None for h in hits):
+                seen.append(law)
+        laws = seen
+    pos = {lid: i for i, lid in enumerate(k.w["law_order"])}
+    return sorted(laws, key=lambda l: (-RANKS[rank_of(k, l["id"])], pos.get(l["id"], 1 << 30), l["id"]))
+
+
+def _hook_fn(k, lid, hook):
+    ns = k.ns.get(lid) or k._load(lid)
+    fn = ns.get(hook)
+    return fn if callable(fn) else None
+
+
+# ---------------------------------------------------------------------- redaction of payloads
+# Agents a call's options or payload make secret from laws: an unnamed killer (end_life named=False), a covert attacker.
+HIDE = {"end_life": lambda p, o: (p.get("by"),) if o.get("named") is False else (),
+        "attack": lambda p, o: (p.get("attacker"),) if p.get("covert") else ()}
+
+
+def hidden_agents(k, name, p, opts) -> tuple:
+    """Who a law may not see in this change: concealed actors (Kernel.concealing), the observer, and HIDE's."""
+    out = set(getattr(k, "_concealed", None) or ())
+    o = _observer(k)
+    if o:
+        out.add(o)
+    f = HIDE.get(name)
+    if f:
+        out.update(x for x in f(p, opts) if x)
+    return tuple(sorted(out))
+
+
+def _scrub(x, hide):
+    if isinstance(x, str):
+        return None if x in hide else x
+    if isinstance(x, dict):
+        return {kk: _scrub(v, hide) for kk, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_scrub(v, hide) for v in x]
+    return x
+
+
+def hook_payload(k, P, payload, viewer, hide=()) -> dict:
+    """A deep copy of the payload as a law may see it: the row's redact function, then hidden agents as None (anywhere in it)."""
+    p = _copy.deepcopy(payload)
+    if P.redact and viewer is not None:
+        mod, _, fn = P.redact.partition(":")
+        p = getattr(importlib.import_module(f"charter.{mod}"), fn)(k, p, viewer)
+    return _scrub(p, set(hide)) if hide else p
+
+
+# ---------------------------------------------------------------------- verdicts
+@dataclass(frozen=True)
+class Verdict:
+    law: str
+    block: bool = False
+    allow: bool = False
+    charge: float = 0.0
+    reason: str | None = None
+    exempt: bool = False
+    directives: dict = field(default_factory=dict)
+
+
+def normalise(P, lid, out):
+    """A before-hook's return value -> a Verdict (or None). A malformed verdict is the law's runtime error."""
+    if out is None:
+        return None
+    if out is True:
+        return Verdict(lid, allow=True)
+    if out is False:
+        return Verdict(lid, block=True)
+    if isinstance(out, (int, float)) and not isinstance(out, bool):
+        x = float(out)
+        if not _math.isfinite(x) or x < 0:
+            raise G.LawError(f"before_{P.name} returned {out!r}: a charge must be a non-negative finite number")
+        if x > 0 and not P.charge:
+            raise G.LawError(f"before_{P.name} returned a charge, but a {P.name} cannot be charged")
+        return Verdict(lid, charge=x) if x > 0 else None
+    if isinstance(out, dict):
+        allowed = {"block", "charge", "reason", "exempt"} | set(P.directives)
+        bad = sorted(str(x) for x in out if x not in allowed)
+        if bad:
+            raise G.LawError(f"before_{P.name} returned unknown keys {bad} (allowed: {sorted(allowed)})")
+        ch = out.get("charge") or 0
+        if isinstance(ch, bool) or not isinstance(ch, (int, float)) or not _math.isfinite(float(ch)) or ch < 0:
+            raise G.LawError(f"before_{P.name}: charge must be a non-negative number, not {ch!r}")
+        if ch > 0 and not P.charge:
+            raise G.LawError(f"before_{P.name} returned a charge, but a {P.name} cannot be charged")
+        return Verdict(lid, block=bool(out.get("block")), charge=float(ch),
+                       reason=None if out.get("reason") is None else str(out["reason"])[:300], exempt=bool(out.get("exempt")),
+                       directives={x: out[x] for x in P.directives if x in out})
+    raise G.LawError(f"before_{P.name} must return None, True, False, a number or a dict, not {type(out).__name__}")
+
+
+@dataclass(frozen=True)
+class DecisionV2:
+    block: bool = False
+    blocked_by: tuple = ()
+    reason: str | None = None
+    charges: tuple = ()
+    directives: dict = field(default_factory=dict)
+
+
+def resolve_v2(k, P, payload, verdicts) -> DecisionV2:
+    """any_block (review 09 §8.3, the default rule): any block blocks; charges (rows with `charge` only) sum, capped when applied,
+    each to the charging law's treasury (accounts.charge_destination); the first valid directive in canonical order wins. `exempt`
+    and explicit allows matter only under the superior rule (P3.2)."""
+    blocked = tuple(v.law for v in verdicts if v.block)
+    reasons = [v.reason for v in verdicts if v.block and v.reason]
+    charges = []
+    if P.charge:
+        payer, item = (payload[x] for x in P.charge)
+        charges = [Charge(v.law, payer, item, v.charge, AC.charge_destination(k, v.law, payer)) for v in verdicts if v.charge > 0]
+    directives = {}
+    for v in verdicts:
+        for x, val in v.directives.items():
+            if x not in directives and DIRECTIVE_OK.get(x, lambda k, v: True)(k, val):
+                directives[x] = val
+    return DecisionV2(bool(blocked), blocked, "; ".join(reasons)[:300] or None, tuple(charges), directives)
+
+
+# ---------------------------------------------------------------------- flags and limited death
+def flag(k, lid, kind, cascade) -> None:
+    """Record a flag on the offending law (law["flags"]: {round, kind, cascade}), log law_flagged publicly, and suspend the law
+    (through law_error: gazette and the Fixer, as for a runtime error) when it has flag_limit flags within flag_window rounds."""
+    law = k.w["laws"][lid]
+    law.setdefault("flags", []).append({"round": k.r, "kind": kind, "cascade": cascade})
+    k.log("law_flagged", None, {"law": lid, "kind": kind}, vis="public")
+    g = gas_cfg(k)
+    recent = [f for f in law["flags"] if f["round"] > k.r - int(g["flag_window"])]
+    if len(recent) >= int(g["flag_limit"]) and law["status"] == "active":
+        k.law_error(lid, "repeatedly exceeded its computation limits")
+
+
+def _ancestors(inv):
+    while inv is not None:
+        yield inv
+        inv = inv.parent
+
+
+def die(k, cas, inv, e, flagged=True) -> None:
+    """Limited death: only this invocation dies. Effects it made before dying stand (atomic invocations are P3.6); the after-items
+    queued inside it are dropped. Per-call steps or Python depth: flag gas_call; depth cap: flag depth; per-cascade gas: flag
+    gas_cascade and HALT the cascade; per-account gas: flag gas_round and close the account's hooks for the round. An invocation that
+    dies only because a budget another invocation already exhausted (a halted cascade, an account out of gas) is not an offender."""
+    keep = deque(it for it in cas.queue if inv not in _ancestors(it.parent))
+    cas.dropped += len(cas.queue) - len(keep)
+    cas.queue = keep
+    if not flagged or isinstance(e, Halted):
+        return
+    if isinstance(e, G.GasExhausted):
+        kind = FLAG_KINDS.get(e.kind, "gas_call")
+    elif isinstance(e, DepthCapExceeded):
+        kind = "depth"
+    else:
+        kind = "gas_call"                                              # gas.DepthExceeded: Python depth counts against the call
+    st = _state(k)
+    if kind == "gas_cascade":
+        if cas.halted:
+            return
+        cas.halted = inv.law
+    if kind == "gas_round":
+        if inv.account in st["out_of_gas"]:
+            return
+        st["out_of_gas"][inv.account] = k.r
+        j = J.jurs(k).get(inv.account) if "jur" in k.w else None
+        k.log("account_out_of_gas", None, {"account": inv.account, "law": inv.law},
+              vis=(J.members(k, inv.account) or "monitor") if j and not j.get("legacy") else "public")
+    flag(k, inv.law, kind, cas.root["id"])
+
+
+LIMITS = (G.GasExhausted, G.DepthExceeded, DepthCapExceeded, Halted)
+DEAD = object()                                                      # invoke's value for an invocation that died
+
+
+def invoke(k, cas, lid, hook, payload, chain, depth, parent=None, reader=None):
+    """One invocation of a new-style hook, metered by gas.Meter.run with its per-call budget, the cascade's budget and the account's
+    budget for the round (hook_cost charged on entry; code it imports with use() runs inside it, so under the same budgets). Returns
+    the hook's value (through `reader` for before-hooks), None when it is skipped (halted cascade, account out of gas, no such hook,
+    or a change it caused was blocked), DEAD when it dies. In a dry run every error propagates (the proposal check fails), as for
+    legacy hooks."""
+    if cas.halted:
+        return None
+    acct = account_of(k, lid)
+    st = _state(k)
+    if acct in st["out_of_gas"]:
+        return None
+    fn = _hook_fn(k, lid, hook)
+    if fn is None:
+        return None
+    g = gas_cfg(k)
+    if cas.budget is None:
+        cas.budget = G.Budget("cascade", int(g["per_cascade"]))
+    budget = next((i.budget for i in reversed(_invs(k)) if i.account == acct and i.budget is not None), None) or \
+        G.Budget("account", int(g["per_account_round"]), st["account_used"].get(acct, 0))
+    inv = Invocation(law=lid, hook=hook, depth=depth, parent=parent, account=acct, budget=budget)
+    meter = k.limited.meter
+    used0 = budget.used
+
+    def run():
+        meter.tick(int(g["hook_cost"]))
+        out = fn(payload, chain)
+        return reader(out) if reader is not None else out
+    _invs(k).append(inv)
+    try:
+        with k.cause("law", lid, hook=hook, depth=depth):
+            try:
+                out = meter.run(run, per_call=int(g["per_call"]), max_depth=int(g["python_depth"]), cascade=cas.budget,
+                                account=budget)
+            except G.LawError:
+                raise
+            except Exception as e:                                   # law code raised (TypeError, KeyError, ...): its runtime error
+                raise G.LawError(f"{type(e).__name__}: {e}") from e
+            _check_public(k, lid)
+            return out
+    except Blocked as e:                                             # a change it asked for was blocked: its call ends, no fault
+        k.w["effects"]["kernel_refusals"].append(e.reason)
+        return None
+    except LIMITS as e:
+        if k.dry:
+            raise
+        die(k, cas, inv, e)
+        return DEAD
+    except G.LawError as e:
+        if k.dry:
+            raise
+        die(k, cas, inv, e, flagged=False)                            # its queued reactions go; the law is suspended as before
+        with k.cause("law", lid, hook=hook):
+            k.law_error(lid, str(e))
+        return DEAD
+    finally:
+        _invs(k).pop()
+        st = _state(k)
+        st["account_used"][acct] = budget.used
+        st["law_gas"][lid] = st["law_gas"].get(lid, 0) + budget.used - used0
+
+
+def _check_public(k, lid) -> None:
+    from charter import linker as LK
+    LK.check_public(k, lid)                                            # P3.3: a law's public dict stays JSON data
+
+
+@dataclass
+class AfterItem:
+    seq: int
+    depth: int
+    law: str
+    hook: str
+    primitive: str
+    payload: dict
+    causes: list
+    hide: tuple
+    turn_agent: str | None
+    parent: Invocation | None
+
+
+def drain_v2(k, cas: Cascade) -> None:
+    """Run the queue FIFO (each item in the cause context it was queued in), then the finalizers (each may queue more). A halted
+    cascade drops what is left of its queue but still runs its finalizers (probate is physics). Logs cascade_halted (monitor) when
+    the cascade halted or dropped reactions."""
+    while True:
+        while cas.queue and not cas.halted:
+            it = cas.queue.popleft()
+            law = k.w["laws"].get(it.law)
+            if not law or law["status"] != "active":
+                continue
+            saved = k._causes
+            k._causes = list(it.causes)
+            try:
+                P = PR.get(it.primitive)
+                chain = chain_view(k, it.causes[cas.index:], it.law, implicit_root=cas.root if cas.implicit else None,
+                                   concealed=it.hide, turn_agent=it.turn_agent)
+                invoke(k, cas, it.law, it.hook, hook_payload(k, P, it.payload, it.law, it.hide), chain, it.depth, it.parent)
+            finally:
+                k._causes = saved
+        if cas.halted and cas.queue:
+            cas.dropped += len(cas.queue)
+            cas.queue.clear()
+        if not cas.finalizers:
+            break
+        causes, fn = cas.finalizers.pop(0)
+        saved = k._causes
+        k._causes = list(causes)
+        try:
+            fn()
+        finally:
+            k._causes = saved
+    if cas.halted or cas.dropped:
+        k.log("cascade_halted", None, {"root": cas.root["id"], "by": cas.halted, "dropped": cas.dropped}, vis="monitor")
+        cas.dropped = 0
+
+
+# ---------------------------------------------------------------------- blocks
+def _law_caused(k) -> bool:
+    return invocation(k) is not None or any(next(iter(f)) == "law" for f in k._causes)
+
+
+def _refusable(k, cas, P, chain) -> bool:
+    """Can the cause of this change be refused? A law (its call ends: Kernel.call, invoke), or an agent's action whose own primitive
+    this is and which has changed nothing yet (the first primitive its handler causes, primitives.ACTION_PRIMITIVES: actions.act turns
+    the block into an ActionError). World, kernel and intervention causes have no refusal path at their call sites: a block of their
+    change is overridden (logged for the monitor) unless the primitive returns a refusal itself (move, enact, repeal)."""
+    if _law_caused(k):
+        return True
+    root = chain[0] if chain else {}
+    if root.get("kind") == "action" and cas.changes == 0:
+        own = PR.ACTION_PRIMITIVES.get(str(root.get("id", "")).split(":", 1)[-1])
+        return isinstance(own, tuple) and bool(own) and own[0] == P.name
+    return False
+
+
+ENTRENCHED_WHEN = {"amend": lambda p: p.get("via") == "fixer"}            # fixer_patch; board_veto: veto is not blockable at all
+
+
+def _blocked_vis(k, P, p):
+    if P.legal:
+        return "public"
+    who = sorted({p.get(x) for x in (P.subject, *P.parties) if x and isinstance(p.get(x), str) and p.get(x) in k.w["agents"]})
+    return who or "monitor"
+
+
+def on_block(k, cas, P, p, d: DecisionV2, chain):
+    """A block that stands (D-18: the affected agents see the blocking laws and the reason): logged, then delivered to its cause:
+    move, enact and repeal return Outcome(ok=False) (an enactment is struck down, a repeal leaves the law in force); a proposal is
+    marked blocked; a refusable cause gets Blocked. None: the cause cannot be refused and the change goes ahead (logged, monitor)."""
+    name = P.name
+    data = {"primitive": name, "by": list(d.blocked_by), **({"reason": d.reason} if d.reason else {})}
+    if name == "propose":
+        lid = p["draft"]["id"]
+        k.w["laws"][lid]["status"] = "blocked"
+        k.log("proposal_blocked", None, {"law": lid, "by": list(d.blocked_by), **({"reason": d.reason} if d.reason else {})},
+              vis="public")
+        raise Blocked(name, d.blocked_by, d.reason)
+    if name in ("enact", "repeal"):
+        if name == "enact":
+            k.w["laws"][p["law"]]["status"] = "struck_down"
+        k.log("primitive_blocked", None, {**data, "law": p["law"]}, vis="public")
+        return Outcome(ok=False, blocked_by=d.blocked_by, refused="blocked")
+    if name == "move":
+        k.log("primitive_blocked", None, {**data, "src": p["src"], "dst": p["dst"], "item": p["item"], "qty": p["qty"]},
+              vis=_blocked_vis(k, P, p))
+        return Outcome(ok=False, blocked_by=d.blocked_by, refused="blocked")
+    if _refusable(k, cas, P, chain):
+        k.log("primitive_blocked", None, data, vis=_blocked_vis(k, P, p))
+        raise Blocked(name, d.blocked_by, d.reason)
+    k.log("primitive_blocked", None, {**data, "overridden": True}, vis="monitor")
+    return None
+
+
+# ---------------------------------------------------------------------- apply under law.v2
+def _accepts(fn, key) -> bool:
+    import inspect
+    try:
+        ps = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return key in ps or any(x.kind is inspect.Parameter.VAR_KEYWORD for x in ps.values())
+
+
+def _fail_closed(k, lid) -> bool:
+    """D-6: a constitution-rank law declaring fail_closed = True blocks the legal act it reviews when its review dies."""
+    return rank_of(k, lid) == "constitution" and (k.ns.get(lid) or {}).get("fail_closed") is True
+
+
+def _run_before(k, cas, P, p, opts, depth, raw, hide) -> list:
+    hook = f"before_{P.name}"
+    own = {lid for lid, _ in _raw_laws(raw)}
+    turn = k.current_turn_agent()
+    frames = raw[cas.index:]
+    verdicts = []
+    for law in bound_laws(k, P, p, "before"):
+        lid = law["id"]
+        if lid in own or _hook_fn(k, lid, hook) is None:              # R1: never its own doings
+            continue
+        chain = chain_view(k, frames, lid, implicit_root=cas.root if cas.implicit else None, concealed=hide, turn_agent=turn)
+        v = invoke(k, cas, lid, hook, hook_payload(k, P, p, lid, hide), chain, depth, invocation(k),
+                   reader=lambda out, lid=lid: normalise(P, lid, out))
+        if v is DEAD:
+            v = Verdict(lid, block=True, reason="fail_closed") if P.legal and _fail_closed(k, lid) else None   # D-6: else abstain
+        if v is not None:
+            verdicts.append(v)
+    return verdicts
+
+
+def _apply_charges(k, P, p, d: DecisionV2, depth, already) -> tuple:
+    """Each charge, in canonical order, is a nested move(payer, the law's treasury, item, qty, why="charge:<law>") in the frame
+    law:<lid>:before_<p> (so R1 keeps the law from gating its own charge; other laws' before_move see it); the total is capped by the
+    payload's quantity (less any legacy tax) and each by what the payer holds. The payer is told (law_charged, D-18)."""
+    out = []
+    cap = p.get("qty")
+    left = None if cap is None else max(0.0, float(cap) - float(already or 0))
+    for c in d.charges:
+        q = c.qty if left is None else min(c.qty, left)
+        q = min(q, k.bal(c.payer, c.item))
+        if q <= 1e-9:
+            continue
+        inv = Invocation(law=c.law, hook=f"before_{P.name}", depth=depth, parent=invocation(k), account=account_of(k, c.law))
+        _invs(k).append(inv)
+        try:
+            with k.cause("law", c.law, hook=f"before_{P.name}", charge=True):
+                ok = k.apply("move", src=c.payer, dst=c.dst, item=c.item, qty=q, why=f"charge:{c.law}").ok
+        except (PhysicsError, DepthCapExceeded, Halted):
+            ok = False
+        finally:
+            _invs(k).pop()
+        if ok:
+            if left is not None:
+                left -= q
+            out.append(Charge(c.law, c.payer, c.item, q, c.dst))
+            if c.payer in k.w["agents"]:
+                k.log("law_charged", None, {"law": c.law, "primitive": P.name, "payer": c.payer, "item": c.item, "qty": q},
+                      vis=[c.payer])
+    return tuple(out)
+
+
+@contextmanager
+def _unhooked(k, on):
+    if not on:
+        yield
+        return
+    prev = getattr(k, "_unhooked", False)
+    k._unhooked = True
+    try:
+        yield
+    finally:
+        k._unhooked = prev
+
+
+def apply_v2(k, P, fn, p, opts) -> Outcome:
+    """apply under law.v2 (review 09 §9.3): depth and halt checks, physics, prim_cost, legacy before-aliases (unchanged), new-style
+    before-hooks (synchronous), the decision, the change in a {"primitive": name} frame with the charges, legacy after-aliases
+    (unchanged), new-style after-items queued."""
+    with _implicit(k, P.name) as cas:
+        return _apply_v2(k, cas, P, fn, p, opts)
+
+
+def _apply_v2(k, cas, P, fn, p, opts) -> Outcome:
+    name = P.name
+    inv = invocation(k)
+    depth = 0 if inv is None else inv.depth + 1
+    g = gas_cfg(k)
+    if inv is not None and cas.halted:
+        raise Halted(f"the cascade {cas.root['id']} has halted")
+    if depth > int(g["depth_cap"]):
+        raise DepthCapExceeded(int(g["depth_cap"]))
+    try:
+        p = _check(k, name, p, opts)
+    except _Noop as n:
+        return Outcome(ok=True, result=n.result)
+    if inv is not None:
+        k.limited.meter.tick(int(g["prim_cost"]))
+    unhooked = cas.halted is not None                                  # a halted cascade: depth-0 changes apply without hooks
+    chain = chain_for(k, name)
+    d = _legacy_before(k, P, p, chain)                                # legacy aliases: exactly as without law.v2 (R5)
+    if d.block and P.blockable:
+        return Outcome(ok=False, blocked_by=d.blocked_by, charges=d.charges)
+    raw = list(k._causes)
+    hide = hidden_agents(k, name, p, opts)
+    v2d = resolve_v2(k, P, p, _run_before(k, cas, P, p, opts, depth, raw, hide)) if P.before and not unhooked else DecisionV2()
+    if v2d.block and P.blockable and not ENTRENCHED_WHEN.get(name, lambda x: False)(p):
+        out = on_block(k, cas, P, p, v2d, chain)
+        if out is not None:
+            return out
+    extra = _extra(P, d)
+    extra.update({x: v for x, v in v2d.directives.items() if _accepts(fn, x)})   # a new-style directive overrides a legacy one
+    with k.cause("primitive", name):
+        with _unhooked(k, unhooked):
+            result = fn(k, **p, **opts, **extra)
+        cas.changes += 1
+        charged = _apply_charges(k, P, p, v2d, depth, d.charged) if v2d.charges else ()
+        prim_causes = list(k._causes)
+    _legacy_after(k, P, p, chain, result)
+    if P.after and not unhooked:
+        _enqueue(k, cas, P, {**p, "result": result}, depth, prim_causes, inv, hidden_agents(k, name, p, opts))
+    return Outcome(ok=True, result=result, charges=d.charges + charged)
+
+
+def _enqueue(k, cas, P, payload, depth, causes, inv, hide) -> None:
+    """Queue (L, after_p) for every bound law with that hook, in canonical order, except accounts out of gas and R2: not when the
+    change was made directly by (L, after_p) itself (the innermost law frame of its cause stack), so a hook never feeds itself; every
+    longer cycle (L reacts to M reacts to L) is legal, bounded by the depth cap and gas."""
+    hook = f"after_{P.name}"
+    inner = next((x for x in reversed(_raw_laws(causes))), None)
+    st = _state(k)
+    snap = None
+    for law in bound_laws(k, P, payload, "after"):
+        lid = law["id"]
+        if inner == (lid, hook) or _hook_fn(k, lid, hook) is None or account_of(k, lid) in st["out_of_gas"]:   # R2
+            continue
+        snap = snap if snap is not None else _copy.deepcopy(payload)
+        cas.queue.append(AfterItem(cas.next(), depth, lid, hook, P.name, snap, causes, hide, k.current_turn_agent(), inv))

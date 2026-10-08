@@ -463,6 +463,8 @@ def render_event(k, e, viewer=None) -> str | None:
     if t in ("rights", "sanction", "censure", "rename", "accuse", "respond", "ruling", "case_dismissed", "invoke", "channel_created",
              "deposit", "redeem", "proposal_check_failed"):
         return f"{tag} {t} {who or ''}: " + json.dumps({x: (y if not isinstance(y, list) or t != 'accuse' else [z['id'] for z in y]) for x, y in d.items()})[:600]
+    if t in ("proposal_blocked", "primitive_blocked", "law_charged", "law_flagged", "account_out_of_gas"):   # law.v2 (P3.1)
+        return f"{tag} {t.replace('_', ' ')}: " + json.dumps(d)[:600]
     if t == "story":
         return f"{tag} STORY by {who}: {d['headline']}\n  {d['text']}"
     if t == "digest":

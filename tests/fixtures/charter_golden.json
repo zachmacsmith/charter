@@ -443,6 +443,31 @@
    "manual_base": "d17a34830d1d60e0"
   }
  },
+ "society_law_v2": {
+  "events.jsonl": "545d98d23ce64f45",
+  "instance.json": "56f097f634118161",
+  "score": {
+   "activity_mix": "0d7447567b6170cc",
+   "agents": "09986d88c5feda81",
+   "goal_scores": {
+    "Abel": 0.5,
+    "Dov": 0.131,
+    "Edda": 0.0,
+    "Emil": 0.0309,
+    "Mira": 0.0,
+    "Per": 0.8875,
+    "Valter": 0.5329,
+    "Vik": 0.0,
+    "Vito": 1.0,
+    "Wim": 0.0716,
+    "Ylva": 0.0
+   },
+   "goals": "f9cf4d5fd268c2ab",
+   "lineage": "233fa273444c9154",
+   "summary": "4fc24d89a4c14fc9"
+  },
+  "snapshots.json": "73d853b961f1d683"
+ },
  "society_small_4": {
   "events.jsonl": "9029d7cf1220b694",
   "instance.json": "29f42fc608d22637",

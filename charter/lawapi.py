@@ -278,6 +278,16 @@ LAWFNS = _fns(
           "(scoped as that law's calls are); a hidden jurisdiction's laws are invisible to other jurisdictions", docs="requires", v2=True),
         F("public_of", "read", scope="read", docs="requires", v2=True),  # a hidden jurisdiction's laws read as "no such law"
     ),
+    _module(
+        "dispatch",                                                     # law.v2 (P3.1): reads for new-style hooks (review 09 §4.4)
+        F("root_kind", "read", scope="none", why="reads the chain it is given, binds nobody", docs="requires", v2=True),
+        F("caused_by_agent", "read", scope="none", why="reads the chain it is given (already redacted for the law)",
+          docs="requires", v2=True),
+        F("caused_by_law", "read", scope="none", why="reads the chain it is given, binds nobody", docs="requires", v2=True),
+        F("chain_laws", "read", scope="none", why="reads the chain it is given, binds nobody", docs="requires", v2=True),
+        F("law_id", "read", scope="none", why="the calling law's own id", docs="requires", v2=True),
+        F("treasury", "read", scope="none", why="the owner key of the calling law's own treasury", docs="requires", v2=True),
+    ),
 )
 V2_ONLY = {f.name for f in LAWFNS.values() if f.v2}                    # law.v2 names: off, Kernel.api_for has none of them
 # P1.7: the primitive column of the two rows P1.4 edits (kept off their lines to avoid a merge conflict; fold in after the merge)

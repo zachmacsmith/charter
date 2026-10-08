@@ -70,6 +70,11 @@ def state(k) -> dict:
     return st
 
 
+def _hooks_live(k) -> bool:
+    from charter import dispatch as D
+    return D.hooks_live(k)
+
+
 def alive(k, aid) -> bool:
     v = k.w["agents"].get(aid)
     return bool(v) and v.get("departed") is None and v["cls"] != "observer"
@@ -182,6 +187,14 @@ def _disable(k, aid, cause, by, public, named, v) -> dict:
                   vis="public" if public else "monitor")
 
     def bequest():                                                        # probate: today's bequest, from the estate
+        cas = k.cascade()
+        if cas is not None and _hooks_live(k):
+            def probate():                                                # law.v2 (P3.1): at the end of the cascade, after the
+                _release(k, aid)                                          # after_end_life hooks (review 09 §13.3)
+                _run_bequest(k, aid, cause, by if named else None)
+            cas.at_end(k, probate)
+            d["outcome"] = {"probate": "deferred"}
+            return
         _release(k, aid)
         d["outcome"] = _run_bequest(k, aid, cause, by if named else None)  # an unnamed (covert) attacker gets nothing and gives nothing away
 

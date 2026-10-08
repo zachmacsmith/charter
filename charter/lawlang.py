@@ -3,7 +3,8 @@
 A law module sets `title` and `intent`, may keep persistent data in `state` (a dict), and defines hooks:
 on_enact, on_repeal, on_round_start(r), on_round_end(r), on_harvest(agent, camp, x, y) (return a deduction),
 on_transfer(src, dst, item, qty) (return False to block, or a number to tax), on_proposal(p), on_vote(ballot, agent, choice),
-on_post(agent, text) and the module hooks in charter/lawapi.py. It calls the kernel API (see API_GROUPS, generated from the table in
+on_post(agent, text) and the module hooks in charter/lawapi.py; with law.v2 also before_<p>(p, chain) and after_<p>(p, chain) for every
+routed primitive p (V2_HOOKS, check_hooks: a check error without law.v2, R5; dispatch.py runs them). It calls the kernel API (see API_GROUPS, generated from the table in
 charter/lawapi.py); nothing else is reachable: no imports, no I/O, no dunders, no global/nonlocal, no try, no classes.
 
 Static class (by which API calls appear, so it cannot be misstated):
@@ -111,11 +112,64 @@ def classify(tree: ast.AST, imported=()) -> str:
 
 def _classify_one(tree: ast.AST) -> str:
     c = calls(tree)
-    if c & PROCEDURAL_CALLS:
+    hc = hooks_class(tree)                                             # law.v2 hooks (none in any law without law.v2: R5)
+    if c & PROCEDURAL_CALLS or hc == "procedural":
         return "procedural"
-    if c & STRUCTURAL_CALLS or moves_holdings_by_return(tree):
+    if c & STRUCTURAL_CALLS or moves_holdings_by_return(tree) or hc == "structural":
         return "structural"
     return "ordinary"
+
+
+# ---------------------------------------------------------------------- law.v2 hooks (P3.1; review 09 §4.2, §9.3 R5, §11)
+from charter.primitives import HOOKS as _HOOKROWS, PRIMITIVES as _PRIMS   # noqa: E402
+V2_HOOKS = tuple(n for n, h in _HOOKROWS.items() if h.kind in ("before", "after"))   # before_<p>/after_<p>, every declared phase
+
+
+def new_style_hooks(tree: ast.Module) -> list:
+    """Top-level functions named before_<p>/after_<p> for a declared primitive p (whatever the phase flags say), in source order:
+    [(name, phase, primitive)]."""
+    out = []
+    for n in tree.body:
+        if isinstance(n, ast.FunctionDef):
+            ph, _, prim = n.name.partition("_")
+            if ph in ("before", "after") and prim in _PRIMS:
+                out.append((n.name, ph, prim))
+    return out
+
+
+def check_hooks(tree: ast.Module, v2: bool, live=None) -> None:
+    """R5: new-style hooks are a check error without law.v2. With it, each must hook a phase its primitive has (regrow cannot be
+    hooked before: physics), a primitive routed through Kernel.apply (`live`: dispatch.ROUTED; others never fire yet), and take
+    exactly (p, chain)."""
+    for name, ph, prim in new_style_hooks(tree):
+        if not v2:
+            raise LawError(f"{name}: new-style hooks (before_<primitive>, after_<primitive>) need law.v2 in this world")
+        if name not in _HOOKROWS:
+            raise LawError(f"{name}: {prim} cannot be hooked {ph} it happens (physics)")
+        if live is not None and prim not in live:
+            raise LawError(f"{name}: the {prim} primitive is not routed through the kernel yet, so the hook would never run")
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+        a = fn.args
+        if len(a.args) != 2 or a.vararg or a.kwarg or a.kwonlyargs or a.posonlyargs or a.defaults:
+            raise LawError(f"{name} must take exactly two arguments: (p, chain)")
+
+
+def hooks_class(tree: ast.Module) -> str:
+    """The class a law's new-style hooks give it (review 09 §11): any hook of a legal primitive is procedural; a before-hook that can
+    block or charge (a return other than None, True or a constant 0) is structural; after-hooks add nothing of their own."""
+    cls = "ordinary"
+    for name, ph, prim in new_style_hooks(tree):
+        if _PRIMS[prim].legal:
+            return "procedural"
+        if ph == "before":
+            fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+            for r in ast.walk(fn):
+                if isinstance(r, ast.Return) and r.value is not None:
+                    v = r.value
+                    if not (isinstance(v, ast.Constant) and (v.value is None or v.value is True or
+                                                             (type(v.value) in (int, float) and v.value == 0))):
+                        cls = "structural"
+    return cls
 
 
 def is_repeal(tree: ast.Module) -> str | None:

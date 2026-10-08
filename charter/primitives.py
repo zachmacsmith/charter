@@ -610,7 +610,7 @@ LAW_OUTPUTS = {
     "gazette": "an output (ARCHITECTURE §3.3)",
     "notify": "an output (ARCHITECTURE §3.3)",
     "censure": "a public statement about an agent: an output (it only counts in the round's effects)",
-    "use": "a link between laws' code (law.v2, P3.3): changes no world state the primitives describe",
+    "use": "law.v2 (P3.3): links another law's exports into the calling module when it loads; no change to the world",
 }
 
 # Event types that are outputs, look-ups or records of no change (EventType.primitive None on purpose); every other type of kind
