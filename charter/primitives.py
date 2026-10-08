@@ -100,6 +100,7 @@ class Primitive:
     status: str = "live"            # live | planned
     # W8a
     routed: bool = False            # Kernel.apply makes the change (dispatch.ROUTED); fn is then the apply function
+    tier: str = ""                  # review 12 §1: P | E | X | L (routed law) | L-route (law, not routed yet); TIERS
 
     @property
     def hooks(self) -> tuple:
@@ -760,6 +761,32 @@ OUTPUT_EVENTS = {
 }
 
 
+# Review 12 WP0 (W8a; charter/tiers.py): each row's tier, by tier (the row's `tier` field is set from here, so WP1 routing a
+# primitive moves its name from "L-route" to "L"). P: physics (never blockable); E: epistemics; X: the experimental contract;
+# L: law that may already hook it (routed); L-route: law, not routed yet (§2.14: free acts, then the laws' own rule setters).
+TIER_OF = {
+    "P": ("regrow", "drift", "set_camp_state", "create_camp", "settle_project", "begin_life", "end_life", "default_loan",
+          "close_ballot", "deauthorize",           # world causes, time, ballots counted as cast, consent (K-2: the grantor may revoke)
+          "demand_tribute"),                       # unrouted: to route as blockable=False, after-hooks only
+    "E": ("write_note", "use_power"),
+    "X": ("set_role", "set_goal", "suspend_law", "request_fix"),
+    "L": ("move", "harvest", "mint", "burn", "create_currency", "convert", "destroy", "grant_right", "revoke_right",
+          "suspend_right", "limit_actions", "create_right", "set_dm_limit", "appoint", "attack", "fortify", "guard_bind",
+          "guard_release", "post", "dm", "hide_post", "subscribe", "set_outlet_rule", "set_media_rule", "join", "leave", "admit",
+          "expel", "set_camp_rule", "offer_loan", "accept_loan", "repay_loan", "extend_loan", "settle_loan", "improve_camp",
+          "lease", "contribute", "propose", "decide", "open_ballot", "cast_vote", "veto", "enact", "repeal", "amend",
+          "set_procedure", "rule", "open_case", "answer_case", "appeal", "set_court_rule", "define_action", "set_conflict_rule",
+          "create_contract", "deposit_escrow", "set_allowance", "pull", "breach", "swap", "open_fund", "authorize", "act_for"),
+    "L-route": ("found", "invite", "declare", "set_charter", "dissolve", "invoke", "commission", "set_will", "name_successor",
+                "licence", "set_price", "library_doc", "library_permit", "set_capacity", "share_note", "offer_lease",
+                "set_initiative", "hire_assassin",
+                # the laws' own rule setters: routed, constitutions could review them (today they bypass before_<p>)
+                "set_money_rule", "set_title", "rename", "set_arms_rule", "set_lease_rules", "set_birth_rules",
+                "set_succession_rule", "set_project_rule", "set_power_rule", "loan_terms", "loan_assign", "create_clause",
+                "start_project"),
+}
+
+
 def _finish(rows) -> dict:
     out = {}
     for p in rows:
@@ -768,7 +795,8 @@ def _finish(rows) -> dict:
         out[p.name] = p
     acts = {n: tuple(a for a, ps in ACTION_PRIMITIVES.items() if isinstance(ps, tuple) and n in ps) for n in out}
     compel = {n: tuple(f.name for f in LA.LAWFNS.values() if f.primitive == n) for n in out}
-    return {n: replace(p, act=acts[n], compel=compel[n]) for n, p in out.items()}
+    tier = {n: t for t, names in TIER_OF.items() for n in names}
+    return {n: replace(p, act=acts[n], compel=compel[n], tier=tier.get(n, "")) for n, p in out.items()}
 
 
 PRIMITIVES: dict[str, Primitive] = _finish(_ROWS)
