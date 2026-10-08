@@ -107,7 +107,17 @@ def restrict(gt, r0, r1) -> dict:
                         "population": [p for p in lf.get("population") or [] if r0 <= p.get("round", 0) <= r1]}
     if gt.get("arrived_agents"):
         view["arrived_agents"] = [x for x in gt["arrived_agents"] if not isinstance(x, dict) or int(x.get("arrived", 0)) <= r1]
+    found = gt["foundings"] if "foundings" in gt else _foundings(gt.get("events") or ())
+    if found:                                                            # P6.4: who founded which association (state, not deed:
+        view["foundings"] = {c: f for c, f in found.items() if f["round"] <= r1}   # kept across the window's start)
     return view
+
+
+def _foundings(events) -> dict:
+    """{association id: {"founder", "round", "name", "template", "params"}} from the contract_created events (P6.4)."""
+    return {e["data"]["contract"]: {"founder": e.get("agent"), "round": e["round"], "name": e["data"].get("name"),
+                                    "template": e["data"].get("template"), "params": e["data"].get("params") or {}}
+            for e in events if e["type"] == "contract_created" and (e.get("data") or {}).get("contract")}
 
 
 def _restrict_roster(we, r1) -> dict:
@@ -503,6 +513,140 @@ class History:
         if key not in self._windows:
             self._windows[key] = History(restrict(self.gt, r0, r1), roster=_restrict_roster(self._roster, r1))
         return self._windows[key]
+
+    # --- institutions (P6.4): polities and associations as accounts, read from the snapshots and the event log
+    # Every accessor reads this History's states and events, so on a window it sees only the window's rounds (as every table
+    # does); `foundings` is the one run-long table (who founded which association is a fact about the state, not a deed).
+    @property
+    def foundings(self):
+        """{association id: {"founder", "round", "name", "template", "params"}}: every association founded by the last round
+        (contract_created events; on a window, also those founded before it)."""
+        return MappingProxyType(self.cached("foundings", lambda h: h.gt["foundings"] if "foundings" in h.gt
+                                            else _foundings(h.gt.get("events") or ())))
+
+    def accounts(self, r=None) -> dict:
+        """{account id: {"kind", "status", "name", "founder", "members", "laws"}} after round r (default: the last round):
+        the polities (snapshot["jurisdictions"]; "J0" alone, with every present agent a member and the active laws as its laws,
+        when jurisdictions are off) and the associations (snapshot["contracts"], with founder and name from `foundings`).
+        Association rows also carry "template" and "founded". {} without snapshots. Cached per round."""
+        if not self.states:
+            return {}
+        r = self.final["round"] if r is None else r
+        return self.cached(("accounts", r), lambda h: _accounts_at(h, r))
+
+    def account(self, account, r=None) -> dict | None:
+        """One row of `accounts(r)` (None when the account does not exist then)."""
+        return self.accounts(r).get(account)
+
+    def members(self, account, r=None) -> list:
+        """The account's members after round r (default: the last round); [] when it does not exist then."""
+        return list((self.account(account, r) or {}).get("members") or [])
+
+    def membership(self, account) -> list:
+        """The account's members after every round, in round order (a list of lists, like `series`)."""
+        return [self.members(account, r) for r in self.rounds]
+
+    def founded_by(self, agent) -> list:
+        """The associations `agent` founded (by the last round), in founding order."""
+        return [c for c, f in self.foundings.items() if f["founder"] == agent]
+
+    def treasury_key(self, account) -> str:
+        """The owner key of an account's treasury, as move events name it: "assoc:<id>" (association), "reserve" (J0),
+        "reserve:<id>" (another polity)."""
+        if account in self.foundings or account.startswith("A") and any(account in (s.get("contracts") or {}) for s in self.states):
+            return f"assoc:{account}"
+        return "reserve" if account == "J0" else f"reserve:{account}"
+
+    def treasury(self, account, r=None) -> dict | None:
+        """The account's treasury holdings {item: qty} after round r (default: the last round): an association's from
+        snapshot["contracts"], J0's from snapshot["reserve"]; None for another polity (its snapshot holds only its value, see
+        `treasury_value`) or an account that does not exist then."""
+        if not self.states:
+            return None
+        s = self.final if r is None else self.state(r)
+        c = (s.get("contracts") or {}).get(account)
+        if c is not None:
+            return dict(c.get("treasury") or {})
+        if account == "J0":
+            return dict(s.get("reserve") or {})
+        return None
+
+    def treasury_value(self, account, r=None) -> float | None:
+        """The value of the account's treasury after round r (units at unit value, currencies at that round's price; another
+        polity: its recorded reserve_value). None when unknown."""
+        if not self.states:
+            return None
+        s = self.final if r is None else self.state(r)
+        held = self.treasury(account, s["round"])
+        if held is None:
+            j = (s.get("jurisdictions") or {}).get(account) or {}
+            return j.get("reserve_value")
+        prices = s.get("prices") or {}
+        return round(sum(q * self.unit.get(i, prices.get(i, 0.0)) for i, q in held.items()), 4)
+
+    def account_laws(self, account, r=None) -> list:
+        """The laws of the account in force (or suspended, for an association) after round r (default: the last round)."""
+        return list((self.account(account, r) or {}).get("laws") or [])
+
+    def payments(self, account, rounds=None, to=None) -> tuple:
+        """Move events out of the account's treasury (`treasury_key`) to anyone else (with `to`: to that owner key), in log
+        order, within `rounds` as `events` takes it."""
+        key = self.treasury_key(account)
+        return tuple(e for e in self.events("move", rounds=rounds) if e["data"].get("src") == key and e["data"].get("dst") != key
+                     and (to is None or e["data"].get("dst") == to))
+
+    def receipts(self, account, rounds=None) -> tuple:
+        """Move events into the account's treasury (a law's charges, pulls, forfeits, payments in), in log order. Legacy
+        harvest deductions log no move: read them from the harvest events' "deducted" (see `deductions`)."""
+        key = self.treasury_key(account)
+        return tuple(e for e in self.events("move", rounds=rounds) if e["data"].get("dst") == key and e["data"].get("src") != key)
+
+    def deductions(self, account, rounds=None) -> tuple:
+        """Harvest events of the account's members (in the harvest's round) with a deduction by law (data "deducted" > 0).
+        Which law took it is not recorded on the event; with several deducting accounts a deduction is not split."""
+        return tuple(e for e in self.events("harvest", rounds=rounds) if (e["data"].get("deducted") or 0) > 0
+                     and e.get("agent") in self.members(account, e["round"]))
+
+    def breaches(self, account=None, agent=None, rounds=None) -> tuple:
+        """contract_breach events (of association `account`, of member `agent`), in log order."""
+        return tuple(e for e in self.events("contract_breach", rounds=rounds)
+                     if (account is None or e["data"].get("contract") == account) and (agent is None or e.get("agent") == agent))
+
+    def funds(self, r=None) -> dict:
+        """Per-law funds after round r (snapshot["funds"]: {key: {"account", "law", "status", "holdings"}}); {} when none."""
+        if not self.states:
+            return {}
+        s = self.final if r is None else self.state(r)
+        return dict(s.get("funds") or {})
+
+    def rulings(self, judge=None) -> list:
+        """Decided cases (the cases table), each with "first" (the first-instance verdict when the case was appealed, else its
+        verdict), "appealed" and "overturned" (an appeal decided a verdict other than the first); with `judge`, only the cases
+        that judge decided at first instance."""
+        out = []
+        for c in self.cases.values():
+            if c.get("status") != "decided":
+                continue
+            first = c.get("first") or {}
+            appealed = c.get("stage", 1) == 2 or bool(first)
+            fv = first.get("verdict", c.get("verdict")) if appealed else c.get("verdict")
+            fj = first.get("judge", c.get("judge")) if appealed else c.get("judge")
+            if judge is not None and fj != judge:
+                continue
+            out.append({**c, "first_verdict": fv, "first_judge": fj, "appealed": appealed,
+                        "overturned": appealed and c.get("verdict") != fv})
+        return out
+
+    def losses(self, agent=None, rounds=None) -> tuple:
+        """Harm events: (round, agent, kind) for every attack on an agent (attack_truth, any outcome), every disablement
+        (disabled) and every raid seizure (raid), in log order; with `agent`, that agent's only."""
+        out = []
+        for e in self.events(("attack_truth", "disabled", "raid"), rounds=rounds):
+            d = e["data"]
+            hit = ([d.get("target")] if e["type"] == "attack_truth" else [d.get("agent")] if e["type"] == "disabled"
+                   else sorted(d.get("seized") or {}))
+            out += [(e["round"], x, e["type"]) for x in hit if x and (agent is None or x == agent)]
+        return tuple(out)
 
     # --- shared derived tables
     def cached(self, key, fn):
