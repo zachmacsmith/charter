@@ -172,18 +172,21 @@ def present(spec: dict, seed) -> set:
     return keep | set(_random.Random(f"{seed}|archive_sample").sample(rest, max(0, min(n, len(rest)))))
 
 
-@functools.lru_cache(maxsize=8192)
-def _rel(p: Path, root: Path) -> tuple[str, bool]:
-    """A document's id under root (path without .md) and whether it sits in codex/: pure path arithmetic, memoised because docs()
-    runs on every archive read and Path.relative_to dominated it."""
-    r = p.relative_to(root)
-    return str(r.with_suffix("")), str(r).startswith("codex/")
+@functools.lru_cache(maxsize=16)
+def _index(found: frozenset, root: Path) -> tuple:
+    """The documents under root: each .md file found, in sorted path order, with its id (path without .md) and whether it sits in
+    codex/. A pure function of the files found, memoised because docs() runs on every archive read and sorting and relativising
+    the same Path objects dominated it (the directory is still listed on every call)."""
+    out = []
+    for p in sorted(found):
+        r = p.relative_to(root)
+        out.append((p, str(r.with_suffix("")), str(r).startswith("codex/")))
+    return tuple(out)
 
 
 def docs(shared: Path | None = None, gated: bool = False, spec: dict | None = None) -> dict:
     skip = set() if gated else gated_docs()                            # media2: gated documents only when asked for
-    rel = {p: _rel(p, ROOT) for p in sorted(ROOT.rglob("*.md"))}
-    out = {r: p for p, (r, codex) in rel.items() if not codex and r not in skip and applies(r, spec)}
+    out = {r: p for p, r, codex in _index(frozenset(ROOT.rglob("*.md")), ROOT) if not codex and r not in skip and applies(r, spec)}
     from charter import library as LB
     for name in LB.LIB:
         if "library/" + _slug(name) not in skip:
