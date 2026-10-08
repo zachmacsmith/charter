@@ -364,9 +364,7 @@ def legacy_actions(inst: dict, a: dict) -> list:
     if not FT.on("contracts", inst):                                    # contracts (P4.3): their actions only when on
         absent |= {n for n, x in AR.REG.items() if x.module == "contracts"}
     absent |= {n for n, x in AR.REG.items() if x.module == "directories"}   # directories: core-prompt worlds only (context on)
-    from charter import agent_rules as AGR
-    absent |= AGR.denied(inst, a["id"])                                 # spec agent_rules: actions denied to this agent
-    return [k for k in ACTION_DOC if k not in absent and k not in AGR.denied(inst, a["id"])] + {
+    return [k for k in ACTION_DOC if k not in absent] + {
         "board": ["veto"], "fixer": ["patch"], "scientist": ["read_archive", "search_archive", "write_archive"],
         "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) + (["rule"] if lvl >= 2 else []) \
         + (["set_dm_limit"] if "dm_rules" in a["rights"] and inst["spec"]["channels"].get("dm", True) else [])

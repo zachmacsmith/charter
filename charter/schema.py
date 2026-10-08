@@ -475,9 +475,9 @@ EXTRA = {
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
 DOCS = {
-    "agent_rules": "per-agent scenario rules: {Name: {briefing: text shown every turn as \"Your situation\", deny: [actions the "
-                   "kernel refuses for that agent]}} (charter/agent_rules.py)",
-    "agent_rules.*": "{briefing: \"...\", deny: [found, leave, ...]}",
+    "agent_rules": "per-agent scenario rules: {Name: {briefing: text shown in every call as \"Your situation\"}} "
+                   "(charter/agent_rules.py)",
+    "agent_rules.*": "{briefing: \"...\"}",
     "chronicle.enabled": "the Historian's chronicle (a directory owned by role:historian); null: on exactly when the historian role is "
                          "in play (roles.explicit.historian or roles.counts.historian > 0)",
     "chronicle.namespace": "the chronicle's persistent namespace (null: directories.namespace, shared_archive.namespace, else default)",

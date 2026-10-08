@@ -252,26 +252,20 @@ def test_off_by_default(preset):
     assert not {a.name for a in AR.available(inst, k, k.w["agents"][aid])} & set(DR.ACTIONS)
 
 
-# ------------------------------------------------------------------ agent_rules: briefing and denied actions (charter/agent_rules.py)
-def test_agent_rules_briefing_and_denied_actions(names):
-    from charter import agent_rules as AGR
+# ------------------------------------------------------------------ agent_rules: a per-agent briefing (charter/agent_rules.py)
+def test_agent_rules_briefing(names):
     from charter import schema as SC
     a, b, _ = names
     sp = S.apply_overrides(S.load("society"), ["shared_archive.enabled=false"])
-    sp["agent_rules"] = {a: {"briefing": "You must take the Commonwealth.", "deny": ["found", "leave"]}}
+    sp["agent_rules"] = {a: {"briefing": "Your goals score only control of J0."}}
     assert SC.validate(sp) == []
     inst = generator.generate(sp, 1)
     k = Kernel(inst)
-    sysp = AG.system_prompt(inst, next(x for x in inst["agents"] if x["id"] == a))
-    assert "Your situation: You must take the Commonwealth." in sysp
-    assert "Your situation" not in AG.system_prompt(inst, next(x for x in inst["agents"] if x["id"] == b))
-    avail = {x.name for x in AR.available(inst, k, k.w["agents"][a])}
-    assert not {"found", "leave"} & avail and "found" in {x.name for x in AR.available(inst, k, k.w["agents"][b])}
-    with pytest.raises(A.ActionError, match="found is not open to you in this world. You must take"):
-        A.act(k, a, "found", {"name": "Exile"})
-    assert isinstance(A.act(k, b, "found", {"name": "Free Port"}), str)                    # others unaffected
-    assert AGR.denied(k, b) == frozenset()
-    bad = dict(sp, agent_rules={a: {"deny": ["fond"]}, "Nobody": {"briefing": "x"}})
-    assert any("did you mean 'found'" in e for e in SC.validate(bad))
+    agent = lambda n: next(x for x in inst["agents"] if x["id"] == n)
+    assert "Your situation: Your goals score only control of J0." in AG.system_prompt(inst, agent(a))
+    assert "Your situation" not in AG.system_prompt(inst, agent(b))
+    assert "found" in {x.name for x in AR.available(inst, k, k.w["agents"][a])}          # informs only: nothing is denied
+    bad = dict(sp, agent_rules={a: {"brefing": "x"}, "Nobody": {"briefing": "x"}})
+    assert any("did you mean 'briefing'" in e for e in SC.validate(bad))
     with pytest.raises(ValueError, match="no agent 'Nobody'"):
-        Kernel(dict(inst, spec=bad))
+        Kernel(dict(inst, spec=dict(sp, agent_rules={"Nobody": {"briefing": "x"}})))

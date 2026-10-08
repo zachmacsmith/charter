@@ -1,34 +1,34 @@
-"""Per-agent scenario rules (spec `agent_rules`, default empty: nothing changes): a briefing and denied actions for named agents.
+"""Per-agent scenario rules (spec `agent_rules`, default empty: nothing changes). Today: a briefing for named agents.
 
     agent_rules:
-      Siv: {briefing: "You cannot found a new jurisdiction ...", deny: [found, join, leave, declare, set_charter]}
+      Siv: {briefing: "Your goals score only control of the existing Commonwealth (J0) ..."}
 
-  briefing  a short text shown every turn as "Your situation: ..." in the agent's system prompt (core layer: after its identity;
-            legacy layer: the same), so it is in every model call
-  deny      actions the kernel refuses for that agent (actions.act raises "<action> is not open to you in this world"), and which
-            are left out of its action list (action_registry.available). An experimental-contract rule (review 12 tier X): a
-            restriction the scenario imposes on one agent, not physics and not law; no law can lift it.
-Names are checked when a world is built (Kernel construction): an unknown agent or action is an error with a did-you-mean.
+  briefing  a short text shown as "Your situation: ..." in the agent's system prompt (core layer: after its identity; legacy layer:
+            the same), so it is in every model call. It informs; it restricts nothing (the agent may still do anything the world
+            allows).
+Names are checked when a world is built (Kernel construction) and keys by the schema: an unknown agent or key is an error with a
+did-you-mean.
 """
 from __future__ import annotations
 
 import difflib
 
-FIELDS = ("briefing", "deny")
+FIELDS = ("briefing",)
 
 
 def rules(x) -> dict:
-    """{agent: {briefing, deny}} from a spec, an instance or a kernel ({} when unset)."""
-    sp = x.spec if hasattr(x, "spec") and not isinstance(x, dict) else (x.get("spec") if isinstance(x, dict) and isinstance(x.get("spec"), dict) else x)
+    """{agent: {briefing}} from a spec, an instance or a kernel ({} when unset)."""
+    if hasattr(x, "spec") and not isinstance(x, dict):
+        sp = x.spec
+    elif isinstance(x, dict) and isinstance(x.get("spec"), dict):
+        sp = x["spec"]
+    else:
+        sp = x
     return (sp or {}).get("agent_rules") or {}
 
 
 def briefing(x, aid) -> str:
     return str((rules(x).get(aid) or {}).get("briefing") or "").strip()
-
-
-def denied(x, aid) -> frozenset:
-    return frozenset((rules(x).get(aid) or {}).get("deny") or ())
 
 
 def _close(v, pool) -> str:
@@ -37,18 +37,12 @@ def _close(v, pool) -> str:
 
 
 def check_spec(path, v) -> list:
-    """schema check for agent_rules.<name>: {briefing: str, deny: [action names]}."""
-    from charter import action_registry as AR
+    """schema check for agent_rules.<name>: {briefing: str}."""
     if not isinstance(v, dict):
-        return [f"{path}: expected {{briefing, deny}}, got {v!r}"]
+        return [f"{path}: expected {{briefing}}, got {v!r}"]
     errs = [f"{path}.{k}: unknown key{_close(k, FIELDS)}" for k in v if k not in FIELDS]
     if "briefing" in v and not isinstance(v["briefing"], str):
         errs.append(f"{path}.briefing: expected text")
-    deny = v.get("deny") or []
-    if not isinstance(deny, list):
-        errs.append(f"{path}.deny: expected a list of action names")
-    else:
-        errs += [f"{path}.deny: unknown action {a!r}{_close(a, AR.REG)}" for a in deny if a not in AR.REG]
     return errs
 
 

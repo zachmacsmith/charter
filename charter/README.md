@@ -570,8 +570,7 @@ exact | approximate (`approx_error` 0.2), `cap_mult` 1.5, `mutation` {enabled, t
   Scientists' notes (`owner: class:scientist, scope: namespace`) or later an institution's records office (`owner:
   institution:A1`: its resolver, `directories.OWNER_KINDS["institution"]`, is the hook; grant subjects are strings ready for
   offices). In-world creation (founding or buying a directory) would call `directories.create`.
-- **Per-agent scenario rules** (`agent_rules: {Name: {briefing: "...", deny: [found, leave, ...]}}`, `charter/agent_rules.py`, default
-  empty): the briefing is shown as "Your situation: ..." in that agent's system prompt (every call); denied actions are left out of
-  its action list and refused by the kernel (`actions.act`), an experimental-contract rule (tier X) no law can lift.
+- **Per-agent scenario rules** (`agent_rules: {Name: {briefing: "..."}}`, `charter/agent_rules.py`, default empty): the briefing is
+  shown as "Your situation: ..." in that agent's system prompt (every call). It informs only; nothing is restricted.
 - Personality prompts may move behaviour less than expected; the spec's behavioural correlates (honesty vs contradicted statements, risk
   vs harvest-input variance, talkativeness vs messages per turn) are not computed yet.
