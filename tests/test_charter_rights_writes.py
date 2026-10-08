@@ -1,7 +1,7 @@
 """P2.4d (ARCHITECTURE §11, review 03 §2.1, review 04 §4.1, review 08): rights change through the kernel's primitives only.
 
-An agent's rights list (k.w["agents"][aid]["rights"]) and the rights catalogue (k.w["rights"]) are written by charter/dispatch.py
-(grant_right, revoke_right, create_right: their physics checks and their `rights` events) and by the kernel itself. A grep over the
+An agent's rights list (k.w["agents"][aid]["rights"]) and the rights catalogue (k.w["rights"]) are written by charter/dispatch/changes/
+status.py (grant_right, revoke_right, create_right: their physics checks and their `rights` events) and by the kernel itself. A grep over the
 package's source (an AST walk, so formatting does not hide a write) finds every write to a `["rights"]` subscript (assignment,
 augmented assignment, tuple assignment, a mutating method call) and every mutating call on a local named `rights`. Each one outside
 the kernel and the dispatcher must be listed below with its reason. The list may only shrink: the packages that own the remaining
@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent / "charter"
 ALLOWED_FILES = {"kernel.py": "the kernel (Kernel.__init__, checkpoint migration of renamed rights)",
-                 "dispatch.py": "the primitives' changes: do_grant_right, do_revoke_right, do_create_right"}
+                 "dispatch/changes/status.py": "the primitives' changes: do_grant_right, do_revoke_right, do_create_right"}
 MUTATORS = {"append", "remove", "extend", "sort", "insert", "clear", "pop", "reverse"}
 
 # (file relative to charter/, qualname) -> why the write is not (yet) through grant_right/revoke_right/create_right

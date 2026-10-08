@@ -220,7 +220,7 @@ def test_swap_is_both_legs_or_neither_and_conserves():
     e = events(k, "contract_swap")[-1]
     assert e["data"]["give"] == {"timber": 2.0} and set(e["vis"]) >= {a, b}
     p = PR.get("swap")
-    assert p.fn == "dispatch:do_swap" and "swap" in p.compel and p.hooks == ("before_swap", "after_swap")
+    assert p.fn == "dispatch.changes.associations:do_swap" and "swap" in p.compel and p.hooks == ("before_swap", "after_swap")
     assert LA.LAWFNS["swap"].contract == "escrow" and LA.LAWFNS["open_fund"].contract == "allow"
     with pytest.raises(L.LawError, match="a contract's law only|only in a contract"):
         k.api_for(k.active_laws()[0]["id"])["swap"](a, b, {"timber": 1}, {"grain": 1})

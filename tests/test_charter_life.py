@@ -292,18 +292,19 @@ def test_life_primitives_end_life_estate_departure_and_begin_life():
     assert gone["holdings"] == held and k.w["agents"][c]["holdings"] == held and k.events[-1]["type"] == "departure"
     assert c not in MO.state(k)["estates"] and not any(ev["type"] == "disabled" and ev["data"]["agent"] == c for ev in k.events)
     seen = []
-    orig = D.chain_for
+    from charter.dispatch import routing as DR                              # W8a: patched where apply looks it up
+    orig = DR.chain_for
     d = plain(k)[0]
     LF.state(k)["dies_at"][d] = k.r
     try:
-        D.chain_for = lambda k_, name: seen.append((name, orig(k_, name))) or orig(k_, name)
+        DR.chain_for = lambda k_, name: seen.append((name, orig(k_, name))) or orig(k_, name)
         k.move(d, b, "timber", 0.0)                                            # (a no-op: no chain)
         with k.cause("world", "ageing", agent=d, root=True):
             assert k.chain()[0]["kind"] == "world"
             k.move(b, d, "timber", 1.0, why="transfer")
             MO.disable(k, d, "old_age")
     finally:
-        D.chain_for = orig
+        DR.chain_for = orig
     assert seen and all(ch[0]["kind"] == "world" for _, ch in seen)
     assert "on_birth" not in [x.name for x in D.ALIASES_BEFORE["begin_life"]]    # a phase step dispatches it (assign_newborn)
 

@@ -55,14 +55,14 @@ FUND = "fund:"                                                    # P4.4: a per-
 # and a funded project's spent pool (the conservation test reads them from the begin_life change, the `move ... dst destroyed`
 # events and the projects' `spent` records).
 SOURCES_SINKS = {
-    "mint": ("dispatch.do_mint", "jurisdictions.mint", "interventions._mint",
+    "mint": ("economy.do_mint", "jurisdictions.mint", "interventions._mint",
              "conflict.install", "conflict.start_round", "conflict.resolve_attacks"),   # coins; starting arms; forts back to stone
-    "harvest": ("dispatch.do_harvest", "framework.pay_yield"),                           # yields (camp stock is not an account)
-    "burn": ("dispatch.do_burn", "interventions._burn"),
-    "destroy": ("dispatch.do_destroy", "actions._harvest", "framework.harvest_action", "resources.pay",
+    "harvest": ("economy.do_harvest", "framework.pay_yield"),                           # yields (camp stock is not an account)
+    "burn": ("economy.do_burn", "interventions._burn"),
+    "destroy": ("economy.do_destroy", "actions._harvest", "framework.harvest_action", "resources.pay",
                 "resources.upkeep_start_round", "conflict._take", "conflict._spoils", "conflict.act_forge",
                 "conflict.act_fortify", "conflict.act_buy_initiative",                  # consumed, spent, destroyed or converted
-                "conflict.fort_change", "dispatch.do_convert", "conflict.commit", "conflict.pledge",
+                "conflict.fort_change", "economy.do_convert", "conflict.commit", "conflict.pledge",
                 "conflict._release_pledge"),        # P2.4a: stone into and out of forts, forging, weapons committed/pledged/returned
 }
 

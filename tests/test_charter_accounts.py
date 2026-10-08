@@ -147,7 +147,8 @@ def ledger_run(preset, seed=1, rounds=3, sets=()):
     from charter import agents as AG, runner
     flows, ks = {}, []
     oi, oa = Kernel.__init__, Kernel._add
-    obegin = D.do_begin_life
+    from charter.dispatch.changes import lifecycle as DL                 # W8a: patched where apply resolves the row's fn
+    obegin = DL.do_begin_life
 
     def note(site, item, qty):
         f = flows.setdefault(site, {})
@@ -170,7 +171,7 @@ def ledger_run(preset, seed=1, rounds=3, sets=()):
                 note("events.arrival", i, q)
         return out
 
-    Kernel.__init__, Kernel._add, D.do_begin_life = init, add, begin
+    Kernel.__init__, Kernel._add, DL.do_begin_life = init, add, begin
     D._FNS.pop("begin_life", None)
     try:
         sp = S.apply_overrides(S.load(preset), [f"rounds={rounds}", "shared_archive.enabled=false", *sets])
@@ -179,7 +180,7 @@ def ledger_run(preset, seed=1, rounds=3, sets=()):
         with tempfile.TemporaryDirectory() as d:
             runner.run(inst, AG.ScriptedPolicy(seed), Path(d) / "out", log=lambda *a: None)
     finally:
-        Kernel.__init__, Kernel._add, D.do_begin_life = oi, oa, obegin
+        Kernel.__init__, Kernel._add, DL.do_begin_life = oi, oa, obegin
         D._FNS.pop("begin_life", None)
     k, t0 = ks[0]
     for e in k.events:                                                  # goods destroyed out of an escrow (life's agent_creation)
@@ -202,5 +203,5 @@ def test_totals_are_conserved_except_at_sources_and_sinks(preset):
         accounted = sum(f.get(item, 0.0) for site, f in flows.items() if site in explicit)
         assert change == pytest.approx(accounted, abs=1e-6), (item, change, accounted,
                                                                {s: f[item] for s, f in flows.items() if abs(f.get(item, 0)) > 1e-9})
-    moved = flows.get("dispatch._move", {})
+    moved = flows.get("economy._move", {})
     assert all(abs(q) < 1e-6 for q in moved.values())                    # every move takes exactly what it gives

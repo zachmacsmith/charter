@@ -268,10 +268,14 @@ def test_routed_rows_name_dispatch_functions():
     want |= {"swap", "open_fund"}                                     # P4.4 (W6e)
     want |= {"authorize", "deauthorize", "act_for"}                   # P4.5 (W7a): agency
     assert set(D.ROUTED) == want
+    assert set(D.ROUTED) == {n for n, p in PR.PRIMITIVES.items() if p.routed}                    # W8a: the explicit flag
     for n in want:
         p = PR.get(n)
-        assert p.fn == f"dispatch:do_{n}" and p.fn in p.sites and callable(getattr(D, f"do_{n}"))
+        mod, _, qual = p.fn.partition(":")
+        assert p.routed and mod.startswith("dispatch.") and qual == f"do_{n}" and p.fn in p.sites, p.fn
+        assert D._fn(p) is getattr(D, f"do_{n}") and callable(D._fn(p))                         # the package re-exports it
         assert set(D.OPTIONS[n]).isdisjoint(p.params), n
+    assert not any(p.routed for n, p in PR.PRIMITIVES.items() if n not in want)
 
 
 def test_apply_returns_an_outcome_and_refuses_with_physics_errors(k):
