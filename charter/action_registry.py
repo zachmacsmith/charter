@@ -21,6 +21,7 @@ An entry:  register(name, purpose, section, core=False, pre=False, msg=False, ne
               "level:<n>"     law level at least Ln
               "law:<key>"     spec law.<key> is true (e.g. "law:v2": the legal system v2)
               "any:<a>|<b>"   at least one of the requirements a, b, ... (e.g. "any:mod:hidden|level:4")
+              "dir:any"       directories are provisioned (charter/directories.py) and, without a kernel, the agent owns one
   edge      rights that make a core action part of the holder's edge though it does not require them ("harvest:*" any harvest
             right): open camps let anyone harvest, but the rights holders are the ones it is an edge for
   when      optional state check (inst, k, a, rights) -> bool, for things that come and go (a loan law, an open poll, a group);
@@ -50,18 +51,19 @@ from typing import Callable
 
 CORE_ORDER = ("TALK AND TRADE", "INFORMATION", "MEMORY", "PRODUCE", "POLITICS", "FORCE", "LINEAGE")
 NICHE_ORDER = ("your role", "camps", "commons", "files", "press", "finance", "jurisdictions", "contracts", "courts", "force, more",
-               "inheritance", "groups", "powers")
+               "inheritance", "groups", "powers", "directories")
 NICHE_PHRASE = {"your role": "use your role's other tools", "camps": "survey, improve or lease camps",
                 "commons": "fund projects or pay the tribute", "files": "keep files, pin them or buy memory from a Scholar",
                 "press": "subscribe to outlets, buy placements, leak, answer polls, post anonymously or use the library",
                 "finance": "lend, borrow and use coins", "jurisdictions": "found, fund or join jurisdictions",
                 "contracts": "found, join or leave contracts (clubs, companies, crowdfunds, cartels, exchanges)",
                 "courts": "go to court or call the Fixer", "force, more": "guard others, join attacks, hire the assassin or buy initiative",
-                "inheritance": "decide your inheritance or copy an agent", "groups": "run private groups", "powers": "use a word of power or an action a law defined"}
+                "inheritance": "decide your inheritance or copy an agent", "groups": "run private groups", "powers": "use a word of power or an action a law defined",
+                "directories": "move, delete or share files in your directories"}
 UNIVERSAL_RIGHTS = ()                                                   # rights everyone holds (none at present): never an edge
 CATEGORIES = ("productive", "economic", "political", "talk")           # activity categories, in scorer.CATEGORIES' key order
 MODULES = ("core", "context", "camps", "credit", "projects", "outside", "mortality", "life", "roles", "conflict", "jurisdictions",
-           "media", "scholars", "contracts")
+           "media", "scholars", "contracts", "directories")
 
 
 @dataclass(frozen=True)
@@ -160,6 +162,9 @@ def _need(inst, a, rights, n) -> bool:
         return v not in _classes(a)
     if kind == "law":
         return bool((inst["spec"].get("law") or {}).get(v))
+    if kind == "dir":                                                  # directories: provisioned, and (before a kernel exists) owned
+        from charter import directories as DR                          # by the agent (grantees appear once granted: `when`)
+        return DR.static_access(inst, a)
     if kind == "level":
         return ["L0", "L1", "L2", "L3", "L4"].index(inst["law_level"]) >= int(v)
     raise ValueError(f"unknown requirement {n!r}")
@@ -645,6 +650,56 @@ R("invoke", "use a hidden power you know, or an action a law defined", "powers",
   doc='invoke {"action": "name", "args": [...]}: use an action a law defined, if you hold its right')
 
 
+# directories (charter/directories.py): shown only to agents who can reach a directory (its owner, or a grantee)
+def _k_dirs(inst, k, a, r):
+    from charter import directories as DR
+    return DR.has_any(inst, k, a, r)
+def _k_dirs_write(inst, k, a, r):
+    from charter import directories as DR
+    return DR.can_write_any(inst, k, a, r)
+def _k_dirs_owner(inst, k, a, r):
+    from charter import directories as DR
+    return DR.owns_any(inst, k, a, r)
+
+
+_DIR = ' ("dir" may be left out when you can reach one directory)'
+R("dir_list", "list the files of a directory you can read", "INFORMATION", core=True, pre=True, needs=("dir:any",),
+  when=_k_dirs, args='{"prefix": "people/"}', handler="directories:dir_list", module="directories", category="productive",
+  aliases={"folder": "prefix", "directory": "dir"},
+  doc='dir_list {"dir": "chronicle", "prefix": "people/"}: the files (and sizes) of a directory you can read' + _DIR)
+R("dir_read", "read a file of a directory", "INFORMATION", core=True, pre=True, needs=("dir:any",), when=_k_dirs,
+  args='{"path": "rounds/r01.md"}', handler="directories:dir_read", module="directories", category="productive",
+  aliases={"file": "path", "name": "path", "directory": "dir", "start": "from_line", "end": "to_line"},
+  doc='dir_read {"dir": "chronicle", "path": "rounds/r01.md", "from_line": 1, "to_line": 400}: a file with line numbers' + _DIR)
+R("dir_search", "search the files of a directory", "INFORMATION", core=True, pre=True, needs=("dir:any",), when=_k_dirs,
+  args='{"query": "..."}', handler="directories:dir_search", module="directories", category="productive",
+  aliases={"q": "query", "folder": "prefix", "directory": "dir"},
+  doc='dir_search {"dir": "chronicle", "query": "Siv treasury", "prefix": "evidence/"}: lines containing every word, with paths '
+      'and line numbers' + _DIR)
+R("dir_write", "write or append to a file of a directory", "MEMORY", core=True, needs=("dir:any",), when=_k_dirs_write,
+  handler="directories:dir_write", module="directories", category="productive",
+  aliases={"file": "path", "name": "path", "content": "text", "directory": "dir"},
+  doc='dir_write {"dir": "chronicle", "path": "people/Siv.md", "text": "...", "mode": "replace"}: create or replace a file '
+      '("append" adds to it); paths are relative, folders made as needed' + _DIR)
+R("dir_edit", "replace text inside a file of a directory", "MEMORY", core=True, needs=("dir:any",), when=_k_dirs_write,
+  handler="directories:dir_edit", module="directories", category="productive",
+  aliases={"file": "path", "old": "find", "new": "replace", "directory": "dir"},
+  doc='dir_edit {"dir": "chronicle", "path": "timeline.md", "find": "exact old text", "replace": "new text"}: every exact match '
+      'is replaced' + _DIR)
+R("dir_move", "move or rename a file of a directory", "directories", needs=("dir:any",), when=_k_dirs_write,
+  handler="directories:dir_move", module="directories", category="productive",
+  aliases={"file": "path", "new_path": "to", "directory": "dir"},
+  doc='dir_move {"dir": "chronicle", "path": "notes.md", "to": "evidence/notes.md"}: move or rename a file' + _DIR)
+R("dir_delete", "delete a file of a directory", "directories", needs=("dir:any",), when=_k_dirs_write,
+  handler="directories:dir_delete", module="directories", category="productive", aliases={"file": "path", "directory": "dir"},
+  doc='dir_delete {"dir": "chronicle", "path": "draft.md"}: delete a file' + _DIR)
+R("dir_grant", "let another agent read or write part of your directory", "directories", needs=("dir:any",),
+  when=_k_dirs_owner, handler="directories:dir_grant", module="directories", category="talk",
+  aliases={"to": "agent", "grantee": "agent", "level": "access", "directory": "dir"},
+  doc='dir_grant {"dir": "chronicle", "agent": "Name", "path": "people/", "access": "read"}: owners only; give an agent read or '
+      'write access to a file, a folder ("people/") or everything (""); access "none" revokes' + _DIR)
+
+
 # ---------------------------------------------------------------------- frozen older orders (see the module docstring)
 # actions.ACTIONS: the order the "unknown action" error lists actions in (it reaches logged results)
 ACTIONS_ORDER = (
@@ -661,7 +716,8 @@ ACTIONS_ORDER = (
     "answer_poll", "buy_licence", "set_memory_price", "library_permit", "library_remove", "buy_memory", "library_deposit",
     "library_read", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance", "propose_contract_change",
     "appeal", "legal_position",
-    "authorize", "revoke_authorization", "act_for", "standing_order")    # P4.5
+    "authorize", "revoke_authorization", "act_for", "standing_order",    # P4.5
+    "dir_list", "dir_read", "dir_search", "dir_write", "dir_edit", "dir_move", "dir_delete", "dir_grant")   # directories
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -676,7 +732,8 @@ DOC_ORDER = (
     "grant_licence", "buy_licence", "annotate", "set_memory_price", "buy_memory", "library_deposit", "library_read",
     "library_permit", "library_remove", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance",
     "propose_contract_change", "appeal", "legal_position",
-    "authorize", "revoke_authorization", "act_for", "standing_order")    # P4.5
+    "authorize", "revoke_authorization", "act_for", "standing_order",    # P4.5
+    "dir_list", "dir_read", "dir_search", "dir_write", "dir_edit", "dir_move", "dir_delete", "dir_grant")   # directories
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 

@@ -282,6 +282,20 @@ def rewind(run, to: int, out, kind: str = "rewind", parent_extra: dict | None = 
         st["published"] = kept                                          # the parent's writes are the parent's to publish
         st.pop("published_at", None)
         (out / archive.FROZEN_DIR / "state.json").write_text(json.dumps(st, indent=1))
+    from charter import directories as DR
+    if (run / DR.FROZEN_DIR / "base.json").exists():                    # the frozen directories: base, and the parent's write-backs
+        (out / DR.FROZEN_DIR).mkdir()                                   # are the parent's (the branch writes back only its own changes)
+        shutil.copy2(run / DR.FROZEN_DIR / "base.json", out / DR.FROZEN_DIR / "base.json")
+        try:
+            st = json.loads((run / DR.FROZEN_DIR / "state.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            st = {}
+        import pickle
+        w = pickle.loads((run / runner.CKPT_DIR / ent["file"]).read_bytes())["kernel"]["w"]
+        st["published"] = {n: {p: PV.put_blob(out, t) for p, t in sorted(d["files"].items())} for n, d in (w.get("dirs") or {}).items()
+                           if d.get("scope") == "namespace"}
+        st.pop("written_back_at", None)
+        (out / DR.FROZEN_DIR / "state.json").write_text(json.dumps(st, indent=1))
     snaps = json.loads((run / "snapshots.json").read_text())[:ent["counts"]["snapshots"]]
     (out / "snapshots.json").write_text(json.dumps(snaps, default=list))
     if (run / "ground_truth.json").exists():

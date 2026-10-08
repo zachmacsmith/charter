@@ -41,6 +41,7 @@ from pathlib import Path
 from charter import actions as A
 from charter import agents as AG
 from charter import archive
+from charter import directories as DR
 from charter import code as DC                                        # the default code (code.enabled; review 12 WP3)
 from charter import context as CX                                     # context: fixed-layer prompts and lookups (charter/context.py)
 from charter import conflict as CF
@@ -224,18 +225,21 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
     out.mkdir(parents=True, exist_ok=True)
     resuming = resume and (out / "checkpoint.pkl").exists()
     fz = archive.Frozen.open(out, inst["spec"], resume=resuming, base_from=archive_from, publish=publish_archive)
+    dz = DR.Frozen.open(out, inst["spec"], resume=resuming, base_from=archive_from, publish=publish_archive,
+                        dry=PV.policy_info(policy, inst, dry)["dry"])   # directories: frozen per run, written back (None: off)
     if fz is None:                                                      # the shared archive is off
-        return _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_source, until, keep_checkpoints, schedule)
+        return _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_source, until, keep_checkpoints, schedule,
+                    dz=dz)
     if not resuming:
         fz.rebuild()                                                    # a resume rebuilds once the overlay is cut to the checkpoint
     with fz.bind(inst["spec"]):
         res = _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_source, until, keep_checkpoints, schedule,
-                   fz=fz)
+                   fz=fz, dz=dz)
     return res
 
 
 def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_source, until, keep_checkpoints, schedule,
-         fz=None) -> Path:
+         fz=None, dz=None) -> Path:
     k = Kernel(inst, sandbox)
     agents = {a["id"]: a for a in inst["agents"]}
     ckpt_path = out / "checkpoint.pkl"
@@ -265,6 +269,8 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         _apply_live(k, inst, dict(k.w.get("live") or {}), log, announce=False)   # settings switched on in earlier resumes
     else:
         shared_snap = archive.snapshot(k.shared_archive)
+        if dz is not None:                                              # directories: the working copies start from the frozen base
+            dz.load(k)
         k.begin_round_cause(phase="setup")                              # provenance: constitution, statutes, start laws
         (out / "instance.json").write_text(json.dumps(inst, indent=1, default=str))
         freeze_common_text(out, inst)                                   # Leaker's common text as the agents see it (P6.2)
@@ -289,6 +295,8 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
     k.sandbox = SB.Recording(k.sandbox, out, k, append=resuming)       # sandbox.jsonl + blobs: replay serves the outputs
     if fz is not None:
         PV.annotate(out, shared_archive=fz.info())                     # the frozen base's hash (run.json)
+    if dz is not None:
+        PV.annotate(out, directories=dz.info())                        # the frozen directories' hash (run.json)
     notes, cursors, results, guesses = rs.notes, rs.cursors, rs.results, rs.guesses
     welfare_series, start_values, shared_snap, const = rs.welfare_series, rs.start_values, rs.shared_snap, rs.const
     obs = OBS.start(inst, out, k, ck["runner"].get("observer") if resuming else None)   # secret observer or None
@@ -613,6 +621,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         k.end_round(run_probes(inst))                                   # snapshot["probes"]: library and goal probes (P6.2)
         k.snapshots[-1]["welfare"] = welfare(k)
         k.snapshots[-1].update(R.round_record(k))                       # role holders this round, secret ones too (monitor-only)
+        k.snapshots[-1].update(DR.round_record(k))                      # directories: each file's index (monitor-only; off: nothing)
         welfare_series.append(k.snapshots[-1]["welfare"])
         k.phase("editorial")
         MD.editorial_turns(k, PV.Keyed(policy, phase="editorial"), agents, sysp, in_parallel, reason_f, results, r, final)   # media2: editors write next round's editions
@@ -625,6 +634,8 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=False)
         reason_f.flush()
         _checkpoint(ckpt_path, r, k, runner_state(), offsets(), keep)
+        if dz is not None and r + 1 < inst["rounds"]:                   # directories: written back at each checkpoint (the last: below)
+            dz.write_back(k)
         _live(out, f"round {r + 1} of {inst['rounds']} complete", full=True)
         log(f"  round {r + 1}/{inst['rounds']} done ({time.time() - t0:.0f}s): laws {len(k.active_laws())}, "
             f"currencies {list(k.w['currencies'])}, decisive set {len(k.snapshots[-1]['decisive_set'])}")
@@ -638,6 +649,10 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         n = fz.publish()
         if n:
             log(f"  published {n} shared-archive write(s) to {fz.live}")
+    if dz is not None:                                                  # directories: write back; a complete run adds its record
+        n = dz.finish(k, out.name, k.events, inst) if complete else dz.write_back(k)
+        if n:
+            log(f"  wrote back {n} directory file(s)")
     _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_snap, complete=complete)
     PV.end(out, "complete" if complete else "paused", last_round - 1)
     return out

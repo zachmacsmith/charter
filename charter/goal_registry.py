@@ -1012,6 +1012,16 @@ _INSTITUTION_ROWS = [
               'rounds after which {crew} held weapons or a fort; (c) 1 if the share of payers attacked is below{ties_rule} the '
               'share of the other agents (neither payers nor {crew}) attacked, else 0. 0 without payers.',
          params=IG.defaults_sampler("Protection racket"), score=IG.h_protection, needs=frozenset({'events', 'states'})),
+    # Not an institution goal, but kept with them for the same reasons (never drawn: weight 0; assigned with goals.explicit; text
+    # then rule shown): the Historian's goal, scored on its directory (charter/directories.py, snapshot["directories"]).
+    Goal('Chronicler', 'Knowledge', 0, gate="institution", requires=('directories',), share="direct",
+         text='write the history of this world in your {dir}: round-by-round accounts (rounds/r01.md, ...), profiles of '
+              'individuals (people/<Name>.md) and evidence (evidence/), covering this world and what earlier worlds left',
+         rule='Over the scored rounds, for the directory {dir} (0 unless you kept it), {combine}: (a) the share of the scored '
+              'rounds named by a file of at least {min_bytes} bytes (in its path, as rounds/r03.md does, or as "round 3" in its '
+              'text); (b) the share of the other agents named in a file of at least {min_bytes} bytes under people/; (c) the '
+              'files of at least {min_bytes} bytes under evidence/ / {evidence}, capped at 1. Files under _records/ do not count.',
+         params=IG.defaults_sampler("Chronicler"), score=IG.h_chronicler, needs=frozenset({'states'})),
 ]
 
 
@@ -1054,6 +1064,17 @@ INSTITUTION_EXAMPLES = {
                           ex("A", {"ties": "fail"}, 4 / 9, per_round=[{"conflict": {"forts": {"A": 1}}}] * 4,
                              events=[(r, "move", "B", {"src": "B", "dst": "A", "item": "timber", "qty": 1.0, "why": "transfer"})
                                      for r in (0, 1, 2)])),
+    "Chronicler": (ex("A", {}, 14 / 45, final={"directories": {"chronicle": {"owners": ["A"], "files": {
+                       "rounds/r01.md": {"bytes": 300, "rounds": [1], "agents": []},
+                       "rounds/r02.md": {"bytes": 300, "rounds": [2], "agents": ["B"]},
+                       "people/B.md": {"bytes": 300, "rounds": [], "agents": ["B"]},
+                       "evidence/e1.md": {"bytes": 300, "rounds": [2], "agents": []},
+                       "people/C.md": {"bytes": 50, "rounds": [], "agents": ["C"]}}}}}),       # (a) 2/4, (b) 1/3, (c) 1/10
+                   ex("B", {}, 0.0, final={"directories": {"chronicle": {"owners": ["A"], "files": {
+                       "rounds/r01.md": {"bytes": 300, "rounds": [1], "agents": []}}}}}),     # B never kept it
+                   ex("A", {"evidence": 1, "scoring": "all"}, 1.0, rounds=1, names=("A", "B"), final={"directories": {
+                       "chronicle": {"owners": ["A"], "files": {"people/B.md": {"bytes": 900, "rounds": [1], "agents": ["B"]},
+                                                                "evidence/x.md": {"bytes": 200, "rounds": [], "agents": []}}}}})),
 }
 INSTITUTION = {g.name: replace(g, examples=INSTITUTION_EXAMPLES.get(g.name, ())) for g in _INSTITUTION_ROWS}
 assert set(IG.DEFAULTS) == set(INSTITUTION) == set(IG.HSCORERS) and not set(INSTITUTION) & set(GOALS)

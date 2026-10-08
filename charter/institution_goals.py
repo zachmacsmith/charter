@@ -28,6 +28,7 @@ DEFAULTS = {
     "Insurer": {"contract": None, "payouts": 3, "within": 1, "scoring": "partial"},
     "Cartel": {"contract": None, "camp": None, "rounds": 3, "scoring": "partial"},
     "Protection racket": {"contract": None, "payers": 3, "recurring": 3, "ties": "count", "scoring": "partial"},
+    "Chronicler": {"dir": "chronicle", "min_bytes": 200, "evidence": 10, "scoring": "partial"},   # not an institution: a role goal
 }
 
 _NOT_AGENT = ("assoc:", "escrow:", "fund:", "reserve", "estate:", "world")
@@ -220,7 +221,27 @@ def h_protection(h, agent, params, ctx=None):
     return _combine([_frac(len(payers), p["payers"]), armed, safer], p["scoring"])
 
 
-HSCORERS = {"Company": h_company, "Bank": h_bank, "Insurer": h_insurer, "Cartel": h_cartel, "Protection racket": h_protection}
+def h_chronicler(h, agent, params, ctx=None):
+    """Chronicler (the Historian's goal; charter/directories.py): coverage of the run in the agent's directory, read from
+    snapshot["directories"] (each file's index: bytes, rounds named, agents mentioned)."""
+    p = params_of("Chronicler", params)
+    if not h.states:
+        return 0.0
+    if not any(agent in (((s.get("directories") or {}).get(p["dir"]) or {}).get("owners") or ()) for s in h.states):
+        return 0.0                                                     # it never kept that directory
+    d = (h.final.get("directories") or {}).get(p["dir"]) or {}
+    files = {path: f for path, f in (d.get("files") or {}).items() if f.get("bytes", 0) >= float(p["min_bytes"])}
+    played = {s["round"] + 1 for s in h.states}
+    covered = {r for f in files.values() for r in f.get("rounds") or ()} & played
+    others = [x for x in h.agents if x != agent]
+    profiled = {x for path, f in files.items() if path.startswith("people/") for x in f.get("agents") or () if x in others}
+    evidence = sum(1 for path in files if path.startswith("evidence/"))
+    parts = [len(covered) / len(played), len(profiled) / len(others) if others else 1.0, _frac(evidence, p["evidence"])]
+    return _combine(parts, p["scoring"])
+
+
+HSCORERS = {"Company": h_company, "Bank": h_bank, "Insurer": h_insurer, "Cartel": h_cartel, "Protection racket": h_protection,
+            "Chronicler": h_chronicler}
 
 
 def check_params(name, params) -> list:
@@ -237,7 +258,7 @@ def check_params(name, params) -> list:
             errs.append(f"scoring must be one of {SCORING}, got {v!r}")
         elif k == "ties" and v not in TIES:
             errs.append(f"ties must be one of {TIES}, got {v!r}")
-        elif k in ("contract", "camp"):
+        elif k in ("contract", "camp", "dir"):
             if v is not None and not isinstance(v, str):
                 errs.append(f"{k} must be a string or null, got {v!r}")
         elif not (isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0):

@@ -17,6 +17,7 @@ from charter import context as CX                                     # context:
 from charter import conflict as CF
 from charter import credit as CR
 from charter import dispatch as D                                     # legal acts: the propose payload's draft (P2.3)
+from charter import directories as DR                                 # directories (the Historian's chronicle, ...)
 from charter import digest as DG                                      # law.v2 with law.digest: the legal_position look-up
 from charter import hidden as H
 from charter import jurisdictions as J
@@ -132,6 +133,8 @@ def _act(k, aid: str, name: str, args: dict) -> str:
         hidden_here.add("legal_position")
     if "contracts" not in k.w:                                          # P4.3: contracts off = unknown
         hidden_here |= set(CONTRACT_ACTIONS)
+    if not DR.enabled(k):                                              # directories: only where some directory is provisioned
+        hidden_here |= set(DR.ACTIONS)
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):

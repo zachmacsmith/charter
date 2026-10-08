@@ -111,6 +111,8 @@ class Kernel:
             "loans": {}, "loan_seq": 0, "loan_law": None, "loan_enforce": False,
         }
         PUB.install(self)                                              # law.publication: the store (off: nothing)
+        from charter import directories as DR
+        DR.install(self)                                               # directories (the Historian's chronicle; off: nothing)
         for a in self.w["agents"].values():
             a["start_value"] = self.holdings_value(a["id"])
         def effects():                                                   # per-round effects, efficiency and the turn log

@@ -643,6 +643,9 @@ def lookup(k, aid, name, args: dict) -> str:
     if name == "legal_position":                                        # law.v2 with law.digest (charter/digest.py)
         from charter import digest as DG
         return DG.act_legal_position(k, aid)
+    from charter import directories as DR
+    if name in DR.LOOKUPS and DR.enabled(k):                            # directories: list, read, search (access checked there)
+        return DR.lookup(k, aid, name, args)
     raise _error(f"no lookup {name!r}; lookups: {', '.join(lookup_names(k))}")
 
 
@@ -651,7 +654,9 @@ def lookup_names(k) -> tuple:
     _lookups(v) below used to shadow it, so the error above called the section with a kernel."""
     from charter import lawpreview as LP
     from charter import digest as DG
-    return tuple(n for n in LOOKUPS if (n != "preview_law" or LP.enabled(k)) and (n != "legal_position" or DG.enabled(k)))
+    from charter import directories as DR
+    return tuple(n for n in LOOKUPS if (n != "preview_law" or LP.enabled(k)) and (n != "legal_position" or DG.enabled(k))) \
+        + (DR.LOOKUPS if DR.enabled(k) else ())
 
 
 def dm_step_lookup(k, aid, q) -> str:
@@ -1221,6 +1226,11 @@ def turn_prompt(k, a: dict, order: list, since: int, n_actions: int, final: bool
         parts.append("## Media (written by other agents)\n" + "\n\n".join(med))
     if pinned:
         parts.append("## Pinned files\n" + "\n\n".join(pinned))
+    from charter import directories as DR
+    dirs = DR.turn_section(k, aid) if DR.enabled(k) else ""
+    if dirs:                                                            # directories the agent can reach (owner or grantee)
+        parts.append("## Your directories\n" + dirs)
+        rec["directories"] = {"tokens": tokens(dirs)}
     if carry:
         parts.append("## Lookups you paid for last turn\n" + "\n\n".join(carry))
     if fetched is not None:

@@ -75,4 +75,6 @@ OPTIONS = {
     "set_succession_rule": frozenset({"lid"}), "set_project_rule": frozenset({"lid"}), "set_power_rule": frozenset({"lid"}),
     "loan_terms": frozenset({"lid"}), "loan_assign": frozenset({"lid"}), "create_clause": frozenset({"name", "text", "key"}),
     "start_project": frozenset({"record", "lid"}),
+    # directories: text = the file's new text; to = a move's new path
+    "dir_write": frozenset({"text", "to"}), "dir_grant": frozenset(),
 }

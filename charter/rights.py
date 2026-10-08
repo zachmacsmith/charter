@@ -94,6 +94,8 @@ R(HARVEST, "harvest at {camp}", "property", "camp", secret=_secret_camp)
 # carried by roles (the roles module adds them to the catalogue)
 R("maker", "make new agents: to order (a commission) or your own (create_agent, copy_agent)", "role", "role", role="maker")
 R("scholar", "sell memory (file space and pin slots) and keep a library", "role", "role", role="scholar")
+R("chronicle", "keep the chronicle: write it, edit it and grant others access (dir_write, dir_grant)", "role", "role",
+  role="historian")
 R("impersonate", "send private messages that look like another agent's (forge_dm)", "role", "role", secret=True, role="spy",
   aliases=("forge",))
 # created by library laws and regime constitutions, named in code (goals' offices)

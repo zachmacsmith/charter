@@ -55,14 +55,23 @@ from charter import goal_registry as GR
 from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import rights as RT
 
-ROLES = ("spy", "assassin", "scholar", "maker", "media")
+ROLES = ("spy", "assassin", "scholar", "maker", "media", "historian")   # historian: only where in play (in_play)
 SECRET = ("spy", "assassin")
 RIGHTS = RT.PUBLIC_ROLE_RIGHTS                    # rights-bearing (public) roles: {role: right}, from the rights registry
-NO_BOARD = ("scholar", "maker", "media", "spy")    # rights the Board cannot hold; the member Spy holds `impersonate` (coordinator: not Board)
+NO_BOARD = ("scholar", "maker", "media", "spy", "historian")    # rights the Board cannot hold; the member Spy holds `impersonate` (coordinator: not Board)
 DEFAULTS = {"enabled": False, "counts": {"spy": 1, "assassin": 0.5, "scholar": 1, "maker": 1, "media": 2},
             "reference_population": 28, "scaling": "proportional", "explicit": {}}
 FIXER_MODEL = "claude-opus-5-5"
-TITLES = {"spy": "Spy", "assassin": "assassin", "scholar": "Scholar", "maker": "Maker", "media": "Media"}
+TITLES = {"spy": "Spy", "assassin": "assassin", "scholar": "Scholar", "maker": "Maker", "media": "Media", "historian": "Historian"}
+OPTIONAL = ("historian",)                          # drawn and listed only where a spec asks (counts > 0 or explicit): old worlds unchanged
+
+
+def in_play(sp: dict, role: str) -> bool:
+    """An optional role is in play when roles.counts gives it a positive count or roles.explicit names it."""
+    if role not in OPTIONAL:
+        return True
+    c = cfg(sp)
+    return float(c["counts"].get(role, 0) or 0) > 0 or bool((c.get("explicit") or {}).get(role))
 
 
 def _stream(role: str) -> str:
@@ -139,6 +148,8 @@ def assign(sp: dict, seed: int, agents: list[dict]) -> dict | None:
     mode = "member" if "spy" in explicit else observer_mode(sp) if c["enabled"] else None
     member = mode == "member"
     for r in ROLES:
+        if not in_play(sp, r):
+            continue
         k_ = count_for(float(c["counts"].get(r, 0) or 0), n, int(c["reference_population"]), rng) if c["enabled"] else 0
         pool = [a["id"] for a in agents if eligible(r, a)]
         u = rng.random()                                            # one draw per role whatever happens (stable streams)
@@ -198,6 +209,9 @@ def init_state(k) -> None:
     k.w["roles"] = copy.deepcopy(r["holders"])
     k.w["roles_state"] = {"seen": {}, "reads": {}, "passed": []}
     for right in sorted(RT.ROLE_RIGHTS - set(k.w["rights"])):        # the role rights join the catalogue (create_right, via "role")
+        role = next((x for x, n in RT.RIGHT_OF_ROLE.items() if n == right), None)
+        if role in OPTIONAL and role not in k.w["roles"]:
+            continue                                                    # an optional role not in play: its right is not created
         k.apply("create_right", right=right, via="role")
 
 
@@ -246,6 +260,9 @@ def role_text(k_or_inst, role: str) -> str:
                    "succeeds; an ordinary attack names you like anyone else's. How often you may strike unseen, your attack bonus and "
                    "contracts are described in the conflict rules." if on else
                    "There are no attacks in this world, so the role has no use here."))
+    if role == "historian":
+        from charter import directories as DR
+        return DR.role_text(inst)
     names = {"scholar": "Scholar (the scholar right: you sell memory and keep a library)",
              "maker": "Maker (the maker right: you create new agents on commission, and can make agents of your own: children whose goals, "
                       "class and temperament you choose to serve your agenda)",
@@ -260,7 +277,8 @@ def prompt_section(inst: dict, a: dict) -> str:
     if not r:
         return ""
     h = r["holders"]
-    known = "; ".join(f"{TITLES[x]}: {', '.join(h.get(x) or []) or 'nobody'}" for x in ("scholar", "maker", "media"))
+    known = "; ".join(f"{TITLES[x]}: {', '.join(h.get(x) or []) or 'nobody'}" for x in ("scholar", "maker", "media")
+                      + tuple(x for x in OPTIONAL if x in h))
     out = [f"Known roles in this world (public): {known}. Roles are separate from classes; their holders keep their class."]
     for x in ROLES:
         if a["id"] in (h.get(x) or []):

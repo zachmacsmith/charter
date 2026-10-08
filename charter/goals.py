@@ -91,7 +91,7 @@ def goal_on(goal: str, spec_goals: dict, spec: dict | None = None) -> bool:
     """Whether a goal can be drawn: the update's goals need the update's features and their own module."""
     if goal in GR.INSTITUTION:                                       # P6.4: only with goals.institution_share > 0 and their modules
         sg = spec_goals or (spec or {}).get("goals") or {}
-        return float(sg.get("institution_share") or 0) > 0 and all(
+        return GR.INSTITUTION[goal].weight > 0 and float(sg.get("institution_share") or 0) > 0 and all(
             bool(((spec or {}).get(m) or {}).get("enabled")) for m in GR.INSTITUTION[goal].requires)
     if goal in OPT_IN and not (spec_goals or (spec or {}).get("goals") or {}).get("eliminator_variants"):
         return False                                                 # opt-in: drawn only with goals.eliminator_variants (explicit always)

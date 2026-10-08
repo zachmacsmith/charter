@@ -69,7 +69,7 @@ EFFECTS = ("move", "create", "destroy", "relation", "rule", "status", "life", "s
 CAUSES = ("agent", "law", "world", "kernel")
 COMPEL_VIS = ("parties", "public", "monitor")
 FEATURES = ("core", "conflict", "media2", "scholars", "jurisdictions", "life", "mortality", "projects", "outside", "credit", "hidden",
-            "camptypes", "leases", "context", "roles", "events", "contracts")
+            "camptypes", "leases", "context", "roles", "events", "contracts", "directories")
 
 
 class UnknownPrimitive(KeyError):
@@ -155,6 +155,7 @@ PARAM_SAMPLES = {
     "scope": {"action": "transfer", "item": "grain", "qty": 2.0, "to": None, "rounds": None, "office": False},
     "under": "J1",                                                                                       # W8e: incorporation
     "members": ["a1", "a2"],                                                                              # W8b: found
+    "dir": "chronicle", "path": "people/", "access": "read",                                             # directories
 }
 
 
@@ -740,6 +741,21 @@ _ROWS = [
       why={"compel": "a law opens its own fund; it binds nobody"},
       notes="owner key fund:<law>:<name>, an account of the law's own account (polity or association); only that law (and its "
             "amendments, which keep the id) moves goods out of it; closed into the account's treasury once the law is out of force"),
+    # directories (charter/directories.py): owned trees of text files (the Historian's chronicle is one). Laws never act for an
+    # agent; under law.v2 a law may gate or watch who writes which path or grants whom (never the text).
+    P("dir_write", "directories", "create", ("agent", "dir", "path", "op"), "directories:change_dir_write", routed=True,
+      subject="agent", parties=("agent",), agent_params=("agent",), causes=("agent",),
+      sites=("directories:change_dir_write", "directories:dir_write", "directories:dir_edit", "directories:dir_move",
+             "directories:dir_delete"),
+      why={"compel": _LNA, "gate": "law.v2: before_dir_write gates it (who changes which path of which directory; never the text)",
+           "event": "private writing; the runner's turn record keeps the action"},
+      notes="op: write, append, edit, move (option to: the new path) or delete; the text is an option, not payload"),
+    P("dir_grant", "directories", "relation", ("agent", "dir", "grantee", "path", "access"), "directories:change_dir_grant",
+      routed=True, subject="agent", parties=("agent", "grantee"), agent_params=("agent", "grantee"), causes=("agent",),
+      sites=("directories:change_dir_grant", "directories:dir_grant"),
+      why={"compel": _LNA, "gate": "law.v2: before_dir_grant gates it",
+           "event": "the grantee is told by a private notice; the runner's turn record keeps the action"},
+      notes="access: read, write or none (revokes); path: a file, a folder prefix, or \"\" (all of it)"),
     # P4.5: agency (charter/contracts.py). Laws never act for an agent: no law function causes these; the grantor consents
     # (authorize), the grantee acts (act_for), every use is logged to both.
     P("authorize", "contracts", "relation", ("grantor", "grantee", "auth", "scope"), "dispatch.changes.agency:do_authorize", routed=True, subject="grantor",
@@ -826,6 +842,9 @@ ACTION_PRIMITIVES = {
     "standing_order": ("create_contract", "set_allowance"),
     # powers
     "invoke": ("invoke", "use_power"),
+    # directories
+    "dir_list": LOOKUP, "dir_read": LOOKUP, "dir_search": LOOKUP, "dir_write": ("dir_write",), "dir_edit": ("dir_write",),
+    "dir_move": ("dir_write",), "dir_delete": ("dir_write",), "dir_grant": ("dir_grant",),
 }
 
 # Law functions that write but cause no primitive (outputs), with why. Every other writing LawFn names its primitive.
@@ -870,7 +889,8 @@ TIER_OF = {
           # ... and the laws' own rule setters (constitutions can review them: before_<p>)
           "set_money_rule", "set_title", "rename", "set_arms_rule", "set_lease_rules", "set_birth_rules",
           "set_succession_rule", "set_project_rule", "set_power_rule", "loan_terms", "loan_assign", "create_clause",
-          "start_project"),
+          "start_project",
+          "dir_write", "dir_grant"),                                   # directories
     "L-route": (),
 }
 

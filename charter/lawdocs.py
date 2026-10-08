@@ -598,6 +598,8 @@ def v2_article(contracts: bool = False) -> dict:
         P = PR.get(n)
         if P.feature == "contracts" and not contracts:                  # P4.3: absent where contracts are off
             continue
+        if P.feature == "directories":                                  # hookable, but listed in the directories' manual entry
+            continue
         hooks = [h for h in P.hooks]
         if not hooks:
             continue

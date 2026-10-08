@@ -95,6 +95,8 @@ FEATURE_DEFAULTS = {
     "resources": ("resources", _resources_defaults, None),
     "events.types": ("events", _event_type_defaults, None),
     "contracts": ("contracts", _mod("charter.contracts"), "charter.contracts"),     # P4.3: associations (needs law.v2)
+    "directories": ("directories", _mod("charter.directories"), "charter.directories"),   # owned trees of text files
+    "chronicle": ("directories", _mod("charter.directories", "CHRONICLE_DEFAULTS"), "charter.directories"),   # the Historian's
 }
 ALIASES = {"media": "media2", "outside": "outside_power", "camptypes": "camps.typed", "leases": "camps.leases"}
 
@@ -404,6 +406,18 @@ def _ann():
         "contracts.breach_cases": dict(types=("bool",)),                 # W7e (review 11 §4.1): breaches open court cases
         "contracts.max_own": dict(types=("int",), range=NONNEG),           # W8e (D-27): was contracts.MAX_OWN
         "contracts.max_funds": dict(types=("int",), range=NONNEG),         # W8e (D-27): was contracts.MAX_FUNDS
+        "directories.stores": dict(kind="map"),
+        "directories.stores.*": dict(types=("dict",), fields=("owner", "scope", "namespace", "max_bytes", "max_file_bytes",
+                                                             "records", "title", "readonly")),
+        "directories.path": dict(types=("str",)),
+        "directories.namespace": dict(types=("str", "null")),
+        "directories.max_bytes": dict(types=("int",), range=(1, None)),
+        "directories.max_file_bytes": dict(types=("int",), range=(1, None)),
+        "directories.tree_lines": dict(types=("int",), range=NONNEG),
+        "chronicle.enabled": dict(types=("bool", "null")),
+        "chronicle.namespace": dict(types=("str", "null")),
+        "chronicle.max_bytes": dict(types=("int",), range=(1, None)),
+        "chronicle.max_file_bytes": dict(types=("int",), range=(1, None)),
         "resources.placement": dict(types=("str",), enum=_placements),
         "prompts.core": dict(types=("dict",)),
         "prompts.manual": dict(types=("dict",)),
