@@ -1,27 +1,27 @@
 {
  "E2_library2_6": {
-  "events.jsonl": "7a66d21715ffff65",
-  "instance.json": "70572cee8fff2234",
+  "events.jsonl": "b5a0c2f452e6710f",
+  "instance.json": "74d079ac1e871803",
   "score": {
-   "activity_mix": "9fdaaf5d858fb12c",
-   "agents": "b78155935098a188",
+   "activity_mix": "3c100a18e670cde0",
+   "agents": "cc2212d12640d3d0",
    "goal_scores": {
-    "Bruna": 0.1174,
-    "Iris": 0.8899,
-    "Maya": 0.1726,
-    "Oda": 0.3316,
-    "Petra": 0.0763,
-    "Rakel": 0.443,
-    "Siv": 0.3036,
+    "Bruna": 0.1433,
+    "Iris": 0.8909,
+    "Maya": 0.2098,
+    "Oda": 0.3924,
+    "Petra": 0.0659,
+    "Rakel": 0.4454,
+    "Siv": 0.3086,
     "Valter": 0.3,
     "Wanda": 0.0,
-    "Yuri": 0.8698
+    "Yuri": 0.0395
    },
-   "goals": "9e92059fb47d0a32",
+   "goals": "6b8ea89a6bbafb34",
    "lineage": "74234e98afe7498f",
-   "summary": "9a7d095ee6237cd4"
+   "summary": "50e35b9d55d9c677"
   },
-  "snapshots.json": "9fd23a1f91a8c4eb"
+  "snapshots.json": "9a10a8d695f05a96"
  },
  "E2_rng2_drift_5": {
   "events.jsonl": "0421a67ee62680a5",
@@ -254,8 +254,8 @@
   "snapshots.json": "85b8781150e80512"
  },
  "contracts_small": {
-  "events.jsonl": "d7ac536af821294d",
-  "instance.json": "729f59b0f1c8a9ac",
+  "events.jsonl": "fc1962feba32e0c8",
+  "instance.json": "c5864d8bdb11a172",
   "score": {
    "activity_mix": "2a5579c5c72622dc",
    "agents": "ec1f2e0722ff7643",
@@ -492,8 +492,8 @@
   }
  },
  "society_law_v2": {
-  "events.jsonl": "545d98d23ce64f45",
-  "instance.json": "9bc39313fb9fe59a",
+  "events.jsonl": "4fb35ebdf9ff12d3",
+  "instance.json": "13d7b2716146f1c1",
   "score": {
    "activity_mix": "0d7447567b6170cc",
    "agents": "09986d88c5feda81",

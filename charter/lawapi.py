@@ -349,6 +349,7 @@ CONTRACT_COLUMN = {
 LAWFNS.update({n: replace(f, contract=CONTRACT_COLUMN.get(n, "deny")) for n, f in LAWFNS.items()})
 CONTRACT_DENIED = frozenset(n for n, f in LAWFNS.items() if f.contract == "deny")
 V2_ONLY = {f.name for f in LAWFNS.values() if f.v2}                    # law.v2 names: off, Kernel.api_for has none of them
+CONTRACTS_ONLY = {f.name for f in LAWFNS.values() if f.module == "contracts"}   # P4.3: only with contracts.enabled (an association's law)
 # P1.7: the primitive column of the two rows P1.4 edits (kept off their lines to avoid a merge conflict; fold in after the merge)
 LAWFNS.update({n: replace(LAWFNS[n], primitive=p) for n, p in (("repeal", "repeal"), ("set_official_editor", "appoint"))})
 

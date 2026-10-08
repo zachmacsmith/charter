@@ -574,9 +574,9 @@ _ROWS = [
       sites=("kernel:Kernel.api_for.clause",)),
     P("define_action", "core", "legal", ("law", "action", "right"), "dispatch:do_define_action", legal=True, causes=("law",),
       preview=("actions",), sites=("dispatch:do_define_action", "kernel:Kernel.api_for.define_action")),
-    P("set_conflict_rule", "core", "legal", ("jurisdiction", "rule", "law"), "dispatch:set_conflict_rule", subject="jurisdiction",
-      legal=True, causes=("law",), sites=("dispatch:set_conflict_rule",),
-      why={"gate": "set by a constitution-rank law (P3.2); not hookable yet", "event": "logs no event yet (P3.2 follow-up)"},
+    P("set_conflict_rule", "core", "legal", ("jurisdiction", "rule", "law"), "dispatch:do_set_conflict_rule", subject="jurisdiction",
+      legal=True, event="conflict_rule_set", causes=("law",), sites=("dispatch:do_set_conflict_rule", "dispatch:law_set_conflict_rule",
+                                                                     "dispatch:set_conflict_rule"),
       notes="law.v2: how conflicting before-hook verdicts are resolved in a polity (any_block, superior, posterior, a function)"),
     # ------------------------------------------------------------------ contracts (P4.3: associations, charter/contracts.py)
     P("create_contract", "contracts", "create", ("agent", "contract", "name", "template"), "dispatch:do_create_contract",

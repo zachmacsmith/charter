@@ -867,8 +867,8 @@ def draft(k, lid) -> dict:
     hooks = sorted(n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in PR.HOOKS)
     return {"id": lid, "title": law["title"], "intent": law["intent"], "code": law["code"], "cls": law["cls"],
             "rank": law.get("rank") or (L.declared(tree, "rank") if v2(k) else None) or "statute", "author": law["author"], "calls": sorted(L.calls(tree) & L.API), "hooks": hooks,
-            "rights": {x: sorted(v) for x, v in rights.items()}, "imports": info["imports"], "exports": info["exports"],
-            "amends": law.get("amends"), "repeals": law["repeal_target"],
+            "rights": {x: sorted(v) for x, v in rights.items()}, "repeals": law["repeal_target"],
+            **({"imports": info["imports"], "exports": info["exports"], "amends": law.get("amends")} if v2(k) else {}),   # law.v2 only
             **({"reason": law.get("amend_reason") or "", "dependents": [dict(x) for x in law.get("dependents") or ()]}
                if law.get("amends") else {})}
 
@@ -1517,7 +1517,7 @@ HELPERS = ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_i
 def law_api(k, lid) -> dict:
     return {"root_kind": root_kind, "caused_by_agent": caused_by_agent, "caused_by_law": caused_by_law, "chain_laws": chain_laws,
             "law_id": lambda: lid, "treasury": lambda: treasury_of(k, lid),
-            "set_conflict_rule": lambda rule: set_conflict_rule(k, lid, rule)}                 # P3.2
+            "set_conflict_rule": lambda rule: law_set_conflict_rule(k, lid, rule)}             # P3.2
 
 
 # ---------------------------------------------------------------------- P3.2: rank, lex superior, procedures per rank (review 09 §8)
@@ -1630,18 +1630,37 @@ def _polity(k, lid) -> str:
     return (J.law_jur(k, lid) or "J0") if "jur" in k.w else "J0"
 
 
-def set_conflict_rule(k, lid, rule) -> None:
-    """Law API set_conflict_rule(name_or_fn) (procedural), and a constitution's declared `conflict_rule` (at enactment): only a law
-    of rank constitution or higher; a name of lawlang.CONFLICT_RULES or a function fn(verdicts) -> {"block": bool, "charges": [...]}."""
+def _conflict_rule_arg(k, lid, rule):
+    """Checks shared by the law API and a constitution's declaration: only a law of rank constitution or higher; a name of
+    lawlang.CONFLICT_RULES or a function fn(verdicts) -> {"block": bool, "charges": [...]} (registered: the payload names its key)."""
     if RANKS[rank_of(k, lid)] < RANKS["constitution"]:
         raise L.LawError("only a constitution-rank law may set the conflict rule")
     if isinstance(rule, str) and rule in L.CONFLICT_RULES:
-        entry = {"rule": rule, "law": lid}
-    elif callable(rule):
-        entry = {"rule": "function", "law": lid, "key": k._reg(lid, rule)}
-    else:
-        raise L.LawError(f"the conflict rule is one of {', '.join(L.CONFLICT_RULES)} or a function fn(verdicts)")
-    k.w.setdefault("conflict_rules", {})[_polity(k, lid)] = entry
+        return rule
+    if callable(rule):
+        return {"fn": k._reg(lid, rule)}
+    raise L.LawError(f"the conflict rule is one of {', '.join(L.CONFLICT_RULES)} or a function fn(verdicts)")
+
+
+def law_set_conflict_rule(k, lid, rule) -> None:
+    """Law API set_conflict_rule(name_or_fn) (procedural): the set_conflict_rule primitive, routed (hookable, logged)."""
+    k.apply("set_conflict_rule", jurisdiction=_polity(k, lid), rule=_conflict_rule_arg(k, lid, rule), law=lid)
+
+
+def set_conflict_rule(k, lid, rule) -> None:
+    """A constitution's declared `conflict_rule` at enactment (part of the enact act, so not a separate primitive)."""
+    do_set_conflict_rule(k, _polity(k, lid), _conflict_rule_arg(k, lid, rule), lid, quiet=True)
+
+
+def do_set_conflict_rule(k, jurisdiction, rule, law, quiet=False) -> None:
+    """The set_conflict_rule primitive's change: rule is a CONFLICT_RULES name or {"fn": fnreg key}."""
+    entry = {"rule": "function", "law": law, "key": rule["fn"]} if isinstance(rule, dict) else {"rule": rule, "law": law}
+    k.w.setdefault("conflict_rules", {})[jurisdiction] = entry
+    if not quiet:
+        k.log("conflict_rule_set", None, {"jurisdiction": jurisdiction, "law": law, "rule": entry["rule"]}, vis="public")
+
+
+OPTIONS["set_conflict_rule"] = frozenset({"quiet"})
 
 
 def conflict_rule(k, polity) -> dict | None:

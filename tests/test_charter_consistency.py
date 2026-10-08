@@ -16,10 +16,10 @@ def test_law_api_classification_and_docs_agree():
     k = Kernel(generator.generate(S.load("E6"), 1))
     api = set(k.api_for("L0"))
     from charter import lawapi as LA
-    assert api == L.API - LA.V2_ONLY, (sorted(api - L.API), sorted(L.API - api))   # law.v2 names exist only in law.v2 worlds
+    assert api == L.API - LA.V2_ONLY - LA.CONTRACTS_ONLY, (sorted(api - L.API), sorted(L.API - api))   # law.v2 and contract names: only there
     non_functions = set(L.HOOKS) | {e for e, v in LD.ENTRIES.items() if v["topic"] in ("ballots", "rare-mechanics")} \
         | {"approval_rules", "ballot_gate", "ballot_weights", "dry_run_preview", "step_limits"}
-    assert api <= set(LD.ENTRIES) and set(LD.ENTRIES) - api - LA.V2_ONLY <= non_functions
+    assert api <= set(LD.ENTRIES) and set(LD.ENTRIES) - api - LA.V2_ONLY - LA.CONTRACTS_ONLY <= non_functions
 
 
 def test_every_action_has_a_doc_and_an_explicit_activity_category():
@@ -71,12 +71,13 @@ def test_actions_dispatch_through_the_registry_without_trampolines():
 def test_unknown_action_error_lists_actions_in_the_old_order():
     import pytest
     assert A.ACTIONS[:8] == ("harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose")
-    assert A.ACTIONS[-3:] == ("buy_memory", "library_deposit", "library_read")
+    i = A.ACTIONS.index("library_read")                                 # later modules' actions (contracts, ...) are appended after it
+    assert A.ACTIONS[i - 2:i + 1] == ("buy_memory", "library_deposit", "library_read")
     k = Kernel(generator.generate(S.load("E6"), 1))
     aid = next(iter(k.w["agents"]))
     with pytest.raises(A.ActionError) as e:
         A.act(k, aid, "no_such_action", {})
-    hidden = set(A.CONTEXT_ACTIONS) | set(A.MEDIA_ACTIONS) | set(A.LAW_V2_ACTIONS)   # E6: context, media2 and law.v2 are off
+    hidden = set(A.CONTEXT_ACTIONS) | set(A.MEDIA_ACTIONS) | set(A.LAW_V2_ACTIONS) | set(A.CONTRACT_ACTIONS)   # E6: context, media2, law.v2, contracts off
     assert str(e.value) == "unknown action 'no_such_action'. Actions: " + ", ".join(x for x in A.ACTIONS if x not in hidden)
 
 

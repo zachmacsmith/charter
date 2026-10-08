@@ -517,6 +517,8 @@ def render_event(k, e, viewer=None) -> str | None:
         return f"{tag} {t} {who or ''}: " + json.dumps({x: (y if not isinstance(y, list) or t != 'accuse' else [z['id'] for z in y]) for x, y in d.items()})[:600]
     if t in ("proposal_blocked", "primitive_blocked", "law_charged", "law_flagged", "account_out_of_gas"):   # law.v2 (P3.1)
         return f"{tag} {t.replace('_', ' ')}: " + json.dumps(d)[:600]
+    if t == "conflict_rule_set":                                        # law.v2 (P3.2): a routed set_conflict_rule
+        return f"{tag} law {d.get('law')} set the conflict rule of {d.get('jurisdiction')}: {d.get('rule')}"
     if t == "compelled":                                                # law.v2 (P3.7, D-5): a law's change that concerns you
         return f"{tag} {compelled_text(d, viewer)}"
     if t == "story":

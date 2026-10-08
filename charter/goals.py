@@ -605,7 +605,7 @@ def common_texts(inst) -> list:
     of consecutive lines in the first agent's order. Quoting it is not a leak. The runner freezes it at run start into
     common_text.json (P6.2), which History loads as gt["common_text"]. Leaker version 2 (P7.2); version 1 hand-assembled the
     old pipeline's API doc, goal prior, library intents, goal list and world rules (review 02 section 3.8)."""
-    if not inst.get("agents") or "spec" not in inst:                 # hand-built instances in tests
+    if not inst.get("agents") or "spec" not in inst or not inst.get("camps"):   # hand-built instances in tests
         return []
     from charter import preview as PR
     seen = [[ln.strip() for t in PR.seen_texts(inst, a) for ln in t.splitlines()] for a in inst["agents"]]

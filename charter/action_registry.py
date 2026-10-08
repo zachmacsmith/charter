@@ -544,7 +544,7 @@ R("set_allowance", "let a contract take from you each round", "contracts", needs
       'each round (dues, premiums, instalments); qty 0 withdraws it')
 R("propose_contract_change", "propose new code for a contract", "contracts", needs=("mod:contracts",),
   handler="contracts:act_propose_contract_change", module="contracts", category="political",
-  emits=("contract_changed", "contract_change_failed"), aliases={"law": "replaces", "target": "replaces"},
+  aliases={"law": "replaces", "target": "replaces"},          # the decision logs contract_changed / _failed (contracts._decide)
   doc='propose_contract_change {"contract": "A1", "code": "<law code>", "replaces": "L7"}: new code for a contract you belong to '
       '(replaces: one of its laws, or none to add a law; empty code with replaces ends that law); its procedure decides (by '
       'default its members vote, closing at the end of the round)')

@@ -191,6 +191,8 @@ E("primitive_blocked", "dispatch", "summary", "public|parties|monitor", "event",
        "refused and the change went ahead (data.overridden)")
 E("law_charged", "dispatch", "summary", "parties", "event", "agents", primitive="move",
   note="a before-hook's charge, paid by the payer to the charging law's treasury (the payer is told)")
+E("conflict_rule_set", "dispatch", "legal_act", "public", "event", "agents", primitive="set_conflict_rule",
+  note="a constitution-rank law set its polity's conflict rule (any_block, superior, posterior, function)")
 E("law_flagged", "dispatch", "summary", "public", "event", "agents",
   note="a law's hook hit a limit (gas_call, depth, gas_cascade, gas_round); flag_limit flags in flag_window rounds suspend it")
 E("account_out_of_gas", "dispatch", "summary", "public|parties", "event", "agents",

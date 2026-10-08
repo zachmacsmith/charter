@@ -41,6 +41,13 @@ class _JsonSpy:
 
 
 def _build(name, tmp):
+    if name in golden.V2_CASES:                          # their start laws are test fixtures (tests/charter_law_v2_laws.py)
+        with golden.V2.registered():
+            return _build_(name, tmp)
+    return _build_(name, tmp)
+
+
+def _build_(name, tmp):
     preset, seed, sets = golden.CASES[name]
     sp = S.apply_overrides(S.load(preset), sets + ["shared_archive.enabled=false"])
     inst = generator.generate(sp, seed)
