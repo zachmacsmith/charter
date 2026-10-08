@@ -549,6 +549,14 @@ def _decide(k, rec, pr) -> str:
             return _adopt(k, rec, pr)
         if not isinstance(res, dict):
             return _fail(k, rec, pr, "its procedure rejected the change")
+        if ST.staged(k, res):                                          # W7e: a stage plan (law.v2), members only
+            pr.update(status="stage")
+            res = {**res, "assent": [a for a in res.get("assent") or [] if a in rec["members"]]}
+            ST.begin(k, lid, plid, res, jid=cid, members=list(rec["members"]), contract=pr["id"])
+            if pr["status"] != "stage":
+                return (f"{cid} adopted {lid}." if pr["status"] == "adopted" else
+                        f"The change to {cid} failed.")
+            return f"Proposed {lid} for {cid}; it goes through its procedure's stages (read_law {lid})."
         spec = {"electorate": [a for a in res.get("electorate", rec["members"]) if a in rec["members"]],
                 "rule": ST.rule_ref(k, plid, res.get("rule", "majority")), "weights": res.get("weights")}   # W6c: rule functions
     what = f"{cid} '{rec['name']}': adopt {lid} '{law['title']}'" + (f" in place of {pr['replaces']}" if pr["replaces"] else "") + "?"
@@ -556,6 +564,19 @@ def _decide(k, rec, pr) -> str:
     k.w["ballots"][bid]["jurisdiction"] = cid
     pr.update(status="ballot", ballot=bid)
     return f"Proposed {lid} for {cid}; its members vote on {bid} (closes at the end of this round)."
+
+
+def stage_done(k, lid, pid, passed, why="") -> None:
+    """W7e: the end of a contract change's stage plan (stages._pass / _fail): adopt it or fail it through the proposal record."""
+    rec = next((r for r in recs(k).values() if pid in r["proposals"]), None)
+    pr = (rec or {}).get("proposals", {}).get(pid)
+    if pr is None or pr["status"] != "stage" or pr["law"] != lid:
+        return
+    if passed and rec["status"] != "dissolved":
+        _adopt(k, rec, pr)
+    else:
+        k.w["laws"][lid]["status"] = "proposed"                         # so _fail marks it failed, as a ballot's failure does
+        _fail(k, rec, pr, why or "the contract was dissolved")
 
 
 def _adopt(k, rec, pr) -> str:

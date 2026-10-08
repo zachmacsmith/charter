@@ -1550,7 +1550,19 @@ def law_api(k, lid) -> dict:
     return {"root_kind": root_kind, "caused_by_agent": caused_by_agent, "caused_by_law": caused_by_law, "chain_laws": chain_laws,
             "law_id": lambda: lid, "treasury": lambda: treasury_of(k, lid),
             "set_conflict_rule": lambda rule: law_set_conflict_rule(k, lid, rule),             # P3.2
-            "refuse": refuse}                                                                  # W6a
+            "refuse": refuse,                                                                  # W6a
+            "is_number": is_number, "is_text": is_text}                                        # W7e
+
+
+def is_number(x) -> bool:
+    """Law API is_number(x) (law.v2, W7e): is x a number (an int or a float; True/False are not)? Law code has no isinstance, so
+    this is how a penalty tells numeric damages from a named remedy."""
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
+def is_text(x) -> bool:
+    """Law API is_text(x) (law.v2, W7e): is x a string?"""
+    return isinstance(x, str)
 
 
 # ---------------------------------------------------------------------- W6a: clean refusal (review 10 §4 "Clean failure", roadmap #3)

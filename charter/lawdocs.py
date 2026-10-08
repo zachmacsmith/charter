@@ -411,18 +411,28 @@ E += [
     ("case", "court-rules", "Read", "case(case_id)", "one case as cases() gives it, or None (no such case, or another polity's).",
      "common", "uncommon"),
     ("court_rules", "court-rules", "Read", "court_rules()", "this polity's court rules in force: deadline, panel, judges, "
-     "appeal_judges, appeal_window, appeal_panel.", "common", "uncommon"),
+     "appeal_judges, appeal_window, appeal_panel, rulings_per_round.", "common", "uncommon"),
     ("set_court_rule", "court-rules", "Governance", "set_court_rule(key, value)", 'sets one of this polity\'s court rules while '
      'this law is in force: "deadline" (rounds a case or an appeal waits for a ruling, 1-20; default 3), "panel" (judges deciding '
      'a case: a majority of the panel agreeing decides, 1-9; default 1), "judges" (a right judges must hold besides judge to rule '
-     'at first instance; None: every judge), "appeal_judges" (the higher office: a right appellate judges hold besides judge; '
-     'None: no appeals), "appeal_window" (rounds after a ruling in which a party may appeal, 0-10; default 2), "appeal_panel" '
-     "(1-9; default 1). Where appeals are heard, a guilty ruling's penalty waits for the window (or the appeal). A ruling may "
+     'at first instance; None: every judge), "appeal_judges" (the higher office: a right whose holders sit on the appeal bench, '
+     'with or without judge; None: no appeals), "appeal_window" (rounds after a ruling in which a party may appeal, 0-10; default '
+     '2), "appeal_panel" (1-9; default 1), "rulings_per_round" (rulings a judge may give per round, 1-20; default 3). '
+     "Where appeals are heard, a guilty ruling's penalty waits for the window (or the appeal). A ruling may "
      "carry a remedy (damages, a number, or a name; a panel's is the median of its majority's): a clause's penalty "
      "def penalty(accused, accuser, remedy) receives it (one- and two-argument penalties still work). Procedural.",
      "common", "uncommon"),
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("cases", "case", "court_rules", "set_court_rule")})
+# W7e: type tests (law code has no isinstance); documented only in law.v2 worlds (REQUIRES)
+E += [
+    ("is_number", "court-rules", "Read", "is_number(x)", "is x a number (True and False are not)? Law code has no isinstance: a "
+     "penalty def penalty(accused, accuser, remedy) tells damages from a named remedy with it, e.g. if is_number(remedy): "
+     "fine(accused, \"grain\", remedy).", "common", "uncommon"),
+    ("is_text", "court-rules", "Read", "is_text(x)", "is x text (a string)? e.g. a named remedy: if is_text(remedy) and remedy == "
+     "\"apology\": ...", "common", "uncommon"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("is_number", "is_text")})
 # law-readable evidence (charter/evidence.py, review 10 #10): documented only in law.v2 worlds (REQUIRES)
 E += [
     ("event", "chains", "Read", "event(event_id)", "one event of the world's record (\"e42\"), as a copy: {id, round, type, agent, "

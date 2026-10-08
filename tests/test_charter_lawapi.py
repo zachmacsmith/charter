@@ -21,7 +21,8 @@ W6A_FNS = ("refuse",)                                                           
 EV_FNS = ("event", "history")                                                                    # review 10 #10 (evidence.law_api)
 AM_FNS = ("propose_law", "propose_amendment")                                                    # P3.4 (amendment.law_api)
 CO_FNS = ("cases", "case", "court_rules", "set_court_rule")                                       # courts v2 (courts.law_api)
-W6_V2_FNS = {*W6A_FNS, *CO_FNS, *EV_FNS}                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
+W7E_FNS = ("is_number", "is_text")                                                              # W7e (dispatch.law_api)
+W6_V2_FNS = {*W6A_FNS, *CO_FNS, *EV_FNS, *W7E_FNS}                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
 W6_FNS = {*W6_V2_FNS}                                                 # every W6 law function (contract-module ones are in CONTRACT_FNS)
 SNAPSHOT = Path(__file__).parent / "fixtures" / "charter_lawapi_snapshot.json"
 ALL_ON = ["jurisdictions.enabled=false", "conflict.enabled=true", "media2.enabled=true", "life.enabled=true",

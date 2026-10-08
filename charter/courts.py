@@ -21,8 +21,11 @@ A rule holds while the law that set it is in force; otherwise its default applie
   appeal_judges  the higher office: a right an appellate judge must hold besides `judge` (None: no appeals)        default None
   appeal_window  rounds after a ruling in which a party may appeal                                                 default 2
   appeal_panel   the appeal bench's panel size                                                                     default 1
-Everyone who rules holds `judge` (so the `rule` action is listed for them); the court rules choose among the judges. A law gives an
-office the bench by granting it both rights.
+  rulings_per_round  rulings (and panel votes) a judge may give per round, counted across courts (W7e)            default 3
+At first instance everyone who rules holds `judge` (so the `rule` action is listed for them); the court rules choose among the
+judges. A law gives an office the first-instance bench by granting it both rights. W7e: the appellate office named by
+appeal_judges sits on the appeal bench by that right alone (it need not also hold `judge`): appellate_office() lists `rule` for it
+(action_registry's `alt` check) and it rules on appeals only.
 
 Deferred penalties: when the case's polity hears appeals (appeal_judges set and appeal_window > 0) a guilty ruling at first instance
 does not run its penalty at once: the case records penalty "pending" and appealable_until. At the end of the window (the kernel's
@@ -45,8 +48,9 @@ from charter import dispatch as D
 from charter import jurisdictions as J
 from charter import lawlang as L
 
-DEFAULTS = {"deadline": 3, "panel": 1, "judges": None, "appeal_judges": None, "appeal_window": 2, "appeal_panel": 1}
-BOUNDS = {"deadline": (1, 20), "panel": (1, 9), "appeal_window": (0, 10), "appeal_panel": (1, 9)}
+DEFAULTS = {"deadline": 3, "panel": 1, "judges": None, "appeal_judges": None, "appeal_window": 2, "appeal_panel": 1,
+            "rulings_per_round": 3}                                     # W7e: the per-judge cap (before W7e a fixed 3)
+BOUNDS = {"deadline": (1, 20), "panel": (1, 9), "appeal_window": (0, 10), "appeal_panel": (1, 9), "rulings_per_round": (1, 20)}
 RIGHT_KEYS = ("judges", "appeal_judges")
 STATUSES = ("open", "decided", "dismissed")
 REMEDY_CHARS = 80
@@ -111,10 +115,34 @@ def bench(k, c) -> tuple:
 
 
 def judges_for(k, c, right, exclude=()) -> list:
-    """Judges who may hear a case: holders of judge (bound by the clause's law, with jurisdictions on) who also hold `right`."""
+    """Judges who may hear a case: holders of judge (bound by the clause's law, with jurisdictions on) who also hold `right`; on
+    appeal (W7e) also holders of the appellate right who do not hold judge (after the judges, in holder order)."""
     lid = clause_law(k, c)
-    return [a for a in k.holders("judge") if (not J.enabled(k) or J.binds(k, lid, a)) and (right is None or k.has(a, right))
+    pool = list(k.holders("judge"))
+    if c.get("stage", 1) == 2 and right is not None:
+        pool += [a for a in k.holders(right) if a not in pool]
+    return [a for a in pool if (not J.enabled(k) or J.binds(k, lid, a)) and (right is None or k.has(a, right))
             and a not in exclude]
+
+
+def appellate_office(k, aid) -> bool:
+    """W7e (law.v2): does aid hold the appellate right a polity's court rules name (appeal_judges, with appeals heard) in some
+    polity whose laws bind it? Such an office sees the `rule` action without `judge` (action_registry: rule's alt check)."""
+    if not enabled(k):
+        return False
+    for pol in sorted(k.w.get("court_rules") or {}):
+        r = rules(k, pol)
+        if appeals_heard(r) and k.has(aid, r["appeal_judges"]):
+            return True
+    return False
+
+
+def may_rule_without_judge(k, aid, c) -> bool:
+    """W7e: a case on appeal whose bench right aid holds: it may rule though it does not hold judge."""
+    if not enabled(k) or c is None or c.get("stage", 1) != 2:
+        return False
+    right, _ = bench(k, c)
+    return bool(right) and k.has(aid, right)
 
 
 def first_judges(c) -> set:

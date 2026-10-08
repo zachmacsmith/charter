@@ -176,6 +176,9 @@ def action_doc(name: str, inst: dict, a: dict, f: dict | None = None) -> str:
                  "rival, a blocker or a threat to your broader goal") if secret else
                 (". Disabling an agent is public and irreversible, but it can serve your broader goal: removing a rival, a blocker or a "
                  "threat at the right moment"))
+    if name == "vote" and ((inst.get("spec") or {}).get("law") or {}).get("v2"):   # W7e: W6c's rule-function ballots
+        doc += ("; a ballot decided by a law's rule function (its ballot_open shows \"function ...\") may take a ranked list, "
+                'e.g. "choice": ["b", "a", "c"], best first')
     if name == "transfer" and ((inst.get("spec") or {}).get("law") or {}).get("v2"):   # W6a: law.v2's purpose memo
         doc += '; add "memo": "wage" (a short purpose: wage, sale, gift, loan, ...) that laws can read'
     return doc

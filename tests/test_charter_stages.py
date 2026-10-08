@@ -398,7 +398,7 @@ def test_replay_and_rewind_mid_procedure(tmp_path, monkeypatch, staged_start_law
 
 
 def test_an_association_s_procedure_may_use_a_rule_function():
-    """P4.3 contracts reuse the rule functions (their stage plans are not supported yet)."""
+    """P4.3 contracts reuse the rule functions (stage plans too since W7e: tests/test_charter_w7e.py)."""
     import re
     from charter import contracts as CT
     inst = generator.generate(S.apply_overrides(S.load("E2"), ["rounds=8", "shared_archive.enabled=false", "turns=sequential",

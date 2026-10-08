@@ -25,6 +25,9 @@ An entry:  register(name, purpose, section, core=False, pre=False, msg=False, ne
             right): open camps let anyone harvest, but the rights holders are the ones it is an edge for
   when      optional state check (inst, k, a, rights) -> bool, for things that come and go (a loan law, an open poll, a group);
             skipped (treated as true) when there is no kernel (generation, tests of the instance only)
+  alt       optional state check (inst, k, a, rights) -> bool that admits the action to an agent lacking a `right:` requirement
+            (every other requirement must still hold); only with a live kernel. W7e: `rule` for an appellate office that a court
+            rule names (courts.appellate_office), which need not hold judge
   handler   "module:function" under charter ("conflict:act_fortify", "camptypes.leases:offer"), called as fn(k, aid, **args) by
             actions.act; resolved lazily (resolve), so this module imports nothing
   doc       the action's documentation line (manual, legacy prompt, observer): a string.Template whose $facts come from
@@ -82,13 +85,14 @@ class Act:
     edge: tuple = ()                                                    # further rights whose holders have it as an edge
     aliases: dict = field(default_factory=dict, hash=False)             # {synonym: proper argument name}
     legacy: bool = True                                                 # listed by the legacy (context-off) system prompt
+    alt: Callable | None = None                                         # W7e: admits it despite a missing right (see above)
 
 
 REG: dict[str, Act] = {}
 
 
 def register(name, purpose, section, core=False, pre=False, msg=False, needs=(), when=None, args="", edge=(), *, handler, doc,
-             category, module, emits=(), primitives=(), aliases=None, legacy=True):
+             category, module, emits=(), primitives=(), aliases=None, legacy=True, alt=None):
     if category not in CATEGORIES:
         raise ValueError(f"action {name}: category {category!r} is not one of {CATEGORIES}")
     if module not in MODULES:
@@ -99,7 +103,7 @@ def register(name, purpose, section, core=False, pre=False, msg=False, needs=(),
         raise ValueError(f"action {name} registered twice")
     REG[name] = Act(name, purpose, section, handler, doc, category, module, tuple(emits), tuple(primitives), core, pre, msg,
                     tuple(needs), when, args, tuple(n.split(":", 1)[1] for n in needs if n.startswith("right:")), tuple(edge),
-                    dict(aliases or {}), legacy)
+                    dict(aliases or {}), legacy, alt)
     return REG[name]
 
 
@@ -170,7 +174,9 @@ def available(inst, k, a, rights=None) -> list:
     out = []
     for act in REG.values():
         if not all(_need(inst, a, rights, n) for n in act.needs):
-            continue
+            if not (act.alt is not None and live and all(_need(inst, a, rights, n) for n in act.needs if not n.startswith("right:"))
+                    and act.alt(inst, k, a, rights)):
+                continue
         if act.when is not None and live and not act.when(inst, k, a, rights):
             continue
         out.append(act)
@@ -210,6 +216,9 @@ def _k_owns_group(inst, k, a, r): return any(ch["owner"] == a["id"] for ch in k.
 def _k_accused(inst, k, a, r): return any(c.get("accused") == a["id"] and c.get("status") == "open" for c in k.w["cases"].values())
 def _k_clauses(inst, k, a, r): return bool(k.w["clauses"])
 def _k_appealable(inst, k, a, r): return any(c.get("appealable_until") is not None and a["id"] in (c["accuser"], c["accused"]) for c in k.w["cases"].values())
+def _k_appellate(inst, k, a, r):
+    from charter import courts as CO                                   # W7e: an appellate office named by a court rule
+    return CO.appellate_office(k, a["id"])
 def _k_scholar(inst, k, a, r): return bool((k.w.get("roles") or {}).get("scholar"))
 def _k_poll(inst, k, a, r): return any(q.get("round") == k.r for q in ((k.w.get("media") or {}).get("polls") or {}).values())
 def _k_licences(inst, k, a, r):
@@ -346,7 +355,7 @@ R("name_successor", "choose who takes your Board seat", "POLITICS", core=True, n
 R("patch", "fix a law to its intent (Fixer)", "POLITICS", core=True, needs=("right:patch",),
   handler="actions:_patch", module="core", category="political", emits=("patch_submitted",),
   doc='patch {"law": "L4", "code": "...", "reason": "..."}: Fixer only')
-R("rule", "decide a court case, as a judge", "POLITICS", core=True, needs=("right:judge", "level:2"),
+R("rule", "decide a court case, as a judge", "POLITICS", core=True, needs=("right:judge", "level:2"), alt=_k_appellate,
   handler="actions:_rule", module="core", category="political", emits=("ruling", "panel_vote"),
   doc='rule {"case": "C1", "verdict": "guilty", "reason": "..."}: judges only')
 # force

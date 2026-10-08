@@ -27,6 +27,11 @@ State (plain data in k.w): the proposal's law record carries "procedure" {"law":
 "jurisdiction", "at": stage index, "kind": stage|assent|override, "ballot": the open ballot, "history": [{stage, kind, ballot,
 result}]} and status "stage" while it runs; each stage ballot carries "stage" {"law", "kind", "index"}, which routes its close here
 (Kernel.close_ballots). Events: proposal_stage_open and proposal_stage_close (public), besides each stage's ballot_open/close.
+
+Contracts (W7e): an association's own procedure (set_procedure in its code, contracts._decide) may answer with a stage plan too. The
+plan's electorates and assent are cut to the members (contracts._decide cuts the assent); the procedure record also carries "contract": the proposal id (rec
+"proposals"), and the end goes back to contracts (contracts.stage_done: adopted through the contract's own path, or failed with its
+contract_change_failed) instead of Kernel.passed / proposal_failed; its stage events are members-only, like the contract's record.
 """
 from __future__ import annotations
 
@@ -152,18 +157,32 @@ def plan(k, plid, res, members=None) -> dict:
             "assent_closes_in": _closes(res.get("assent_closes_in")), "override": ov}
 
 
-def begin(k, lid, plid, res, jid=None, members=None) -> None:
-    """A procedure answered with a stage plan: record it on the proposal and open its first stage (or decide at once)."""
+def begin(k, lid, plid, res, jid=None, members=None, contract=None) -> None:
+    """A procedure answered with a stage plan: record it on the proposal and open its first stage (or decide at once). contract
+    (W7e): the contract proposal's id when an association's procedure answered (see the module docstring)."""
     law = k.w["laws"][lid]
     try:
         p = plan(k, plid, res, members)
     except ValueError as e:
+        if contract is not None:
+            from charter import contracts as CT
+            return CT.stage_done(k, lid, contract, False, f"the procedure's stage plan is invalid: {e}")
         law["status"] = "failed"
         k.log("proposal_failed", law["author"], {"law": lid, "why": f"the procedure's stage plan is invalid: {e}"}, vis="public")
         return
     law["status"] = "stage"
     law["procedure"] = {"law": plid, "plan": p, "jurisdiction": jid, "at": -1, "kind": None, "ballot": None, "history": []}
+    if contract is not None:
+        law["procedure"]["contract"] = contract
     _next(k, lid)
+
+
+def _vis(k, proc):
+    """Who sees a stage's events: everyone; a contract's members only (W7e)."""
+    if proc.get("contract") is None:
+        return "public"
+    from charter import contracts as CT
+    return CT._vis(CT.recs(k)[proc["jurisdiction"]])
 
 
 def _total(proc) -> int:
@@ -191,7 +210,7 @@ def _open(k, lid, kind, index, spec):
         b["jurisdiction"] = proc["jurisdiction"]
     proc.update(at=index, kind=kind, ballot=bid)
     k.log("proposal_stage_open", None, {"law": lid, "stage": index + 1, "of": n, "kind": kind, "name": label, "ballot": bid,
-                                        "closes_round": b["closes"]}, vis="public")
+                                        "closes_round": b["closes"]}, vis=_vis(k, proc))
 
 
 def _next(k, lid) -> None:
@@ -208,13 +227,19 @@ def _next(k, lid) -> None:
 def _pass(k, lid) -> None:
     proc = k.w["laws"][lid]["procedure"]
     proc.update(kind="passed", ballot=None)
+    if proc.get("contract") is not None:                               # W7e: a contract's change is adopted its own way
+        from charter import contracts as CT
+        return CT.stage_done(k, lid, proc["contract"], True)
     k.passed(lid)
 
 
 def _fail(k, lid, why) -> None:
     law = k.w["laws"][lid]
-    law["status"] = "failed"
     law["procedure"].update(kind="failed", ballot=None)
+    if law["procedure"].get("contract") is not None:                   # W7e: the contract's own failure (members-only)
+        from charter import contracts as CT
+        return CT.stage_done(k, lid, law["procedure"]["contract"], False, why)
+    law["status"] = "failed"
     k.log("proposal_failed", law["author"], {"law": lid, "why": why}, vis="public")
 
 
@@ -237,7 +262,7 @@ def closed(k, b, res) -> None:
     else:
         nxt = "passed" if yes else "failed"
     k.log("proposal_stage_close", None, {"law": lid, "stage": st["index"] + 1, "of": _total(proc), "kind": kind, "name": label,
-                                         "ballot": b["id"], "result": res, "next": nxt}, vis="public")
+                                         "ballot": b["id"], "result": res, "next": nxt}, vis=_vis(k, proc))
     if kind == "stage":
         return _next(k, lid) if yes else _fail(k, lid, f"voted down at {label} ({b['id']})")
     if kind == "assent":
