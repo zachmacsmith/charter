@@ -583,11 +583,12 @@ _ROWS = [
     P("open_case", "core", "legal", ("jurisdiction", "case", "accuser", "accused", "clause", "evidence", "source"),
       "dispatch:do_open_case",
       subject="jurisdiction", parties=("jurisdiction", "accuser", "accused"), agent_params=("accuser", "accused"), legal=True,
-      event="accuse", causes=("agent", "law"), reads=("cases", "case", "court_rules"),
+      event="accuse", causes=("agent",), reads=("cases", "case", "court_rules"),
       sites=("dispatch:do_open_case", "courts:change_open_case", "actions:_accuse"), why={"compel": _LNA, "gate": _V2GATE},
       notes="routed (courts v2): before_open_case can refuse standing, after_open_case can charge a filing fee; law.v2: the "
             "polity's court rules set the deadline and the bench. W7e: source (agent, or contract: a breach a contract's law "
-            "records under contracts.breach_cases, caused by that law; then in the payload, with accuser the victim or None)"),
+            "records under contracts.breach_cases: the kernel opens it inside that law's breach() call, no law function opens a "
+            "case, so it has no compel face; then in the payload, with accuser the victim or None)"),
     P("answer_case", "core", "legal", ("jurisdiction", "case", "accused", "evidence"), "dispatch:do_answer_case",
       subject="jurisdiction", parties=("jurisdiction", "accused"), agent_params=("accused",), legal=True, event="respond",
       causes=("agent",), reads=("cases", "case"), sites=("dispatch:do_answer_case", "courts:change_answer_case", "actions:_respond"),
