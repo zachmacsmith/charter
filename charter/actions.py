@@ -657,7 +657,8 @@ def _vote(k, aid, ballot, choice):
     if aid not in b["electorate"]:
         raise ActionError(f"you are not in the electorate of {ballot}")
     opts = b["options"]
-    if b["rule"].startswith("approval"):
+    ranked = isinstance(b["rule"], dict) and b["rule"].get("fn") and isinstance(choice, list)   # law.v2 (W6c): a rule function
+    if ranked or str(b["rule"]).startswith("approval"):                # may read a list (a ranking, approvals)
         choice = [str(c) for c in (choice if isinstance(choice, list) else [choice])]
         bad = [c for c in choice if c not in opts]
         if bad:

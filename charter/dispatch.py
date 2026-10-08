@@ -931,7 +931,12 @@ def do_open_ballot(k, jurisdiction, ballot, question, electorate, options, rule,
     k.w["ballots"][ballot] = {"id": ballot, "question": question, "electorate": electorate, "options": [str(o) for o in options],
                               "rule": rule, "weights": weights or {}, "closes": closes_round, "votes": {}, "on_result": on_result,
                               "law": opened_by, "proposal": proposal, "gate": gate_spec, "status": "open"}
-    k.log("ballot_open", None, {"ballot": ballot, "question": question, "electorate": electorate, "options": options, "rule": rule,
+    if isinstance(rule, dict):                                         # law.v2 (W6c): a rule function or an assent, by name
+        from charter import stages as ST
+        shown = ST.shown(rule)
+    else:
+        shown = rule
+    k.log("ballot_open", None, {"ballot": ballot, "question": question, "electorate": electorate, "options": options, "rule": shown,
                                 "closes_round": closes_round}, vis="public")
     return {"ballot": ballot}
 

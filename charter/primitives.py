@@ -521,11 +521,16 @@ _ROWS = [
       parties=("jurisdiction",), before=False, blockable=False, legal=True, event="proposal_failed", causes=("kernel",),
       sites=("dispatch:do_decide", "kernel:Kernel.decide", "kernel:Kernel._decide", "jurisdictions:decide", "kernel:Kernel.passed",
              "jurisdictions:passed"),
-      why={"gate": "internal: the procedure decides; review 09 §5"}),
+      why={"gate": "internal: the procedure decides; review 09 §5"},
+      notes="law.v2 (W6c, charter/stages.py): a procedure may return a stage plan (stages, assent, override); each stage is an "
+            "open_ballot, the next stage opens when one closes yes (Kernel.close_ballots -> stages.closed), and a plan that "
+            "passes goes to Kernel.passed"),
     P("open_ballot", "core", "legal", ("jurisdiction", "ballot", "question", "electorate", "options", "rule", "closes_round", "proposal",
                                        "opened_by"),
       "dispatch:do_open_ballot", subject="jurisdiction", parties=("jurisdiction",), legal=True, event="ballot_open",
-      causes=("law", "kernel"), compel_vis="public", sites=("dispatch:do_open_ballot", "kernel:Kernel.open_ballot")),
+      causes=("law", "kernel"), compel_vis="public", sites=("dispatch:do_open_ballot", "kernel:Kernel.open_ballot"),
+      notes="rule: a name; law.v2 (W6c): {fn, law, name} for a law's rule function fn(votes, electorate) (run by Kernel.tally "
+            "under the gas meter) or {assent, silence} for a procedure's assent stage"),
     P("cast_vote", "core", "legal", ("jurisdiction", "ballot", "agent", "choice"), "dispatch:do_cast_vote", subject="jurisdiction",
       parties=("jurisdiction", "agent"), agent_params=("agent",), legal=True, event="vote", causes=("agent", "world"),
       sites=("dispatch:do_cast_vote", "actions:_vote", "conflict:discard_votes", "dispatch:legacy_hooks"), why={"compel": _LNA}),

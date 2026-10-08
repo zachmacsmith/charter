@@ -433,7 +433,8 @@ def read_law(k, aid, ref) -> str:
     head = (f"{law['id']} '{law['title']}' ({law.get('cls')}, {law.get('status')}), proposed by {law.get('author')}"
             + (f", enacted in round {law['enacted_round'] + 1}" if law.get("enacted_round") is not None else "") + f".\nIntent: {law.get('intent', '')}")
     hist = ("\nPatches: " + "; ".join(f"round {p.get('round', 0) + 1} by {p.get('by')}: {str(p.get('reason', ''))[:120]}" for p in patches)) if patches else ""
-    return f"{head}{hist}\nCode:\n{law['code']}"
+    from charter import stages as _ST
+    return f"{head}{_ST.describe(law)}{hist}\nCode:\n{law['code']}"           # law.v2 (W6c): a multi-stage procedure's state
 
 
 def search_dms(k, aid, query) -> str:

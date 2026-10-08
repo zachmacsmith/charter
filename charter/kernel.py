@@ -38,6 +38,7 @@ from charter import projects as P
 
 from charter import features as FT                                    # the feature table: phases and merge order (features.py)
 from charter import rights as RT                                      # the rights registry: names, docs, secrecy, entrenchment
+from charter import stages as ST                                      # law.v2 (W6c): multi-stage procedures, ballot rule functions
 from charter.rights import ENTRENCHED, KERNEL_RIGHTS, NEVER, RENAMED_RIGHTS   # noqa: F401  (derived from the registry)
 from charter import eventtypes as ET                                  # the event-type registry: the post family, feeds, renderers
 
@@ -582,7 +583,7 @@ class Kernel:
                     **({"rank": rank} if rank is not None else {}))
 
         def open_ballot(question, electorate, options, rule="majority", closes_in=1, on_result=None, weights=None):
-            return k.open_ballot(question, list(electorate), list(options), rule, int(closes_in),
+            return k.open_ballot(question, list(electorate), list(options), ST.rule_ref(k, lid, rule), int(closes_in),
                                  k._reg(lid, on_result) if on_result else None, weights, lid)
 
         def fine(aid, item, qty):
@@ -1073,7 +1074,10 @@ class Kernel:
                 return
             if res is True:
                 self.passed(lid)
+            elif ST.staged(self, res):                                 # law.v2 (W6c): a multi-stage procedure
+                ST.begin(self, lid, plid, res)
             elif isinstance(res, dict):
+                res = ST.with_rule_ref(self, plid, res)                # law.v2 (W6c): a rule function, stored as data
                 electorate = list(res.get("electorate", []))
                 if res.get("gate"):
                     law["status"] = "gated"
@@ -1098,6 +1102,8 @@ class Kernel:
     def tally(self, b):
         w = lambda a: float(b["weights"].get(a, 1.0))
         rule = b["rule"]
+        if isinstance(rule, dict):                                      # law.v2 (W6c): a rule function or an assent ballot
+            return ST.tally(self, b)
         if rule.startswith("approval_top"):
             n = int(rule.replace("approval_top", "") or 1)
             score = {}
@@ -1127,7 +1133,9 @@ class Kernel:
             res = self.tally(b)                                         # the close_ballot primitive (dispatch.do_close_ballot)
             self.apply("close_ballot", jurisdiction=J.ballot_jur(self, b) if "jur" in self.w else None, ballot=b["id"], result=res,
                        votes=b["votes"])
-            if b["proposal"] and b["gate"]:
+            if b.get("stage") is not None:                             # law.v2 (W6c): a stage of a multi-stage procedure
+                ST.closed(self, b, res)
+            elif b["proposal"] and b["gate"]:
                 law = self.w["laws"][b["proposal"]]
                 if res == "yes":
                     g = b["gate"]
@@ -1346,29 +1354,39 @@ class Kernel:
             if res is True:
                 return [a]
             if isinstance(res, dict):
-                electorate = list(res.get("electorate", []))
-                wts = {x: float((res.get("weights") or {}).get(x, 1.0)) for x in electorate}
-                total = sum(wts.values())
-                if total <= 0:
+                chosen = ST.decisive(res, self._yes_set) if ST.staged(self, res) else self._yes_set(res)   # W6c: every stage
+                if chosen is None:
                     continue
-                need = 2 * total / 3 if res.get("rule") == "two_thirds" else total / 2
-                chosen, acc = [], 0.0
-                for x in sorted(electorate, key=lambda x: -wts[x]):
-                    chosen.append(x)
-                    acc += wts[x]
-                    if (acc >= need - 1e-9) if res.get("rule") == "two_thirds" else (acc > need):
-                        break
                 if res.get("gate") and res["gate"] not in chosen:
                     chosen = [res["gate"]] + chosen
                 if best is None or len(chosen) < len(best):
                     best = chosen
         return best or []
 
+    @staticmethod
+    def _yes_set(res):
+        """The smallest set of yes votes that carries one ballot spec (heaviest first); None for an electorate of no weight."""
+        electorate = list(res.get("electorate", []))
+        wts = {x: float((res.get("weights") or {}).get(x, 1.0)) for x in electorate}
+        total = sum(wts.values())
+        if total <= 0:
+            return None
+        need = 2 * total / 3 if res.get("rule") == "two_thirds" else total / 2
+        chosen, acc = [], 0.0
+        for x in sorted(electorate, key=lambda x: -wts[x]):
+            chosen.append(x)
+            acc += wts[x]
+            if (acc >= need - 1e-9) if res.get("rule") == "two_thirds" else (acc > need):
+                break
+        return chosen
+
     def vote_weights(self):
         """Each agent's share of ballot weight under the ordinary procedure (0 for agents outside the electorate)."""
         res = self.procedure_spec("ordinary", next(iter(self.w["agents"])))
         if not isinstance(res, dict):
             return {}
+        if ST.staged(self, res):                                        # law.v2 (W6c): the first stage's weights
+            res = next((s for s in res["stages"] if isinstance(s, dict)), {})
         el = list(res.get("electorate", []))
         wts = {x: float((res.get("weights") or {}).get(x, 1.0)) for x in el}
         tot = sum(wts.values()) or 1.0
