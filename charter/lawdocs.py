@@ -359,6 +359,16 @@ E += [
      "after_settle_loan sees every repayment. Structural.", "common", "uncommon"),
 ]
 REQUIRES["settle_loan"] = lambda spec: bool((spec.get("law") or {}).get("v2"))
+# law-readable evidence (charter/evidence.py, review 10 #10): documented only in law.v2 worlds (REQUIRES)
+E += [
+    ("event", "chains", "Read", "event(event_id)", "one event of the world's record (\"e42\"), as a copy: {id, round, type, agent, "
+     "data, cause}; None if this law's polity may not see it (only public events, and a hidden polity's or a contract's own "
+     "members-only record; never private messages, notices or secrets; actors who acted unseen read as None).", "common", "uncommon"),
+    ("history", "chains", "Read", "history(type=None, agent=None, since=None, limit=20)", "the latest events this law may see "
+     "(as event()), oldest first, at most 50: of one type or a list of types, by one agent, from round `since` on. Costs gas by "
+     "the size of what it reads.", "common", "uncommon"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("event", "history")})
 # contracts (charter/contracts.py, P4.3): documented only in worlds with contracts on (OPTIONAL), for the code of a contract
 E += [
     ("pull", "contracts", "Contracts", "pull(member, item, qty)", "a contract's law only: takes qty of item from a member into its "

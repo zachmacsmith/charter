@@ -1703,6 +1703,34 @@ def _hook_fn(k, lid, hook):
     return fn if callable(fn) else None
 
 
+# Hooks indexed by name (review 10 §7 "Gas and performance"): {hook: frozenset of active law ids whose module defines it}, rebuilt
+# when the active laws or their loaded modules change (identity of each namespace). A primitive no law hooks skips bound_laws
+# altogether. Unknown (None) while an active law is not loaded yet: callers then take the full path, which loads laws exactly as
+# before, so the index never changes which laws load or run, or in what order.
+def _hook_index(k) -> dict | None:
+    act = [lid for lid in k.w["law_order"] if k.w["laws"][lid]["status"] == "active"]
+    nss = tuple(k.ns.get(lid) for lid in act)
+    hit = k.__dict__.get("_hook_index")
+    if hit is not None and hit[0] == act and len(hit[1]) == len(nss) and all(a is b for a, b in zip(hit[1], nss)):
+        return hit[2]
+    if any(ns is None for ns in nss):
+        return None
+    idx: dict = {}
+    for lid, ns in zip(act, nss):
+        for name, v in ns.items():
+            if name in PR.HOOKS and callable(v):
+                idx.setdefault(name, set()).add(lid)
+    idx = {h: frozenset(v) for h, v in idx.items()}
+    k._hook_index = (act, nss, idx)
+    return idx
+
+
+def hooked(k, hook) -> bool:
+    """May any active law define `hook`? False only when every active law is loaded and none defines it."""
+    idx = _hook_index(k)
+    return idx is None or hook in idx
+
+
 # ---------------------------------------------------------------------- redaction of payloads
 # Agents a call's options or payload make secret from laws: an unnamed killer (end_life named=False), a covert attacker.
 HIDE = {"end_life": lambda p, o: (p.get("by"),) if o.get("named") is False else (),
@@ -2343,6 +2371,8 @@ def _fail_closed(k, lid) -> bool:
 
 def _run_before(k, cas, P, p, opts, depth, raw, hide) -> list:
     hook = f"before_{P.name}"
+    if not hooked(k, hook):                                           # no law in force defines it (the hook index)
+        return []
     own = {lid for lid, _ in _raw_laws(raw)}
     turn = k.current_turn_agent()
     frames = raw[cas.index:]
@@ -2462,6 +2492,8 @@ def _enqueue(k, cas, P, payload, depth, causes, inv, hide) -> None:
     change was made directly by (L, after_p) itself (the innermost law frame of its cause stack), so a hook never feeds itself; every
     longer cycle (L reacts to M reacts to L) is legal, bounded by the depth cap and gas."""
     hook = f"after_{P.name}"
+    if not hooked(k, hook):
+        return
     inner = next((x for x in reversed(_raw_laws(causes))), None)
     st = _state(k)
     snap = None

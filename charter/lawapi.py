@@ -301,6 +301,11 @@ LAWFNS = _fns(
           "a constitution-rank law may)", docs="requires", v2=True, primitive="set_conflict_rule"),
     ),
     _module(
+        "evidence",                                                     # law.v2 (review 10 #10): the event log as evidence
+        F("event", "read", scope="read", docs="requires", v2=True),     # only what the law's account may know (evidence.sees)
+        F("history", "read", ((1, "agent"),), scope="read", docs="requires", v2=True),   # bounded and metered by size
+    ),
+    _module(
         "amendment",                                                    # law.v2 (P3.4): laws propose laws and amendments (D-16: L3)
         F("propose_law", "governance", scope="none", why="a draft of the calling law's own jurisdiction, decided by its procedure",
           docs="requires", primitive="propose", v2=True),
