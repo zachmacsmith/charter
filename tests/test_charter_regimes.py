@@ -286,3 +286,159 @@ def test_old_runs_still_score(tmp_path):
     out = runner.run(inst, AG.ScriptedPolicy(2), tmp_path / "run", log=lambda *x: None)
     s = scorer.score(out)["summary"]
     assert s["regime"] is None and s["regime_start"] == "oligarchy"
+
+
+# ------------------------------------------------------------------ regimes as law sets (W6d; review 10 §5.4)
+from charter import library as LB                                     # noqa: E402
+from charter import lawset as LS                                      # noqa: E402
+
+V2SET = {"base": "representative_democracy",
+         "laws": [{"template": "Entrenched Constitution", "params": {"AMEND_RULE": "two_thirds"}},
+                  {"template": "Bill of Rights"},
+                  {"template": {"choice": ["Intestacy", "Primogeniture", "Forced Heirship"]}},
+                  {"template": "Commons Charter", "params": {"QUOTA": {"randint": [3, 9]}, "FINE": {"uniform": [1, 4]}}},
+                  {"template": "Progressive Income Tax"}],
+         "drop": ["Honest Dealing"],
+         "amend": {"Universal Franchise": {}, "Commons Charter": {"SUSPEND_ROUNDS": 4}}}
+
+
+def v2_sp(regime=V2SET, rung="opus20", **over):
+    s = sp_for(rung, regime, **over)
+    return spec.set_path(s, "law.v2", True)
+
+
+def test_law_set_regime_resolves_templates_drop_and_amend():
+    inst = generator.generate(v2_sp(), 3)
+    reg = inst["regime"]
+    names = [s["name"] for s in reg["statutes"]]
+    assert names[:2] == ["Universal Franchise", "Court of Justice"] and "Honest Dealing" not in names     # inherited, minus drop
+    assert names[2:4] == ["Entrenched Constitution", "Bill of Rights"] and names[4] in ("Intestacy", "Primogeniture", "Forced Heirship")
+    commons = next(s for s in reg["statutes"] if s["name"] == "Commons Charter")
+    p = commons["template"]["params"]
+    assert 3 <= p["QUOTA"] <= 9 and 1 <= p["FINE"] <= 4 and p["SUSPEND_ROUNDS"] == 4                      # drawn, and amended
+    assert f"QUOTA = {p['QUOTA']}" in commons["code"] and "SUSPEND_ROUNDS = 4" in commons["code"]
+    assert reg["law_set"]["dimensions"]["label"] == "democracy" and reg["law_set"]["dimensions"]["entrenched"]
+    assert any(o["change"] == "harvest" for o in reg["law_set"]["overlaps"])   # Commons Charter and the income tax both hook harvests
+    k = start(inst)
+    rec = {x["title"]: x for x in k.w["laws"].values()}
+    assert rec["Commons Charter"]["template"] == {"name": "Commons Charter", "params": p, "rank": None}
+    assert rec["Universal Franchise"]["template"]["params"] == {} and "template" not in rec["Court of Justice"]
+    assert all(x["status"] == "active" for x in k.w["laws"].values())
+    json.dumps(inst)
+
+
+def test_law_set_rank_override_and_regime_statutes_as_templates():
+    inst = generator.generate(v2_sp({"base": "assembly", "laws": [{"template": "Intestacy", "rank": "constitution"},
+                                                                  {"template": "Ruler's Purse"}]}), 1)
+    a, b = inst["regime"]["statutes"]
+    assert "rank = 'constitution'" in a["code"] and LS.rank_of(a["code"]) == "constitution"
+    assert b["name"] == "Ruler's Purse" and b["template"]["name"] == "Ruler's Purse"
+
+
+def test_sampled_law_sets_vary_while_dimensions_and_the_world_stay_put():
+    plain = {"base": "representative_democracy", "laws": [{"template": "Intestacy"}, {"template": "Commons Charter"}]}
+    shas, keys = set(), set()
+    for seed in range(8):
+        a = generator.generate(v2_sp(), seed)
+        assert json.dumps(a) == json.dumps(generator.generate(v2_sp(), seed))          # deterministic by seed
+        b = generator.generate(v2_sp(plain), seed)
+        assert json.dumps(a["agents"]) == json.dumps(b["agents"]) and json.dumps(a["camps"]) == json.dumps(b["camps"])
+        laws = [{"name": "c", "code": a["constitution_code"]}] + a["regime"]["statutes"]
+        shas.add(tuple(LS.of(laws)["shas"]))
+        keys.add(LS.key(a["regime"]["law_set"]["dimensions"]))
+        assert LS.key(LS.dimensions(laws)) == LS.key(a["regime"]["law_set"]["dimensions"])
+    assert len(shas) > 4 and len(keys) == 1                                # the law set varies; its dimensions do not
+
+
+def test_law_set_composability_failures():
+    with pytest.raises(ValueError, match="can never fire"):                # no conflict module: nobody attacks
+        generator.generate(v2_sp({"base": "assembly", "laws": [{"template": "Strict Liability for Attacks"}]}, rung="E4"), 1)
+    with pytest.raises(ValueError, match="cannot set the procedure for constitution drafts"):
+        generator.generate(v2_sp({"base": "assembly", "laws": [{"template": "Supermajority Procedure", "rank": "statute"}]}, rung="E4"), 1)
+    with pytest.raises(ValueError, match="needs law.v2"):
+        generator.generate(sp_for("E4", {"base": "assembly", "laws": [{"template": "Intestacy"}]}), 1, check=False)
+    inst = generator.generate(v2_sp({"base": "assembly", "laws": [{"template": "Title Registry"}]}, rung="E4"), 1)   # L4 in an L3 world
+    assert inst["regime"]["statutes"] == [] and any("Title Registry" in r and "needs L4" in r for r in inst["repairs"])
+    rep = LS.check([{"name": "imports", "code": 'title = "I"\nintent = "t"\nx = use("L3")\ndef on_enact():\n    gazette("x")\n'}],
+                   v2_sp(rung="E4"), "L4")
+    assert "import library entries only" in rep["errors"][0]
+    from charter import schema as SC
+    errs = SC.validate(v2_sp({"base": "assembly", "laws": [{"template": "Intestacyy", "params": {"SHAER": 1}}], "dorp": []}))
+    assert any("did you mean 'Intestacy'" in e for e in errs) and any("did you mean 'drop'" in e for e in errs)
+    assert any("SHARE" in e for e in SC.validate(v2_sp({"base": "assembly", "laws": [{"template": "Intestacy", "params": {"SHAER": 1}}]})))
+    assert any("needs law.v2" in e for e in SC.validate(sp_for("E4", {"base": "assembly", "laws": [{"template": "Intestacy"}]})))
+
+
+# Derived versus hand-declared dimensions. The derived label reads the procedures at round 0 statically; it disagrees with the
+# declared `expect` here (reported, not forced): federation's weighted electorate (each camp's harvest-right holders plus the
+# Legislators) is a composite the static reading cannot size, so it reads as a restricted franchise (oligarchy), while the
+# scorer, counting the holders at round 0, finds a democracy.
+KNOWN_DISAGREEMENTS = {"federation": ("democracy", "oligarchy")}
+
+
+def test_derived_dimensions_against_declared_expect():
+    found = {}
+    for name, d in RG.REGIMES.items():
+        laws = [{"name": "constitution", "code": RG.constitution_code(d["constitution"])}] + \
+               [{"name": s, "code": RG.statute_code(s)} for s in d.get("statutes", [])]
+        dims = LS.dimensions(laws)
+        assert dims == LS.dimensions(laws) and dims["label"] in LS.LABELS                     # pure
+        if dims["label"] != d["expect"]:
+            found[name] = (d["expect"], dims["label"])
+    assert found == KNOWN_DISAGREEMENTS
+
+
+def test_dimension_vector_reads_the_law_set():
+    base = [{"name": "c", "code": RG.constitution_code("assembly")}]
+    d0 = LS.dimensions(base)
+    assert (d0["label"], d0["amendment_rule"], d0["entrenched"], d0["rights_guard"], d0["succession"]) == \
+           ("oligarchy", "two_thirds", False, False, False)
+
+    def tk(n, **p):
+        return {"name": n, "code": LB.instantiate(n, p) if p else LB.TOOLKIT[n]["code"]}
+    d1 = LS.dimensions(base + [tk("Referendum Procedure"), tk("Bill of Rights"), tk("Intestacy"), tk("Progressive Income Tax"),
+                               tk("Constitutional Court")])
+    assert d1["procedures"]["constitution:procedural"]["electorate"] == "citizens" and d1["amendment_rule"] == "majority_voting"
+    assert d1["rights_guard"] and d1["succession"] and d1["taxes"] and d1["review"] and d1["offices"] == 1
+    assert d1["ranks"] == {"constitution": 3, "statute": 3} and d1["coverage"]["end_life"] == {"statute": 1}
+    d2 = LS.dimensions(base + [tk("Simple Majority Procedure", ELECTORATE="citizens", RULE="majority_voting")])
+    assert d2["label"] == "democracy"                                       # the procedure law's constants are read
+
+
+def test_fingerprint_and_distance():
+    a = start(generator.generate(v2_sp(), 1))
+    b = start(generator.generate(v2_sp({"base": "representative_democracy", "laws": [{"template": "Intestacy"}]}), 1))
+    fa, fb = LS.fingerprint(a), LS.fingerprint(b)
+    assert len(fa["shas"]) == len({x["sha"] for x in fa["laws"]})
+    assert all(x["sha"] == a.w["laws"][x["id"]]["code_sha"] for x in fa["laws"])
+    assert next(x for x in fa["laws"] if x["title"] == "Bill of Rights")["template"]["name"] == "Bill of Rights"
+    assert fa["coverage"]["revoke_right"] == {"constitution": 1}
+    d = LS.distance(fa, fb)
+    assert LS.distance(fa, fa) == {"only_a": [], "only_b": [], "jaccard": 0.0, "coverage_diff": {}, "coverage_l1": 0}
+    assert d["only_a"] and 0 < d["jaccard"] < 1 and d["coverage_diff"]["revoke_right"] == {"constitution": -1} and d["coverage_l1"] > 0
+
+
+def test_run_json_records_the_legal_fingerprint(tmp_path):
+    inst = generator.generate(v2_sp({"base": "assembly", "laws": [{"template": "Commons Charter"}]}, rung="E4", rounds=1), 2)
+    out = runner.run(inst, AG.ScriptedPolicy(2), tmp_path / "run", log=lambda *x: None)
+    fp = json.loads((out / "run.json").read_text())["legal_fingerprint"]
+    assert [x["title"] for x in fp["laws"]] == ["Constitution: Assembly", "Commons Charter"]
+    assert fp["laws"][1]["template"] == {"name": "Commons Charter", "params": {}, "rank": None} and fp["coverage"]["harvest"]
+    plain = generator.generate(sp_for("E2", None, rounds=1), 2)                                          # no law.v2: no key
+    out2 = runner.run(plain, AG.ScriptedPolicy(2), tmp_path / "run2", log=lambda *x: None)
+    assert "legal_fingerprint" not in json.loads((out2 / "run.json").read_text())
+
+
+def test_legacy_regimes_have_no_law_set():
+    for name in RG.REGIMES:
+        assert "law_set" not in generator.generate(sp_for("E4", name), 1)["regime"]
+
+
+def test_drop_and_amend_of_inherited_statutes():
+    inst = generator.generate(sp_for("E4", {"base": "absolute_autocracy", "drop": ["Ruler's Purse"]}), 1)       # no law.v2 needed
+    assert [s["name"] for s in inst["regime"]["statutes"]] == ["Harvest Levy"] and "template" not in inst["regime"]["statutes"][0]
+    with pytest.raises(Exception, match="has no constant RATE"):                                             # edition 1: no constants
+        generator.generate(sp_for("E4", {"base": "absolute_autocracy", "amend": {"Harvest Levy": {"RATE": 0.25}}}), 1)
+    sp = spec.set_path(v2_sp({"base": "absolute_autocracy", "amend": {"Harvest Levy": {"RATE": 0.25}}}, rung="E4"), "law.library.edition", 2)
+    st = generator.generate(sp, 1)["regime"]["statutes"]
+    assert "RATE = 0.25" in st[0]["code"] and st[0]["template"] == {"name": "Harvest Levy", "params": {"RATE": 0.25}, "rank": None}

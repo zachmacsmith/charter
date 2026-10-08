@@ -25,6 +25,21 @@ Entry fields:
   expect         the scorer's label intended at round 0 (anarchy / dictatorship / oligarchy / democracy); see README for mismatches
   description    what agents are told; {Office} placeholders become the office holders' names. Empty for the five legacy regimes,
                  so `regime: assembly` gives exactly the prompts of `constitution: assembly`.
+
+Regimes as law sets (W6d; review 10 §5.4; law.v2 worlds only). A regime may also name laws made from parameterised templates (a
+toolkit template, library.TOOLKIT; any library law; a regimes.STATUTES law), resolved at generation with library.instantiate:
+  laws           [{template, rank, params}], enacted at round 0 after the statutes, in order. template: a name, or a distribution
+                 over names ({choice: [...]} / {weights: {...}}); params: {CONSTANT: value or distribution} (instantiate replaces
+                 the law's top-level constants); rank: the copy's declared rank (default: the template's own). Inline regimes add
+                 their laws to the base regime's. Draws use their own stream (random.Random(f"{seed}|regime_laws")), so replicates
+                 vary the law set while the rest of the world, and the derived dimensions, stay put.
+  drop           names of inherited statutes (or templates) to leave out
+  amend          {name: {CONSTANT: value}}: change a parameter of an inherited statute or of a law in the set (by template name or
+                 by title)
+The resolved set is checked for composability (lawset.check: static rules, level, rank, import DAG, a law that can never fire is an
+error, overlaps recorded) and its dimensions are derived from the laws (lawset.dimensions), recorded beside the declared `expect`.
+Each law made from a template records its provenance (template, params, rank) on its law record (k.w["laws"][lid]["template"]).
+A regime without these keys is resolved exactly as before (its record has no law_set key).
 """
 from __future__ import annotations
 
@@ -512,7 +527,8 @@ REGIMES: dict[str, dict] = {
     },
 }
 
-FIELDS = ("constitution", "statutes", "rights", "spec", "no_vote_needed", "expect", "summary", "description")
+FIELDS = ("constitution", "statutes", "rights", "spec", "no_vote_needed", "expect", "summary", "description", "laws", "drop", "amend")
+LAW_ENTRY_KEYS = ("template", "rank", "params")
 
 
 # ------------------------------------------------------------------ lookup
@@ -552,7 +568,9 @@ def definition(value) -> tuple[str, dict]:
     if isinstance(value, dict):
         base = value.get("base")
         d = copy.deepcopy(REGIMES[base]) if base else {}
-        d.update({k: copy.deepcopy(v) for k, v in value.items() if k not in ("base", "name")})
+        d.update({k: copy.deepcopy(v) for k, v in value.items() if k not in ("base", "name", "laws")})
+        if value.get("laws"):                                         # a law set adds to the base regime's laws
+            d["laws"] = list(d.get("laws") or []) + copy.deepcopy(list(value["laws"]))
         if "constitution" not in d:
             raise ValueError("an inline regime needs a constitution (or a base regime)")
         return str(value.get("name") or (f"{base}+custom" if base else "custom")), d
@@ -590,11 +608,15 @@ def resolve(spec: dict, seed: int) -> tuple[dict, dict | None]:
     spec["constitution"] = d["constitution"]
     for k, v in (d.get("spec") or {}).items():
         _set(spec, k, v)
-    return spec, {"name": name, "drawn_from": raw if S.is_dist(raw) else None, "constitution": d["constitution"],
-                  "statute_names": list(d.get("statutes") or []), "statutes": [], "rights": d.get("rights") or [],
-                  "spec": d.get("spec") or {}, "no_vote_needed": bool(d.get("no_vote_needed")), "expect": d.get("expect"),
-                  "summary": d.get("summary", ""), "description": d.get("description", ""), "cantons_text": d.get("cantons_text", ""),
-                  "offices": {}, "notes": [], "rng_seed": int(seed) * 7907 + 101}
+    drop = list(d.get("drop") or [])
+    rec = {"name": name, "drawn_from": raw if S.is_dist(raw) else None, "constitution": d["constitution"],
+           "statute_names": [s for s in d.get("statutes") or [] if s not in drop], "statutes": [], "rights": d.get("rights") or [],
+           "spec": d.get("spec") or {}, "no_vote_needed": bool(d.get("no_vote_needed")), "expect": d.get("expect"),
+           "summary": d.get("summary", ""), "description": d.get("description", ""), "cantons_text": d.get("cantons_text", ""),
+           "offices": {}, "notes": [], "rng_seed": int(seed) * 7907 + 101}
+    if d.get("laws") or drop or d.get("amend"):                      # a law set (W6d): resolved in finish, once the spec is
+        rec["law_set"] = {"laws": copy.deepcopy(list(d.get("laws") or [])), "drop": drop, "amend": copy.deepcopy(d.get("amend") or {})}
+    return spec, rec
 
 
 def finish(sp: dict, reg: dict | None) -> None:
@@ -603,13 +625,86 @@ def finish(sp: dict, reg: dict | None) -> None:
     if not reg:
         return
     lvl = sp["law_level"]
+    amend = (reg.get("law_set") or {}).get("amend") or {}
     for s in reg["statute_names"]:
         code = statute_code(s, sp)
+        if s in amend:                                                # amend: a parameter of an inherited statute
+            code = LB.set_constants(code, amend[s], s)
         need = level_of(code)
         if LEVELS.index(need) > LEVELS.index(lvl):
             reg["notes"].append(f"regime {reg['name']}: dropped starting statute '{s}' (needs {need}; this world is {lvl})")
             continue
-        reg["statutes"].append({"name": s, "code": code, "level": need})
+        reg["statutes"].append({"name": s, "code": code, "level": need, **({"template": {"name": s, "params": dict(amend[s]),
+                                                                                       "rank": None}} if s in amend else {})})
+    if reg.get("law_set") is not None:
+        resolve_laws(sp, reg)
+
+
+def law_rng(seed: int) -> random.Random:
+    """The stream a regime's law set draws templates and parameters from (its own: nothing else in the world moves)."""
+    return random.Random(f"{int(seed)}|regime_laws")
+
+
+def template_code(name: str, params: dict | None, sp: dict | None = None, rank: str | None = None) -> str:
+    """A law made from a template: a toolkit or library law (library.instantiate) or a regimes.STATUTES law, with its constants set."""
+    if name in LB.TOOLKIT or name in LB.LIB:
+        return LB.instantiate(name, params, sp, rank=rank)
+    if name in STATUTES:
+        return LB.set_constants(statute_code(name), params, name, rank)
+    raise KeyError(f"unknown law template {name!r} (not in the toolkit, the library or regimes.STATUTES)")
+
+
+def _drawn(v, rng):
+    from charter import spec as S
+    x = S.draw(v, rng)
+    return round(x, 4) if S.is_dist(v) and isinstance(x, float) else x
+
+
+def resolve_laws(sp: dict, reg: dict) -> None:
+    """Resolve a regime's law set (W6d): draw templates and parameters from the law stream, instantiate each, apply amend and drop,
+    check the whole starting set for composability (lawset.check: an error is a ValueError) and record its derived dimensions."""
+    from charter import lawset as LS
+    ls, name = reg["law_set"], reg["name"]
+    if ls["laws"] and not ((sp.get("law") or {}).get("v2")):
+        raise ValueError(f"regime {name}: a law set (regime laws) needs law.v2: true (ranks, new-style hooks, imports)")
+    rng = law_rng(sp["seed"])
+    amend, drop = ls["amend"], set(ls["drop"])
+    drawn = []
+    for entry in ls["laws"]:
+        tpl = _drawn(entry["template"], rng)
+        params = {k: _drawn(v, rng) for k, v in (entry.get("params") or {}).items()}
+        rank = _drawn(entry.get("rank"), rng)
+        if tpl in drop:
+            reg["notes"].append(f"regime {name}: dropped law '{tpl}' (drop)")
+            continue
+        params.update(amend.get(tpl) or {})
+        code = template_code(tpl, params, sp, rank)
+        title = L.header(code)[0]
+        if title != tpl and title in amend:
+            params.update(amend[title])
+            code = template_code(tpl, params, sp, rank)
+        drawn.append({"name": title, "code": code, "template": {"name": tpl, "params": params, "rank": rank}})
+    known = {s["name"] for s in reg["statutes"]} | {d["name"] for d in drawn} | {d["template"]["name"] for d in drawn}
+    for t in sorted(set(amend) - known):
+        reg["notes"].append(f"regime {name}: amend names {t!r}, which is not in this regime's starting laws")
+    start = [{"name": "constitution", "code": constitution_code(reg["constitution"])}] + reg["statutes"] + drawn
+    if not (sp.get("law") or {}).get("v2"):                          # only drop/amend of statutes: nothing new to check
+        reg["law_set"]["overlaps"] = []
+        reg["law_set"]["dimensions"] = LS.dimensions(start)
+        return
+    rep = LS.check(start, sp, sp["law_level"])
+    if rep["errors"]:
+        raise ValueError(f"regime {name}: its starting laws do not compose: " + "; ".join(rep["errors"]))
+    low = {x["name"]: x["level"] for x in rep["dropped"]}
+    for d in drawn:
+        if d["name"] in low:
+            reg["notes"].append(f"regime {name}: dropped starting law '{d['name']}' (needs {low[d['name']]}; this world is "
+                                f"{sp['law_level']})")
+            continue
+        reg["statutes"].append({"name": d["name"], "code": d["code"], "level": level_of(d["code"]), "template": d["template"]})
+    kept = [{"name": "constitution", "code": constitution_code(reg["constitution"])}] + reg["statutes"]
+    reg["law_set"]["overlaps"] = rep["overlaps"]
+    reg["law_set"]["dimensions"] = LS.dimensions(kept)
 
 
 def _select(agents, sel):
@@ -705,6 +800,8 @@ def enact_statutes(k, inst: dict) -> list[str]:
     out = []
     for s in (reg or {}).get("statutes", []):
         lid = k.new_law(s["code"], "constitution")
+        if s.get("template"):                                          # W6d: provenance of a law made from a template
+            k.w["laws"][lid]["template"] = copy.deepcopy(s["template"])
         k.enact(lid)
         out.append(lid)
     return out

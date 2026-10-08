@@ -472,12 +472,20 @@ def generate(spec: dict, seed: int, check: bool = True) -> dict:
 def validate(inst: dict, rng: random.Random) -> dict:
     """Make the instance playable; record every repair in inst['repairs']."""
     import difflib
-    bad = [n for n in (inst["spec"].get("start_laws") or []) if n not in LB.LIB]
+    bad = [n for n in (inst["spec"].get("start_laws") or []) if n not in LB.LIB and n not in LB.TOOLKIT]
     if bad:                                                             # fail before any run directory exists
-        hints = {n: difflib.get_close_matches(n, list(LB.LIB), 1) for n in bad}
+        hints = {n: difflib.get_close_matches(n, list(LB.LIB) + list(LB.TOOLKIT), 1) for n in bad}
         raise ValueError("unknown start_laws: " + ", ".join(f"{n!r}" + (f" (did you mean {h[0]!r}?)" if h else "") for n, h in hints.items()))
-    off = {n: LB.GATED_CATEGORIES[LB.LIB[n]["category"]] for n in (inst["spec"].get("start_laws") or [])
-           if LB.LIB[n]["category"] in LB.GATED_CATEGORIES and not MD.module_on(inst["spec"], LB.GATED_CATEGORIES[LB.LIB[n]["category"]])}
+    tk = [n for n in (inst["spec"].get("start_laws") or []) if n in LB.TOOLKIT]
+    if tk:                                                              # W6d: toolkit templates are law.v2 code; one must be able to fire
+        from charter import lawset as LS
+        if not (inst["spec"].get("law") or {}).get("v2"):
+            raise ValueError("start_laws: toolkit templates need law.v2: true (" + ", ".join(tk) + ")")
+        rep = LS.check([{"name": n, "code": LB.TOOLKIT[n]["code"]} for n in tk], inst["spec"], "L4")
+        if rep["errors"]:
+            raise ValueError("start_laws: " + "; ".join(rep["errors"]))
+    off = {n: LB.GATED_CATEGORIES[LB.LIB[n]["category"]] for n in (inst["spec"].get("start_laws") or []) if n in LB.LIB
+           and LB.LIB[n]["category"] in LB.GATED_CATEGORIES and not MD.module_on(inst["spec"], LB.GATED_CATEGORIES[LB.LIB[n]["category"]])}
     if off:                                                             # a gated module's law does nothing with the module off
         raise ValueError("start_laws need modules that are off: " + ", ".join(f"{n!r} needs {m}.enabled=true" for n, m in off.items()))
     rep = []

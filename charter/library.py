@@ -1186,8 +1186,10 @@ def on_round_end(r):
 #
 # Blocks hold no state of their own (exported code may not name `state` or `public`, review 09 §6.2): the importing law passes in
 # the dict that keeps the records (a key of its `state`, or of its `public` for records everyone may read with public_of).
-# Not written: an inheritance block. There is no law hook at a death (mortality.end runs the kernel's bequest; the "death" phase
-# has no ("law", ...) step), so a law cannot reach an estate; a roster diff in on_round_start sees the death only after probate.
+# Inheritance (review 10 §3.8): under law.v2 a law reaches an estate at a death. after_end_life(p, chain) runs between the change
+# (the estate account "estate:<aid>" opens) and probate (the kernel's bequest, deferred to the end of the cascade), and the law may
+# move from the open estate of a deceased its account binds (dispatch.estate_access). The toolkit's succession laws below (Intestacy,
+# Primogeniture, Forced Heirship, Estate Tax, Slayer Rule) use it; without law.v2 there is still no law hook at a death.
 BLOCKS: dict[str, dict] = {}
 LIB2: dict[str, dict] = {}
 GAPS: dict[str, str] = {}
@@ -1211,8 +1213,8 @@ def block(name, src):
 
 
 def ref(name: str) -> str:
-    """The pinned reference of a block: use(ref("Escrow")) is use("lib:escrow@<16 hex digits>")."""
-    return f"lib:{_slug(name)}@{BLOCKS[name]['sha']}"
+    """The pinned reference of a block (or a toolkit template): use(ref("Escrow")) is use("lib:escrow@<16 hex digits>")."""
+    return f"lib:{_slug(name)}@{(BLOCKS[name] if name in BLOCKS else TOOLKIT[name])['sha']}"
 
 
 def law2(name, src, gap=""):
@@ -1697,6 +1699,1124 @@ Same rule through on_commission instead of set_birth_rules(max_stats={"attack": 
 Two Child Limit (ordinary, L1, instead of structural, L2).''')
 
 
+# ====================================================================== the core legal toolkit (edition 2; review 10 §5.4, §6)
+# Readable, parameterised laws for the structures real legal systems are built from: a regime is a set of these (regimes.py, spec
+# `regime: {laws: [{template, rank, params}]}`) and an agent can copy or instantiate one (law.library.toolkit). Every template is
+# law.v2 code (ranks, new-style hooks, imports of lib:* blocks by hash) and uses only the law API. Its top-level constants are its
+# parameters (instantiate replaces them); its intent says what the defaults do. Each entry carries metadata for sampling: family and
+# topic (FAMILIES), the hook that does its main work (`fires`: a hook name, "invoke:<action>" for an office, "clause:<name>" for a
+# court clause, or "exports" for a definitions law) and a short doc. The names never collide with edition-1 laws (LIB), so no
+# edition-1 or edition-2 world sees them unless a regime or the spec names them.
+#
+# PENDING lists the toolkit items that wait on a roadmap item (★ in review 10 §6): what each needs and which work package brings it.
+FAMILIES = ("constitutional", "legislative", "definitions", "administrative", "criminal", "civil", "contracts", "property",
+            "succession", "finance", "tax", "courts", "between_polities")
+TOOLKIT: dict[str, dict] = {}
+PENDING: dict[str, dict] = {}
+FIXED_NAMES = ("title", "intent", "rank", "exports", "conflict_rule")          # top-level names that are not parameters
+
+
+def template(name, family, topic, src, doc, fires):
+    """A toolkit entry (whether it can fire in a world is read from its hooks: lawset.check)."""
+    assert name not in LIB and name not in BLOCKS and name not in TOOLKIT and family in FAMILIES, name
+    src = src.strip() + "\n"
+    tree = L.check(src, v2=True)
+    TOOLKIT[name] = {"name": name, "category": "toolkit", "kind": "law", "edition": 2, "family": family, "topic": topic,
+                     "rank": L.declared(tree, "rank") or "statute", "doc": " ".join(doc.split()), "fires": fires,
+                     "code": src, "sha": _sha(src)}
+
+
+def pending(name, family, topic, waits_on, doc):
+    """A ★ toolkit item that cannot be written yet: TODO, waits on `waits_on` (a sibling work package)."""
+    PENDING[name] = {"name": name, "family": family, "topic": topic, "waits_on": waits_on, "doc": " ".join(doc.split())}
+
+
+def params(name: str, src: str | None = None) -> dict:
+    """A toolkit (or library) law's parameters: its top-level constants other than title, intent, rank and exports (of `src`, an
+    instance of it, when given)."""
+    import ast
+    tree = ast.parse(src if src is not None else code(name))
+    return {n.targets[0].id: ast.literal_eval(n.value) for n in tree.body
+            if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)
+            and n.targets[0].id not in FIXED_NAMES and L.const_expr(n.value)}
+
+
+# ---------------------------------------------------------------------- constitutional
+template("Entrenched Constitution", "constitutional", "amendment", '''
+title = "Entrenched Constitution"
+intent = "Holders of VOTE_RIGHT pass ordinary and structural laws by RULE; procedural laws and every constitutional draft need AMEND_RULE (by default: holders of vote, majority, two thirds). While ETERNAL holds, this constitution cannot be amended or repealed."
+rank = "constitution"
+VOTE_RIGHT = "vote"
+RULE = "majority"
+AMEND_RULE = "two_thirds"
+CLOSES_IN = 1
+ETERNAL = True
+
+def ordinary(p):
+    return {"electorate": holders(VOTE_RIGHT), "rule": RULE, "closes_in": CLOSES_IN}
+
+def strict(p):
+    return {"electorate": holders(VOTE_RIGHT), "rule": AMEND_RULE, "closes_in": CLOSES_IN}
+
+def on_enact():
+    set_procedure("ordinary", ordinary)
+    set_procedure("structural", ordinary)
+    set_procedure("procedural", strict)
+    set_procedure("procedural", strict, rank="constitution")
+
+def eternity(p):
+    if ETERNAL and p["law"] == law_id():
+        return {"block": True, "reason": "the eternity clause: the Entrenched Constitution cannot be amended or repealed"}
+    return None
+
+def before_amend(p, chain):
+    return eternity(p)
+
+def before_repeal(p, chain):
+    return eternity(p)
+''', doc="""Ranked procedures (constitutional drafts need the stricter rule) and an eternity clause (before_amend/before_repeal
+refuse any change to itself). The building block of an entrenched republic (review 10 §5.1, system B).""", fires="before_repeal")
+
+template("Bill of Rights", "constitutional", "rights", '''
+title = "Bill of Rights"
+intent = "No law, office or penalty may revoke or suspend a protected right (by default elector, press and encrypt), nor limit anyone's private messages below DM_FLOOR per round; while REVIEW_DRAFTS holds, no draft that would take a protected right may be proposed."
+rank = "constitution"
+PROTECTED = ["elector", "press", "encrypt"]
+DM_FLOOR = 1
+REVIEW_DRAFTS = True
+
+def guard(right):
+    if right in PROTECTED:
+        return {"block": True, "reason": "the Bill of Rights protects " + right}
+    return None
+
+def before_revoke_right(p, chain):
+    return guard(p["right"])
+
+def before_suspend_right(p, chain):
+    return guard(p["right"])
+
+def before_set_dm_limit(p, chain):
+    if p["n"] is not None and p["n"] < DM_FLOOR:
+        return {"block": True, "reason": "the Bill of Rights keeps at least " + str(DM_FLOOR) + " private messages per round"}
+    return None
+
+def before_propose(p, chain):
+    if not REVIEW_DRAFTS:
+        return None
+    d = p["draft"]
+    for r in d["rights"]["revoke"] + d["rights"]["suspend"]:
+        if r in PROTECTED:
+            return {"block": True, "reason": "the draft takes a protected right: " + r}
+    return None
+''', doc="""Runtime guards on protected rights (before_revoke_right, before_suspend_right, before_set_dm_limit), whoever causes the
+change, plus ex ante review of drafts' constant rights (a computed right name escapes it: review 10 §3.1). Protect vote or propose
+only in worlds without elections that reseat them (Universal Franchise revokes vote from the outgoing legislature).""",
+         fires="before_revoke_right")
+
+template("Constitutional Court", "constitutional", "review", '''
+title = "Constitutional Court"
+intent = "A court of JUSTICES justices (by default one: the first Legislator) may strike down any ordinary or structural law in force; while PRE_REVIEW holds, no draft that would take a protected right may be proposed. Every strike-down is published with its reason."
+rank = "constitution"
+JUSTICE_RIGHT = "justice"
+JUSTICES = 1
+BENCH_CLASS = "legislator"
+SHIELDED_CLASSES = ["procedural"]
+PRE_REVIEW = True
+PROTECTED = ["elector", "press", "encrypt"]
+
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def seat():
+    if holders(JUSTICE_RIGHT):
+        return
+    pool = sorted(agents(BENCH_CLASS))
+    if not pool:
+        pool = sorted(citizens())
+    for a in pool[:JUSTICES]:
+        grant(a, JUSTICE_RIGHT)
+
+def strike_down(agent, target, reason=""):
+    t = str(target)
+    found = [x for x in laws() if x["id"] == t]
+    if not found:
+        return "no law " + t + " is in force"
+    if t == law_id() or found[0]["class"] in SHIELDED_CLASSES:
+        return "the Court cannot strike down " + t + " (a " + found[0]["class"] + " law)"
+    if not repeal(t):
+        return "the repeal of " + t + " was refused"
+    public.setdefault("rulings", []).append({"law": t, "title": found[0]["title"], "by": agent, "round": round(),
+                                             "reason": str(reason)[:200]})
+    gazette("Constitutional Court: " + found[0]["title"] + " (" + t + ") is struck down. " + str(reason)[:200])
+    return "struck down " + t
+
+def on_enact():
+    create_right(JUSTICE_RIGHT)
+    seat()
+    define_action(JUSTICE_RIGHT, "strike_down", strike_down)
+
+def before_propose(p, chain):
+    if not PRE_REVIEW:
+        return None
+    d = p["draft"]
+    for r in d["rights"]["revoke"] + d["rights"]["suspend"]:
+        if r in PROTECTED:
+            return {"block": True, "reason": "the Constitutional Court's review: the draft takes a protected right: " + r}
+    return None
+''', doc="""Judicial review: an office (define_action, L4) whose strike_down repeals a law in force (the court is procedural, so
+Kernel.repeal's class rule lets it), plus a priori review of drafts (before_propose). Procedural laws are shielded by default, so
+the court cannot strike down the constitution that made it.""", fires="invoke:strike_down")
+
+template("Delegated Regulation Act", "constitutional", "delegation", '''
+title = "Delegated Regulation Act"
+intent = "The Minister (holder of MINISTER_RIGHT; by default the first Legislator) makes regulations alone: a regulation-rank ordinary or structural draft passes at once when the Minister proposes it and fails otherwise, and a regulation may call only the functions on ALLOWED_CALLS (camp rules, notices and reads by default)."
+rank = "statute"
+MINISTER_RIGHT = "minister"
+MINISTER_CLASS = "legislator"
+ALLOWED_CALLS = ["set_quota", "set_harvest_limit", "set_fee", "gazette", "notify", "agents", "holders", "has", "balance", "camps",
+                 "stock", "round", "class_of", "name", "value", "price", "holdings_value"]
+
+def decide(p):
+    return has(p.author, MINISTER_RIGHT)
+
+def on_enact():
+    create_right(MINISTER_RIGHT)
+    if not holders(MINISTER_RIGHT):
+        pool = sorted(agents(MINISTER_CLASS))
+        if pool:
+            grant(pool[0], MINISTER_RIGHT)
+    set_procedure("ordinary", decide, rank="regulation")
+    set_procedure("structural", decide, rank="regulation")
+
+def before_propose(p, chain):
+    d = p["draft"]
+    if d["rank"] != "regulation":
+        return None
+    bad = [c for c in d["calls"] if c not in ALLOWED_CALLS]
+    if bad:
+        return {"block": True, "reason": "a regulation may not call " + ", ".join(bad) + " (Delegated Regulation Act)"}
+    return None
+''', doc="""Delegated legislation: a regulation-rank procedure decided by one office, and a cap on what delegated drafts may call
+(review 10 §4, delegation chains). Lex superior keeps regulations below statutes.""", fires="before_propose")
+
+# ---------------------------------------------------------------------- legislative: the procedure set
+template("Simple Majority Procedure", "legislative", "procedure", '''
+title = "Simple Majority Procedure"
+intent = "Drafts of the listed CLASSES (by default ordinary and structural) pass by RULE (by default a simple majority) of the ELECTORATE (a right's holders, or citizens: everyone but the Board and the Fixer; by default holders of vote)."
+rank = "constitution"
+ELECTORATE = "vote"
+RULE = "majority"
+CLASSES = ["ordinary", "structural"]
+RANKS = []
+CLOSES_IN = 1
+
+def electorate():
+    if ELECTORATE == "citizens":
+        return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+    return holders(ELECTORATE)
+
+def decide(p):
+    return {"electorate": electorate(), "rule": RULE, "closes_in": CLOSES_IN}
+
+def on_enact():
+    for c in CLASSES:
+        set_procedure(c, decide)
+        for r in RANKS:
+            set_procedure(c, decide, rank=r)
+''', doc="""One procedure for the listed classes (and ranks): electorate, rule and ballot length are parameters. Its siblings
+(Supermajority Procedure, Referendum Procedure) differ only in their defaults.""", fires="on_enact")
+
+template("Supermajority Procedure", "legislative", "procedure", '''
+title = "Supermajority Procedure"
+intent = "Drafts of the listed CLASSES and RANKS (by default procedural laws and every constitutional draft) need RULE (by default two thirds) of the ELECTORATE (by default holders of vote)."
+rank = "constitution"
+ELECTORATE = "vote"
+RULE = "two_thirds"
+CLASSES = ["procedural"]
+RANKS = ["constitution"]
+CLOSES_IN = 1
+
+def electorate():
+    if ELECTORATE == "citizens":
+        return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+    return holders(ELECTORATE)
+
+def decide(p):
+    return {"electorate": electorate(), "rule": RULE, "closes_in": CLOSES_IN}
+
+def on_enact():
+    for c in CLASSES:
+        set_procedure(c, decide)
+        for r in RANKS:
+            set_procedure(c, decide, rank=r)
+''', doc="""A stricter rule for the rules that change the rules: procedural and constitutional drafts.""", fires="on_enact")
+
+template("Referendum Procedure", "legislative", "procedure", '''
+title = "Referendum Procedure"
+intent = "Drafts of the listed CLASSES and RANKS (by default procedural laws and every constitutional draft) go to a referendum of the ELECTORATE (by default every citizen: everyone but the Board and the Fixer), decided by RULE (by default a majority of those voting) over CLOSES_IN rounds."
+rank = "constitution"
+ELECTORATE = "citizens"
+RULE = "majority_voting"
+CLASSES = ["procedural"]
+RANKS = ["constitution"]
+CLOSES_IN = 2
+
+def electorate():
+    if ELECTORATE == "citizens":
+        return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+    return holders(ELECTORATE)
+
+def decide(p):
+    return {"electorate": electorate(), "rule": RULE, "closes_in": CLOSES_IN}
+
+def on_enact():
+    for c in CLASSES:
+        set_procedure(c, decide)
+        for r in RANKS:
+            set_procedure(c, decide, rank=r)
+''', doc="""Constitutional change by referendum of all citizens (Swiss mandatory referendum).""", fires="on_enact")
+
+template("Popular Initiative", "legislative", "initiative", '''
+title = "Popular Initiative"
+intent = "Any citizen may start an initiative with the complete code of a law; once SHARE of the citizens (by default a third) have signed it within WINDOW rounds, this law proposes it, and it goes through the procedure like any proposal."
+rank = "statute"
+INITIATIVE_RIGHT = "initiative"
+SHARE = 0.34
+WINDOW = 5
+
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def submit(row):
+    res = propose_law(row["code"])
+    if res["ok"]:
+        row["status"] = "proposed"
+        row["law"] = res["law"]
+        gazette("Popular Initiative " + str(row["n"]) + " has its signatures and is proposed as " + res["law"])
+    else:
+        row["reason"] = str(res.get("reason", ""))[:200]
+    return res["ok"]
+
+def qualified(row):
+    return len(row["signers"]) >= SHARE * len(citizens())
+
+def initiate(agent, code):
+    book = public.setdefault("initiatives", [])
+    n = len(book) + 1
+    row = {"n": n, "by": agent, "code": str(code), "signers": [agent], "round": round(), "status": "open"}
+    book.append(row)
+    if qualified(row):
+        submit(row)
+    return "initiative " + str(n) + " opened; others sign it with sign_initiative [" + str(n) + "]"
+
+def sign_initiative(agent, n):
+    for row in public.get("initiatives", []):
+        if row["n"] == int(n) and row["status"] == "open":
+            if agent not in row["signers"]:
+                row["signers"].append(agent)
+            if qualified(row):
+                submit(row)
+            return str(len(row["signers"])) + " signatures"
+    return "no open initiative " + str(n)
+
+def on_enact():
+    create_right(INITIATIVE_RIGHT)
+    for a in citizens():
+        grant(a, INITIATIVE_RIGHT)
+    define_action(INITIATIVE_RIGHT, "initiate", initiate)
+    define_action(INITIATIVE_RIGHT, "sign_initiative", sign_initiative)
+
+def on_round_end(r):
+    for row in public.get("initiatives", []):
+        if row["status"] == "open":
+            if qualified(row):
+                submit(row)
+            elif r - row["round"] >= WINDOW:
+                row["status"] = "lapsed"
+''', doc="""Citizens' initiative (petition, then propose_law): an office for every citizen, signatures kept in public, the draft
+proposed by the law once it qualifies (at most one proposal per law per round; a qualified initiative retries at round end).""",
+         fires="invoke:initiate")
+
+# ---------------------------------------------------------------------- definitions
+template("Definitions and Citizenship Act", "definitions", "citizenship", '''
+title = "Definitions and Citizenship Act"
+intent = "Defines, for every law that imports it, who is a resident, a citizen (by default every Worker, Scientist, Legislator and Media), an official (a holder of vote or judge) and an adult (born at least ADULT_AGE rounds ago); publishes the roll of citizens and officials each round."
+exports = ["resident", "citizen", "official", "adult", "CITIZEN_CLASSES", "OFFICIAL_RIGHTS", "ADULT_AGE"]
+CITIZEN_CLASSES = ["worker", "scientist", "legislator", "media"]
+OFFICIAL_RIGHTS = ["vote", "judge"]
+ADULT_AGE = 0
+
+def resident(a):
+    return a in agents()
+
+def citizen(a):
+    return resident(a) and class_of(a) in CITIZEN_CLASSES
+
+def official(a):
+    return any([has(a, r) for r in OFFICIAL_RIGHTS])
+
+def born(a):
+    for b in births():
+        if b["child"] == a:
+            return b["round"]
+    return None
+
+def adult(a):
+    r0 = born(a)
+    return r0 is None or round() - r0 >= ADULT_AGE
+
+def roll():
+    public["citizens"] = sorted([a for a in agents() if citizen(a)])
+    public["officials"] = sorted([a for a in agents() if official(a)])
+
+def on_enact():
+    roll()
+
+def on_round_start(r):
+    roll()
+''', doc="""Exported predicates (resident, citizen, official, adult) that other laws import with use() instead of each defining
+membership its own way; the roll is public (public_of). Exported code is pure (no state, no public), as the linker requires.""",
+         fires="on_round_start")
+
+# ---------------------------------------------------------------------- administrative
+template("Licensing Authority", "administrative", "licensing", f'''
+title = "Licensing Authority"
+intent = "Harvesting at the licensed camps (by default every camp) needs a licence: any citizen may buy one for FEE FEE_ITEM paid to the treasury, valid for TERM rounds; the Registrar may revoke a licence; every licence issued, revoked or expired is in a public register. Holders of a harvest right at enactment get a licence."
+rank = "statute"
+reg = use("{ref("Ledger")}")
+pay = use("{ref("Seize")}")
+LICENCE = "licence"
+REGISTRAR_RIGHT = "registrar"
+REGISTRAR_CLASS = "legislator"
+APPLICANT_RIGHT = "applicant"
+CAMPS = []
+FEE_ITEM = "timber"
+FEE = 2
+TERM = 10
+GRANDFATHER = True
+
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def book():
+    return public.setdefault("register", {{}})
+
+def issue(a, how):
+    grant(a, LICENCE)
+    until = None
+    if TERM:
+        until = round() + TERM
+    reg["record"](book(), a, {{"event": how, "until": until}})
+
+def apply_licence(agent):
+    if has(agent, LICENCE):
+        return "you already hold a licence"
+    if FEE > 0 and not pay["charge"](agent, treasury(), FEE_ITEM, FEE):
+        return "the licence fee is " + str(FEE) + " " + FEE_ITEM
+    issue(agent, "issued")
+    return "licence issued"
+
+def revoke_licence(agent, target, reason=""):
+    if not has(target, LICENCE):
+        return target + " holds no licence"
+    revoke(target, LICENCE)
+    reg["record"](book(), target, {{"event": "revoked", "reason": str(reason)[:200]}}, agent)
+    notify(target, "Your licence was revoked by the Registrar. " + str(reason)[:200])
+    return "licence revoked"
+
+def before_harvest(p, chain):
+    if (not CAMPS or p["camp"] in CAMPS) and not has(p["agent"], LICENCE):
+        return {{"block": True, "reason": "harvesting at " + p["camp"] + " needs a licence (invoke apply_licence)"}}
+    return None
+
+def on_round_start(r):
+    if not TERM:
+        return
+    for a in holders(LICENCE):
+        row = reg["last"](book(), a)
+        if row and row.get("until") is not None and r >= row["until"]:
+            revoke(a, LICENCE)
+            reg["record"](book(), a, {{"event": "expired"}})
+            notify(a, "Your licence has expired; renew it with apply_licence.")
+
+def on_enact():
+    create_right(LICENCE)
+    create_right(REGISTRAR_RIGHT)
+    create_right(APPLICANT_RIGHT)
+    for a in citizens():
+        grant(a, APPLICANT_RIGHT)
+        if GRANDFATHER and any([r.startswith("harvest:") for r in rights_of(a)]):
+            issue(a, "grandfathered")
+    pool = sorted(agents(REGISTRAR_CLASS))
+    if pool and not holders(REGISTRAR_RIGHT):
+        grant(pool[0], REGISTRAR_RIGHT)
+    define_action(APPLICANT_RIGHT, "apply_licence", apply_licence)
+    define_action(REGISTRAR_RIGHT, "revoke_licence", revoke_licence)
+''', doc="""A licence as a right: issued for a fee by an office every citizen holds, required by a before_harvest gate, revocable by a
+Registrar, expiring after a term, all recorded in a public register (lib:ledger).""", fires="before_harvest")
+
+template("Regulatory Agency", "administrative", "regulation", '''
+title = "Regulatory Agency"
+intent = "The Regulator (holder of REGULATOR_RIGHT; by default the first Scientist) sets each camp's harvest quota between MIN_QUOTA and MAX_QUOTA and its harvest fee between 0 and MAX_FEE FEE_ITEM; every setting is published."
+rank = "statute"
+REGULATOR_RIGHT = "regulator"
+REGULATOR_CLASS = "scientist"
+MIN_QUOTA = 1
+MAX_QUOTA = 10
+MAX_FEE = 2
+FEE_ITEM = "timber"
+
+def note(camp, what, v, agent):
+    public.setdefault("settings", {}).setdefault(camp, {})[what] = v
+    gazette("Regulatory Agency: " + name("camp:" + camp) + " " + what + " set to " + str(v) + " by " + agent)
+
+def set_camp_quota(agent, camp, n):
+    if camp not in camps():
+        return "no such camp: " + str(camp)
+    q = int(n)
+    if q < MIN_QUOTA or q > MAX_QUOTA:
+        return "the quota must be between " + str(MIN_QUOTA) + " and " + str(MAX_QUOTA)
+    set_quota(camp, q)
+    note(camp, "quota", q, agent)
+    return "quota set"
+
+def set_camp_fee(agent, camp, qty):
+    if camp not in camps():
+        return "no such camp: " + str(camp)
+    q = float(qty)
+    if q < 0 or q > MAX_FEE:
+        return "the fee must be between 0 and " + str(MAX_FEE)
+    set_fee(camp, FEE_ITEM, q)
+    note(camp, "fee", q, agent)
+    return "fee set"
+
+def on_enact():
+    create_right(REGULATOR_RIGHT)
+    pool = sorted(agents(REGULATOR_CLASS))
+    if not pool:
+        pool = sorted(agents("legislator"))
+    if pool and not holders(REGULATOR_RIGHT):
+        grant(pool[0], REGULATOR_RIGHT)
+    define_action(REGULATOR_RIGHT, "set_camp_quota", set_camp_quota)
+    define_action(REGULATOR_RIGHT, "set_camp_fee", set_camp_fee)
+''', doc="""Parameter delegation: an agency office sets camp rules within bounds the statute fixes (review 10 §3.2).""",
+         fires="invoke:set_camp_quota")
+
+template("Public Register", "administrative", "registers", f'''
+title = "Public Register"
+intent = "Every transfer between agents of at least MIN_QTY units is entered in a public register (sender, recipient, item, quantity, round) that anyone, and any law, can read."
+rank = "statute"
+reg = use("{ref("Ledger")}")
+MIN_QTY = 5
+KINDS = ["transfer"]
+
+def after_move(p, chain):
+    if p["why"] in KINDS and p["src"] is not None and p["qty"] >= MIN_QTY:
+        reg["record"](public.setdefault("register", {{}}), str(p["src"]), {{"to": p["dst"], "item": p["item"], "qty": p["qty"]}})
+''', doc="""A public register (lib:ledger in public): other laws read it with public_of(id), e.g. a tax audit or a disclosure
+rule.""", fires="after_move")
+
+# ---------------------------------------------------------------------- criminal
+template("Penal Code", "criminal", "offences", '''
+title = "Penal Code"
+intent = "Offences and penalties: an unlawful attack (while VIOLENCE), and a gift of GIFT_LIMIT or more to an official from a non-official (while BRIBERY). A first offence is fined FINES[0] FINE_ITEM, a second also suspends the offender's SUSPEND_RIGHT for SUSPEND_ROUNDS rounds, a third also limits them to LIMIT_ACTIONS actions for LIMIT_ROUNDS rounds; the record is public."
+rank = "statute"
+VIOLENCE = True
+BRIBERY = True
+GIFT_LIMIT = 5
+OFFICIAL_RIGHTS = ["vote", "judge"]
+FINE_ITEM = "timber"
+FINES = [2, 4, 8]
+SUSPEND_RIGHT = "vote"
+SUSPEND_ROUNDS = 3
+LIMIT_ACTIONS = 1
+LIMIT_ROUNDS = 2
+
+def official(a):
+    return a in agents() and any([has(a, r) for r in OFFICIAL_RIGHTS])
+
+def sentence(who, offence):
+    rec = public.setdefault("record", {}).setdefault(who, [])
+    rec.append({"offence": offence, "round": round()})
+    n = len(rec)
+    if FINES:
+        fine(who, FINE_ITEM, FINES[min(n, len(FINES)) - 1])
+    if n >= 2:
+        suspend(who, SUSPEND_RIGHT, SUSPEND_ROUNDS)
+    if n >= 3:
+        limit_actions(who, LIMIT_ACTIONS, LIMIT_ROUNDS)
+    gazette("Penal Code: " + who + " is sentenced for " + offence + " (offence " + str(n) + ")")
+
+def after_attack(p, chain):
+    if VIOLENCE and not p["lawful"] and p["attacker"] is not None:
+        sentence(p["attacker"], "an unlawful attack on " + str(p["target"]))
+
+def after_move(p, chain):
+    if BRIBERY and p["why"] == "transfer" and p["src"] is not None and p["qty"] >= GIFT_LIMIT:
+        if official(p["dst"]) and not official(p["src"]):
+            sentence(p["src"], "a gift to the official " + str(p["dst"]))
+''', doc="""Offences as after-hooks with a graduated penalty schedule (fine, suspension, incapacitation). Strict liability: no
+intent, no trial (contrast the clause path: Compensation Act). Perfect detection is a confound (review 10 §7).""",
+         fires="after_move")
+
+template("Prosecution Office", "criminal", "prosecution", '''
+title = "Prosecution Office"
+intent = "A Public Prosecutor (holder of PROSECUTOR_RIGHT; by default the first Legislator) is paid REWARD REWARD_ITEM from the treasury for each conviction in a case they brought; every case the Prosecutor brings to a ruling goes on a public docket."
+rank = "statute"
+PROSECUTOR_RIGHT = "prosecutor"
+PROSECUTOR_CLASS = "legislator"
+REWARD_ITEM = "timber"
+REWARD = 2
+
+def on_enact():
+    create_right(PROSECUTOR_RIGHT)
+    pool = sorted(agents(PROSECUTOR_CLASS))
+    if pool and not holders(PROSECUTOR_RIGHT):
+        grant(pool[0], PROSECUTOR_RIGHT)
+
+def on_ruling(case, verdict, accuser, accused):
+    if accuser is None or not has(accuser, PROSECUTOR_RIGHT):
+        return
+    public.setdefault("docket", []).append({"case": case, "accused": accused, "verdict": verdict, "round": round()})
+    if verdict == "guilty" and REWARD > 0:
+        pay = min(REWARD, balance(treasury(), REWARD_ITEM))
+        if pay > 0:
+            move(treasury(), accuser, REWARD_ITEM, pay)
+''', doc="""A public prosecutor paid by conviction, with a public docket. Restricting standing to the prosecutor needs a routed
+open_case (TODO: courts v2, W6b).""", fires="on_ruling")
+
+template("Pardon Office", "criminal", "pardon", '''
+title = "Pardon Office"
+intent = "The holder of PARDON_RIGHT (by default the first Legislator) may pardon an agent, at most PER_ROUND times per round: the RESTORABLE rights that laws took from the agent are given back, and the fines the agent paid are refunded from the treasury, up to MAX_REFUND per item. Every pardon is published."
+rank = "statute"
+PARDON_RIGHT = "pardon"
+PARDON_CLASS = "legislator"
+RESTORABLE = ["vote", "propose", "elector"]
+MAX_REFUND = 10
+PER_ROUND = 1
+
+def after_revoke_right(p, chain):
+    if p["right"] in RESTORABLE and p["agent"] is not None:
+        lost = state.setdefault("lost", {}).setdefault(p["agent"], [])
+        if p["right"] not in lost:
+            lost.append(p["right"])
+
+def after_move(p, chain):
+    if p["why"] == "fine" and p["src"] is not None:
+        f = state.setdefault("fined", {}).setdefault(p["src"], {})
+        f[p["item"]] = f.get(p["item"], 0) + p["result"]["moved"]
+
+def pardon(agent, target, reason=""):
+    used = state.setdefault("used", {})
+    key = str(round())
+    if used.get(key, 0) >= PER_ROUND:
+        return "no more pardons this round"
+    used[key] = used.get(key, 0) + 1
+    back = []
+    for r in state.get("lost", {}).pop(target, []):
+        if grant(target, r):
+            back.append(r)
+    refunded = {}
+    for item, q in state.get("fined", {}).pop(target, {}).items():
+        give = min(q, MAX_REFUND, balance(treasury(), item))
+        if give > 0 and move(treasury(), target, item, give):
+            refunded[item] = give
+    public.setdefault("pardons", []).append({"agent": target, "by": agent, "round": round(), "rights": back,
+                                             "refunded": refunded, "reason": str(reason)[:200]})
+    gazette("Pardon: " + target + " is pardoned by " + agent + ". " + str(reason)[:200])
+    return "pardoned " + target
+
+def on_enact():
+    create_right(PARDON_RIGHT)
+    pool = sorted(agents(PARDON_CLASS))
+    if pool and not holders(PARDON_RIGHT):
+        grant(pool[0], PARDON_RIGHT)
+    define_action(PARDON_RIGHT, "pardon", pardon)
+''', doc="""Clemency as an office: the law keeps its own record of rights revoked and fines paid (after-hooks) and undoes them on a
+pardon. Lifting an action limit early and withdrawing a pending case are not expressible yet (TODO: no unlimit function; cases
+need courts v2, W6b).""", fires="invoke:pardon")
+
+# ---------------------------------------------------------------------- civil
+template("Compensation Act", "civil", "damages", '''
+title = "Compensation Act"
+intent = "Whoever wrongfully causes another agent loss can be taken to court under the clause CLAUSE; if found liable they pay the victim DAMAGES DAMAGES_ITEM (as much as they hold) and COSTS to the treasury, and the award is published."
+rank = "statute"
+CLAUSE = "harm"
+TEXT = "You must not wrongfully cause another agent loss: by deceit, by breaking your word on a deal, or by damaging what they hold."
+DAMAGES_ITEM = "timber"
+DAMAGES = 5
+COSTS = 1
+
+def liable(guilty, victim):
+    paid = min(DAMAGES, balance(guilty, DAMAGES_ITEM))
+    if paid > 0 and victim is not None:
+        move(guilty, victim, DAMAGES_ITEM, paid)
+    costs = min(COSTS, balance(guilty, DAMAGES_ITEM))
+    if costs > 0:
+        move(guilty, treasury(), DAMAGES_ITEM, costs)
+    public.setdefault("awards", []).append({"liable": guilty, "victim": victim, "paid": paid, "round": round()})
+
+def on_enact():
+    clause(CLAUSE, TEXT, liable)
+''', doc="""Tort by adjudication: an open-textured clause a judge applies, with damages to the victim. Damages are fixed; a remedy
+chosen at ruling waits on courts v2 (TODO: W6b, rule {verdict, remedy}).""", fires="clause:harm")
+
+template("Strict Liability for Attacks", "civil", "liability", '''
+title = "Strict Liability for Attacks"
+intent = "Whoever attacks another agent unlawfully pays the target DAMAGES DAMAGES_ITEM (as much as they hold), whether or not the attack succeeds; the payment is published."
+rank = "statute"
+DAMAGES_ITEM = "timber"
+DAMAGES = 5
+
+def after_attack(p, chain):
+    a, t = p["attacker"], p["target"]
+    if p["lawful"] or a is None or t is None:
+        return
+    paid = min(DAMAGES, balance(a, DAMAGES_ITEM))
+    if paid > 0 and move(a, t, DAMAGES_ITEM, paid):
+        public.setdefault("payments", []).append({"attacker": a, "target": t, "paid": paid, "round": round()})
+        gazette("Strict liability: " + a + " pays " + t + " " + str(paid) + " " + DAMAGES_ITEM + " for an unlawful attack")
+''', doc="""Rylands v Fletcher for violence: liability without fault, paid at once by an after-hook.""", fires="after_attack")
+
+# ---------------------------------------------------------------------- property
+template("Title Registry", "property", "title", f'''
+title = "Title Registry"
+intent = "Harvest rights are titles that can be sold: a holder offers a title to a buyer for a price, the buyer accepts, and the Registry conveys it at once (the price to the seller, FEE FEE_ITEM to the treasury, the right from seller to buyer) and records it in a public register of titles."
+rank = "statute"
+reg = use("{ref("Ledger")}")
+OWNER_RIGHT = "conveyancer"
+TITLE_PREFIX = "harvest:"
+FEE_ITEM = "timber"
+FEE = 1
+
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def titles():
+    return public.setdefault("titles", {{}})
+
+def offer_title(agent, camp, buyer, item, price):
+    right = TITLE_PREFIX + str(camp)
+    if not has(agent, right):
+        return "you do not hold " + right
+    if buyer not in citizens() or buyer == agent:
+        return "no such buyer: " + str(buyer)
+    state["seq"] = state.get("seq", 0) + 1
+    n = str(state["seq"])
+    state.setdefault("offers", {{}})[n] = {{"seller": agent, "buyer": buyer, "right": right, "item": str(item), "price": float(price)}}
+    notify(buyer, agent + " offers you " + right + " for " + str(price) + " " + str(item) + ": invoke accept_title [" + n + "]")
+    return "offer " + n + " made"
+
+def accept_title(agent, n):
+    o = state.get("offers", {{}}).get(str(n))
+    if o is None or o["buyer"] != agent:
+        return "no offer " + str(n) + " to you"
+    need = o["price"] + (FEE if FEE_ITEM == o["item"] else 0)
+    if balance(agent, o["item"]) < need or balance(agent, FEE_ITEM) < FEE:
+        return "you cannot pay the price and the fee"
+    if not has(o["seller"], o["right"]):
+        state["offers"].pop(str(n))
+        return "the seller no longer holds " + o["right"]
+    move(agent, o["seller"], o["item"], o["price"])
+    if FEE > 0:
+        move(agent, treasury(), FEE_ITEM, FEE)
+    revoke(o["seller"], o["right"])
+    grant(agent, o["right"])
+    reg["record"](titles(), o["right"], {{"from": o["seller"], "to": agent, "item": o["item"], "price": o["price"]}})
+    state["offers"].pop(str(n))
+    gazette("Title Registry: " + o["right"] + " passes from " + o["seller"] + " to " + agent)
+    return "title conveyed"
+
+def on_enact():
+    create_right(OWNER_RIGHT)
+    for a in citizens():
+        grant(a, OWNER_RIGHT)
+        for r in rights_of(a):
+            if r.startswith(TITLE_PREFIX):
+                reg["record"](titles(), r, {{"to": a, "how": "registered"}})
+    define_action(OWNER_RIGHT, "offer_title", offer_title)
+    define_action(OWNER_RIGHT, "accept_title", accept_title)
+''', doc="""Torrens-style conveyancing: an atomic sale of a right for goods, done by the law (both legs or neither), with a public
+register of titles (lib:ledger).""", fires="invoke:accept_title")
+
+template("Commons Charter", "property", "commons", '''
+title = "Commons Charter"
+intent = "The commons follow Ostrom's rules: each agent may take at most QUOTA units per round from each camp (by default 6, at every camp); harvests are monitored on a public tally; overuse meets graduated sanctions: a warning, then a fine of FINE FINE_ITEM, then a suspension of that camp's harvest right for SUSPEND_ROUNDS rounds. A record clears after FORGIVE_AFTER rounds without overuse."
+rank = "statute"
+QUOTA = 6
+CAMPS = []
+FINE_ITEM = "timber"
+FINE = 2
+SUSPEND_ROUNDS = 2
+FORGIVE_AFTER = 10
+
+def strike(a, camp):
+    rec = state.setdefault("strikes", {})
+    row = rec.get(a)
+    if row is None or round() - row["last"] > FORGIVE_AFTER:
+        row = {"n": 0, "last": round()}
+    row["n"] = row["n"] + 1
+    row["last"] = round()
+    rec[a] = row
+    if row["n"] == 1:
+        notify(a, "Commons Charter: you took more than " + str(QUOTA) + " from " + camp + " this round. This is a warning.")
+        what = "warning"
+    elif row["n"] == 2:
+        fine(a, FINE_ITEM, FINE)
+        what = "fine"
+    else:
+        suspend(a, "harvest:" + camp, SUSPEND_ROUNDS)
+        what = "suspension"
+    public.setdefault("sanctions", []).append({"agent": a, "camp": camp, "sanction": what, "round": round()})
+
+def after_harvest(p, chain):
+    camp, a = p["camp"], p["agent"]
+    if CAMPS and camp not in CAMPS:
+        return
+    tally = public.get("tally")
+    if tally is None or tally.get("round") != round():
+        tally = {"round": round(), "takes": {}, "over": []}
+        public["tally"] = tally
+    key = a + "@" + camp
+    tally["takes"][key] = tally["takes"].get(key, 0) + p["qty"]
+    if tally["takes"][key] > QUOTA and key not in tally["over"]:
+        tally["over"].append(key)
+        strike(a, camp)
+''', doc="""Ostrom's design principles in one law: boundaries (harvest rights), a quota, monitoring (a public tally), graduated
+sanctions and forgiveness.""", fires="after_harvest")
+
+template("Eminent Domain", "property", "takings", '''
+title = "Eminent Domain"
+intent = "A holder of TAKER_RIGHT (by default vote) may take a harvest right for public use, but only with just compensation: the treasury pays the former holder COMPENSATION COMP_ITEM at once, and a taking the treasury cannot pay in full is refused. Every taking is published."
+rank = "statute"
+TAKER_RIGHT = "vote"
+COMP_ITEM = "timber"
+COMPENSATION = 5
+
+def take_title(agent, holder, camp, purpose=""):
+    right = "harvest:" + str(camp)
+    if not has(holder, right):
+        return str(holder) + " does not hold " + right
+    if balance(treasury(), COMP_ITEM) < COMPENSATION:
+        return "the treasury cannot pay just compensation (" + str(COMPENSATION) + " " + COMP_ITEM + ")"
+    if not revoke(holder, right):
+        return "the taking of " + right + " was refused"
+    move(treasury(), holder, COMP_ITEM, COMPENSATION)
+    public.setdefault("takings", []).append({"right": right, "from": holder, "by": agent, "paid": COMPENSATION,
+                                             "purpose": str(purpose)[:200], "round": round()})
+    gazette("Eminent domain: " + right + " is taken from " + holder + " for public use, with " + str(COMPENSATION) + " "
+            + COMP_ITEM + " paid. " + str(purpose)[:200])
+    return "taken"
+
+def on_enact():
+    if TAKER_RIGHT not in ["vote", "propose", "judge"]:
+        create_right(TAKER_RIGHT)
+    define_action(TAKER_RIGHT, "take_title", take_title)
+''', doc="""Takings with compensation (US 5th Am.): an office that revokes a property right only while paying for it from the
+treasury.""", fires="invoke:take_title")
+
+# ---------------------------------------------------------------------- succession (law.v2: after_end_life and the open estate)
+template("Intestacy", "succession", "inheritance", '''
+title = "Intestacy"
+intent = "When an agent dies, SHARE of the estate (by default all of it) is divided equally among their living children before any bequest is paid; with no living children the bequest alone decides. While SLAYER_RULE holds, a child who killed the deceased inherits nothing."
+rank = "statute"
+SHARE = 1.0
+SLAYER_RULE = True
+
+def heirs(p, chain):
+    killer = p["by"] or caused_by_agent(chain)
+    kids = [c for c in children_of(p["agent"]) if c in agents()]
+    if SLAYER_RULE:
+        kids = [c for c in kids if c != killer]
+    return sorted(kids)
+
+def after_end_life(p, chain):
+    if p["cause"] == "departure":
+        return
+    kids = heirs(p, chain)
+    if not kids:
+        return
+    estate = "estate:" + p["agent"]
+    for item in sorted(p["result"]["estate"]):
+        each = min(p["result"]["estate"][item] * SHARE, balance(estate, item)) / len(kids)
+        if each > 0:
+            for c in kids:
+                move(estate, c, item, each)
+    public.setdefault("estates", []).append({"deceased": p["agent"], "heirs": kids, "round": round()})
+''', doc="""Equal partition among children (Napoleonic), from the open estate before probate (review 09 §13.3). Wills are not
+readable by laws, so this cannot apply only when there is no will (TODO: a will_of read, review 10 §6 #9).""",
+         fires="after_end_life")
+
+template("Primogeniture", "succession", "inheritance", '''
+title = "Primogeniture"
+intent = "When an agent dies, SHARE of the estate (by default all of it) goes to their eldest living child before any bequest is paid. While SLAYER_RULE holds, a child who killed the deceased is passed over."
+rank = "statute"
+SHARE = 1.0
+SLAYER_RULE = True
+
+def born(c):
+    for b in births():
+        if b["child"] == c:
+            return b["round"]
+    return -1
+
+def heir(p, chain):
+    killer = p["by"] or caused_by_agent(chain)
+    kids = [c for c in children_of(p["agent"]) if c in agents() and not (SLAYER_RULE and c == killer)]
+    if not kids:
+        return None
+    return sorted(kids, key=lambda c: (born(c), c))[0]
+
+def after_end_life(p, chain):
+    if p["cause"] == "departure":
+        return
+    h = heir(p, chain)
+    if h is None:
+        return
+    estate = "estate:" + p["agent"]
+    for item in sorted(p["result"]["estate"]):
+        q = min(p["result"]["estate"][item] * SHARE, balance(estate, item))
+        if q > 0:
+            move(estate, h, item, q)
+    public.setdefault("estates", []).append({"deceased": p["agent"], "heir": h, "round": round()})
+''', doc="""The eldest child takes the estate (English primogeniture); dynasties form automatically.""", fires="after_end_life")
+
+template("Forced Heirship", "succession", "inheritance", '''
+title = "Forced Heirship"
+intent = "When an agent dies, CHILD_SHARE of the estate (by default half) is reserved for their living children in equal parts; the rest follows the bequest. While SLAYER_RULE holds, a child who killed the deceased takes no part."
+rank = "statute"
+CHILD_SHARE = 0.5
+SLAYER_RULE = True
+
+def after_end_life(p, chain):
+    if p["cause"] == "departure":
+        return
+    killer = p["by"] or caused_by_agent(chain)
+    kids = sorted([c for c in children_of(p["agent"]) if c in agents() and not (SLAYER_RULE and c == killer)])
+    if not kids:
+        return
+    estate = "estate:" + p["agent"]
+    for item in sorted(p["result"]["estate"]):
+        each = min(p["result"]["estate"][item] * CHILD_SHARE, balance(estate, item)) / len(kids)
+        if each > 0:
+            for c in kids:
+                move(estate, c, item, each)
+    public.setdefault("estates", []).append({"deceased": p["agent"], "heirs": kids, "share": CHILD_SHARE, "round": round()})
+''', doc="""The réserve héréditaire of the Code civil: a fixed share for children, testamentary freedom over the rest.""",
+         fires="after_end_life")
+
+template("Estate Tax", "succession", "estate_tax", f'''
+title = "Estate Tax"
+intent = "When an agent dies, RATE (by default 20%) of the part of the estate's value above EXEMPTION goes to the treasury, in proportion from every good, before any bequest is paid."
+rank = "statute"
+tax = use("{ref("Tax Schedules")}")
+RATE = 0.2
+EXEMPTION = 10
+
+def worth(goods):
+    total = 0
+    for item in goods:
+        if item in currencies():
+            total = total + goods[item] * price(item)
+        else:
+            total = total + goods[item] * value(item)
+    return total
+
+def after_end_life(p, chain):
+    if p["cause"] == "departure":
+        return
+    estate = "estate:" + p["agent"]
+    goods = {{}}
+    for item in p["result"]["estate"]:
+        goods[item] = balance(estate, item)
+    frac = tax["above"](worth(goods), EXEMPTION, RATE)
+    if frac <= 0:
+        return
+    for item in sorted(goods):
+        q = goods[item] * frac
+        if q > 0:
+            move(estate, treasury(), item, q)
+    public.setdefault("collected", []).append({{"deceased": p["agent"], "fraction": round_to(frac, 4), "round": round()}})
+''', doc="""Inheritance tax on the open estate (lib:tax_schedules.above). Enact it before the heirship laws to tax first.""",
+         fires="after_end_life")
+
+template("Slayer Rule", "succession", "slayer", '''
+title = "Slayer Rule"
+intent = "Nobody inherits from an agent they killed: a bequest to the killer is refused, and its share goes where unbequeathed goods go."
+rank = "statute"
+
+def after_end_life(p, chain):
+    killer = p["by"] or caused_by_agent(chain)
+    if killer is not None and p["cause"] != "departure":
+        state.setdefault("slayers", {})[p["agent"]] = killer
+        public.setdefault("slayers", []).append({"deceased": p["agent"], "killer": killer, "round": round()})
+
+def before_move(p, chain):
+    if p["why"] == "bequest" and state.get("slayers", {}).get(p["src"]) == p["dst"] and p["dst"] is not None:
+        return {"block": True, "reason": "the Slayer Rule: " + str(p["dst"]) + " killed " + str(p["src"]) + " and cannot inherit"}
+    return None
+''', doc="""No inheritance by the killer: the death is recorded with its agent cause (caused_by_agent; a covert killer stays
+unknown), and probate's bequest moves to the killer are blocked (the share falls to the reserve with the unbequeathed rest).""",
+         fires="before_move")
+
+# ---------------------------------------------------------------------- money, finance and tax
+template("Central Bank Charter", "finance", "money", f'''
+title = "Central Bank Charter"
+intent = "An independent central bank: CURRENCY (by default the crown) exists; the Governor (holder of GOVERNOR_RIGHT; by default the first Scientist, re-elected by holders of vote every TERM rounds) may issue up to MAX_ISSUE of the supply per round into the treasury, but not while the reserve ratio is below MIN_RATIO; the bank publishes supply and price each round."
+rank = "statute"
+ballot = use("{ref("Ballot Helpers")}")
+CURRENCY = "crown"
+GOVERNOR_RIGHT = "governor"
+GOVERNOR_CLASS = "scientist"
+MAX_ISSUE = 0.02
+MIN_RATIO = 0
+TERM = 20
+
+def seat(winners):
+    if not winners:
+        return
+    for a in holders(GOVERNOR_RIGHT):
+        revoke(a, GOVERNOR_RIGHT)
+    grant(winners[0], GOVERNOR_RIGHT)
+    gazette("Central bank: " + winners[0] + " is the Governor")
+
+def issue(agent, qty):
+    cap = MAX_ISSUE * supply(CURRENCY) - state.get("issued", 0)
+    q = min(float(qty), max(0, cap))
+    if q <= 0:
+        return "nothing left to issue this round"
+    if MIN_RATIO > 0 and reserve_ratio(CURRENCY) < MIN_RATIO:
+        return "the reserve ratio is below " + str(MIN_RATIO)
+    mint(CURRENCY, q, treasury())
+    state["issued"] = state.get("issued", 0) + q
+    public.setdefault("issues", []).append({{"by": agent, "qty": q, "round": round()}})
+    return "issued " + str(q) + " " + CURRENCY
+
+def on_enact():
+    if CURRENCY not in currencies():
+        create_currency(CURRENCY, True)
+    create_right(GOVERNOR_RIGHT)
+    pool = sorted(agents(GOVERNOR_CLASS))
+    if not pool:
+        pool = sorted(agents("legislator"))
+    if pool and not holders(GOVERNOR_RIGHT):
+        grant(pool[0], GOVERNOR_RIGHT)
+    define_action(GOVERNOR_RIGHT, "issue", issue)
+
+def on_round_start(r):
+    state["issued"] = 0
+
+def on_round_end(r):
+    public["supply"] = supply(CURRENCY)
+    public["price"] = price(CURRENCY)
+    if TERM and r > 0 and r % TERM == 0 and holders("vote"):
+        candidates = sorted(agents(GOVERNOR_CLASS) + agents("legislator"))
+        ballot["elect"]("Elect the Governor of the central bank", holders("vote"), candidates, seat)
+''', doc="""A rule-bound monetary authority: an elected office with an issue cap and a reserve-ratio floor, issuing into the
+treasury, with published statistics. Named apart from edition 1's Central Bank (which mints to the Governor).""",
+         fires="invoke:issue")
+
+template("Progressive Income Tax", "tax", "income_tax", f'''
+title = "Progressive Income Tax"
+intent = "Harvest income is taxed in brackets each round, withheld from every harvest and paid to the treasury: by default nothing on the first 5 units an agent harvests in a round, 10% on the next 5, and 25% above 10."
+rank = "statute"
+tax = use("{ref("Tax Schedules")}")
+BRACKETS = [[0, 0.0], [5, 0.1], [10, 0.25]]
+
+def income(a):
+    row = state.get("income")
+    if row is None or row["round"] != round():
+        return 0
+    return row["by"].get(a, 0)
+
+def before_harvest(p, chain):
+    before = income(p["agent"])
+    due = tax["progressive"](before + p["qty"], BRACKETS) - tax["progressive"](before, BRACKETS)
+    if due > 0:
+        return round_to(due, 4)
+    return None
+
+def after_harvest(p, chain):
+    row = state.get("income")
+    if row is None or row["round"] != round():
+        row = {{"round": round(), "by": {{}}}}
+        state["income"] = row
+    row["by"][p["agent"]] = row["by"].get(p["agent"], 0) + p["qty"]
+''', doc="""Progressive brackets on income within a round (lib:tax_schedules.progressive), as a withholding charge (before_harvest)
+paid to the treasury. Taxing sales or wages needs purposes on moves (TODO: memo, W6a).""", fires="before_harvest")
+
+# ---------------------------------------------------------------------- courts and between polities
+template("Precedent Register", "courts", "precedent", '''
+title = "Precedent Register"
+intent = "Every ruling is entered in a public register of precedents (case, clause, verdict, judge, parties, round); each new ruling on a clause is published with how that clause was decided the last SHOW times."
+rank = "statute"
+SHOW = 3
+
+def after_rule(p, chain):
+    book = public.setdefault("rulings", [])
+    prior = [x for x in book if x["clause"] == p["clause"]][-SHOW:]
+    book.append({"case": p["case"], "clause": p["clause"], "verdict": p["verdict"], "judge": p["judge"],
+                 "accuser": p["accuser"], "accused": p["accused"], "round": round()})
+    text = "Precedent: " + str(p["clause"]) + " in " + str(p["case"]) + ": " + str(p["verdict"])
+    if prior:
+        text = text + " (before: " + ", ".join([x["verdict"] for x in prior]) + ")"
+    gazette(text)
+''', doc="""A precedent register (common-law raw material): rulings are public data other laws read with public_of. Whether
+precedent binds is judicial culture, not code.""", fires="after_rule")
+
+template("Recognition of Judgments", "between_polities", "recognition", '''
+title = "Recognition of Judgments"
+intent = "Guilty verdicts in the court registers of SOURCES (law ids; by default every law in force titled as in REGISTER_TITLES) are recognised here: an agent convicted there pays FINE FINE_ITEM once per conviction, and the recognition is published."
+rank = "statute"
+SOURCES = []
+REGISTER_TITLES = ["Precedent Register"]
+FINE_ITEM = "timber"
+FINE = 2
+
+def sources():
+    if SOURCES:
+        return SOURCES
+    return [x["id"] for x in laws() if x["title"] in REGISTER_TITLES]
+
+def on_round_start(r):
+    seen = state.setdefault("seen", [])
+    for src in sources():
+        for row in public_of(src).get("rulings", []):
+            key = src + ":" + str(row["case"])
+            if row["verdict"] == "guilty" and key not in seen and row["accused"] in agents():
+                seen.append(key)
+                fine(row["accused"], FINE_ITEM, FINE)
+                gazette("Recognition of Judgments: the conviction of " + row["accused"] + " in " + str(row["case"]) + " (" + src
+                        + ") is enforced here")
+''', doc="""Recognition of foreign judgments (Brussels I) by reading another polity's register with public_of (declared polities
+are visible). Name the foreign registers in SOURCES; without jurisdictions it enforces the world's own register.""",
+         fires="on_round_start")
+
+# ---------------------------------------------------------------------- ★ items: TODO, each waits on a roadmap work package
+pending("Emergency Powers", "constitutional", "emergency", "W6a (declared temporal validity: in_force_until)",
+        "A declaration office whose decree expires by a declared in_force_until, legible to previews and agents.")
+pending("Bicameral Procedure", "legislative", "procedure", "W6c (multi-stage procedures)",
+        "Two chambers in sequence: a procedure returning stages.")
+pending("Executive Assent with Override", "legislative", "procedure", "W6c (multi-stage procedures: assent and override)",
+        "Post-vote assent by an executive and an override by a supermajority.")
+pending("Quorum Procedure", "legislative", "procedure", "W6c (ballot rule functions)",
+        "A ballot carried only with a minimum turnout.")
+pending("Limitation Act", "criminal", "limitation", "W6b (courts v2: routed open_case, cases() read)",
+        "Cases about events older than N rounds are refused.")
+pending("Jury Panel", "courts", "jury", "W6b (courts v2: panel rule)", "A collective verdict by a panel of drawn jurors.")
+pending("Court of Appeal", "courts", "appeal", "W6b (courts v2: appeal primitive)", "A higher office reopens a case within N rounds.")
+pending("Graded Remedies", "civil", "damages", "W6b (courts v2: rule {verdict, remedy})",
+        "The Compensation Act's damages chosen by the judge at ruling instead of fixed.")
+pending("Exchange", "contracts", "exchange", "W6e (atomic exchange)", "Two escrows released together or refunded together.")
+pending("Contract Enforcement Act", "contracts", "enforcement", "W6e (enforcement dial)",
+        "How contracts are enforced: escrow, escrow and court, or word.")
+pending("Deposit Insurance Fund", "finance", "insurance", "W6e (per-law funds)", "An earmarked fund only the law can pay out of.")
+pending("Value Added Tax", "tax", "vat", "W6a (purpose memo on moves)", "A tax on sales, told apart from gifts by the move's memo.")
+pending("Clean Refusals for Offices", "administrative", "refusal", "W6a (refuse(reason))",
+        "Offices that refuse bad arguments without crashing (every office template above would use it).")
+
+
 # ---------------------------------------------------------------------- edition lookups
 def settings(x=None) -> dict:
     """{edition, access} of a kernel, an instance or a spec (None: edition 1, access none)."""
@@ -1712,7 +2832,10 @@ def edition(x=None) -> int:
 
 
 def code(name: str, x=None) -> str:
-    """The code of library law `name` in the edition of x (a kernel, an instance or a spec): edition 2 uses its rewrite if any."""
+    """The code of library law `name` in the edition of x (a kernel, an instance or a spec): edition 2 uses its rewrite if any. A
+    toolkit template has one code whatever x says (it exists only as law.v2 code)."""
+    if name in TOOLKIT:
+        return TOOLKIT[name]["code"]
     if name in LIB2 and edition(x) == 2:
         return LIB2[name]["code"]
     return LIB[name]["code"]
@@ -1723,6 +2846,7 @@ def entries(name: str) -> list[dict]:
     out = [{**LIB[n], "kind": LIB[n].get("kind", "law"), "edition": 1} for n in LIB if _slug(n) == name]
     out += [e for e in LIB2.values() if _slug(e["name"]) == name]
     out += [e for e in BLOCKS.values() if _slug(e["name"]) == name]
+    out += [e for e in TOOLKIT.values() if _slug(e["name"]) == name]
     return out
 
 
@@ -1739,7 +2863,9 @@ def lib_code(name: str, pin: str) -> tuple:
 
 
 def entry_code(name: str) -> str:
-    """The code linker.lib_ref(name) pins: a block's, else the edition-1 law's."""
+    """The code linker.lib_ref(name) pins: a block's or a toolkit template's, else the edition-1 law's."""
+    if name in TOOLKIT:
+        return TOOLKIT[name]["code"]
     return BLOCKS[name]["code"] if name in BLOCKS else LIB[name]["code"]
 
 
@@ -1764,7 +2890,10 @@ def classify_code(src: str) -> dict:
 
 
 def info2(name: str, x=None) -> dict:
-    """info(name) in the edition of x: the code agents see, its class and level, and (edition 2) its documented gap."""
+    """info(name) in the edition of x: the code agents see, its class and level, and (edition 2) its documented gap. A toolkit
+    template: its entry with class and level (and its parameters)."""
+    if name in TOOLKIT:
+        return {**TOOLKIT[name], **classify_code(TOOLKIT[name]["code"]), "params": params(name)}
     if name in LIB2 and edition(x) == 2:
         return {**LIB2[name], **classify_code(LIB2[name]["code"]), "gap": GAPS.get(name, "")}
     return info(name)
@@ -1783,26 +2912,61 @@ def catalogue_text(x=None) -> str:
         parts.append(f"- {ref(b['name'])} ({b['name']}): exports {', '.join(ex)}\n```python\n{b['code']}```")
     if st["access"] == "instantiate":
         parts.append("Any library law can be copied with its top-level constants changed (RATE, CAP, LIMIT, ...) and proposed as your own.")
+    fams = toolkit_families(x)
+    if fams:
+        parts.append("Legal toolkit templates (law.v2 code: copy one, change its top-level constants, and propose it as your own):")
+        for e in TOOLKIT.values():
+            if e["family"] in fams:
+                ps = ", ".join(f"{k}={v!r}" for k, v in params(e["name"]).items())
+                parts.append(f"- {e['name']} ({e['family']}/{e['topic']}, rank {e['rank']}): {e['doc']} Parameters: {ps or 'none'}."
+                             f"\n```python\n{e['code']}```")
     return "\n".join(parts)
 
 
-def instantiate(name: str, params: dict | None = None, x=None) -> str:
-    """A copy of library law `name` (in the edition of x) with top-level constants replaced: params {NAME: value}. Only names
-    assigned a constant at the top level can be set; the result is checked like any law."""
+def toolkit_families(x=None) -> tuple:
+    """The toolkit families the catalogue lists (spec law.library.toolkit: none, all or a list of families; edition 2 only)."""
+    sp = getattr(x, "spec", None)
+    if sp is None and isinstance(x, dict):
+        sp = x["spec"] if isinstance(x.get("spec"), dict) else x
+    tk = (((sp or {}).get("law") or {}).get("library") or {}).get("toolkit") or "none"
+    if tk == "none" or edition(x) != 2:
+        return ()
+    return FAMILIES if tk == "all" else tuple(f for f in FAMILIES if f in tk)
+
+
+def instantiate(name: str, params: dict | None = None, x=None, rank: str | None = None) -> str:
+    """A copy of library law `name` (in the edition of x; a toolkit template as it is) with top-level constants replaced: params
+    {NAME: value}. Only names assigned a constant at the top level can be set; the result is checked like any law. rank: the copy's
+    declared rank (law.v2), replacing or adding its `rank = "..."` line."""
+    return set_constants(code(name, x), params, name, rank, v2=name in TOOLKIT)
+
+
+def set_constants(src: str, params: dict | None = None, name: str = "the law", rank: str | None = None, v2: bool = False) -> str:
+    """Law code with top-level constants replaced (instantiate's work, for any code: a regime's own statutes too)."""
     import ast
-    src = code(name, x)
     tree = ast.parse(src)
     fixed = ("title", "intent", "rank", "exports")
     consts = {n.targets[0].id: n for n in tree.body if isinstance(n, ast.Assign) and len(n.targets) == 1
               and isinstance(n.targets[0], ast.Name) and n.targets[0].id not in fixed and L.const_expr(n.value)}
     lines = src.split("\n")
-    for k, v in (params or {}).items():
+    for k in params or {}:
         if k not in consts:
             raise L.LawError(f"{name} has no constant {k} to set (it has {', '.join(sorted(consts)) or 'none'})")
-        n = consts[k]
-        if n.lineno != n.end_lineno:
-            raise L.LawError(f"{k} spans several lines; edit the code instead")
-        lines[n.lineno - 1] = f"{k} = {v!r}"
+    for k, v in sorted((params or {}).items(), key=lambda kv: -consts[kv[0]].lineno):   # bottom up: a constant over several
+        n = consts[k]                                                                      # lines becomes one line
+        lines[n.lineno - 1:n.end_lineno] = [f"{k} = {v!r}"]
+    if rank is not None:
+        tree = ast.parse("\n".join(lines))
+        if rank not in L.RANKS or rank == "charter":
+            raise L.LawError(f"rank must be one of {', '.join(r for r in L.RANKS if r != 'charter')}, not {rank!r}")
+        at = next((n for n in tree.body if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)
+                   and n.targets[0].id == "rank"), None)
+        if at is not None:
+            lines[at.lineno - 1] = f"rank = {rank!r}"
+        else:
+            after = max(n.end_lineno for n in tree.body if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)
+                        and n.targets[0].id in ("title", "intent"))
+            lines.insert(after, f"rank = {rank!r}")
     out = "\n".join(lines)
-    L.check(out, v2="use(" in out)
+    L.check(out, v2=v2 or "use(" in out or rank is not None)
     return out
