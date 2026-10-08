@@ -437,7 +437,8 @@ def read_law(k, aid, ref) -> str:
             + f"{_D.window_note(k, law['id'])}.\nIntent: {law.get('intent', '')}")        # W7e: its declared window (law.v2)
     hist = ("\nPatches: " + "; ".join(f"round {p.get('round', 0) + 1} by {p.get('by')}: {str(p.get('reason', ''))[:120]}" for p in patches)) if patches else ""
     from charter import stages as _ST
-    return f"{head}{_ST.describe(law)}{hist}\nCode:\n{law['code']}"           # law.v2 (W6c): a multi-stage procedure's state
+    from charter import code as _DC                                    # code.enabled: an Act of the default code says so
+    return f"{head}{_DC.read_note(law)}{_ST.describe(law)}{hist}\nCode:\n{law['code']}"   # law.v2 (W6c): a multi-stage procedure's state
 
 
 def search_dms(k, aid, query) -> str:

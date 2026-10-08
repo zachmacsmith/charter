@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import difflib
 
+from charter import code as DC
 from charter import dispatch as D
 from charter import jurisdictions as J
 from charter import lawlang as L
@@ -204,7 +205,7 @@ def _law_draft(k, caller, code, author, intent) -> str:
     if "jurisdiction" in k.w["laws"][caller]:
         law["jurisdiction"] = k.w["laws"][caller]["jurisdiction"]
     if law["repeal_target"]:
-        tgt = next((l for l in k.active_laws() if (l["id"] == law["repeal_target"] or l["title"].lower() == law["repeal_target"].lower())
+        tgt = next((l for l in DC.laws_in_force(k) if (l["id"] == law["repeal_target"] or l["title"].lower() == law["repeal_target"].lower())
                     and J.law_jur(k, l["id"]) == J.law_jur(k, caller)), None)
         if not tgt:
             law["status"] = "failed_check"

@@ -8,6 +8,7 @@ agent's action only; on_enact/on_repeal stay lifecycle hooks of the law itself (
 primitives has a CHECKS entry except propose under law.v2 (ranks.check_propose). set_conflict_rule's change is ranks'."""
 from __future__ import annotations
 
+from charter import code as DC
 from charter import jurisdictions as J
 from charter import lawlang as L
 from charter import primitives as PR
@@ -177,6 +178,8 @@ def do_repeal(k, jurisdiction, law, by_law, via) -> dict:
     if "on_repeal" in ns:
         k.call(law, ns["on_repeal"])
     rec["status"] = "repealed"
+    if DC.is_act(rec):                                                  # the default code: its rows go, the residual applies
+        DC.on_repeal(k, law)
     for cl, key in list(k.w["procedures"].items()):
         if key.split("#")[0] == law:
             del k.w["procedures"][cl]
@@ -203,6 +206,8 @@ def do_amend(k, jurisdiction, law, old_sha, new_sha, diff, via, by, patch=None) 
     try:
         ns = k._load(law)
         k._rebind(law, ns)                                              # procedures, callbacks, penalties now run the patched code
+        if DC.is_act(rec):                                              # the default code: the Act now runs as its source
+            DC.on_code_changed(k, law)
         if rec["status"] == "suspended":
             rec["status"] = "active"
     except L.LawError as e:

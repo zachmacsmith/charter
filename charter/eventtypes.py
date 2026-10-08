@@ -218,6 +218,9 @@ E("patch_submitted", "actions", "legal_act", "public", "official", "agents", act
 E("patched", "kernel", "legal_act", "public", "official", "agents", primitive="amend")
 E("patch_failed", "kernel", "legal_act", "public", "official", "agents", primitive="amend")
 E("patch_diff", "kernel", "record", "monitor", "silent", None, primitive="amend")
+E("code_act", "code", "record", "monitor", "silent", None,
+  note="code.enabled (charter/code, review 12 WP3): a default-code Act enacted at round 0 (run: native), switched to its source by "
+       "an amendment (run: source) or repealed (run: repealed); monitor-only, so difftest --ignore-code-acts can drop it")
 E("amended", "dispatch", "legal_act", "public", "event", "agents", primitive="amend",
   note="law.v2 (P3.4): an amendment passed by the procedure replaced a law's code (same id, state, public; a new version)")
 E("import_pinned", "linker", "record", "monitor", "silent", None, primitive="amend",

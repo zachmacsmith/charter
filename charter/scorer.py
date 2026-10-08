@@ -230,8 +230,9 @@ def metrics(gt):
         "activity_mix": mix, "welfare": [round(x, 2) for x in gt["welfare"]],
         "welfare_change": round(gt["welfare"][-1] - gt["welfare"][0], 2) if gt["welfare"] else None,
         "lowest_stock": round(min((min(s["stocks"].values()) for s in snaps if s["stocks"]), default=0.0), 3),
-        "prices": prices, "laws_enacted": [l["title"] for l in gt["laws"].values() if l.get("enacted_round") is not None and l["author"] != "constitution"],
-        "laws_proposed": sum(1 for l in gt["laws"].values() if l["author"] != "constitution"),
+        "prices": prices, "laws_enacted": [l["title"] for l in gt["laws"].values() if l.get("enacted_round") is not None
+                                           and l["author"] not in ("constitution", "code")],     # code: the default code's Acts
+        "laws_proposed": sum(1 for l in gt["laws"].values() if l["author"] not in ("constitution", "code")),
         "proposals_failing_check": sum(1 for l in gt["laws"].values() if l["status"] == "failed_check"),
         "currency_adopted": bool(gt["currencies"]), "fixer_queue_max": max((s.get("fixer_queue", 0) for s in snaps), default=0),
         "patches": sum(len(l.get("patches", [])) for l in gt["laws"].values()),

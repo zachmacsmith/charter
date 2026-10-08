@@ -55,6 +55,7 @@ import json
 import random
 import re
 
+from charter import code as DC                                        # the default code (code.enabled): Acts as repeal targets
 from charter import features as FT                                    # the one enabled check (Feature.on)
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawapi as LA
@@ -741,7 +742,7 @@ def propose(k, aid, code, intent=None, jurisdiction=None):
     law = k.w["laws"][lid]
     law["jurisdiction"] = jid
     if law["repeal_target"]:
-        tgt = next((l for l in k.active_laws() if (l["id"] == law["repeal_target"] or l["title"].lower() == law["repeal_target"].lower())
+        tgt = next((l for l in DC.laws_in_force(k) if (l["id"] == law["repeal_target"] or l["title"].lower() == law["repeal_target"].lower())
                     and law_jur(k, l["id"]) == jid), None)
         if not tgt:
             law["status"] = "failed_check"
