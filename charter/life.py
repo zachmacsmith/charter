@@ -1,7 +1,9 @@
 """Life: lifespans, Makers and children, mutation, the population cap, and lineage scoring (spec `life`, off by default).
 
 Lifespans. Every agent but the Fixer (Board members included) lives a number of rounds drawn from `lifespan` ([30, 50]) at full
-scale (`full_scale_rounds`, 80); shorter runs scale it by rounds / 80 (never up). Starting agents have `elapsed` ([0, 15], scaled the
+scale (`full_scale_rounds`, 80); shorter runs scale it by rounds / 80 (never up). A `--set rounds=N` override that shortens a
+preset does not rescale: spec.apply_overrides records the preset's own rounds as `design_rounds`, and that length is used instead
+(unless the same overrides set `full_scale_rounds` too, which keeps the plain rounds / full_scale rule). Starting agents have `elapsed` ([0, 15], scaled the
 same way) rounds already behind them, so deaths do not all arrive together. Agents see exactly how many rounds remain
 (`lifespan_known: exact`), or an estimate off by a fixed per-agent error of up to `approx_error` (`approximate`). Old-age deaths
 happen at step 6 of the end of round (Kernel.end_round -> end_of_round) through mortality.disable(cause="old_age"). Own RNG streams
@@ -66,6 +68,7 @@ CHILD_CLASSES = ("worker", "scientist", "legislator", "media")
 DEFAULTS = {
     "enabled": False,
     "lifespan": [30, 50], "elapsed": [0, 15], "full_scale_rounds": 80,
+    "design_rounds": None,              # set by spec.apply_overrides when `rounds` is overridden: the preset's own run length
     "lifespan_known": "exact", "approx_error": 0.2,
     "cap_mult": 1.5,
     "mutation": {"enabled": True, "trait_sd": 0.05, "archetype": 0.10, "goal": 0.05, "secondary": 0.10},
@@ -125,8 +128,12 @@ def _clip(text, tokens) -> str:
 
 
 def _scale(k) -> float:
+    """Lifespans scale by run length / full_scale_rounds (never up). The run length is the longer of the run's rounds and
+    `design_rounds` (the preset's own rounds, recorded when an override shortens the run), so cutting a run short plays the first
+    rounds of the same world instead of compressing every life into a die-off; lengthening a run scales as before."""
     c = cfg(k.spec)
-    return min(1.0, int(k.inst["rounds"]) / float(c["full_scale_rounds"]))
+    n = max(int(k.inst["rounds"]), int(c.get("design_rounds") or 0))
+    return min(1.0, n / float(c["full_scale_rounds"]))
 
 
 def _draw_lifespan(k, rng) -> int:

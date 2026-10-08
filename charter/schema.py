@@ -377,6 +377,7 @@ def _ann():
         "conflict.start": dict(kind="map"),
         "life.lifespan": dict(types=("list", "dict"), fields=("mean", "sd", "min", "max")),
         "life.elapsed": dict(types=("list",)),
+        "life.design_rounds": dict(types=("int", "null"), range=(1, None)),
         "life.lifespan_known": dict(types=("str",), enum=("exact", "approximate")),
         "life.tier_models": dict(kind="map", keys=("weak", "mid", "strong")),
         "life.tier_models.*": dict(types=("str",)),
@@ -559,6 +560,9 @@ DOCS = {
     "life.lifespan": "rounds each agent lives at full scale: [lo, hi] or {mean, sd, min, max}",
     "life.elapsed": "rounds already behind starting agents at full scale, [lo, hi]",
     "life.full_scale_rounds": "run length at which lifespans apply unscaled (shorter runs scale them down)",
+    "life.design_rounds": ("the run length lifespans are scaled for when longer than `rounds`: set automatically to the preset's own "
+                           "rounds when an override shortens the run (and does not also set full_scale_rounds), so a shortened run "
+                           "plays the first rounds of the same lives instead of compressing them"),
     "life.lifespan_known": "exact | approximate: what agents know of their remaining rounds",
     "life.approx_error": "largest relative error of an approximate lifespan",
     "life.cap_mult": "population cap as a multiple of the starting agents in play",

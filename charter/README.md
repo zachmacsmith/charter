@@ -427,7 +427,9 @@ Runs the same scripted worlds on two code revisions and reports where they first
 ## Life: lifespans, children and succession (`life`, off by default; `docs/new_features_update.md`)
 Turn it on with `--set life.enabled=true`, or run the preset `life_pilot` (20 rounds, cheaper children). The keys are not in
 `base.yaml` (adding them would change every `instance.json` and the golden fingerprints); their defaults are `life.DEFAULTS`:
-`lifespan` [30, 50] and `elapsed` [0, 15] at `full_scale_rounds` 80 (scaled down by rounds/80 in shorter runs), `lifespan_known`
+`lifespan` [30, 50] and `elapsed` [0, 15] at `full_scale_rounds` 80 (scaled down by rounds/80 in shorter runs; a `--set rounds=N`
+that shortens a preset records its own rounds as `design_rounds` and scales by that, so the short run plays the first N rounds of
+the same lives instead of a compressed die-off, unless the overrides also set `full_scale_rounds`), `lifespan_known`
 exact | approximate (`approx_error` 0.2), `cap_mult` 1.5, `mutation` {enabled, trait_sd 0.05, archetype 0.10, goal 0.05, secondary
 0.10}, `prices` {base 30, tier_mid 40, tier_strong 120, action 30, life10 20, scratch1000 10, attack5 15, defense5 15, lookup 5},
 `pay` {base: timber, extras: gold}, `persona_tokens` 300, `letter_tokens` 1000, `commission_expiry` 5, `ensure_maker` true.
