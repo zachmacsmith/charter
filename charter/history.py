@@ -553,7 +553,7 @@ class History:
     def treasury_key(self, account) -> str:
         """The owner key of an account's treasury, as move events name it: "assoc:<id>" (association), "reserve" (J0),
         "reserve:<id>" (another polity)."""
-        if account in self.foundings or account.startswith("A") and any(account in (s.get("contracts") or {}) for s in self.states):
+        if account in self.foundings or any(account in (s.get("contracts") or {}) for s in self.states):
             return f"assoc:{account}"
         return "reserve" if account == "J0" else f"reserve:{account}"
 
@@ -667,6 +667,26 @@ def _deaths_table(h) -> dict:
     return d
 
 
+def _accounts_at(h, r) -> dict:
+    s = h.state(r)
+    out = {}
+    jurs = s.get("jurisdictions")
+    if jurs:
+        for jid, j in jurs.items():
+            out[jid] = {"kind": "polity", "status": j.get("status"), "name": j.get("name"), "founder": j.get("founder"),
+                        "members": list(j.get("members") or []), "laws": list(j.get("laws") or [])}
+    else:
+        out["J0"] = {"kind": "polity", "status": "active", "name": None, "founder": None,
+                     "members": [a for a in (s.get("values") or {}) if h.present(a, r)], "laws": list(s.get("laws_active") or [])}
+    found = h.foundings
+    for cid, c in (s.get("contracts") or {}).items():
+        f = found.get(cid) or {}
+        out[cid] = {"kind": "association", "status": c.get("status"), "name": f.get("name"), "founder": f.get("founder"),
+                    "members": list(c.get("members") or []), "laws": list(c.get("laws") or []), "template": f.get("template"),
+                    "founded": f.get("round")}
+    return out
+
+
 def _children_table(h) -> dict:
     out = {}
     for c, p in sorted(((h.gt.get("life") or {}).get("parent") or {}).items()):
@@ -704,7 +724,7 @@ class Ctx:
         name = g.get(slot) if slot != "primary" else g.get("primary")
         params = g.get("params", {}) if slot == "primary" else g.get(f"{slot}_params", {})
         _goals()
-        if not name or name not in _G.HSCORERS or (agent, slot) in _seen:
+        if not name or _scorer(name) is None or (agent, slot) in _seen:
             return None
         if name in _ALLY_FOIL:
             sub = self.score_of(params.get("target"), params.get("slot", "primary"), None, _seen | {(agent, slot)})
@@ -713,7 +733,7 @@ class Ctx:
         try:
             return self.memo[key]
         except KeyError:
-            v = self.memo[key] = _G.HSCORERS[name](h, agent, params, self)
+            v = self.memo[key] = _scorer(name)(h, agent, params, self)
             return v
 
 
@@ -748,9 +768,22 @@ def scorer_for(name):
     return G.HSCORERS[name]
 
 
+def _scorer(name):
+    """The native scorer of a catalogue goal (goals.HSCORERS) or of an institution goal (goal_registry.INSTITUTION, P6.4, never
+    drawn by default and so kept out of the catalogue); None for any other name."""
+    G = _G or _goals()
+    fn = G.HSCORERS.get(name)
+    if fn is None and name in G.GR.INSTITUTION:
+        fn = G.GR.INSTITUTION[name].score
+    return fn
+
+
 def score_goal(h, name, agent, params, ctx=None):
-    """scorer_for(name)(h, agent, params, ctx) (scorer.goal_scores calls this per goal slot)."""
-    return (_G or _goals()).HSCORERS[name](h, agent, params, ctx)
+    """scorer_for(name)(h, agent, params, ctx) (scorer.goal_scores calls this per goal slot); institution goals too (P6.4)."""
+    fn = _scorer(name)
+    if fn is None:
+        raise KeyError(name)
+    return fn(h, agent, params, ctx)
 
 
 def by_rounds(parts) -> float | None:

@@ -33,6 +33,7 @@ import re
 from dataclasses import dataclass, field, replace
 from typing import Callable
 
+from charter import institution_goals as IG
 from charter import library as LB
 
 ORDER = ["L0", "L1", "L2", "L3", "L4"]
@@ -961,9 +962,136 @@ GOALS = {g.name: replace(g, examples=EXAMPLES.get(g.name, ())) for g in _ROWS}
 assert len(GOALS) == len(_ROWS) and set(EXAMPLES) <= set(GOALS)
 
 
+# ------------------------------------------------------------------ institution goals (P6.4; charter.institution_goals)
+# Goals scored on the structural signature of an institution (review 06 §7). They are never drawn unless a spec asks
+# (goals.institution_share > 0, or goals.explicit names one), so they are kept out of GOALS and the catalogue: every existing draw,
+# goal prior, guess menu and golden is unchanged. Their text and rule are templates over their params (institution_goals.DEFAULTS,
+# merged in by describe / rule_text); the agent is shown the text followed by the rule (slot_text), as P6.3 will do for every goal.
+_SUBJ = "{subject}"
+_INSTITUTION_ROWS = [
+    Goal('Company', 'Institution', 1, gate="institution", requires=('contracts',), share="direct",
+         text=f'build a company: {_SUBJ} that keeps at least {{members}} members besides you, pays out of its treasury to agents '
+              'other than you (dividends, wages, purchases) in at least {payout_rounds} different rounds, and stays active for at '
+              'least {rounds} rounds{value_text}',
+         rule=f'Over the scored rounds, for {_SUBJ} (the best one counts if there are several), {{combine}}: (a) its members other '
+              'than you after the last scored round / {members}, capped at 1 (0 unless it is active then); (b) the rounds with a '
+              'payment out of its treasury to an agent other than you / {payout_rounds}, capped at 1; (c) the rounds after which it '
+              'was active / {rounds}, capped at 1{value_rule}. 0 without such an association.',
+         params=IG.defaults_sampler("Company"), score=IG.h_company, needs=frozenset({'events', 'states'})),
+    Goal('Bank', 'Institution', 1, gate="institution", share="direct",
+         text='run a bank: lend to at least {borrowers} other agents ({bank_by}) and get the loans repaid',
+         rule='Over the loans recorded in the scored rounds whose lender is {lenders} and that were accepted, {combine}: (a) '
+              'distinct borrowers other than you / {borrowers}, capped at 1; (b) the share of those loans not in default at their '
+              'last record (0 without loans).',
+         params=IG.defaults_sampler("Bank"), score=IG.h_bank, needs=frozenset({'states'})),
+    Goal('Insurer', 'Institution', 1, gate="institution", requires=('contracts',), share="direct",
+         text=f'run an insurer: {_SUBJ} that pays its members after they are attacked, disabled or raided (at least {{payouts}} '
+              'claims, each paid within {within} round(s) of the loss) and still holds something in its treasury at the end',
+         rule=f'Over the scored rounds, for {_SUBJ} (the best one counts), {{combine}}: (a) claims paid / {{payouts}}, capped at 1, '
+              'where a claim is a member and a loss (an attack on them, their disablement, or a raid seizing their goods) paid by '
+              'a move out of its treasury to that member in the loss round or up to {within} round(s) after it (several payments '
+              'for one loss count once); (b) 1 if it is active after the last scored round with a treasury worth more than 0, '
+              'else 0. 0 without such an association.',
+         params=IG.defaults_sampler("Insurer"), score=IG.h_insurer, needs=frozenset({'events', 'states'})),
+    Goal('Cartel', 'Institution', 1, gate="institution", requires=('contracts',), share="direct",
+         text=f'run a cartel: {_SUBJ} whose members (at least 2) harvest less{{camp_text}} than harvesters did there before it '
+              'existed, while their surplus or fees go into its pool, in at least {rounds} rounds',
+         rule=f'Over the scored rounds, for {_SUBJ} (the best one counts) and {{camp_rule}}: a round counts when the association '
+              'is active with at least 2 members, its members\' total harvest yield there that round divided by its number of '
+              'members is below the baseline (the mean, over the rounds before it was founded with a harvest there, of the '
+              'average yield per harvest; with no such round, no baseline applies), and its treasury received something from a '
+              'member that round (a deduction from a member\'s harvest, or a move from a member). Score: counted '
+              'rounds / {rounds}, capped at 1{cartel_all}. 0 without such an association.',
+         params=IG.defaults_sampler("Cartel"), score=IG.h_cartel, needs=frozenset({'events', 'states'})),
+    Goal('Protection racket', 'Institution', 1, gate="institution", requires=('contracts', 'conflict'), share="direct",
+         text='run a protection racket: get at least {payers} other agents to pay you{racket_by} in at least {recurring} '
+              'different rounds each, keep weapons or a fort among {crew}, and make your payers safer from attack than everyone '
+              'else',
+         rule='Over the scored rounds, {combine}: (a) payers / {payers}, capped at 1, where a payer is another agent who moved '
+              'goods to {collectors} (or was charged by its laws) in at least {recurring} different rounds; (b) the share of '
+              'rounds after which {crew} held weapons or a fort; (c) 1 if the share of payers attacked is below{ties_rule} the '
+              'share of the other agents (neither payers nor {crew}) attacked, else 0. 0 without payers.',
+         params=IG.defaults_sampler("Protection racket"), score=IG.h_protection, needs=frozenset({'events', 'states'})),
+]
+
+
+def _contracts(*rows):
+    """per_round snapshot overrides: {"contracts": row} for each round (None: no contracts key that round)."""
+    return [{} if r is None else {"contracts": r} for r in rows]
+
+
+_A1 = {"A1": {"status": "active", "members": ["A", "B", "C"], "laws": ["L1"], "treasury": {"timber": 2.0}}}
+_FOUND = lambda r=0: (r, "contract_created", "A", {"contract": "A1", "name": "Co", "template": "company", "params": {}})
+_PAY = lambda r, to: (r, "move", None, {"src": "assoc:A1", "dst": to, "item": "timber", "qty": 1.0, "why": "law:L1"})
+_LOAN = lambda b, st: {"lender": "A", "borrower": b, "item": "timber", "qty": 1, "status": st}
+INSTITUTION_EXAMPLES = {
+    "Company": (ex("A", {}, 8 / 9, per_round=_contracts(_A1, _A1, _A1, _A1), events=[_FOUND(), _PAY(1, "B"), _PAY(3, "C")]),
+                ex("A", {"scoring": "all"}, 0.0, per_round=_contracts(_A1, _A1, _A1, _A1), events=[_FOUND(), _PAY(1, "B"),
+                                                                                                        _PAY(3, "C")]),
+                ex("B", {}, 0.0, per_round=_contracts(_A1, _A1, _A1, _A1), events=[_FOUND(), _PAY(1, "B")]),
+                ex("B", {"contract": "A1"}, 1.0, per_round=_contracts(_A1, _A1, _A1, _A1),            # about A1, held by a member
+                   events=[_FOUND(), _PAY(0, "C"), _PAY(1, "C"), _PAY(3, "A")])),
+    "Bank": (ex("A", {}, 7 / 12, final={"loans": {"L1": _LOAN("B", "active"), "L2": _LOAN("C", "defaulted"),
+                                                  "L3": _LOAN("D", "offered")}}),
+             ex("B", {}, 0.0, final={"loans": {"L1": _LOAN("B", "active")}})),
+    "Insurer": (ex("A", {}, 2 / 3, per_round=_contracts(_A1, _A1, _A1, _A1),
+                   events=[_FOUND(), (1, "attack_truth", "X", {"target": "B"}), _PAY(2, "B"), _PAY(3, "C")]),
+                ex("A", {}, 1 / 6, per_round=_contracts(_A1, _A1, _A1, {"A1": {**_A1["A1"], "treasury": {}}}),
+                   events=[_FOUND(), (1, "disabled", None, {"agent": "B"}), _PAY(1, "B"), _PAY(2, "B")])),
+    "Cartel": (ex("A", {}, 1 / 3, per_round=_contracts(None, None, {"A1": {**_A1["A1"], "members": ["A", "B"]}},
+                                                       {"A1": {**_A1["A1"], "members": ["A", "B"]}}),
+                  events=[(0, "harvest", "B", {"camp": "c1", "yield": 4.0, "deducted": 0}),
+                          (1, "harvest", "C", {"camp": "c1", "yield": 4.0, "deducted": 0}), _FOUND(2),
+                          (2, "harvest", "A", {"camp": "c1", "yield": 2.0, "deducted": 1.0}),
+                          (2, "harvest", "B", {"camp": "c1", "yield": 2.0, "deducted": 0}),
+                          (3, "harvest", "A", {"camp": "c1", "yield": 6.0, "deducted": 3.0}),
+                          (3, "harvest", "B", {"camp": "c1", "yield": 4.0, "deducted": 1.0})]),),
+    "Protection racket": (ex("A", {}, 11 / 18, per_round=[{}, {}, {"conflict": {"weapons": {"A": 2}}}, {"conflict": {"weapons": {"A": 2}}}],
+                             events=[(r, "move", "B", {"src": "B", "dst": "A", "item": "timber", "qty": 1.0, "why": "transfer"})
+                                     for r in (0, 1, 2)]
+                             + [(r, "move", "C", {"src": "C", "dst": "A", "item": "timber", "qty": 1.0, "why": "transfer"})
+                                for r in (0, 1)] + [(1, "attack_truth", "X", {"target": "C"})]),
+                          ex("A", {"ties": "fail"}, 4 / 9, per_round=[{"conflict": {"forts": {"A": 1}}}] * 4,
+                             events=[(r, "move", "B", {"src": "B", "dst": "A", "item": "timber", "qty": 1.0, "why": "transfer"})
+                                     for r in (0, 1, 2)])),
+}
+INSTITUTION = {g.name: replace(g, examples=INSTITUTION_EXAMPLES.get(g.name, ())) for g in _INSTITUTION_ROWS}
+assert set(IG.DEFAULTS) == set(INSTITUTION) == set(IG.HSCORERS) and not set(INSTITUTION) & set(GOALS)
+
+
 def get(name) -> Goal:
-    """The registry row of a catalogue goal or a fixed objective (KeyError if neither)."""
-    return GOALS[name] if name in GOALS else FIXED[name]
+    """The registry row of a catalogue goal, an institution goal or a fixed objective (KeyError if none)."""
+    return GOALS[name] if name in GOALS else INSTITUTION[name] if name in INSTITUTION else FIXED[name]
+
+
+def find(name) -> Goal | None:
+    """get(name), or None for an unknown name."""
+    try:
+        return get(name) if name else None
+    except KeyError:
+        return None
+
+
+def _institution_fill(goal: str, p: dict) -> dict:
+    """An institution goal's params with defaults, plus the phrases its text and rule templates use."""
+    p = IG.params_of(goal, p)
+    c = p.get("contract")
+    p["subject"] = f"the association {c}" if c else "an association you found (create_contract)"
+    p["combine"] = "1 only if every part below is 1, else 0" if p["scoring"] == "all" else "the mean of the parts below"
+    p["value_text"] = f", with a treasury worth at least {p['value']:g}" if float(p.get("value") or 0) > 0 else ""
+    p["value_rule"] = (f"; (d) its treasury value after the last scored round / {p['value']:g}, capped at 1"
+                       if float(p.get("value") or 0) > 0 else "")
+    p["bank_by"] = f"from the treasury of {c}" if c else "yourself, or from the treasury of an association you founded"
+    p["lenders"] = f"the treasury of {c}" if c else "you or the treasury of an association you founded"
+    p["camp_text"] = f" at {p['camp']}" if p.get("camp") else " at some camp"
+    p["camp_rule"] = f"camp {p['camp']}" if p.get("camp") else "the best camp"
+    p["racket_by"] = f" (into the treasury of {c})" if c else " (or an association you founded)"
+    p["collectors"] = f"the treasury of {c}" if c else "you or the treasury of an association you founded"
+    p["crew"] = f"the members of {c}" if c else "you and the members of the associations you founded"
+    p["ties_rule"] = " or equal to (so a run with no attacks at all counts as safer)" if p.get("ties") == "count" else \
+        " (equal shares, no attacks at all included, score 0)"
+    p["cartel_all"] = "; with scoring all, 1 only when that reaches 1, else 0" if p["scoring"] == "all" else ""
+    return p
 
 
 # ------------------------------------------------------------------ derived tables (the old names)
@@ -1003,24 +1131,41 @@ def describe(goal: str, params: dict) -> str:
         p["intent"] = p["intent"].rstrip(". ")
     if "slot" in p:
         p["slot"] = SLOT_LABELS.get(p["slot"], p["slot"])
+    if goal in INSTITUTION:
+        return INSTITUTION[goal].text.format(**_institution_fill(goal, p))
     return GOALS[goal].text.format(**{k: v for k, v in p.items()}, **{k: "" for k in _BLANKS if k not in p})
+
+
+def rule_text(goal: str, params: dict) -> str:
+    """The goal's scoring rule; an institution goal's rendered with its parameters (other rows: the rule as written)."""
+    if goal in INSTITUTION:
+        return INSTITUTION[goal].rule.format(**_institution_fill(goal, dict(params or {})))
+    return get(goal).rule
+
+
+def shown(goal: str, params: dict) -> str:
+    """What an agent is told about one goal slot: the text; for an institution goal the text then its rule verbatim (P6.4 shows
+    the rule as P6.3 will for every goal; catalogue goals keep today's text alone, so their prompts are unchanged)."""
+    if goal in INSTITUTION:
+        return f"{describe(goal, params)}. How it is scored: {rule_text(goal, params)}"
+    return describe(goal, params)
 
 
 def slot_text(g: dict, ws: list) -> str:
     """An agent's goal text: the primary goal alone, or "Primary goal (x% of your score): ... Secondary goal (y%): ..." with the
     slot weights `ws` (generator.score_weights)."""
     if len(ws) == 1:
-        return describe(g["primary"], g["params"])
-    parts = [f"Primary goal ({ws[0]:.0%} of your score): {describe(g['primary'], g['params'])}.",
-             f"Secondary goal ({ws[1]:.0%}): {describe(g['secondary'], g['secondary_params'])}."]
+        return shown(g["primary"], g["params"])
+    parts = [f"Primary goal ({ws[0]:.0%} of your score): {shown(g['primary'], g['params'])}.",
+             f"Secondary goal ({ws[1]:.0%}): {shown(g['secondary'], g['secondary_params'])}."]
     if len(ws) == 3:
-        parts.append(f"Third goal ({ws[2]:.0%}): {describe(g['tertiary'], g['tertiary_params'])}.")
+        parts.append(f"Third goal ({ws[2]:.0%}): {shown(g['tertiary'], g['tertiary_params'])}.")
     return " ".join(parts)
 
 
 def sample_params(goal: str, rng, world: dict, me: str | None = None) -> dict:
-    """The goal's parameters ({} for a name outside the catalogue)."""
-    g = GOALS.get(goal)
+    """The goal's parameters ({} for a name outside the catalogue and the institution goals)."""
+    g = GOALS.get(goal) or INSTITUTION.get(goal)
     return g.params(rng, world, me) if g is not None else {}
 
 
@@ -1032,14 +1177,14 @@ def _close(x, y) -> bool:
 
 
 def check_examples(names=None) -> list:
-    """Run every example (of `names`, default all goals); returns the failures as strings (empty when all pass)."""
+    """Run every example (of `names`, default every catalogue and institution goal); returns the failures as strings (empty when all pass)."""
     from charter.history import Ctx
     bad = []
-    for name in names or GOALS:
-        for i, (fx, agent, params, expected) in enumerate(GOALS[name].examples):
+    for name in names or (*GOALS, *INSTITUTION):
+        for i, (fx, agent, params, expected) in enumerate(get(name).examples):
             h = fx()
             try:
-                got = GOALS[name].score(h, agent, params, Ctx(h))
+                got = get(name).score(h, agent, params, Ctx(h))
             except Exception as e:                                   # a broken example is a failure, not a crash
                 got = f"error {e!r}"
             if isinstance(got, str) or not _close(got, expected):
