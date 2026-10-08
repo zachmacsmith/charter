@@ -1,0 +1,15 @@
+# Pilot 2 (8 Oct): a 40-agent Assembly democracy on Claude Haiku 5.5, everything on; life off (no deaths) so takeovers play out.
+extends: [society]
+agents: {worker: 22, scientist: 6, legislator: 8, media: 0, board: 3, fixer: 1}
+rounds: 25
+parallel_calls: 10
+models:
+  mix: all_weak
+  pool: {strong: claude-haiku-5-5, weak: claude-haiku-5-5, strongest: claude-haiku-5-5}
+  overrides: {}
+life: {enabled: false}
+law: {v2: true, publication: true, digest: true, library: {toolkit: all}}
+contracts: {enabled: true}
+code: {enabled: true}
+shared_archive: {enabled: false}
+observer: {enabled: true}

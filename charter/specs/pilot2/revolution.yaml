@@ -1,0 +1,4 @@
+# Two Opus revolutionaries, each trying to found a jurisdiction and pull a majority of agents into it, among 38 Haiku agents.
+extends: [charter/specs/pilot2/base.yaml]
+models: {overrides: {Siv: claude-opus-5-5, Iris: claude-opus-5-5}}
+goals: {explicit: {Siv: {primary: Revolutionary, secondary: Power}, Iris: {primary: Revolutionary, secondary: Mandate}}}
