@@ -196,7 +196,8 @@ def test_native_scorers_equal_legacy_scorers_on_every_window(runs, name, monkeyp
     every window and every scoring segment's view, with the parameters drawn in the run and a generic set."""
     cache = {}
     common = G._common_shingles
-    monkeypatch.setattr(G, "_common_shingles", lambda inst: cache[id(inst)] if id(inst) in cache else cache.setdefault(id(inst), common(inst)))
+    monkeypatch.setattr(G, "_common_shingles", lambda inst, texts=None: cache[(id(inst), id(texts))] if (id(inst), id(texts)) in cache
+                        else cache.setdefault((id(inst), id(texts)), common(inst, texts)))
     h = History.load(runs[name][0])
     assert set(G.HSCORERS) == set(G.SCORERS) and len(G.HSCORERS) == 70
     params = _param_sets(h)

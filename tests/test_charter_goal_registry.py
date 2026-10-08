@@ -67,6 +67,28 @@ def test_examples_agree_with_the_legacy_scorers():
             assert GR._close(G.SCORERS[name](h.gt, agent, params), expected), name
 
 
+def test_native_scorers_equal_legacy_on_every_window_of_every_example():
+    """On each example's fixture, the native scorer equals the version-1 legacy scorer on the whole history and on every window
+    (r0, r1), for every agent: the examples exercise branches the golden runs never reach (loans, leaks, deaths, lineage, ...)."""
+    def outcome(fn, *a):
+        try:
+            return ("ok", fn(*a))
+        except Exception:                                            # both must fail alike (e.g. an agent missing from a table)
+            return ("error", None)
+
+    n = 0
+    for name, g in GR.GOALS.items():
+        for fx, agent, params, _ in g.examples:
+            h = fx()
+            rs = h.rounds
+            for v in [h] + [h.window(r0, r1) for i, r0 in enumerate(rs) for r1 in rs[i:]]:
+                for a in sorted(set(v.final["values"]) | set(v.start_values)):
+                    assert outcome(G.HSCORERS[name], v, a, params, HI.Ctx(v)) == outcome(G.SCORERS[name], v.gt, a, params), \
+                        (name, a, params, v)
+                    n += 1
+    assert n > 1000
+
+
 def test_old_names_are_derived_from_the_rows():
     rows = GR.GOALS.values()
     assert set(G.NEW_GOALS) == {g.name for g in rows if g.gate == "update"} == {"Eliminator", "Seat", "Dynasty"}

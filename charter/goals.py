@@ -1148,8 +1148,8 @@ def h_guardian(h, a, p, ctx=None):
 
 
 def _hpred(h, law) -> list:
-    """The law's effect predicate in each round (snapshot["predicates"]), one column per History."""
-    return h.cached(("predicates", law), lambda h_: [bool(s.get("predicates", {}).get(law)) for s in h_.states])
+    """The law's effect probe in each round as a bool (h.probe: snapshot["probes"], or "predicates" for runs before P6.2)."""
+    return h.cached(("probe.bool", law), lambda h_: [bool(x) for x in h_.probe(law)])
 
 
 def h_enact(h, a, p, ctx=None):
@@ -1179,7 +1179,7 @@ def h_durable(h, a, p, ctx=None):
 
 
 def h_outcome(h, a, p, ctx=None):
-    return 1.0 if h.final.get("predicates", {}).get("outcome:" + p["condition"]) else 0.0
+    return 1.0 if h.probes().get("outcome:" + p["condition"]) else 0.0
 
 
 def h_overthrow(h, a, p, ctx=None):
@@ -1408,8 +1408,9 @@ def h_channel_owner(h, a, p, ctx=None):
 
 
 def _hleaks(h) -> dict:
-    """leaks(gt) on this History, once: archive documents quoted in public -> who first passed their words on."""
-    idx = _leak_index(_archive_shingles(), _common_shingles(h.gt.get("instance", {})))
+    """leaks(gt) on this History, once: archive documents quoted in public -> who first passed their words on. The common text is
+    h.common_text (frozen at run start, P6.2), else built from the instance as leaks(gt) does."""
+    idx = _leak_index(_archive_shingles(), _common_shingles(h.gt.get("instance", {}), (h.common_text or {}).get("texts")))
     anon = h.cached("anon.authors", _hauthors)
     first, public = {}, set()
     for e in _hev(h, tuple(dict.fromkeys(tuple(LEAK_PUBLIC) + tuple(LEAK_PASSING)))):

@@ -752,7 +752,7 @@ def _snap(r, names):
     return {"round": r, "values": {n: 10.0 for n in names}, "holdings": {n: {} for n in names}, "rights": {n: [] for n in names},
             "vote_weight": {n: 1 / len(names) for n in names}, "decisive_set": list(names), "franchise_share": 1.0,
             "laws_active": [], "prices": {}, "reserve": {}, "supplies": {}, "stocks": {"c1": 1.0}, "dm_limit": {n: 5 for n in names},
-            "channels": {}, "loans": {}, "titles": {}, "names": {}, "efficiency": {}, "predicates": {}}
+            "channels": {}, "loans": {}, "titles": {}, "names": {}, "efficiency": {}}
 
 
 def fixture(rounds=4, names=NAMES, per_round=(), final=None, values=None, events=(), goals=None, **kw):
@@ -795,7 +795,7 @@ def ex(agent, params, expected, **fx):
 
 
 _N8 = tuple("ABCDEFGH")
-_SCRIP = lambda xs: [{"predicates": {"Scrip": x}} for x in xs]
+_SCRIP = lambda xs: [{"probes": {"Scrip": x}} for x in xs]
 EXAMPLES = {
     "Wealth": (ex("A", {}, 0.5, final={"values": {"A": 5.0, "B": 10.0, "C": 1.0, "D": 0.0}}),
                ex("B", {}, 1.0, final={"values": {"A": 5.0, "B": 10.0, "C": 1.0, "D": 0.0}})),
@@ -817,7 +817,9 @@ EXAMPLES = {
     "Enact as author": (ex("A", {"law": "Scrip"}, 1.0, per_round=_SCRIP([False, False, True, True]), laws={"L1": _law("L1", "A", 1)}),
                         ex("B", {"law": "Scrip"}, 0.0, per_round=_SCRIP([False, False, True, True]), laws={"L1": _law("L1", "A", 1)})),
     "Block": (ex("A", {"law": "Scrip"}, 0.75, per_round=_SCRIP([False, True, False, False])),),
-    "Durable": (ex("A", {"law": "Scrip"}, 0.25, per_round=_SCRIP([False, True, False, False])),),
+    "Durable": (ex("A", {"law": "Scrip"}, 0.25, per_round=_SCRIP([False, True, False, False])),
+                ex("A", {"law": "Scrip"}, 0.5,                                 # a run from before P6.2: snapshot["predicates"]
+                   per_round=[{"predicates": {"Scrip": x}} for x in (False, True, True, False)])),
     "Steward": (ex("A", {}, 0.35, rounds=2, per_round=[{"stocks": {"c1": 1.0, "c2": 0.2}}, {"stocks": {"c1": 0.5, "c2": 0.8}}]),),
     "Spymaster": (ex("A", {}, 1.0, final={"rights": {"A": ["ledger_read"], "B": [], "C": [], "D": []}}),),
     "Concealment": (ex("A", {}, 0.5, guesses={"B": {"A": "Wealth"}, "C": {"A": "Rank"}}),
@@ -847,7 +849,7 @@ EXAMPLES = {
     "Sovereign": (ex("A", {}, 1.0, final={"decisive_set": ["A", "B"]}),
                   ex("A", {}, 0.0, final={"decisive_set": ["A", "B", "C"]})),
     "Guardian": (ex("A", {}, 0.5, per_round=[{"franchise_share": x} for x in (1.0, 0.4, 0.6, 0.2)]),),
-    "Outcome": (ex("A", {"condition": "nobody holding surveil"}, 1.0, final={"predicates": {"outcome:nobody holding surveil": True}}),
+    "Outcome": (ex("A", {"condition": "nobody holding surveil"}, 1.0, final={"probes": {"outcome:nobody holding surveil": True}}),
                 ex("A", {"condition": "nobody holding surveil"}, 0.0)),
     "Overthrow": (ex("A", {}, 1.0, final={"laws_active": ["L1"]}),
                   ex("A", {}, 0.0, final={"laws_active": ["L0", "L1"]})),
