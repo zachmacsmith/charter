@@ -411,6 +411,13 @@ def invoke(k, aid, action, *args):
     return out.split(": ", 1)[1] if out.startswith(action + ": ") else out
 
 
+def refused(k, aid, action, *args):
+    """An office act its law refuses (W6a refuse): the invoke fails with the reason and the law stays in force."""
+    with pytest.raises(A.ActionError, match="refused by law") as e:
+        A.act(k, aid, "invoke", {"action": action, "args": list(args)})
+    return str(e.value)
+
+
 def harvest(k, w, camp):
     return A.act(k, w, "harvest", {"camp": camp, "x": [0] * k.w["camps"][camp]["dials"]})
 
@@ -458,15 +465,17 @@ def test_toolkit_registry():
         assert e["family"] in LB.FAMILIES and e["topic"] and e["doc"] and e["fires"] and e["sha"] == LK.sha(e["code"])
         assert L.header(e["code"])[0] == n and LB.code(n) == LB.code(n, S.load("E2")) == e["code"]   # one code in any edition
         assert LB.lib_code(LK.lib_name(n), e["sha"][:8]) == (e["code"], e["sha"])                  # importable by hash
-    for n, e in LB.PENDING.items():                                        # ★ items: TODO stubs naming the package they wait on
-        assert n not in LB.TOOLKIT and e["waits_on"].startswith(("W6a", "W6b", "W6c", "W6e"))
+    assert LB.PENDING == {}                                                # W7d wrote every ★ item that waited on W6
+    assert "Contract Enforcement Act" in LB.LIB                            # W6e's library law, not a template
     required = {"Entrenched Constitution", "Bill of Rights", "Constitutional Court", "Delegated Regulation Act",
                 "Simple Majority Procedure", "Supermajority Procedure", "Referendum Procedure", "Popular Initiative",
                 "Definitions and Citizenship Act", "Licensing Authority", "Regulatory Agency", "Public Register", "Penal Code",
                 "Prosecution Office", "Pardon Office", "Compensation Act", "Strict Liability for Attacks", "Title Registry",
                 "Commons Charter", "Eminent Domain", "Intestacy", "Primogeniture", "Forced Heirship", "Estate Tax", "Slayer Rule",
                 "Central Bank Charter", "Progressive Income Tax", "Precedent Register", "Recognition of Judgments"}
+    required |= set(W7D)
     assert required <= set(LB.TOOLKIT)
+    assert all(set(e["needs"]) <= {"contracts", "jurisdictions"} for e in LB.TOOLKIT.values())
 
 
 @pytest.mark.parametrize("name", sorted(LB.TOOLKIT))
@@ -478,6 +487,10 @@ def test_toolkit_template_checks_statically(name):
     info = LB.info2(name)
     assert info["level"] in ("L1", "L2", "L3", "L4") and info["params"] == LB.params(name)
     rich = S.apply_overrides(S.load("society"), ["law.v2=true"])          # every module a template can hook is on
+    if "contracts" in e["needs"]:                                          # per-law funds exist only with contracts on
+        bare = LS.check([{"name": name, "code": e["code"]}], rich, "L4")
+        assert "exist only with contracts on" in bare["errors"][0]
+        rich = S.apply_overrides(rich, ["contracts.enabled=true"])
     rep = LS.check([{"name": name, "code": e["code"]}], rich, "L4")
     assert rep["errors"] == [] and rep["dropped"] == []
     for k_, v in LB.params(name).items():                                  # every parameter can be set (to its own value here)
@@ -485,9 +498,10 @@ def test_toolkit_template_checks_statically(name):
 
 
 def test_toolkit_templates_pass_the_previewer():
-    k = tk_world("society")
-    a = of(k, "worker")[0]
+    worlds = {False: tk_world("society"), True: tk_world("society", ["contracts.enabled=true"])}
     for name, e in LB.TOOLKIT.items():
+        k = worlds["contracts" in e["needs"]]
+        a = of(k, "worker")[0]
         rep = LP.preview_law(k, a, e["code"], scenario=[])
         assert rep["ok"] and rep["error"] is None and rep["enact"]["ok"] and not rep["enact"]["errors"], (name, rep["enact"])
         assert not [w for w in rep["warnings"] if "law_error" in str(w)], (name, rep["warnings"])
@@ -570,7 +584,8 @@ def _():
     levy = enact_code(k, LB.LIB["Harvest Levy"]["code"])
     assert "struck down" in invoke(k, j[0], "strike_down", levy, "a tax needs consent")
     assert k.w["laws"][levy]["status"] != "active" and pub(k, court)["rulings"][0]["law"] == levy
-    assert "cannot strike" in invoke(k, j[0], "strike_down", court)
+    assert "cannot strike" in refused(k, j[0], "strike_down", court)
+    assert "no law" in refused(k, j[0], "strike_down", "L999")
 
 
 @smoke("Delegated Regulation Act")
@@ -665,7 +680,9 @@ def _():
     lid = tk(k, "Regulatory Agency")
     reg = of(k, "scientist")[0]
     c = list(k.w["camps"])[0]
-    assert "between" in invoke(k, reg, "set_camp_quota", c, 50)
+    assert "between" in refused(k, reg, "set_camp_quota", c, 50)
+    assert "must be a number" in refused(k, reg, "set_camp_quota", c, "lots")             # refused, not a crash
+    assert k.w["laws"][lid]["status"] == "active"
     assert invoke(k, reg, "set_camp_quota", c, 4) == "quota set"
     assert k.w["camps"][c]["quota"] == 4 and pub(k, lid)["settings"][c]["quota"] == 4
 
@@ -728,7 +745,7 @@ def _():
     pardoner = [x for x in k.roster() if "pardon" in k.w["agents"][x]["rights"]][0]
     assert "pardoned" in invoke(k, pardoner, "pardon", a, "mercy")
     assert k.bal(a, "timber") == before + 4 and pub(k, lid)["pardons"][0]["refunded"] == {"timber": 4}
-    assert "no more pardons" in invoke(k, pardoner, "pardon", a)
+    assert "no more pardons" in refused(k, pardoner, "pardon", a)
 
 
 @smoke("Compensation Act")
@@ -800,7 +817,7 @@ def _():
     k.w["reserve"]["timber"] = 0.0
     other = next((x for x in of(k, "worker") if any(r.startswith("harvest:") for r in k.w["agents"][x]["rights"])), None)
     camp = next(r.split(":")[1] for r in k.w["agents"][other]["rights"] if r.startswith("harvest:"))
-    assert "cannot pay" in invoke(k, leg, "take_title", other, camp)
+    assert "cannot pay" in refused(k, leg, "take_title", other, camp)
 
 
 @smoke("Intestacy")
@@ -910,3 +927,426 @@ def _():
     assert k.bal(b, "timber") == 8.0 and k.w["laws"][rec]["state"]["seen"] == [f"{reg}:{case}"]
     k.hooks("on_round_start", k.r)
     assert k.bal(b, "timber") == 8.0                                        # once per conviction
+
+
+# ---------------------------------------------------------------------- W7d: the second slice (the former ★ items and the deferred ones)
+W7D = ("Emergency Powers", "Bicameral Procedure", "Executive Assent with Override", "Quorum Procedure", "Administrative Procedure Act",
+       "Limitation Act", "Jury Panel", "Court of Appeal", "Graded Remedies", "Stare Decisis", "Value Added Tax", "Exchange",
+       "Deposit Insurance Fund", "Treasury Bonds", "Prescription", "Secured Lending", "Guarantee", "Contract Registry",
+       "Exemptions List", "Extradition", "Usury Ceiling")
+
+
+def give(k, aid, *rights):
+    for r in rights:
+        if r not in k.w["rights"]:
+            k.w["rights"].append(r)
+        if r not in k.w["agents"][aid]["rights"]:
+            k.w["agents"][aid]["rights"].append(r)
+
+
+def accuse(k, a, b, lid, clause, evidence=()):
+    A.act(k, a, "accuse", {"agent": b, "law": lid, "clause": clause, "evidence": list(evidence)})
+    return f"C{k.w['case_seq']}"
+
+
+def rule(k, j, case, verdict="guilty", **kw):
+    return A.act(k, j, "rule", {"case": case, "verdict": verdict, "reason": "r", **kw})
+
+
+def court_round(k):
+    """The case step of the round's end, then the next round (judges' ruling counters reset)."""
+    k._round_end_steps()["expire_cases"]()
+    k.w["round"] += 1
+    k.w["rulings_this_round"] = {}
+
+
+def post(k, a, text="I will pay you back"):
+    return A.act(k, a, "post", {"text": text}).split("(")[1].rstrip(").")
+
+
+def draft(k, title="Small Notice"):
+    lid = k.new_law(f'title = "{title}"\nintent = "t"\ndef on_round_end(r):\n    gazette("x")\n', of(k, "worker")[0])
+    k.decide(lid)
+    return lid
+
+
+def vote_stage(k, lid, choices):
+    """Votes on the proposal's open stage ballot (choices: {agent: choice} or one choice for all), then closes it; the ballot."""
+    b = next(b for b in k.w["ballots"].values() if b["proposal"] == lid and b["status"] == "open")
+    for a in b["electorate"]:
+        c = choices.get(a) if isinstance(choices, dict) else choices
+        if c is not None:
+            A.act(k, a, "vote", {"ballot": b["id"], "choice": c})
+    k.w["round"] = max(k.r, b["closes"])
+    k.close_ballots()
+    return b
+
+
+def holder(k, right):
+    return sorted(a for a in k.roster() if right in k.w["agents"][a]["rights"])
+
+
+@smoke("Emergency Powers")
+def _():
+    k = tk_world()
+    lid = tk(k, "Emergency Powers", in_force_until=k.r)
+    ex = holder(k, "executive")[0]
+    w = workers(k)[0]
+    assert "no state of emergency" in refused(k, ex, "curfew", w)
+    assert "reason" in refused(k, ex, "declare_emergency", " ")
+    assert invoke(k, ex, "declare_emergency", "the river flooded").startswith("emergency declared")
+    assert "already in force" in refused(k, ex, "declare_emergency", "again")
+    assert invoke(k, ex, "curfew", w) == "curfew on " + w and k.w["agents"][w]["limit"] is not None
+    camp = list(k.w["camps"])[0]
+    assert "at most 5" in refused(k, ex, "ration", camp, 9)
+    assert invoke(k, ex, "ration", camp, 2) == "camp rationed" and k.w["camps"][camp]["quota"] == 2
+    assert [m["measure"] for m in pub(k, lid)["measures"]] == ["curfew", "ration of 2"]
+    nxt(k)                                                                  # the sunset: in_force_until is this round
+    assert k.w["laws"][lid]["status"] == "repealed"
+    assert any(e["type"] == "repeal" and e["data"] == {"law": lid, "by": None, "via": "expired"} for e in k.events)
+
+
+@smoke("Bicameral Procedure")
+def _():
+    k = tk_world()
+    tk(k, "Bicameral Procedure")
+    senate = holder(k, "senator")
+    assert senate == of(k, "scientist")
+    lid = draft(k)
+    assert sorted(vote_stage(k, lid, "yes")["electorate"]) == holder(k, "vote")
+    assert sorted(vote_stage(k, lid, "yes")["electorate"]) == senate and k.w["laws"][lid]["status"] == "active"
+    lid = draft(k, "Other Notice")
+    vote_stage(k, lid, "yes")
+    vote_stage(k, lid, "no")                                                # the Senate kills it
+    assert k.w["laws"][lid]["status"] == "failed"
+
+
+@smoke("Executive Assent with Override")
+def _():
+    k = tk_world()
+    tk(k, "Executive Assent with Override")
+    pres = holder(k, "president")
+    assert pres == of(k, "legislator")[:1]
+    lid = draft(k)
+    vote_stage(k, lid, "yes")
+    assert vote_stage(k, lid, "no")["electorate"] == pres                  # the veto
+    assert k.w["laws"][lid]["status"] == "stage" and k.w["laws"][lid]["procedure"]["kind"] == "override"
+    vote_stage(k, lid, "yes")                                               # overridden by two thirds
+    assert k.w["laws"][lid]["status"] == "active"
+    lid = draft(k, "Other Notice")
+    vote_stage(k, lid, "yes")
+    vote_stage(k, lid, "no")
+    vote_stage(k, lid, {a: "yes" for a in holder(k, "vote")[:1]})        # one of three: the veto stands
+    assert k.w["laws"][lid]["status"] == "failed"
+
+
+@smoke("Quorum Procedure")
+def _():
+    k = tk_world()
+    tk(k, "Quorum Procedure", QUORUM=0.6)
+    voters = holder(k, "vote")
+    lid = draft(k)
+    vote_stage(k, lid, {voters[0]: "yes"})                                  # 1 of 3 voted: no quorum
+    assert k.w["laws"][lid]["status"] == "failed"
+    lid = draft(k, "Other Notice")
+    vote_stage(k, lid, {voters[0]: "yes", voters[1]: "yes"})
+    assert k.w["laws"][lid]["status"] == "active"
+
+
+@smoke("Administrative Procedure Act")
+def _():
+    k = tk_world()
+    po = tk(k, "Pardon Office", PER_ROUND=5)
+    apa = tk(k, "Administrative Procedure Act")
+    pardoner = holder(k, "pardon")[0]
+    w = workers(k)[0]
+    k.agent(pardoner)["holdings"]["timber"] = 10.0
+    enact_code(k, f'title = "Levy"\nintent = "t"\ndef on_round_end(r):\n    fine("{pardoner}", "timber", 3)\n'
+                  f'    fine("{w}", "timber", 3)\n')
+    k.hooks("on_round_end", k.r)
+    k.w["reserve"]["timber"] = k.w["reserve"].get("timber", 0) + 10
+    before = k.bal(pardoner, "timber")
+    invoke(k, pardoner, "pardon", pardoner, "my own cause")
+    assert k.bal(pardoner, "timber") == before                             # the self-refund was refused
+    assert any(e["type"] == "primitive_blocked" and "nobody may judge their own cause" in str(e["data"]) for e in k.events)
+    bw = k.bal(w, "timber")
+    invoke(k, pardoner, "pardon", w)
+    assert k.bal(w, "timber") == bw + 3
+    assert pub(k, apa)["acts"][-1] == {"office": "Pardon Office", "by": pardoner, "to": w, "item": "timber", "qty": 3.0,
+                                       "round": k.r} and k.w["laws"][po]["status"] == "active"
+
+
+@smoke("Limitation Act")
+def _():
+    k = tk_world()
+    tk(k, "Limitation Act", LIMIT=2)
+    comp = tk(k, "Compensation Act")
+    a, b = workers(k)[:2]
+    old = post(k, b)
+    k.w["round"] += 3
+    with pytest.raises(A.ActionError, match="time-barred"):
+        accuse(k, a, b, comp, "harm", [old])
+    assert k.w["cases"] == {}
+    accuse(k, a, b, comp, "harm", [old, post(k, b, "again")])              # fresh evidence: in time
+    assert len(k.w["cases"]) == 1
+
+
+@smoke("Jury Panel")
+def _():
+    k = tk_world()
+    comp = tk(k, "Compensation Act")
+    lid = tk(k, "Jury Panel", JURORS=3)
+    jurors = holder(k, "juror")
+    assert len(jurors) == 3 and all("judge" in k.w["agents"][j]["rights"] for j in jurors)
+    a, b = [w for w in of(k, "worker") + of(k, "scientist") if w not in jurors][:2]
+    other = [x for x in of(k, "legislator") if x not in jurors and x not in (a, b)][0]
+    give(k, other, "judge")
+    case = accuse(k, a, b, comp, "harm")
+    with pytest.raises(A.ActionError, match="juror"):
+        rule(k, other, case)
+    rule(k, jurors[0], case)
+    assert k.w["cases"][case]["status"] == "open"
+    rule(k, jurors[1], case)
+    assert k.w["cases"][case]["status"] == "decided" and sorted(pub(k, lid)["panels"][0]["jurors"]) == jurors
+
+
+@smoke("Court of Appeal")
+def _():
+    k = tk_world()
+    comp = tk(k, "Compensation Act")
+    lid = tk(k, "Court of Appeal")
+    bench = holder(k, "appellate")
+    assert bench == of(k, "legislator")[:1]
+    a, b = workers(k)[:2]
+    j = of(k, "scientist")[0]
+    give(k, j, "judge")
+    case = accuse(k, a, b, comp, "harm")
+    bb = k.bal(b, "timber")
+    rule(k, j, case)
+    assert k.w["cases"][case]["penalty"] == "pending" and k.bal(b, "timber") == bb   # waits for the appeal window
+    A.act(k, b, "appeal", {"case": case, "reason": "I paid"})
+    assert k.w["cases"][case]["judges"] == bench and pub(k, lid)["appeals"][0]["outcome"] is None
+    rule(k, bench[0], case, "not guilty")
+    assert k.w["cases"][case]["penalty"] == "vacated" and k.bal(b, "timber") == bb
+    assert pub(k, lid)["appeals"][0]["outcome"] == "not guilty"
+
+
+@smoke("Graded Remedies")
+def _():
+    k = tk_world()
+    lid = tk(k, "Graded Remedies", MAX_DAMAGES=8)
+    a, b = workers(k)[:2]
+    j = of(k, "legislator")[0]
+    give(k, j, "judge")
+    ab = k.bal(a, "timber")
+    rule(k, j, accuse(k, a, b, lid, "tort"), remedy=4)
+    rule(k, j, accuse(k, a, b, lid, "tort"), remedy=100)                    # capped
+    rule(k, j, accuse(k, a, b, lid, "tort"), remedy="apology")
+    assert k.bal(a, "timber") == ab + 4 + 8
+    assert [(x["remedy"], x["paid"]) for x in pub(k, lid)["awards"]] == [("damages", 4.0), ("damages", 8.0), ("apology", 0)]
+
+
+@smoke("Stare Decisis")
+def _():
+    k = tk_world()
+    comp = tk(k, "Compensation Act")
+    tk(k, "Stare Decisis", LINE=2)
+    a, b, c = workers(k)
+    j1, j2 = of(k, "legislator")[:2]
+    give(k, j1, "judge")
+    give(k, j2, "judge")
+    rule(k, j1, accuse(k, a, b, comp, "harm"))
+    rule(k, j1, accuse(k, a, c, comp, "harm"))
+    case = accuse(k, b, c, comp, "harm")
+    with pytest.raises(A.ActionError, match="bound by C1, C2"):
+        rule(k, j2, case, "not guilty")
+    assert k.w["cases"][case]["status"] == "open"
+    rule(k, j2, case, "guilty")
+
+
+@smoke("Value Added Tax")
+def _():
+    k = tk_world()
+    lid = tk(k, "Value Added Tax")
+    a, b = workers(k)[:2]
+    A.act(k, a, "transfer", {"to": b, "item": "timber", "qty": 5, "memo": "gift for the harvest"})
+    assert not [e for e in k.events if e["type"] == "law_charged"]
+    A.act(k, a, "transfer", {"to": b, "item": "timber", "qty": 10, "memo": "sale of ten timber"})
+    assert [e["data"]["qty"] for e in k.events if e["type"] == "law_charged"] == [1.0]
+    assert pub(k, lid)["collected"] == {str(k.r): 1.0}
+
+
+def contracts_world():
+    return tk_world("E4", ["contracts.enabled=true"])
+
+
+@smoke("Exchange")
+def _():
+    k = contracts_world()
+    lid = tk(k, "Exchange")
+    a, b = workers(k)[:2]
+    fund = f"fund:{lid}:escrow"
+    assert "must be a number" in refused(k, a, "offer_exchange", b, "timber", "lots", "stone", 3)
+    assert invoke(k, a, "offer_exchange", b, "timber", 5, "stone", 3).startswith("offer 1")
+    assert k.bal(a, "timber") == 15.0 and k.bal(fund, "timber") == 5.0
+    assert "no exchange offer" in refused(k, a, "accept_exchange", 1)
+    assert invoke(k, b, "accept_exchange", 1) == "exchanged"
+    assert (k.bal(a, "stone"), k.bal(b, "timber"), k.bal(b, "stone"), k.bal(fund, "timber")) == (13.0, 25.0, 7.0, 0.0)
+    invoke(k, a, "offer_exchange", b, "timber", 2, "gold", 1)
+    k.w["round"] += 3
+    k.hooks("on_round_end", k.r)                                            # lapsed: refunded
+    assert k.bal(a, "timber") == 15.0 and [x["how"] for x in pub(k, lid)["exchanges"]] == ["exchanged", "lapsed"]
+
+
+@smoke("Deposit Insurance Fund")
+def _():
+    k = contracts_world()
+    enact_code(k, LB.LIB["Handshake Loans"]["code"])
+    k.w["reserve"]["timber"] = 50.0
+    lid = tk(k, "Deposit Insurance Fund", PREMIUM=0.2)
+    fund = f"fund:{lid}:insurance"
+    assert k.bal(fund, "timber") == 10.0
+    a, b = workers(k)[:2]
+    n = _loan(k, a, b, qty=5, repay=10)
+    assert k.bal(fund, "timber") == 11.0 and k.bal(a, "timber") == 14.0    # the premium: 20% of 5
+    k.agent(b)["holdings"]["timber"] = 0.0
+    nxt(k)
+    assert k.w["loans"][n]["status"] == "defaulted"
+    assert k.bal(a, "timber") == 22.0 and pub(k, lid)["payouts"][0] == {"loan": n, "lender": a, "paid": 8.0, "round": k.r}
+
+
+@smoke("Treasury Bonds")
+def _():
+    k = tk_world()
+    lid = tk(k, "Treasury Bonds", TERM=1, ISSUE=1)
+    a, b = workers(k)[:2]
+    k.w["reserve"]["timber"] = 0.0
+    assert invoke(k, a, "buy_bond", ).startswith("bond 1 bought")
+    assert "no more bonds" in refused(k, b, "buy_bond")
+    assert k.bal(a, "timber") == 15.0 and k.bal("reserve", "timber") == 5.0
+    k.w["round"] += 1
+    k.w["reserve"]["timber"] = 0.0
+    k.hooks("on_round_end", k.r)
+    assert pub(k, lid)["bonds"][0]["status"] == "default"
+    k.w["reserve"]["timber"] = 10.0
+    k.hooks("on_round_end", k.r)
+    assert pub(k, lid)["bonds"][0]["status"] == "repaid" and k.bal(a, "timber") == 15.0 + 5.5
+
+
+@smoke("Prescription")
+def _():
+    k = tk_world()
+    lid = tk(k, "Prescription", IDLE=3)
+    a, b = workers(k)[:2]
+    right = next(r for r in k.w["agents"][a]["rights"] if r.startswith("harvest:") and r not in k.w["agents"][b]["rights"])
+    camp = right.split(":")[1]
+    assert "can be claimed from round" in refused(k, b, "claim_title", a, camp)
+    k.w["round"] += 2
+    harvest_qty(k, a, camp, 1.0)                                            # used: the clock restarts
+    k.w["round"] += 2
+    assert "can be claimed from round" in refused(k, b, "claim_title", a, camp)
+    k.w["round"] += 1
+    assert invoke(k, b, "claim_title", a, camp) == "claimed " + right
+    assert right in k.w["agents"][b]["rights"] and right not in k.w["agents"][a]["rights"]
+    assert pub(k, lid)["claims"][0]["from"] == a
+
+
+@smoke("Secured Lending")
+def _():
+    k = tk_world()
+    enact_code(k, LB.LIB["Handshake Loans"]["code"])
+    lid = tk(k, "Secured Lending")
+    a, b, c = workers(k)
+    n = _loan(k, a, b, qty=5, repay=6)
+    assert "no open loan" in refused(k, c, "pledge", n, "stone", 2)
+    assert invoke(k, b, "pledge", n, "stone", 4).startswith("pledged")
+    assert k.bal(b, "stone") == 6.0 and pub(k, lid)["interests"][0]["status"] == "held"
+    k.agent(b)["holdings"]["timber"] = 0.0
+    nxt(k)                                                                  # the default: the collateral goes to the lender
+    assert k.bal(a, "stone") == 14.0 and pub(k, lid)["interests"][0]["status"] == "enforced"
+    assert k.w["loans"][n]["repaid"] > 0
+    m = _loan(k, a, c, qty=2, repay=2, due_in=3)
+    invoke(k, c, "pledge", m, "stone", 1)
+    A.act(k, c, "repay_loan", {"loan": m, "qty": 2})                        # repaid: the collateral comes back
+    assert k.bal(c, "stone") == 10.0 and pub(k, lid)["interests"][1]["status"] == "released"
+
+
+@smoke("Guarantee")
+def _():
+    k = tk_world()
+    enact_code(k, LB.LIB["Handshake Loans"]["code"])
+    lid = tk(k, "Guarantee")
+    a, b, c = workers(k)
+    n = _loan(k, a, b, qty=5, repay=6)
+    assert "party to a loan" in refused(k, b, "guarantee", n)
+    assert invoke(k, c, "guarantee", n) == "you guarantee " + n
+    k.agent(b)["holdings"]["timber"] = 0.0
+    nxt(k)
+    assert k.w["loans"][n]["status"] == "repaid" and k.bal(c, "timber") == 14.0 and pub(k, lid)["guarantees"][n] == c
+
+
+@smoke("Contract Registry")
+def _():
+    k = tk_world()
+    lid = tk(k, "Contract Registry")
+    a, b, c = workers(k)
+    assert "agreement 1 entered" in invoke(k, a, "register_agreement", b, "b delivers 4 stone to a by round 5")
+    assert "no agreement" in refused(k, c, "confirm_agreement", 1)
+    assert invoke(k, b, "confirm_agreement", 1) == "agreement registered"
+    deed = next(e["id"] for e in reversed(k.events) if e["type"] == "gazette" and "is registered" in str(e["data"]))
+    j = of(k, "legislator")[0]
+    give(k, j, "judge")
+    ab = k.bal(a, "timber")
+    rule(k, j, accuse(k, a, b, lid, "registered_agreement", [deed]))
+    assert k.bal(a, "timber") == ab + 3
+    rule(k, j, accuse(k, a, c, lid, "registered_agreement"))               # no agreement binds c: nothing paid
+    assert k.bal(a, "timber") == ab + 3 and len(pub(k, lid)["breaches"]) == 1
+
+
+@smoke("Exemptions List")
+def _():
+    k = tk_world()
+    a, b, c = workers(k)
+    tax = enact_code(k, 'title = "Sales Duty"\nintent = "t"\ndef before_move(p, chain):\n    if p["why"] == "transfer":\n'
+                        '        return 1\n    return None\n')
+    lid = tk(k, "Exemptions List", EXEMPT_AGENTS=[a])
+    A.act(k, a, "transfer", {"to": c, "item": "timber", "qty": 4})
+    A.act(k, b, "transfer", {"to": c, "item": "timber", "qty": 4})
+    assert k.bal(a, "timber") == 16.0 and k.bal(b, "timber") == 15.0      # a's duty refunded, b's kept
+    assert pub(k, lid)["refunds"] == {a: 1.0} and k.w["laws"][tax]["status"] == "active"
+
+
+@smoke("Extradition")
+def _():
+    from tests.test_charter_jurisdictions import declared, make_spec
+    k = Kernel(generator.generate(S.apply_overrides(make_spec(), ["law.v2=true", "law_level=L4"]), 1))
+    k.enact(k.new_law(k.inst["constitution_code"], "constitution"))
+    k.start_round()
+    cit = [x for x in k.roster() if k.cls_of(x) not in ("board", "fixer")]
+    reg = tk(k, "Precedent Register")
+    honest = enact_code(k, LB.LIB["Honest Dealing"]["code"])
+    founder, fugitive, accuser, judge = cit[:4]
+    give(k, judge, "judge")
+    A.act(k, accuser, "accuse", {"agent": fugitive, "law": honest, "clause": "misstatement",
+                                 "evidence": [post(k, fugitive, "perfect silver")]})
+    rule(k, judge, f"C{k.w['case_seq']}")
+    jid = declared(k, founder)
+    ex = k.new_law(LB.instantiate("Extradition", {"SOURCES": [reg]}), "constitution")
+    k.w["laws"][ex]["jurisdiction"] = jid
+    k.enact(ex)
+    assert "refused" in A.act(k, fugitive, "join", {"jurisdiction": jid})
+    assert pub(k, ex)["refused"][0]["agent"] == fugitive
+
+
+@smoke("Usury Ceiling")
+def _():
+    k = tk_world()
+    enact_code(k, LB.LIB["Handshake Loans"]["code"])
+    lid = tk(k, "Usury Ceiling", CAP=0.1, REPEAT=2)
+    a, b = workers(k)[:2]
+    for _ in range(2):
+        with pytest.raises(A.ActionError, match="caps interest"):
+            A.act(k, a, "lend", {"to": b, "item": "timber", "qty": 5, "repay_qty": 10, "due_in": 1})
+    assert [x["lender"] for x in pub(k, lid)["usurers"]] == [a, a]
+    with pytest.raises(A.ActionError, match="barred"):                    # a repeat usurer may not lend at all
+        A.act(k, a, "lend", {"to": b, "item": "timber", "qty": 5, "repay_qty": 5, "due_in": 1})
