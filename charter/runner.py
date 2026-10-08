@@ -50,6 +50,7 @@ from charter import events as EV
 from charter import interventions as IV                               # interventions: scheduled typed ops (charter/interventions.py)
 from charter import goal_registry as GR
 from charter import library as LB
+from charter import life as LF                                         # life.max_population: the budget stop
 from charter import provenance as PV
 from charter import media as MD                                       # media2
 from charter import observer as OBS
@@ -353,8 +354,24 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
             PV.end(out, "stopped", r - 1)
             raise RunStopped(msg)
 
+    def stop_if_over_budget(r):
+        """life.max_population (a model-cost guard): a round that would start with more living agents than allowed is not played;
+        the run is kept as of the end of the previous round (its checkpoint) and stops. Births are never refused."""
+        why = LF.budget_stop(k) if "life" in k.w else None
+        if why is None:
+            return
+        reason_f.close()
+        ev_f.close()
+        policy.close()
+        if obs:
+            obs.f.flush()
+        msg = FS.budget(out, r, inst["rounds"], why)
+        PV.end(out, "stopped", r - 1)
+        raise RunStopped(msg)
+
     last_round = inst["rounds"] if until is None else max(first_round, min(inst["rounds"], int(until)))
     for r in range(first_round, last_round):
+        stop_if_over_budget(r)
         if rs.schedule and IV.pending(k, rs, "setup", r):               # setup entries of a later (re)start, e.g. in a replay
             k.begin_round_cause(phase="setup")
             due("setup", r=r)

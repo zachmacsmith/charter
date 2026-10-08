@@ -4,7 +4,12 @@ Lifespans. Every agent but the Fixer (Board members included) lives a number of 
 scale (`full_scale_rounds`, 80); shorter runs scale it by rounds / 80 (never up). A `--set rounds=N` override that shortens a
 preset does not rescale: spec.apply_overrides records the preset's own rounds as `design_rounds`, and that length is used instead
 (unless the same overrides set `full_scale_rounds` too, which keeps the plain rounds / full_scale rule). Starting agents have `elapsed` ([0, 15], scaled the
-same way) rounds already behind them, so deaths do not all arrive together. Agents see exactly how many rounds remain
+same way) rounds already behind them, so deaths do not all arrive together. Demography (review 15 §2.6, D-36; off by default):
+`scale: none` makes lifespans absolute rounds, never scaled; `age_structure: stationary` draws each founder's remaining life from the
+stationary distribution of the lifespan (density S(r)/mu, iid or `age_sampling: systematic`) and its lifespan given that, so old-age
+deaths run at about N/mu a round from round 1 (Lifespan, stationary_iter). With either, there is no population cap unless `cap_mult` is
+set, `max_population` stops the run as a budget guard (runner, failstop.budget), and the economy audit's fixes apply (`audit_fixes`:
+B2-B5, B7); `default_heirs: children` sends unbequeathed estates to children (unborn included), then co-parents, then the reserve. Agents see exactly how many rounds remain
 (`lifespan_known: exact`), or an estimate off by a fixed per-agent error of up to `approx_error` (`approximate`). Old-age deaths
 happen at step 6 of the end of round (Kernel.end_round -> end_of_round) through mortality.disable(cause="old_age"). Own RNG streams
 ("<seed>|life|..."), so turning Life on moves no other draw.
@@ -82,6 +87,16 @@ DEFAULTS = {
                                         # discount, negative) and prices.tier_strong relative to it. None: the old weak-default pricing
     "persona_tokens": 300, "letter_tokens": 1000, "commission_expiry": 5, "ensure_maker": True,
     "heir_reminder": 3,                 # rounds left at which an agent is reminded, every turn, to consider an heir
+    # Demography (review 15 §2.6, D-36). The defaults reproduce the old draws exactly.
+    "scale": "run",                     # run: lifespans scale by run length (_scale); none: absolute rounds, never scaled
+    "age_structure": "elapsed",         # elapsed: founders have randint(elapsed) rounds behind them; stationary: founders' ages drawn
+                                        # from the stationary age distribution of `lifespan` (density S(a)/mu)
+    "age_sampling": "iid",              # stationary only: iid (independent draws) | systematic (evenly spaced quantiles)
+    "max_population": None,             # a model-cost budget guard: the run stops (STOPPED.md) before a round that starts with more living
+                                        # agents than this (an int, or "4N": a multiple of the starting agents); births are never refused
+    "default_heirs": "reserve",         # where an estate's unbequeathed part goes: reserve (as before) | children (children, unborn
+                                        # included, then co-parents, then the reserve)
+    "audit_fixes": None,                # review 16 bugs B2-B5, B7; None: on with the absolute or stationary demography, else off
 }
 # Lineage scoring per goal, from each goal's registry row (goal_registry.Goal.lineage / lineage_override):
 HISTORY = GR.LINEAGE_RECORD             # scored on the run's record: the best of the whole lineage, dead members included
@@ -127,24 +142,215 @@ def _clip(text, tokens) -> str:
     return text
 
 
-def _scale(k) -> float:
+def demography(c) -> bool:
+    """The absolute / stationary demography (review 15 §2.6) is on: `scale: none` or `age_structure: stationary`."""
+    return c.get("scale") == "none" or c.get("age_structure") == "stationary"
+
+
+def fixes(c) -> bool:
+    """The economy audit's fixes (review 16 §6: B2 copy tier, B3 bought lifespan, B4 birth-round inheritance, B5 refunds to the
+    estate, B7 clip after scaling): `audit_fixes`, or by default on exactly when the new demography is."""
+    v = c.get("audit_fixes")
+    return demography(c) if v is None else bool(v)
+
+
+def run_scale(c, rounds) -> float:
     """Lifespans scale by run length / full_scale_rounds (never up). The run length is the longer of the run's rounds and
     `design_rounds` (the preset's own rounds, recorded when an override shortens the run), so cutting a run short plays the first
-    rounds of the same world instead of compressing every life into a die-off; lengthening a run scales as before."""
-    c = cfg(k.spec)
-    n = max(int(k.inst["rounds"]), int(c.get("design_rounds") or 0))
+    rounds of the same world instead of compressing every life into a die-off; lengthening a run scales as before. `scale: none`:
+    1 (absolute lifespans)."""
+    if c.get("scale") == "none":
+        return 1.0
+    n = max(int(rounds), int(c.get("design_rounds") or 0))
     return min(1.0, n / float(c["full_scale_rounds"]))
 
 
-def _draw_lifespan(k, rng) -> int:
-    """life.lifespan: [lo, hi] (uniform), or {mean, sd, min, max} (normal, clipped), scaled by the run's length."""
-    ls = cfg(k.spec)["lifespan"]
+def _scale(k) -> float:
+    return run_scale(cfg(k.spec), k.inst["rounds"])
+
+
+def draw_lifespan(c, scale, rng) -> int:
+    """life.lifespan: [lo, hi] (uniform), or {mean, sd, min, max} (normal, clipped), scaled by `scale`. The clip comes before
+    scaling (as always), or after it under the audit fixes (B7: a scaled `min: 3` no longer becomes 0.9)."""
+    ls = c["lifespan"]
     if isinstance(ls, dict):
         x = rng.gauss(float(ls.get("mean", 30)), float(ls.get("sd", 10)))
+        if fixes(c):
+            return max(2, round(min(float(ls.get("max", 1e9)), max(float(ls.get("min", 2)), x * scale))))
         x = min(float(ls.get("max", 1e9)), max(float(ls.get("min", 2)), x))
-        return max(2, round(x * _scale(k)))
+        return max(2, round(x * scale))
     lo, hi = ls
-    return max(2, round(rng.uniform(float(lo), float(hi)) * _scale(k)))
+    return max(2, round(rng.uniform(float(lo), float(hi)) * scale))
+
+
+def _draw_lifespan(k, rng) -> int:
+    c = cfg(k.spec)
+    return draw_lifespan(c, run_scale(c, k.inst["rounds"]), rng)
+
+
+class Lifespan:
+    """The lifespan distribution L (life.lifespan at a scale) and its stationary remaining life (review 15 §2.6): survival
+    S(a) = P(L > a), mean mu, remaining-life CDF G(r) = integral_0^r S/mu and its inverse, and L given L > r.
+    Uniform [lo, hi]: closed forms. Normal {mean, sd, min, max} (clipped): S tabulated on a fine grid, G by the trapezoid rule and
+    inverted by linear interpolation; L | L > r exactly by inverting the clipped normal's survival (one draw)."""
+
+    GRID = 4000
+
+    def __init__(self, c, scale=1.0):
+        ls = c["lifespan"]
+        s = float(scale)
+        self.normal = isinstance(ls, dict)
+        if self.normal:
+            m, sd = float(ls.get("mean", 30)), float(ls.get("sd", 10))
+            mn, mx = float(ls.get("min", 2)), float(ls.get("max", 1e9))
+            if fixes(c):                                                 # clip after scaling (B7), as draw_lifespan does
+                self.m, self.sd, self.mn, self.mx = m * s, sd * s, mn, mx
+            else:
+                self.m, self.sd, self.mn, self.mx = m * s, sd * s, mn * s, mx * s
+            self.sd = max(self.sd, 1e-9)
+            top = min(self.mx, self.m + 10 * self.sd)
+            top = max(top, self.mn)
+            self.top = top
+            h = top / self.GRID if top > 0 else 1.0
+            self.xs = [i * h for i in range(self.GRID + 1)]
+            ss = [self.S(x) for x in self.xs]
+            cum = [0.0]
+            for i in range(1, len(self.xs)):
+                cum.append(cum[-1] + 0.5 * (ss[i - 1] + ss[i]) * h)
+            self.mu = cum[-1]
+            self.G_tab = [x / self.mu for x in cum]
+        else:
+            lo, hi = float(ls[0]) * s, float(ls[1]) * s
+            self.lo, self.hi = min(lo, hi), max(lo, hi)
+            self.mu = 0.5 * (self.lo + self.hi)
+            self.top = self.hi
+
+    def _Phi(self, z) -> float:
+        return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+    def S(self, a) -> float:
+        """P(L > a)."""
+        if self.normal:
+            if a < self.mn:
+                return 1.0
+            if a >= self.mx:
+                return 0.0
+            return 1.0 - self._Phi((a - self.m) / self.sd)
+        if a <= self.lo:
+            return 1.0
+        if a >= self.hi:
+            return 0.0
+        return (self.hi - a) / (self.hi - self.lo)
+
+    def G(self, r) -> float:
+        """The CDF of the stationary remaining life."""
+        if self.normal:
+            if r >= self.top:
+                return 1.0
+            h = self.xs[1]
+            i = int(r / h)
+            f = r / h - i
+            return self.G_tab[i] + f * (self.G_tab[i + 1] - self.G_tab[i])
+        lo, hi, mu = self.lo, self.hi, self.mu
+        if r <= lo:
+            return r / mu
+        if r >= hi:
+            return 1.0
+        return lo / mu + ((hi - lo) ** 2 - (hi - r) ** 2) / (2 * (hi - lo) * mu)
+
+    def remaining(self, u) -> float:
+        """G^-1(u): a remaining life from a uniform u in [0, 1)."""
+        u = min(max(float(u), 0.0), 1.0)
+        if self.normal:
+            import bisect
+            j = bisect.bisect_left(self.G_tab, u)
+            if j <= 0:
+                return 0.0
+            if j >= len(self.G_tab):
+                return self.top
+            g0, g1 = self.G_tab[j - 1], self.G_tab[j]
+            f = 0.0 if g1 <= g0 else (u - g0) / (g1 - g0)
+            return self.xs[j - 1] + f * (self.xs[j] - self.xs[j - 1])
+        lo, hi, mu = self.lo, self.hi, self.mu
+        if hi <= lo or u <= lo / mu:
+            return u * mu
+        return hi - math.sqrt(max(0.0, (hi - lo) ** 2 - 2 * (hi - lo) * mu * (u - lo / mu)))
+
+    def given_over(self, r, rng) -> float:
+        """L drawn from f conditioned on L > r (one draw from rng)."""
+        if self.normal:
+            from statistics import NormalDist
+            w = rng.random()
+            q = 1.0 - w * self.S(r)                                         # P(L <= x) = q at the drawn x
+            q = min(max(q, 1e-12), 1 - 1e-12)
+            x = self.m + self.sd * NormalDist().inv_cdf(q)
+            return min(self.mx, max(self.mn, x, r))
+        return rng.uniform(max(self.lo, r), self.hi)
+
+
+def stationary_iter(c, n, scale, rng):
+    """(span, elapsed) for n founders under `age_structure: stationary` (review 15 §2.6), lazily: remaining life r = G^-1(u) with u
+    iid U(0, 1) (`age_sampling: iid`) or systematic ((pi(i) + v) / n), the lifespan L | L > r, then span = round(L) (at least
+    floor(r) + 1 and 2) and elapsed = span - floor(r) - 1, so the founder plays rounds 0..floor(r) and leaves at step 6 of round
+    floor(r). Draws in a fixed order on `rng`: (systematic: v, then the permutation) then, per founder, u (iid only) and one draw
+    for L; install draws each founder's approximate-lifespan error after its pair."""
+    dist = Lifespan(c, scale)
+    systematic = c.get("age_sampling") == "systematic"
+    if systematic:
+        v = rng.random()
+        perm = list(range(n))
+        rng.shuffle(perm)
+    for i in range(n):
+        u = (perm[i] + v) / n if systematic else rng.random()
+        r = dist.remaining(u)
+        L = dist.given_over(r, rng)
+        fr = int(math.floor(r))
+        span = max(2, int(round(L)), fr + 1)
+        yield span, span - fr - 1
+
+
+def old_age_share(c, rounds, samples=4000, seed=0) -> float:
+    """The expected share of founders who die of old age within a run of `rounds` (deaths happen at the end of rounds 1..R-1: none
+    in the last round), by simulation of the founder draws (spec check's warning)."""
+    rng = random.Random(f"{seed}|life|old_age_share")
+    scale = run_scale(c, rounds)
+    if c.get("age_structure") == "stationary":
+        draws = stationary_iter(c, samples, scale, rng)
+    else:
+        lo, hi = c["elapsed"]
+        el_scale = 1.0 if c.get("scale") == "none" else scale
+        draws = ((draw_lifespan(c, scale, rng), round(rng.randint(int(lo), int(hi)) * el_scale)) for _ in range(samples))
+    dying = sum(1 for span, el in draws if max(1, span - el) - 1 <= int(rounds) - 2)
+    return dying / samples
+
+
+def is_uncapped(spec) -> bool:
+    """No population cap: `cap_mult: null`, or the new demography with no explicit cap_mult (D-36)."""
+    c = cfg(spec)
+    return c["cap_mult"] is None or ("cap_mult" not in (spec.get("life") or {}) and demography(c))
+
+
+def max_population(c, n0):
+    """life.max_population as a number of living agents: an int, or "<m>N" / "<m>x" (a multiple of the starting agents)."""
+    v = c.get("max_population")
+    if v is None:
+        return None
+    if isinstance(v, str):
+        m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*[xXN×]\s*", v)
+        if not m:
+            raise ValueError(f"life.max_population: {v!r} is neither a number nor a multiple like \"4N\"")
+        return int(math.floor(float(m.group(1)) * n0))
+    return int(v)
+
+
+def budget_stop(k):
+    """A message when the living population exceeds life.max_population (the runner then stops before playing the round), else None."""
+    st = k.w.get("life") or {}
+    mx = max_population(cfg(k.spec), st.get("start_n", 0)) if st else None    # read each round: `--live` may raise it on a resume
+    n = len(k.players())
+    if mx is None or n <= mx:
+        return None
+    return f"the population ({n} living agents) exceeds life.max_population ({mx}), a model-cost budget guard"
 
 
 # ---------------------------------------------------------------------- setup
@@ -152,18 +358,28 @@ def install(k) -> None:
     """Called from Kernel.__init__ when life.enabled: lifespans for the starting agents, the cap, the Maker."""
     c = cfg(k.spec)
     players = sorted(k.players())
-    k.w["life"] = {"start_n": len(players), "cap": int(math.floor(float(c["cap_mult"]) * len(players))), "dies_at": {}, "lifespan": {},
+    # No population cap with the new demography unless cap_mult is set explicitly (D-36: carrying capacity is the only ceiling);
+    # `cap` stays as the reference size for scoring (Populator, Dynasty), at cap_mult (1.5 when none) x the starting agents.
+    uncapped = is_uncapped(k.spec)
+    cap_ref = 1.5 if c["cap_mult"] is None else float(c["cap_mult"])
+    k.w["life"] = {"start_n": len(players), "cap": int(math.floor(cap_ref * len(players))), "dies_at": {}, "lifespan": {},
                    "elapsed": {}, "approx": {}, "parent": {}, "maker_of": {}, "born": {}, "commissions": {}, "seq": 0, "stats": {},
                    "jurisdiction": {}, "births": [], "population": []}
     st = k.w["life"]
+    if uncapped:
+        st["uncapped"] = True
+    max_population(c, len(players))                                     # (fails early on a malformed value)
     rng = random.Random(f"{k.inst['seed']}|life|lifespan")
-    lo, hi = c["elapsed"]
-    for aid in players:
-        if k.w["agents"][aid]["cls"] == "fixer":
-            continue
-        span = _draw_lifespan(k, rng)
-        el = round(rng.randint(int(lo), int(hi)) * _scale(k))
-        _set_lifespan(k, aid, span, el, rng)
+    founders = [a for a in players if k.w["agents"][a]["cls"] != "fixer"]
+    if c.get("age_structure") == "stationary":
+        for aid, (span, el) in zip(founders, stationary_iter(c, len(founders), _scale(k), rng)):
+            _set_lifespan(k, aid, span, el, rng)                          # the approximate error drawn after each founder's pair
+    else:
+        lo, hi = c["elapsed"]
+        for aid in founders:
+            span = _draw_lifespan(k, rng)
+            el = round(rng.randint(int(lo), int(hi)) * _scale(k))
+            _set_lifespan(k, aid, span, el, rng)
     MO.state(k)
     ensure_maker(k, announce_all=True)
 
@@ -193,18 +409,38 @@ def is_maker(k, aid) -> bool:
     return RO.has_role(k, aid, "maker")
 
 
-def ensure_maker(k, announce_all=False) -> None:
+def _name_maker(k, m) -> None:
     from charter import roles as RO
+    RO.holders(k, "maker")                                               # (lets the roles module set up its state first)
+    k.w.setdefault("roles", {}).setdefault("maker", []).append(m)
+    if "maker" not in k.w["agents"][m]["rights"]:                         # the role carries its right (the action registry's gate)
+        k.w["agents"][m]["rights"] = sorted(k.w["agents"][m]["rights"] + ["maker"])
+
+
+def maker_target(k) -> int:
+    """How many Makers `roles.maker_refill` keeps: as many as were named at the start (at least 1 with ensure_maker)."""
+    n = len(((k.inst.get("roles") or {}).get("holders") or {}).get("maker") or [])
+    return max(n, 1 if cfg(k.spec)["ensure_maker"] else 0)
+
+
+def ensure_maker(k, announce_all=False) -> None:
     makers = living_makers(k)
+    pool = sorted(a for a in k.players() if k.w["agents"][a]["cls"] not in ("board", "fixer"))
     if not makers and cfg(k.spec)["ensure_maker"]:
-        pool = sorted(a for a in k.players() if k.w["agents"][a]["cls"] not in ("board", "fixer"))
         if pool:
             m = random.Random(f"{k.inst['seed']}|life|maker|{k.r}").choice(pool)
-            RO.holders(k, "maker")                                       # (lets the roles module set up its state first)
-            k.w.setdefault("roles", {}).setdefault("maker", []).append(m)
-            if "maker" not in k.w["agents"][m]["rights"]:                 # the role carries its right (the action registry's gate)
-                k.w["agents"][m]["rights"] = sorted(k.w["agents"][m]["rights"] + ["maker"])
+            _name_maker(k, m)
             makers = [m]
+            announce_all = True
+    if (k.spec.get("roles") or {}).get("maker_refill"):                 # audit B6: a dead Maker's role is refilled, not left lapsed
+        target = maker_target(k)
+        while len(makers) < target:
+            free = [a for a in pool if a not in makers]
+            if not free:
+                break
+            m = random.Random(f"{k.inst['seed']}|life|maker|{k.r}|refill|{len(makers)}").choice(free)
+            _name_maker(k, m)
+            makers = makers + [m]
             announce_all = True
     if announce_all and makers:
         k.log("maker", None, {"makers": makers, "text": f"The Maker{'s are' if len(makers) > 1 else ' is'} {', '.join(makers)}: "
@@ -213,12 +449,23 @@ def ensure_maker(k, announce_all=False) -> None:
 
 def at_cap(k) -> bool:
     st = k.w.get("life")
-    return bool(st) and len(k.players()) >= st["cap"]
+    return bool(st) and not st.get("uncapped") and len(k.players()) >= st["cap"]
 
 
 def children(k, aid) -> list:
     st = k.w.get("life") or {}
     return sorted(c for c, p in (st.get("parent") or {}).items() if p == aid)
+
+
+def coparents(k, aid) -> list:
+    """The other parents of aid's children (two-parent births record k.w["life"]["parents"][child] = [a, b]; Makers' children have one
+    parent, so none), sorted."""
+    st = k.w.get("life") or {}
+    out = set()
+    for ps in (st.get("parents") or {}).values():
+        if aid in ps:
+            out.update(p for p in ps if p != aid)
+    return sorted(out)
 
 
 def descendants(k, aid) -> list:
@@ -267,8 +514,21 @@ def on_death(k, aid) -> dict:
     """Called by mortality.disable before the bequest: children ordered for this death become due and take what was ordered."""
     st = state(k)
     out = {}
+    fix = fixes(cfg(k.spec))
     for c in sorted(st["commissions"].values(), key=lambda c: c["id"]):
-        if c["parent"] != aid or c["status"] != "waiting":
+        if c["parent"] != aid:
+            continue
+        if fix and c["status"] in ("due", "open") and c.get("reserved") is None:   # audit B4: a child made (or still to be made)
+            got = {}                                                       # when its parent dies takes its holdings from the estate
+            for item, q in ((c.get("final") or c["ordered"]).get("holdings") or {}).items():
+                take = MO.estate_take(k, aid, item, q, f"commission:{c['id']}")
+                if take > 0:
+                    got[item] = take
+            c["reserved"] = got
+            c["files_reserved"] = _take_files(k, aid, (c.get("final") or c["ordered"]).get("files") or [])
+            out[c["id"]] = got
+            continue
+        if c["status"] != "waiting":
             continue
         c["status"], c["due_round"] = "due", k.r
         got = {}
@@ -289,15 +549,24 @@ def after_death(k, aid) -> None:
 
 
 def _refund(k, c, why) -> None:
-    to = c["parent"] if MO.alive(k, c["parent"]) else "reserve"
+    alive = MO.alive(k, c["parent"])
+    estate = not alive and fixes(cfg(k.spec))                              # audit B5: a dead parent's refund goes to its estate
+    to = c["parent"] if alive or estate else "reserve"
     for part in ("cost", "fee"):
         for item, q in c["escrow"][part].items():
             if q > 1e-9:
                 k._add(to, item, q)
         c["escrow"][part] = {}
+    if estate:
+        for item, q in (c.get("reserved") or {}).items():                  # what an unmade child was left goes back too
+            if q > 1e-9:
+                k._add(to, item, q)
+        c["reserved"] = {}
     c["status"] = "refunded"
-    k.log("commission_refunded", c["parent"], {"commission": c["id"], "to": to, "why": why}, vis="monitor")
-    if to != "reserve":
+    k.log("commission_refunded", c["parent"], {"commission": c["id"], "to": "estate" if estate else to, "why": why}, vis="monitor")
+    if estate:
+        MO.settle_late(k, c["parent"])                                     # handed on by its bequest (or default heirs)
+    elif to != "reserve":
         k.notify(to, f"Commission {c['id']} with {c['maker']} is cancelled ({why}); your escrow is returned.")
 
 
@@ -801,6 +1070,8 @@ def copy_agent(k, aid, parent=None, edits=None, commission=None) -> str:
     if parent not in k.w["agents"]:
         raise L.LawError(f"no agent {parent}")
     base = copy_spec(k, parent)
+    if fixes(cfg(k.spec)) and not cfg(k.spec).get("tier_models"):         # audit B2: a copy is priced at the ordered tier, not the
+        base["stats"]["tier"] = c["ordered"]["stats"]["tier"]            # parent's (which cost gold the Maker lacked)
     for x in ("persona", "letter", "files", "holdings", "timing"):          # what the order says about the gift and the timing stays
         base[x] = copy.deepcopy(c["ordered"][x])
     if base["goal"] is None:
@@ -970,7 +1241,8 @@ def _birth(k, c) -> str | None:
     def settle(aid):                                                      # the birth phase's "child" step (events.begin)
         EV.state(k)["arrivals"][aid] = k.r + 1                            # it plays (and is scored) from the next round
         st["parent"][aid], st["maker_of"][aid], st["born"][aid] = parent, maker, k.r + 1
-        drawn["span"] = span = _draw_lifespan(k, rng) + round(int(sp["stats"]["lifespan"]) * _scale(k))
+        bought = int(sp["stats"]["lifespan"])                            # audit B3: bought rounds are not scaled under the fixes
+        drawn["span"] = span = _draw_lifespan(k, rng) + (bought if fixes(cfg(k.spec)) else round(bought * _scale(k)))
         st["lifespan"][aid], st["elapsed"][aid] = span, 0
         st["dies_at"][aid] = k.r + span
         st["approx"][aid] = round(rng.uniform(-1, 1) * float(cfg(k.spec)["approx_error"]), 4)
@@ -1033,7 +1305,8 @@ def state_lines(k, aid) -> list:
                    "or offices count only through living descendants. "
                    + (f"Your living children: {', '.join(heirs)}." if heirs else
                       "You have no heir yet: consider commissioning one from a Maker now (commission), with a goal that carries yours on."))
-    out.append(f"Population: {len(k.players())} of a cap of {st['cap']}. Maker(s): {', '.join(living_makers(k)) or 'none now'}.")
+    out.append(f"Population: {len(k.players())}" + (" (no cap)" if st.get("uncapped") else f" of a cap of {st['cap']}")
+               + f". Maker(s): {', '.join(living_makers(k)) or 'none now'}.")
     o = _inst_agent(k, aid).get("origin")
     if o:
         out.append(f"Your origin: child of {o['parent']}, made by {o['maker']}, born before round {o['born_round'] + 1}.")
@@ -1071,9 +1344,12 @@ def rules_text(inst, maker=True) -> str:
     sp = inst["spec"]
     parts = []
     if MO.active(sp):
+        heirs = enabled(sp) and cfg(sp).get("default_heirs") == "children"
         parts.append("Agents can leave the game for good (disabled). What a departing agent holds follows its bequest (one instruction, set "
                      "with bequest; it can name different recipients if it is disabled by someone, e.g. its attacker's enemies); otherwise "
-                     "its holdings go to the reserve and its files are destroyed. Its rights and offices lapse; secret roles pass to someone "
+                     + ("its holdings go to its children (those still to be born included), or with none to the other parent of its "
+                        "children, or else to the reserve, and its files are destroyed." if heirs else
+                        "its holdings go to the reserve and its files are destroyed.") + " Its rights and offices lapse; secret roles pass to someone "
                      "else, unannounced. A Board member names a successor (name_successor, private unless a law makes namings public), who "
                      "takes the seat when the member leaves and gives up every right except veto; with no living successor the seat stays "
                      "empty. The veto needs a majority of the remaining members; no law can add or remove members.")
@@ -1097,8 +1373,9 @@ def rules_text(inst, maker=True) -> str:
                      f"{c['prices']['scratch1000']}; +5 attack or defense {c['prices']['attack5']}; +1 lookup {c['prices']['lookup']}; "
                      f"plus the Maker's fee. A child ordered without stats costs the base price only; holdings are a gift from your own "
                      "holdings, not part of the price. ")
-                     + f"The population is capped at {c['cap_mult']:g} times the starting count; births wait beyond "
-                     "it. Goals about your own holdings or offices also count through your living descendants: you score your own result or "
+                     + ("There is no population cap. " if is_uncapped(sp) else
+                        f"The population is capped at {c['cap_mult']:g} times the starting count; births wait beyond it. ")
+                     + "Goals about your own holdings or offices also count through your living descendants: you score your own result or "
                      "your lineage's (you and your descendants), whichever is higher.")
     return " ".join(parts)
 
@@ -1193,7 +1470,8 @@ def truth(k, inst=None) -> dict:
     return {"life": {"start_n": st["start_n"], "cap": st["cap"], "parent": st["parent"], "maker_of": st["maker_of"], "born": st["born"],
                      "dies_at": st["dies_at"], "lifespan": st["lifespan"], "elapsed": st["elapsed"], "stats": st["stats"],
                      "jurisdiction": st["jurisdiction"], "births": st["births"], "population": st["population"],
-                     "commissions": st["commissions"]}}
+                     "commissions": st["commissions"],
+                     **({"uncapped": True} if st.get("uncapped") else {})}}
 
 
 def _gt_children(gt, aid) -> list:

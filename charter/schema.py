@@ -44,7 +44,8 @@ _MISSING = object()
 # Keys `--live` may change part-way through a run (runtime-only: they change how turns are played, not how the world was generated).
 # The generalisation of runner.LIVE_KEYS, which must equal this set (tests/test_charter_schema.py) until P5.1 reads it from here.
 RUNTIME_SAFE = {"media2.submissions", "context.lookups_in_dm_step", "context.action_purposes", "context.explore_nudge",
-                "context.budgets.core", "jurisdictions.declare_cost", "media2.edition_tokens", "context.budgets.media"}
+                "context.budgets.core", "jurisdictions.declare_cost", "media2.edition_tokens", "context.budgets.media",
+                "life.max_population"}
 
 CLASSES = ("worker", "scientist", "legislator", "media", "board", "fixer")
 
@@ -379,6 +380,14 @@ def _ann():
         "life.elapsed": dict(types=("list",)),
         "life.design_rounds": dict(types=("int", "null"), range=(1, None)),
         "life.lifespan_known": dict(types=("str",), enum=("exact", "approximate")),
+        "life.scale": dict(types=("str",), enum=("run", "none")),
+        "life.age_structure": dict(types=("str",), enum=("elapsed", "stationary")),
+        "life.age_sampling": dict(types=("str",), enum=("iid", "systematic")),
+        "life.max_population": dict(types=("int", "str", "null")),
+        "life.default_heirs": dict(types=("str",), enum=("reserve", "children")),
+        "life.audit_fixes": dict(types=("bool", "null")),
+        "life.cap_mult": dict(types=("number", "null"), range=(0, None)),
+        "roles.maker_refill": dict(types=("bool",)),
         "life.tier_models": dict(kind="map", keys=("weak", "mid", "strong")),
         "life.tier_models.*": dict(types=("str",)),
         "media2.start_subscribed": dict(types=("bool", "str"), enum=(True, False, "split")),
@@ -434,6 +443,7 @@ EXTRA = {
     "outside_power.first": None,
     "media2.outlet_names": None,
     "life.prices.tier_weak": 0,
+    "roles.maker_refill": False,                                       # S0 (audit B6): a dead Maker's role is refilled
     "llm.api_key": None,
     "roles.counts.seer": None,
     "prompts.core": None,
@@ -565,7 +575,20 @@ DOCS = {
                            "plays the first rounds of the same lives instead of compressing them"),
     "life.lifespan_known": "exact | approximate: what agents know of their remaining rounds",
     "life.approx_error": "largest relative error of an approximate lifespan",
-    "life.cap_mult": "population cap as a multiple of the starting agents in play",
+    "life.cap_mult": ("population cap as a multiple of the starting agents in play; null: no cap. With `scale: none` or "
+                      "`age_structure: stationary` and no explicit cap_mult there is no cap (D-36)"),
+    "life.scale": "run: lifespans scale with the run length (full_scale_rounds, design_rounds); none: absolute rounds, never scaled",
+    "life.age_structure": ("elapsed: founders have `elapsed` rounds behind them; stationary: founders' ages and remaining lives drawn "
+                           "from the stationary age distribution of `lifespan` (old-age deaths at about N/mean lifespan a round)"),
+    "life.age_sampling": "stationary only: iid (independent draws, natural clusters) | systematic (evenly spaced deaths)",
+    "life.max_population": ("budget guard: the run stops (STOPPED.md) before a round that starts with more living agents than this "
+                            "(an int, or a multiple of the starting agents like \"4N\"); births are never refused; null: no guard"),
+    "life.default_heirs": ("where the unbequeathed part of an estate goes: reserve, or children (unborn ones included), then "
+                           "co-parents, then the reserve"),
+    "life.audit_fixes": ("review 16 fixes B2 (copies at the ordered tier), B3 (bought lifespan unscaled), B4 (a child born as its "
+                         "parent dies keeps its share), B5 (refunds to the estate), B7 (clip after scaling); null: on with the new "
+                         "demography (scale none or stationary ages)"),
+    "roles.maker_refill": "name a new Maker whenever one dies, keeping the starting number (otherwise only when none is left)",
     "life.mutation": "mutation of a child's spec at birth",
     "life.mutation.trait_sd": "sd of the noise added to each trait",
     "life.mutation.archetype": "chance the archetype is redrawn",
@@ -1256,6 +1279,29 @@ def validate(spec) -> list[str]:
     return errs
 
 
+OLD_AGE_WARN = 0.5                                                     # spec check: warn above this share of founders dying of age
+
+
+def warnings(spec) -> list[str]:
+    """Things that are valid but probably unintended (spec check prints them; they never fail it). Life: more than OLD_AGE_WARN of
+    the founders would die of old age within the run (the first Haiku pilots' mistake: lifespans scaled to a short run)."""
+    out = []
+    life = spec.get("life") if isinstance(spec, dict) else None
+    rounds = spec.get("rounds") if isinstance(spec, dict) else None
+    if isinstance(life, dict) and life.get("enabled") is True and isinstance(rounds, int) and not isinstance(rounds, bool):
+        from charter import life as LF
+        try:
+            c = LF.cfg(spec)
+            share = LF.old_age_share(c, rounds)
+        except (TypeError, ValueError, KeyError, ZeroDivisionError):
+            return out                                                  # distributions or malformed values: validate reports those
+        if share > OLD_AGE_WARN:
+            out.append(f"life: about {share:.0%} of the founders die of old age within the {rounds} rounds ({share / max(1, rounds - 1):.1%} "
+                       f"a round); replacing them needs that many births. Consider life.scale: none with longer lifespans (e.g. [60, 120]) "
+                       f"and life.age_structure: stationary (docs: charter/specs/fragments/demography.yaml)")
+    return out
+
+
 def _join(path, k) -> str:
     return f"{path}.{k}" if path else str(k)
 
@@ -1458,4 +1504,7 @@ def cmd(a) -> int:
         print(f"{name}: " + ("ok" if not errs else f"{len(errs)} error(s)"))
         for e in errs:
             print(f"  {e}")
+        if not errs:
+            for w in warnings(S.apply_overrides(S.load(name), a.set)):
+                print(f"  warning: {w}")
     return 1 if bad else 0
