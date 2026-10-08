@@ -495,6 +495,10 @@ def render_event(k, e, viewer=None) -> str | None:
         return f"{tag} ballot {d['ballot']}: {d['question']} options={d['options']} rule={d['rule']} electorate={d['electorate']} closes end of round {d['closes_round'] + 1}"
     if t == "ballot_close":
         return f"{tag} ballot {d['ballot']} closed: {d['result']} (votes {d['votes']})"
+    if t == "proposal_stage_open":                                      # law.v2 (W6c): multi-stage procedures
+        return f"{tag} {d['law']} reached {d['name']} ({d['kind']}, stage {d['stage']} of {d['of']}): ballot {d['ballot']}"
+    if t == "proposal_stage_close":
+        return f"{tag} {d['law']} {d['name']} ({d['ballot']}): {d['result']}; next: {d['next']}"
     if t == "vote":
         return f"{tag} {who} voted {d['choice']} on {d['ballot']}"
     if t in ("enact", "repeal", "vetoed", "veto_window", "proposal_failed", "law_error", "patched", "patch_submitted", "patch_failed", "request_fix",
@@ -663,8 +667,8 @@ class ScriptedPolicy:
                 acts.append({"action": "propose", "args_json": json.dumps({"code": LB.code(r.choice(k.inst["library"]), k.inst)})})
             elif roll < 0.8 and any(b["status"] == "open" and aid in b["electorate"] for b in k.w["ballots"].values()):
                 b = r.choice([b for b in k.w["ballots"].values() if b["status"] == "open" and aid in b["electorate"]])
-                ch = r.choice(b["options"]) if not b["rule"].startswith("approval") else r.sample(b["options"], min(3, len(b["options"])))
-                acts.append({"action": "vote", "args_json": json.dumps({"ballot": b["id"], "choice": ch if b["rule"].startswith("approval") else ("yes" if "yes" in b["options"] and r.random() < .6 else ch)})})
+                ch = r.choice(b["options"]) if not str(b["rule"]).startswith("approval") else r.sample(b["options"], min(3, len(b["options"])))
+                acts.append({"action": "vote", "args_json": json.dumps({"ballot": b["id"], "choice": ch if str(b["rule"]).startswith("approval") else ("yes" if "yes" in b["options"] and r.random() < .6 else ch)})})
             elif cls == "board" and k.w["veto_queue"] and roll < 0.85:
                 acts.append({"action": "veto", "args_json": json.dumps({"law": r.choice(k.w["veto_queue"])["law"]})})
             elif cls == "fixer" and k.w["fixer_queue"]:

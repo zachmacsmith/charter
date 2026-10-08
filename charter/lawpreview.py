@@ -26,7 +26,7 @@ Report shape (JSON-able):
     {"ok": bool, "error": str | None, "agent", "jurisdiction",
      "static":    {"title", "intent", "cls", "rank", "calls", "hooks", "rights": {grant, revoke, suspend}, "repeals", "defines_action",
                    "imports": [{ref, alias, target, mode, sha}], "exports": [...], "dependents": [...], "overlaps": [{law, title, rank, hooks}]},
-     "procedure": {"proposed": bool, "outcome": pass|ballot|gate|veto_window|dormant|fail|blocked|refused, "status", "reason",
+     "procedure": {"proposed": bool, "outcome": pass|ballot|gate|stages|veto_window|dormant|fail|blocked|refused, "status", "reason",
                    "blocked_by": [...], "decides": lid | None, "ballot": {id, rule, electorate, closes_round, gate} | None,
                    "refusal": str | None, "as_holder": bool},    # as_holder: the agent may not propose (refusal); proposed by one who may
      "enact":     {"status", "ok": bool, "blocked_by": [...], "errors": [...]},
@@ -348,7 +348,8 @@ def _run_scenario(k, aid, name, act, args, hidden) -> dict:
 # ---------------------------------------------------------------------- the preview
 def _status_outcome(status) -> str:
     return {"active": "pass", "enacted_repeal": "pass", "ballot": "ballot", "gated": "gate", "veto_window": "veto_window",
-            "dormant": "dormant", "failed": "fail", "blocked": "blocked", "failed_check": "refused"}.get(status, str(status))
+            "dormant": "dormant", "failed": "fail", "blocked": "blocked", "failed_check": "refused",
+            "stage": "stages"}.get(status, str(status))                # law.v2 (W6c): a multi-stage procedure began
 
 
 def _procedure(k, aid, code, jurisdiction, hidden) -> tuple:

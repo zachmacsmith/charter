@@ -639,10 +639,14 @@ def decide(k, lid):
             k.law_error(k.fnreg[key][0], str(e))
         law["status"] = "failed"
         return
+    from charter import stages as ST
     if res is True:
         passed(k, lid)
+    elif ST.staged(k, res):                                             # law.v2 (W6c): a multi-stage procedure, members only
+        ST.begin(k, lid, plid, res, jid=jid, members=set(members(k, jid)))
     elif isinstance(res, dict):
         mem = set(members(k, jid))
+        res = ST.with_rule_ref(k, plid, res)                            # law.v2 (W6c): a rule function, stored as data
         res = {**res, "electorate": [a for a in list(res.get("electorate", [])) if a in mem]}
         if res.get("gate"):
             law["status"] = "gated"

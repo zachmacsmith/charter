@@ -348,6 +348,20 @@ E += [
      "import cycle, a higher rank, ...). Procedural: law level L3 and up.", "prompt", "common"),
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("propose_law", "propose_amendment")})
+# multi-stage procedures and ballot rule functions (charter/stages.py, W6c): documented only in law.v2 worlds (REQUIRES)
+E += [
+    ("procedure_stages", "ballots", "Governance",
+     'a procedure may return stages: {"stages": [{"electorate", "rule", "closes_in", "name"}, ...], "assent": [agents], '
+     '"override": {"rule", "electorate"}}', "the stages are ballots run one after another (two chambers, readings, a committee); "
+     'failing any fails the proposal. Then each agent in "assent" must vote yes on an assent ballot (any no, or silence unless '
+     '"silence": "assent", is a veto); after a veto an "override" ballot (default rule two_thirds, electorate everyone in the '
+     "stages) can still pass it. A pending proposal's record (read_law) shows its current stage.", "prompt", "common"),
+    ("ballot_rule_function", "ballots", "Governance", "rule=fn(votes, electorate) in a ballot",
+     "open_ballot, a procedure's ballot and each stage accept a function as rule: fn(votes, electorate) gets {agent: choice} "
+     "(a voter may give a ranked list) and the electorate and returns the winning option or None (none wins): a quorum, Borda, "
+     "double majority or supermajority. It runs as your law's call, under the step limit; an error or a non-option counts as None.", "common", "uncommon"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("procedure_stages", "ballot_rule_function")})
 # loans as primitives (credit.py, dispatch.py's loans block): a law-run registry records what it collected; documented only in law.v2
 # worlds (REQUIRES), where the loan hooks exist (before_offer_loan, before_accept_loan, before_default_loan, after_settle_loan, ...)
 E += [

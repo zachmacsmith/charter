@@ -176,6 +176,11 @@ E("vote", "actions", "legal_act", "public", "official", "agents", act="vote", fl
 E("veto_vote", "actions", "legal_act", "public|monitor", "official", "agents", act="veto", primitive="veto")
 E("ballot_open", "kernel", "legal_act", "public", "official", "agents", primitive="open_ballot")
 E("ballot_close", "kernel", "legal_act", "public", "official", "agents", primitive="close_ballot")
+# law.v2 (W6c, charter/stages.py): a multi-stage procedure's stages (ballots, assent, override). Never logged without law.v2.
+E("proposal_stage_open", "stages", "legal_act", "public", "event", "agents", primitive="decide",
+  note="a stage of a proposal's multi-stage procedure opened (law, stage, of, kind stage|assent|override, name, ballot)")
+E("proposal_stage_close", "stages", "legal_act", "public", "event", "agents", primitive="close_ballot",
+  note="a stage closed (result, and next: stage|assent|override|passed|failed)")
 E("veto_window", "kernel", "legal_act", "public", "official", "agents", primitive="decide")
 E("vetoed", "kernel", "legal_act", "public", "official", "agents", primitive="veto")
 E("enact", "kernel", "legal_act", "public", "official", "agents", primitive="enact")

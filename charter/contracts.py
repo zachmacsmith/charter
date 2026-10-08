@@ -52,6 +52,7 @@ from charter import lawapi as LA
 from charter import lawlang as L
 from charter import library as LB
 from charter import powers as PW
+from charter import stages as ST                                       # law.v2 (W6c): ballot rule functions
 
 KEY = "contracts"
 EVENT_TYPES = ET.rendered_by("contracts")
@@ -457,7 +458,7 @@ def _decide(k, rec, pr) -> str:
         if not isinstance(res, dict):
             return _fail(k, rec, pr, "its procedure rejected the change")
         spec = {"electorate": [a for a in res.get("electorate", rec["members"]) if a in rec["members"]],
-                "rule": res.get("rule", "majority"), "weights": res.get("weights")}
+                "rule": ST.rule_ref(k, plid, res.get("rule", "majority")), "weights": res.get("weights")}   # W6c: rule functions
     what = f"{cid} '{rec['name']}': adopt {lid} '{law['title']}'" + (f" in place of {pr['replaces']}" if pr["replaces"] else "") + "?"
     bid = k.open_ballot(what, spec["electorate"], ["yes", "no"], spec["rule"], 0, None, spec.get("weights"), lid)
     k.w["ballots"][bid]["jurisdiction"] = cid
