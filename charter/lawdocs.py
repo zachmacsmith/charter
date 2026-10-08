@@ -20,6 +20,14 @@ TOPICS = {
     "hooks": ("Hooks: when a law runs", "A law runs only through the hooks it defines; the kernel calls them, in order of enactment."),
     "chains": ("Causes of a change (law.v2)", "A new-style hook gets the change and its chain of causes, first cause first; these read "
                "the chain and name the law itself."),
+    "ranks": ("Rank and precedence (law.v2)",
+              'A law declares its rank as a top-level constant: rank = "constitution", "statute" (the default), "regulation" or '
+              '"bylaw". A law may repeal or amend only laws of its own rank or lower: a draft repealing a constitution must itself '
+              'declare rank = "constitution". set_procedure(law_class, fn, rank="constitution") sets the procedure for drafts of '
+              "that rank (only a law of that rank or higher may); a procedure's p.rank is the draft's rank. Before-hooks run highest "
+              "rank first. When laws' before-hooks disagree, the polity's conflict rule decides: any_block (the default: any block "
+              'blocks), superior (the highest-rank explicit verdict wins; a dict with "exempt": True cancels lower-rank charges), '
+              "posterior (the latest-enacted explicit verdict wins) or a constitution's function."),
     "social-hooks": ("Hooks on posts, votes, proposals and rulings",
                      "Beyond the round and economic hooks, a law can react to public speech, votes, new proposals and court rulings."),
     "dm-hook": ("Reading private messages: on_dm", "A law can be told about private messages, but only in worlds that allow it."),
@@ -316,6 +324,15 @@ E += [
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2")))
                  for n in ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")})
+# rank and conflict rules (charter/dispatch.py, P3.2): documented only in law.v2 worlds (REQUIRES)
+E += [
+    ("set_conflict_rule", "ranks", "Governance", "set_conflict_rule(rule)", 'how conflicting before-hook verdicts are resolved in '
+     'this law\'s polity: "any_block", "superior", "posterior", or a function fn(verdicts) returning {"block": bool, "charges": '
+     '[{"law", "charge"}]} (verdicts: [{law, rank, seq, block, allow, charge, exempt, reason}]). Only a constitution-rank law may '
+     'call it (or declare conflict_rule = "superior"); it holds while that law is in force. Makes a law procedural.',
+     "common", "uncommon"),
+]
+REQUIRES["set_conflict_rule"] = lambda spec: bool((spec.get("law") or {}).get("v2"))
 ENTRIES ={e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers",
                "Jurisdictions", "Media", "Life"]

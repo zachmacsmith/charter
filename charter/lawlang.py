@@ -32,6 +32,11 @@ STRUCTURAL_CALLS = LA.STRUCTURAL_CALLS                                 # rights,
 PROCEDURAL_CALLS = LA.PROCEDURAL_CALLS                                 # set_procedure
 L4_CALLS = LA.L4_CALLS                                                 # define_action
 CLASS_RANK = {"ordinary": 0, "structural": 1, "procedural": 2}         # strictness: a law may not repeal a stricter one (Kernel.repeal)
+# P3.2 (law.v2; review 09 §8.1): a law's rank, declared as a top-level constant `rank = "statute"` (default statute). charter is
+# reserved (kernel-seeded: no draft may declare it, no procedure exists for it). CONFLICT_RULES: the named conflict rules (§8.3) a
+# constitution-rank law may declare with `conflict_rule = "superior"` or set with set_conflict_rule(name_or_fn).
+RANKS = {"charter": 4, "constitution": 3, "statute": 2, "regulation": 1, "bylaw": 0}
+CONFLICT_RULES = ("any_block", "superior", "posterior")
 LEVEL_CLASSES = {"L0": set(), "L1": {"ordinary"}, "L2": {"ordinary", "structural"}, "L3": {"ordinary", "structural", "procedural"},
                  "L4": {"ordinary", "structural", "procedural"}}
 from charter.primitives import LAW_HOOKS as HOOKS                     # noqa: E402  live hooks of primitives.HOOKS (lawapi.HOOKTABLE)
@@ -40,7 +45,8 @@ SAFE_BUILTINS = {"len": len, "range": range, "min": min, "max": max, "sum": sum,
                  "enumerate": enumerate, "zip": zip, "any": any, "all": all, "True": True, "False": False, "None": None, "tuple": tuple}
 SAFE_ATTRS = {"get", "items", "keys", "values", "append", "pop", "remove", "insert", "extend", "sort", "index", "setdefault", "update",
               "copy", "upper", "startswith", "endswith", "split", "strip", "join", "replace", "count",
-              "author", "title", "intent", "cls", "id", "round", "add", "discard"}
+              "author", "title", "intent", "cls", "id", "round", "add", "discard",
+              "rank"}                                                  # P3.2: a procedure's p.rank ("statute" unless law.v2)
 ALLOWED_NODES = (ast.Module, ast.FunctionDef, ast.arguments, ast.arg, ast.Return, ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Expr,
                  ast.If, ast.For, ast.While, ast.Break, ast.Continue, ast.Pass, ast.Compare, ast.BoolOp, ast.BinOp, ast.UnaryOp,
                  ast.Call, ast.keyword, ast.Name, ast.Load, ast.Store, ast.Del, ast.Delete, ast.Constant, ast.List, ast.Tuple,
@@ -243,7 +249,7 @@ def load_module(code: str, law_id: str, api: dict, state: dict, limited: Limited
 REF_RE = re.compile(r"^(?:(L\d+)(?:@([0-9a-f]{8,16}))?|lib:([a-z0-9_]+)@([0-9a-f]{8,16}))$")
 MAX_IMPORT_DEPTH = 6
 MAX_LINKED_BYTES = 64 * 1024
-NOT_EXPORTABLE = {"title", "intent", "rank", "exports", "state", "public", "use"}
+NOT_EXPORTABLE = {"title", "intent", "rank", "conflict_rule", "exports", "state", "public", "use"}
 
 
 def _single(n) -> str | None:
@@ -333,10 +339,31 @@ def export_closure(tree: ast.Module, names=None) -> tuple:
     return ast.Module(body=[defs[n] for n in defs if n in seen], type_ignores=[]), used
 
 
+def declared(tree: ast.Module, name: str):
+    """The constant a module assigns to `name` at the top level (rank, conflict_rule, fail_closed), else None."""
+    v = next((n.value for n in tree.body if _single(n) == name), None)
+    return v.value if isinstance(v, ast.Constant) else None
+
+
+def check_rank(tree: ast.Module) -> None:
+    """P3.2 static rules (law.v2): `rank` and `conflict_rule`, when a module sets them at the top level, are set once to a known
+    constant string; only a constitution-rank (or charter) law may declare a conflict rule. Raises LawError."""
+    for nm, known in (("rank", tuple(RANKS)), ("conflict_rule", CONFLICT_RULES)):
+        top = [n for n in tree.body if _single(n) == nm or (isinstance(n, (ast.AugAssign, ast.AnnAssign)) and
+                                                             isinstance(n.target, ast.Name) and n.target.id == nm)]
+        if len(top) > 1:
+            raise LawError(f"{nm} is set once, at the top level")
+        if top and not (_single(top[0]) == nm and isinstance(top[0].value, ast.Constant) and top[0].value.value in known):
+            raise LawError(f"{nm} must be one of {', '.join(known)} as a constant string (line {top[0].lineno})")
+    if declared(tree, "conflict_rule") is not None and RANKS[declared(tree, "rank") or "statute"] < RANKS["constitution"]:
+        raise LawError('only a constitution-rank law may declare conflict_rule (rank = "constitution")')
+
+
 def check_v2(tree: ast.Module, code: str) -> None:
-    """The linker's per-module static rules (see above). Raises LawError."""
+    """The linker's per-module static rules (see above), and the rank rules (check_rank). Raises LawError."""
     if len(code.encode()) > MAX_LINKED_BYTES:
         raise LawError(f"a law may be at most {MAX_LINKED_BYTES // 1024} KB")
+    check_rank(tree)
     use_stmts = [n for n in tree.body if _single(n) and _is_use(n.value)]
     use_calls = {id(n.value) for n in use_stmts}
     use_funcs = {id(n.value.func) for n in use_stmts}
@@ -378,7 +405,7 @@ def check_v2(tree: ast.Module, code: str) -> None:
         nm = _single(n)
         if isinstance(n, ast.FunctionDef) or (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant)):
             continue
-        if nm in ("title", "intent", "rank") and isinstance(n.value, ast.Constant):
+        if nm in ("title", "intent", "rank", "conflict_rule") and isinstance(n.value, ast.Constant):
             continue
         if nm == "exports" or (nm and _is_use(n.value)):
             continue

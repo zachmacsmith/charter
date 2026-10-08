@@ -58,8 +58,9 @@ class CIStr(str):
 
 class Proposal:
     """What a procedure function sees (attributes are whitelisted in the law language)."""
-    def __init__(self, id, author, title, intent, cls, round):
+    def __init__(self, id, author, title, intent, cls, round, rank="statute"):
         self.id, self.author, self.title, self.intent, self.cls, self.round = id, author, title, intent, cls, round
+        self.rank = rank                                               # P3.2: the draft's rank (always statute without law.v2)
 
 
 class Kernel:
@@ -526,10 +527,13 @@ class Kernel:
         def set_fee(c, item, qty):
             k.apply("set_camp_rule", key="fee", value=None if not qty else {"item": item, "qty": float(qty)}, camp=c)
 
-        def set_procedure(law_class, fn):
+        def set_procedure(law_class, fn, rank=None):
             if law_class not in ("ordinary", "structural", "procedural"):
                 raise L.LawError("law_class must be ordinary, structural or procedural")
-            k.apply("set_procedure", jurisdiction=D.jur_of(k, lid), cls=law_class, procedure_law=lid, key=k._reg(lid, fn))
+            if rank is not None:                                       # P3.2: the procedure for drafts of this rank (law.v2)
+                D.check_procedure_rank(k, lid, rank)
+            k.apply("set_procedure", jurisdiction=D.jur_of(k, lid), cls=law_class, procedure_law=lid, key=k._reg(lid, fn),
+                    **({"rank": rank} if rank is not None else {}))
 
         def open_ballot(question, electorate, options, rule="majority", closes_in=1, on_result=None, weights=None):
             return k.open_ballot(question, list(electorate), list(options), rule, int(closes_in),
@@ -691,11 +695,14 @@ class Kernel:
 
     def repeal(self, target, by_law=None, via=None):
         """Repeal the active laws named `target` (an id or a title), one repeal primitive each (dispatch.do_repeal). A law-caused
-        repeal never reaches a law of a stricter class (review F1). True if any was repealed."""
+        repeal never reaches a law of a stricter class (review F1), nor (law.v2, P3.2: lex superior) a law of a higher rank. True if
+        any was repealed."""
         hit = [l for l in self.active_laws() if l["id"] == target or l["title"].lower() == target.lower()]
         if by_law is not None:                                          # law-caused: never a law of a stricter class (review F1)
             rank = self.w["laws"].get(by_law, {}).get("cls")
             hit = [l for l in hit if L.CLASS_RANK.get(l["cls"], 0) <= L.CLASS_RANK.get(rank, 0)]
+            if D.v2(self):                                              # P3.2: nor of a higher rank (lex superior)
+                hit = [l for l in hit if D.may_change(self, D.rank_of(self, by_law), l["id"])]
         done = False
         for law in hit:
             out = self.apply("repeal", jurisdiction=D.jur_of(self, law["id"]), law=law["id"], by_law=by_law,
@@ -977,26 +984,28 @@ class Kernel:
     def decide(self, lid):
         """The decide primitive (dispatch.do_decide): the current procedure for a proposal passes it, fails it, or opens a ballot."""
         law = self.w["laws"][lid]
-        self.apply("decide", jurisdiction=D.jur_of(self, lid), law=lid, cls=law["cls"], rank=law.get("rank") or "statute",
+        self.apply("decide", jurisdiction=D.jur_of(self, lid), law=lid, cls=law["cls"], rank=D.law_rank(self, lid),
                    procedure_law=self._procedure_law(lid))
 
     def _procedure_law(self, lid):
         """The law whose procedure decides this proposal (None: no procedure, or a new jurisdiction's built-in members' vote)."""
         law = self.w["laws"][lid]
-        key = J.procedure_key(self, J.law_jur(self, lid), law["cls"]) if "jur" in self.w else self.w["procedures"].get(law["cls"])
+        key = J.procedure_key(self, J.law_jur(self, lid), law["cls"], D.law_rank(self, lid)) if "jur" in self.w \
+            else D.procedure_lookup(self.w["procedures"], law["cls"], D.law_rank(self, lid))   # P3.2: by rank (v2 off: get(cls))
         return (self.fnreg.get(key) or (None,))[0] if key else None
 
     def _decide(self, lid):
         """Kernel.decide's change with jurisdictions off (on: jurisdictions.decide)."""
         law = self.w["laws"][lid]
-        key = self.w["procedures"].get(law["cls"])
+        rank = D.law_rank(self, lid)
+        key = D.procedure_lookup(self.w["procedures"], law["cls"], rank)   # P3.2: the procedure for its rank (v2 off: get(cls))
         if not key:
             law["status"] = "failed"
             self.log("proposal_failed", law["author"], {"law": lid, "why": "no procedure exists for this class of law"}, vis="public")
             return
         plid, fn = self.fnreg[key]
         with self.cause("kernel", "procedure", law=plid):              # provenance: what the procedure decided (ballots)
-            p = Proposal(lid, law["author"], law["title"], law["intent"], law["cls"], self.r)
+            p = Proposal(lid, law["author"], law["title"], law["intent"], law["cls"], self.r, rank)
             try:
                 res = self.call(plid, fn, p)
             except L.LawError as e:
@@ -1223,7 +1232,7 @@ class Kernel:
 
     # ------------------------------------------------------------------ analysis helpers (kernel-side, used by snapshots)
     def procedure_spec(self, cls, author):
-        key = self.w["procedures"].get(cls)
+        key = D.procedure_lookup(self.w["procedures"], cls, "statute")   # P3.2: a statute draft (v2 off: get(cls))
         if not key:
             return None
         plid, fn = self.fnreg[key]

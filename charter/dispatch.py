@@ -354,7 +354,7 @@ OPTIONS = {
 OPTIONS.update({
     "propose": frozenset({"actor", "preview"}), "decide": frozenset(), "open_ballot": frozenset({"on_result", "weights", "gate_spec"}),
     "cast_vote": frozenset(), "close_ballot": frozenset(), "veto": frozenset(), "enact": frozenset(), "repeal": frozenset(),
-    "amend": frozenset({"patch"}), "set_procedure": frozenset({"key", "own"}), "rule": frozenset({"reason"}),
+    "amend": frozenset({"patch"}), "set_procedure": frozenset({"key", "own", "rank"}), "rule": frozenset({"reason"}),
     "define_action": frozenset({"key"}),
 })
 
@@ -852,7 +852,8 @@ _RIGHT_CALLS = {"grant": "grant", "revoke": "revoke", "suspend": "suspend"}
 def draft(k, lid) -> dict:
     """The `propose` payload's draft (review 09 §5): the record's fields plus static facts read from the AST, so a reviewing law
     never parses code. calls: the law-API functions it calls (sorted); hooks: the hooks it defines; rights: constant rights it
-    grants, revokes or suspends; repeals: a repeal law's target. rank: "statute" until ranks exist (P3.2)."""
+    grants, revokes or suspends; repeals: a repeal law's target. rank (P3.2): the rank recorded on the law, else (law.v2) the rank its
+    code declares, else "statute"."""
     import ast
     law = k.w["laws"][lid]
     tree = ast.parse(law["code"])
@@ -863,7 +864,8 @@ def draft(k, lid) -> dict:
             rights[_RIGHT_CALLS[n.func.id]].add(n.args[1].value)
     hooks = sorted(n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in PR.HOOKS)
     return {"id": lid, "title": law["title"], "intent": law["intent"], "code": law["code"], "cls": law["cls"],
-            "rank": law.get("rank") or "statute", "author": law["author"], "calls": sorted(L.calls(tree) & L.API), "hooks": hooks,
+            "rank": law.get("rank") or (L.declared(tree, "rank") if v2(k) else None) or "statute", "author": law["author"],
+            "calls": sorted(L.calls(tree) & L.API), "hooks": hooks,
             "rights": {x: sorted(v) for x, v in rights.items()}, "repeals": law["repeal_target"]}
 
 
@@ -874,6 +876,8 @@ def do_propose(k, jurisdiction, draft, actor=None, preview=None) -> dict:
     run, which Kernel._restore had replaced, so it never reached the world (storing it changes ground_truth; a later fix)."""
     lid = draft["id"]
     law = k.w["laws"][lid]
+    if v2(k):                                                          # P3.2: the rank is recorded at proposal, from the draft
+        law["rank"] = draft["rank"]
     shown = k.spec["conditions"]["effect_preview"]
     k.log("proposal", actor, {"law": lid, "title": law["title"], "intent": law["intent"], "class": law["cls"], "code": law["code"],
                               **({"jurisdiction": jurisdiction} if jurisdiction is not None else {}),
@@ -942,9 +946,13 @@ def do_enact(k, jurisdiction, law, via) -> dict:
         k.repeal(rec["repeal_target"], by_law=lid, via="procedure")
         return {"status": rec["status"]}
     ns = k._load(lid)
+    if v2(k):                                                          # P3.2: a law enacted without a proposal (start, intervention)
+        rec.setdefault("rank", declared_rank(rec["code"]))
     rec["status"] = "active"
     rec["enacted_round"] = k.r
     k.w["law_order"].append(lid)
+    if v2(k) and isinstance(ns.get("conflict_rule"), str):             # P3.2: a constitution's declared conflict rule (check_rank)
+        set_conflict_rule(k, lid, ns["conflict_rule"])
     if "on_enact" in ns:
         k.call(lid, ns["on_enact"])
     k.log("enact", rec["author"], {"law": lid, "title": rec["title"], "class": rec["cls"]}, vis="public")
@@ -998,8 +1006,11 @@ def do_amend(k, jurisdiction, law, old_sha, new_sha, diff, via, by, patch=None) 
     return {"ok": True}
 
 
-def do_set_procedure(k, jurisdiction, cls, procedure_law, key=None, own=False) -> dict:
-    """The procedure for a class of laws: the world's table (and the legacy J0's), or with own=True a jurisdiction's own table."""
+def do_set_procedure(k, jurisdiction, cls, procedure_law, key=None, own=False, rank=None) -> dict:
+    """The procedure for a class of laws: the world's table (and the legacy J0's), or with own=True a jurisdiction's own table.
+    rank (P3.2, law.v2): the procedure for drafts of that rank and class, stored under "<rank>:<cls>" (procedure_lookup)."""
+    if rank is not None:
+        cls = f"{rank}:{cls}"
     if own:
         jj = J.jurs(k)[jurisdiction]                                    # looked up at call time: dry runs replace k.w
         jj["procedures"][cls] = key
@@ -1210,7 +1221,7 @@ from charter import gas as G
 
 GAS = {"per_call": 10_000, "python_depth": 20, "per_cascade": 100_000, "per_account_round": 1_000_000, "depth_cap": 8,
        "hook_cost": 20, "prim_cost": 5, "flag_limit": 3, "flag_window": 5}
-RANKS = {"charter": 4, "constitution": 3, "statute": 2, "regulation": 1, "bylaw": 0}
+RANKS = L.RANKS                                                       # charter 4 > constitution 3 > statute 2 > regulation 1 > bylaw 0
 FLAG_KINDS = {"call": "gas_call", "cascade": "gas_cascade", "account": "gas_round"}
 
 
@@ -1412,15 +1423,143 @@ HELPERS = ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_i
 
 def law_api(k, lid) -> dict:
     return {"root_kind": root_kind, "caused_by_agent": caused_by_agent, "caused_by_law": caused_by_law, "chain_laws": chain_laws,
-            "law_id": lambda: lid, "treasury": lambda: treasury_of(k, lid)}
+            "law_id": lambda: lid, "treasury": lambda: treasury_of(k, lid),
+            "set_conflict_rule": lambda rule: set_conflict_rule(k, lid, rule)}                 # P3.2
+
+
+# ---------------------------------------------------------------------- P3.2: rank, lex superior, procedures per rank (review 09 §8)
+# Ranks (lawlang.RANKS): charter (reserved) > constitution > statute > regulation > bylaw. A law declares `rank = "..."` as a top-level
+# constant (lawlang.check_rank; default statute). Under law.v2 the rank is recorded on the law record when it is proposed (from the
+# draft payload, do_propose) or, for a law enacted without a proposal (start laws, interventions), when it is enacted. Without law.v2
+# nothing is recorded and every law is a statute (law_rank), so procedure lookups and repeals are exactly as before.
+#   - Lex superior (may_change): a law or draft may repeal or amend only laws of rank <= its own. A draft that repeals (or, P3.4, amends)
+#     a higher-rank law is refused at proposal (check_propose: status blocked, proposal_blocked logged, Blocked to its cause); a
+#     law-caused repeal of a higher-rank law does nothing (Kernel.repeal returns False). Rank charter can never be proposed.
+#   - Procedures per rank (procedure_lookup): set_procedure(cls, fn, rank=R) stores "<R>:<cls>"; only a law of rank >= R may set it.
+#   - Conflict rules (resolve_v2): any_block (default, D-13), superior, posterior, or a constitution's function.
+def declared_rank(code) -> str:
+    """The rank a law's code declares at the top level, else statute."""
+    import ast
+    try:
+        r = L.declared(ast.parse(code), "rank")
+    except SyntaxError:
+        return "statute"
+    return r if isinstance(r, str) and r in RANKS else "statute"
+
+
+def rank_of(k, lid) -> str:
+    """A law's rank: its record's (recorded at proposal or enactment under law.v2), else (law.v2) the rank its code declares, else
+    statute."""
+    law = k.w["laws"].get(lid) or {}
+    r = law.get("rank") or (declared_rank(law["code"]) if v2(k) and law.get("code") else None)
+    return r if isinstance(r, str) and r in RANKS else "statute"
+
+
+def law_rank(k, lid) -> str:
+    """The rank the kernel acts on: rank_of under law.v2, else statute (v2 off: no ranks, nothing changes)."""
+    return rank_of(k, lid) if v2(k) else "statute"
+
+
+def may_change(k, by_rank: str, target: str) -> bool:
+    """Lex superior (§8.1): something of rank `by_rank` may repeal, amend or override law `target` only if the target's rank is <= it."""
+    return RANKS.get(by_rank or "statute", 2) >= RANKS[rank_of(k, target)]
+
+
+def _targets(k, ref) -> list:
+    return [l for l in k.active_laws() if l["id"] == ref or l["title"].lower() == str(ref).lower()]
+
+
+class RankRefused(Blocked):
+    """A proposal the rank physics refuses (P3.2): a draft of rank charter, or one repealing or amending a higher-rank law. A Blocked
+    (by no law), so its cause sees what it sees for a law's block: an agent's action fails, a law's call ends."""
+    def __init__(self, primitive: str, reason: str):
+        PhysicsError.__init__(self, reason)
+        self.primitive, self.by, self.why = primitive, (), reason
+
+
+def check_propose(k, p):
+    """law.v2 (P3.2): no draft may have rank charter; a draft may repeal or amend only laws of rank <= its own (lex superior)."""
+    if not v2(k):
+        return p
+    d = p["draft"]
+    rank = d.get("rank") or "statute"
+    why = None
+    if rank not in RANKS:
+        why = f"unknown rank {rank!r}"
+    elif rank == "charter":
+        why = "rank charter is reserved: no procedure can enact, amend or repeal a charter-rank law"
+    for key, verb in (("repeals", "repeal"), ("amends", "amend")):
+        for t in (_targets(k, d[key]) if d.get(key) and why is None else []):
+            if not may_change(k, rank, t["id"]):
+                why = (f"a {rank} cannot {verb} {t['id']} '{t['title']}', a {rank_of(k, t['id'])} (lex superior): the draft must "
+                       f"declare rank = \"{rank_of(k, t['id'])}\" and pass that rank's procedure")
+                break
+    if why is None:
+        return p
+    k.w["laws"][d["id"]]["status"] = "blocked"
+    k.log("proposal_blocked", None, {"law": d["id"], "by": [], "reason": why}, vis="public")
+    raise RankRefused("propose", why)
+
+
+CHECKS["propose"] = check_propose
+CLASSES = ("ordinary", "structural", "procedural")
+
+
+def procedure_lookup(table: dict, cls: str, rank: str | None):
+    """The key of the procedure that decides a draft of class `cls` and rank `rank` (§8.1, P3.2): table["<rank>:<cls>"]; for a
+    constitution- or charter-rank draft also the procedures its rank has for stricter classes ("constitution:procedural" covers every
+    constitutional draft unless one is set for its own class: a constitution changes only by its rank's procedures once it sets one);
+    then table[cls]; then, for rank >= constitution, table["procedural"]. With rank statute and no "<rank>:" keys (always, without
+    law.v2) this is table.get(cls), as before."""
+    rank = rank if rank in RANKS else "statute"
+    high = RANKS[rank] >= RANKS["constitution"]
+    own = CLASSES[CLASSES.index(cls):] if high and cls in CLASSES else (cls,)
+    for key in [f"{rank}:{c}" for c in own] + [cls] + (["procedural"] if high else []):
+        if table.get(key):
+            return table[key]
+    return None
+
+
+def check_procedure_rank(k, lid, rank) -> None:
+    """set_procedure(cls, fn, rank=R): law.v2 only; R a known rank other than charter; the setting law's rank >= R. Raises LawError."""
+    if not v2(k):
+        raise L.LawError("set_procedure's rank argument needs ranks (law.v2)")
+    if rank not in RANKS or rank == "charter":
+        raise L.LawError(f"rank must be one of {', '.join(r for r in RANKS if r != 'charter')}")
+    if RANKS[rank_of(k, lid)] < RANKS[rank]:
+        raise L.LawError(f"a {rank_of(k, lid)} cannot set the procedure for {rank} drafts (only a law of rank {rank} or higher)")
+
+
+# ---------------------------------------------------------------------- P3.2: conflict rules (review 09 §8.3, D-13)
+# k.w["conflict_rules"]: {polity: {"rule": any_block|superior|posterior|function, "law": lid, "key": fnreg key (function)}}, created on
+# first use (worlds that never set one never have it). A rule holds while the law that set it is in force; otherwise any_block.
+def _polity(k, lid) -> str:
+    return (J.law_jur(k, lid) or "J0") if "jur" in k.w else "J0"
+
+
+def set_conflict_rule(k, lid, rule) -> None:
+    """Law API set_conflict_rule(name_or_fn) (procedural), and a constitution's declared `conflict_rule` (at enactment): only a law
+    of rank constitution or higher; a name of lawlang.CONFLICT_RULES or a function fn(verdicts) -> {"block": bool, "charges": [...]}."""
+    if RANKS[rank_of(k, lid)] < RANKS["constitution"]:
+        raise L.LawError("only a constitution-rank law may set the conflict rule")
+    if isinstance(rule, str) and rule in L.CONFLICT_RULES:
+        entry = {"rule": rule, "law": lid}
+    elif callable(rule):
+        entry = {"rule": "function", "law": lid, "key": k._reg(lid, rule)}
+    else:
+        raise L.LawError(f"the conflict rule is one of {', '.join(L.CONFLICT_RULES)} or a function fn(verdicts)")
+    k.w.setdefault("conflict_rules", {})[_polity(k, lid)] = entry
+
+
+def conflict_rule(k, polity) -> dict | None:
+    """The polity's conflict rule in force (None: any_block)."""
+    e = (k.w.get("conflict_rules") or {}).get(polity)
+    if e and (k.w["laws"].get(e["law"]) or {}).get("status") == "active" and (e["rule"] != "function" or e.get("key") in k.fnreg):
+        return e
+    return None
 
 
 # ---------------------------------------------------------------------- binding and order
-def rank_of(k, lid) -> str:
-    """A law's rank: its record's (P3.2), else its module's top-level `rank` constant, else statute."""
-    law = k.w["laws"].get(lid) or {}
-    r = law.get("rank") or (k.ns.get(lid) or {}).get("rank")
-    return r if isinstance(r, str) and r in RANKS else "statute"
 
 
 def _binds_value(k, lid, key, value):
@@ -1539,7 +1678,7 @@ def normalise(P, lid, out):
             raise G.LawError(f"before_{P.name}: charge must be a non-negative number, not {ch!r}")
         if ch > 0 and not P.charge:
             raise G.LawError(f"before_{P.name} returned a charge, but a {P.name} cannot be charged")
-        return Verdict(lid, block=bool(out.get("block")), charge=float(ch),
+        return Verdict(lid, block=bool(out.get("block")), allow="block" in out and not out["block"], charge=float(ch),
                        reason=None if out.get("reason") is None else str(out["reason"])[:300], exempt=bool(out.get("exempt")),
                        directives={x: out[x] for x in P.directives if x in out})
     raise G.LawError(f"before_{P.name} must return None, True, False, a number or a dict, not {type(out).__name__}")
@@ -1555,21 +1694,88 @@ class DecisionV2:
 
 
 def resolve_v2(k, P, payload, verdicts) -> DecisionV2:
-    """any_block (review 09 §8.3, the default rule): any block blocks; charges (rows with `charge` only) sum, capped when applied,
-    each to the charging law's treasury (accounts.charge_destination); the first valid directive in canonical order wins. `exempt`
-    and explicit allows matter only under the superior rule (P3.2)."""
-    blocked = tuple(v.law for v in verdicts if v.block)
-    reasons = [v.reason for v in verdicts if v.block and v.reason]
+    """The before-verdicts (in canonical order) -> a decision, by the polity's conflict rule (review 09 §8.3; P3.2):
+      any_block (the default, D-13): any block blocks; charges (rows with `charge` only) sum, capped when applied, each to the
+        charging law's treasury (accounts.charge_destination); the first valid directive in canonical order wins.
+      superior: among the explicit verdicts (a block, True, or a dict naming block), those of the highest rank decide, any block among
+        them blocking (ties: any_block); no explicit verdict, no block. Charges sum, except that an exempt verdict of a law of rank >=
+        the charging law's cancels that charge. Directives: canonical order (highest rank first).
+      posterior: the latest-enacted law with an explicit verdict decides; charges sum; directives: latest enactment first.
+      function: the constitution's fn(verdicts) -> {"block": bool, "charges": [{"law", "charge"}]} (verdicts: [{law, rank, seq, block,
+        allow, charge, exempt, reason}]), run as the constitution's call; its output is validated, and any_block decides when it
+        fails or returns something invalid. Directives as any_block.
+    The polity: the payload's jurisdiction (legal acts with jurisdictions on), else that of the first verdict's law; J0 without
+    jurisdictions."""
+    if not verdicts:
+        return DecisionV2()
+    pol = payload.get("jurisdiction") if "jur" in k.w and isinstance(payload.get("jurisdiction"), str) else _polity(k, verdicts[0].law)
+    rule = conflict_rule(k, pol) if v2(k) else None
+    name = rule["rule"] if rule else "any_block"
+    pos = {lid: i for i, lid in enumerate(k.w["law_order"])}
+    order = verdicts
+    deciding = verdicts                                                 # the verdicts whose blocks count
+    exempting = ()
+    if name == "superior":
+        explicit = [v for v in verdicts if v.block or v.allow]
+        top = max((RANKS[rank_of(k, v.law)] for v in explicit), default=None)
+        deciding = [v for v in explicit if RANKS[rank_of(k, v.law)] == top]
+        exempting = [v for v in verdicts if v.exempt]
+    elif name == "posterior":
+        order = sorted(verdicts, key=lambda v: -pos.get(v.law, -1))
+        deciding = next(([v] for v in order if v.block or v.allow), [])
     charges = []
     if P.charge:
         payer, item = (payload[x] for x in P.charge)
-        charges = [Charge(v.law, payer, item, v.charge, AC.charge_destination(k, v.law, payer)) for v in verdicts if v.charge > 0]
+        charges = [Charge(v.law, payer, item, v.charge, AC.charge_destination(k, v.law, payer)) for v in verdicts if v.charge > 0
+                   and not any(e.law != v.law and RANKS[rank_of(k, e.law)] >= RANKS[rank_of(k, v.law)] for e in exempting)]
+    blocked = tuple(v.law for v in deciding if v.block)
+    reasons = [v.reason for v in deciding if v.block and v.reason]
+    if name == "function":
+        out = _rule_function(k, rule, P, verdicts, pos, charges)
+        if out is not None:
+            block, charges = out
+            blocked = (blocked or (rule["law"],)) if block else ()
+            reasons = reasons if block else []
     directives = {}
-    for v in verdicts:
+    for v in order:
         for x, val in v.directives.items():
             if x not in directives and DIRECTIVE_OK.get(x, lambda k, v: True)(k, val):
                 directives[x] = val
     return DecisionV2(bool(blocked), blocked, "; ".join(reasons)[:300] or None, tuple(charges), directives)
+
+
+def _rule_function(k, rule, P, verdicts, pos, charges):
+    """Run a constitution's conflict-rule function (quietly: no new-style hook runs inside it) and validate its output: (block,
+    charges) with each charge {"law": a charging verdict's law, "charge": 0 <= x <= that law's own charge}, in canonical order; or
+    None (a runtime error or an invalid output: the caller keeps any_block's decision)."""
+    lid, fn = k.fnreg[rule["key"]]
+    view = [{"law": v.law, "rank": rank_of(k, v.law), "seq": pos.get(v.law, -1), "block": v.block, "allow": v.allow,
+             "charge": v.charge, "exempt": v.exempt, "reason": v.reason} for v in verdicts]
+    try:
+        with quiet(k):
+            out = k.call(lid, fn, view)
+    except G.LawError:
+        if k.dry:
+            raise
+        return None
+    if not isinstance(out, dict) or not isinstance(out.get("block"), bool):
+        return None
+    if "charges" not in out:
+        return out["block"], charges
+    asked = out["charges"]
+    if not isinstance(asked, list) or not all(isinstance(c, dict) and isinstance(c.get("charge"), (int, float))
+                                              and not isinstance(c.get("charge"), bool) for c in asked):
+        return None
+    by_law = {c.law: c for c in charges}
+    kept = []
+    for c in asked:
+        old = by_law.get(c.get("law"))
+        q = float(c["charge"])
+        if old is None or not _math.isfinite(q) or q < 0 or q > old.qty:
+            return None
+        if q > 0:
+            kept.append(Charge(old.law, old.payer, old.item, q, old.dst))
+    return out["block"], [c for o in charges for c in kept if c.law == o.law]
 
 
 # ---------------------------------------------------------------------- flags and limited death
@@ -1811,8 +2017,9 @@ def _accepts(fn, key) -> bool:
 
 
 def _fail_closed(k, lid) -> bool:
-    """D-6: a constitution-rank law declaring fail_closed = True blocks the legal act it reviews when its review dies."""
-    return rank_of(k, lid) == "constitution" and (k.ns.get(lid) or {}).get("fail_closed") is True
+    """D-6: a constitution-rank law (its recorded rank, P3.2) declaring fail_closed = True blocks the legal act it reviews when its
+    review dies."""
+    return (k.w["laws"].get(lid) or {}).get("rank") in ("constitution", "charter") and (k.ns.get(lid) or {}).get("fail_closed") is True
 
 
 def _run_before(k, cas, P, p, opts, depth, raw, hide) -> list:

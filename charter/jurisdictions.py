@@ -455,10 +455,14 @@ def scope_api(k, lid, api: dict) -> dict:
     out["hide_post"] = hide_post
 
     if not legacy:
-        def set_procedure(law_class, fn):
+        def set_procedure(law_class, fn, rank=None):
             if law_class not in ("ordinary", "structural", "procedural"):
                 raise L.LawError("law_class must be ordinary, structural or procedural")
-            k.apply("set_procedure", jurisdiction=jid, cls=law_class, procedure_law=lid, key=k._reg(lid, fn), own=True)
+            if rank is not None:                                       # P3.2: the procedure for drafts of this rank (law.v2)
+                from charter import dispatch as D
+                D.check_procedure_rank(k, lid, rank)
+            k.apply("set_procedure", jurisdiction=jid, cls=law_class, procedure_law=lid, key=k._reg(lid, fn), own=True,
+                    **({"rank": rank} if rank is not None else {}))
         out["set_procedure"] = set_procedure
 
         def camp_setter(field, conv):
@@ -548,11 +552,14 @@ def procedures_of(k, jid) -> dict:
 BUILTIN = "builtin:members"
 
 
-def procedure_key(k, jid, cls):
+def procedure_key(k, jid, cls, rank=None):
+    """The key of the procedure deciding a draft of class cls (and, P3.2, rank: dispatch.procedure_lookup; None/statute without
+    law.v2: the class's procedure, as before) in jurisdiction jid; a new jurisdiction's built-in members' vote when it has none."""
+    from charter import dispatch as D
     j = jurs(k).get(jid)
     if j is None:
         return None
-    key = procedures_of(k, jid).get(cls)
+    key = D.procedure_lookup(procedures_of(k, jid), cls, rank)
     if key is None and not j.get("legacy"):
         return BUILTIN                                                  # a new jurisdiction: its members vote
     return key
@@ -570,12 +577,14 @@ def decide(k, lid):
     from charter.kernel import Proposal
     law = k.w["laws"][lid]
     jid = law_jur(k, lid)
-    key = procedure_key(k, jid, law["cls"])
+    from charter import dispatch as D
+    rank = D.law_rank(k, lid)                                           # P3.2: the draft's rank (statute without law.v2)
+    key = procedure_key(k, jid, law["cls"], rank)
     if not key:
         law["status"] = "failed"
         k.log("proposal_failed", law["author"], {"law": lid, "why": "no procedure exists for this class of law"}, vis="public")
         return
-    p = Proposal(lid, law["author"], law["title"], law["intent"], law["cls"], k.r)
+    p = Proposal(lid, law["author"], law["title"], law["intent"], law["cls"], k.r, rank)
     try:
         res, plid = _call_procedure(k, jid, key, p)
     except L.LawError as e:
