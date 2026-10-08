@@ -216,6 +216,7 @@ def _ann():
         "turns": dict(types=("str",), enum=("sequential", "simultaneous")),
         "rng_version": dict(types=("int",), enum=(1, 2)),
         "law.v2": dict(types=("bool",)),
+        "law.atomic": dict(types=("bool", "null")),
         **{f"law.gas.{x}": dict(types=("int",), range=(1, None)) for x in ("per_call", "python_depth", "per_cascade", "per_account_round",
                                                                             "depth_cap", "flag_limit", "flag_window")},
         **{f"law.gas.{x}": dict(types=("int",), range=NONNEG) for x in ("hook_cost", "prim_cost")},
@@ -407,6 +408,7 @@ EXTRA = {
     "prompts.profiles": {},
     "prompts.assign": [],
     "law.v2": False,
+    "law.atomic": None,                                                # P3.6: None = on when law.v2 is (dispatch.atomic)
     # law.v2 budgets (P3.1, review 09 §9.2, I-8, D-12): read by dispatch.gas_cfg only when law.v2 is on
     "law.gas.per_call": 10_000, "law.gas.python_depth": 20, "law.gas.per_cascade": 100_000, "law.gas.per_account_round": 1_000_000,
     "law.gas.depth_cap": 8, "law.gas.hook_cost": 20, "law.gas.prim_cost": 5, "law.gas.flag_limit": 3, "law.gas.flag_window": 5,
@@ -612,6 +614,8 @@ DOCS = {
               "before_<primitive>(p, chain) / after_<primitive>(p, chain) for every change whatever caused it, cascades drained at "
               "the end of each root cause, gas per call, cascade and account, depth cap 8, flags: charter/dispatch.py, P3.1); "
               "false: as before",
+    "law.atomic": "law.v2: a hook invocation that dies (gas, depth, an error) is rolled back -- its changes and events are undone, "
+                  "a monitor-only hook_aborted records what was; false: its earlier changes stand (P3.1). Default: on with law.v2",
     "law.gas": "law.v2 gas budgets (review 09 §9.2): a hook that runs out dies, its law is flagged (charter/dispatch.py)",
     "law.gas.per_call": "law.v2: steps one hook invocation may run (today's per-call limit)",
     "law.gas.python_depth": "law.v2: law function frames one invocation may nest",

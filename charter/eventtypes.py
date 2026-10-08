@@ -197,6 +197,8 @@ E("account_out_of_gas", "dispatch", "summary", "public|parties", "event", "agent
   note="an account (polity) used its gas for the round: its laws' new-style hooks are skipped until the next round; members told")
 E("cascade_halted", "dispatch", "record", "monitor", "silent", None,
   note="a cascade halted (per-cascade gas) or dropped queued reactions of dead invocations")
+E("hook_aborted", "dispatch", "record", "monitor", "silent", None,
+  note="law.atomic (P3.6): a dead invocation was rolled back; its events were dropped and this records what was undone")
 E("patch_submitted", "actions", "legal_act", "public", "official", "agents", act="patch", primitive="amend")
 E("patched", "kernel", "legal_act", "public", "official", "agents", primitive="amend")
 E("patch_failed", "kernel", "legal_act", "public", "official", "agents", primitive="amend")

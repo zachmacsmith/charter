@@ -1296,13 +1296,14 @@ def isolated(k):
     if not v2(k):
         yield
         return
-    saved = (k.__dict__.get("_cascades"), k.__dict__.get("_invs"))
-    k._cascades, k._invs = [], []
+    saved = (k.__dict__.get("_cascades"), k.__dict__.get("_invs"), k.__dict__.get("_journal"))
+    k._cascades, k._invs, k._journal = [], [], []                    # P3.6: and its own journal frames
     try:
         yield
     finally:
         k._cascades = saved[0] if saved[0] is not None else []
         k._invs = saved[1] if saved[1] is not None else []
+        k._journal = saved[2] if saved[2] is not None else []
 
 
 @contextmanager
@@ -1592,8 +1593,8 @@ def _ancestors(inv):
 
 
 def die(k, cas, inv, e, flagged=True) -> None:
-    """Limited death: only this invocation dies. Effects it made before dying stand (atomic invocations are P3.6); the after-items
-    queued inside it are dropped. Per-call steps or Python depth: flag gas_call; depth cap: flag depth; per-cascade gas: flag
+    """Limited death: only this invocation dies. Under law.atomic (P3.6) invoke has already rolled back everything it did (rollback);
+    without it, effects it made before dying stand (P3.1). The after-items queued inside it are dropped. Per-call steps or Python depth: flag gas_call; depth cap: flag depth; per-cascade gas: flag
     gas_cascade and HALT the cascade; per-account gas: flag gas_round and close the account's hooks for the round. An invocation that
     dies only because a budget another invocation already exhausted (a halted cascade, an account out of gas) is not an offender."""
     keep = deque(it for it in cas.queue if inv not in _ancestors(it.parent))
@@ -1617,9 +1618,9 @@ def die(k, cas, inv, e, flagged=True) -> None:
             return
         st["out_of_gas"][inv.account] = k.r
         j = J.jurs(k).get(inv.account) if "jur" in k.w else None
-        k.log("account_out_of_gas", None, {"account": inv.account, "law": inv.law},
-              vis=(J.members(k, inv.account) or "monitor") if j and not j.get("legacy") else "public")
-    flag(k, inv.law, kind, cas.root["id"])
+        vis = (J.members(k, inv.account) or "monitor") if j and not j.get("legacy") else "public"
+        lasting(k, lambda acct=inv.account, lid=inv.law: k.log("account_out_of_gas", None, {"account": acct, "law": lid}, vis=vis))
+    lasting(k, lambda lid=inv.law, root=cas.root["id"]: flag(k, lid, kind, root))
 
 
 LIMITS = (G.GasExhausted, G.DepthExceeded, DepthCapExceeded, Halted)
@@ -1655,6 +1656,7 @@ def invoke(k, cas, lid, hook, payload, chain, depth, parent=None, reader=None):
         out = fn(payload, chain)
         return reader(out) if reader is not None else out
     _invs(k).append(inv)
+    fr = begin(k, cas, inv) if atomic(k) else None                  # P3.6: the invocation's journal frame
     try:
         with k.cause("law", lid, hook=hook, depth=depth):
             try:
@@ -1665,27 +1667,245 @@ def invoke(k, cas, lid, hook, payload, chain, depth, parent=None, reader=None):
             except Exception as e:                                   # law code raised (TypeError, KeyError, ...): its runtime error
                 raise G.LawError(f"{type(e).__name__}: {e}") from e
             _check_public(k, lid)
-            return out
+        commit(k, fr)
+        return out
     except Blocked as e:                                             # a change it asked for was blocked: its call ends, no fault
+        commit(k, fr)                                                # (not a death: what it did before stands)
         k.w["effects"]["kernel_refusals"].append(e.reason)
         return None
     except LIMITS as e:
         if k.dry:
             raise
+        rollback(k, cas, fr, e)
         die(k, cas, inv, e)
         return DEAD
     except G.LawError as e:
         if k.dry:
             raise
+        rollback(k, cas, fr, e)
         die(k, cas, inv, e, flagged=False)                            # its queued reactions go; the law is suspended as before
-        with k.cause("law", lid, hook=hook):
-            k.law_error(lid, str(e))
+
+        def suspend(lid=lid, hook=hook, msg=str(e)):
+            with k.cause("law", lid, hook=hook):
+                k.law_error(lid, msg)
+        lasting(k, suspend)
         return DEAD
     finally:
+        _drop_frame(k, fr)                                           # (only if still open: an exception none of the above caught)
         _invs(k).pop()
         st = _state(k)
         st["account_used"][acct] = budget.used
         st["law_gas"][lid] = st["law_gas"].get(lid, 0) + budget.used - used0
+
+
+# ---------------------------------------------------------------------- P3.6: atomic invocations (review 09 §9.5, D-7)
+# With spec law.atomic (default: on whenever law.v2 is; false keeps P3.1's semantics, where a dying invocation's earlier changes
+# stand) an invocation that dies (gas, depth cap, a halted cascade, a LawError) leaves no trace in the world except its flag:
+#   - the journal (k._journal) is a stack of Frames, one per running invocation (begin / commit / rollback around invoke). A frame
+#     holds the IMAGE of everything a law's work can write, taken when the invocation starts: one shallow copy of every mutable
+#     container (dict, list, set; tuples are walked through) reachable from k.w (except KEEP), from every law module's namespace (its
+#     `state`, `public` and module-level data, and the bindings themselves), k.ns, k.fnreg (registered callbacks) and k.eff, plus the
+#     side state (k._fn_n, the kernel and law random streams, the linker's links). A rollback writes every container's saved
+#     contents back IN PLACE, so references held by callers further up the Python stack stay valid, and puts the roots back (a
+#     Kernel._restore run inside the invocation may have replaced k.w). Recording the image rather than each write journals every
+#     writer -- Kernel.apply / do_*, accounts.add, the law-API closures of every feature module, law code mutating its own globals --
+#     with no writer edits, including writers added later; Kernel.j_set / j_del / j_append are plain writes kept for writers that
+#     want to say so. Cost: one walk of the world per invocation (about 1,000 containers in the society golden runs).
+#   - a committed frame is dropped (its parent's image predates it, so a parent rollback still undoes it); a rollback undoes only
+#     its own subtree: nested invocations roll back independently.
+#   - events logged inside the invocation are a contiguous suffix of k.events (nothing else runs meanwhile): they are truncated
+#     (Kernel.truncate_events) and replaced by one monitor-only `hook_aborted {law, hook, kind, events_dropped, dropped, undone}`
+#     (dropped: the truncated events by type; undone: the parts restored: "world", "w.<key>", "w.laws", "law:<id>", "ns",
+#     "fnreg", "eff").
+#   - the cascade's finalizers registered inside it are dropped and its change count restored; die() drops the after-items its
+#     subtree queued (as in P3.1).
+#   - NOT undone: gas (k.w["law_v2"]: budgets used, accounts out of gas, per-law gas) and the penalties of invocations that died
+#     inside it (flags, account_out_of_gas notices, law_error suspensions): `lasting` records them on the enclosing frame and a
+#     rollback replays them after the restore, so a law cannot shed its flags by dying inside another law's hook.
+# Dry runs (k.dry) journal nothing: their errors propagate and the dry run restores its own snapshot.
+KEEP = ("law_v2",)                                                   # k.w keys a rollback keeps (gas spent stays spent)
+_SCALARS = (str, int, float, bool, type(None), bytes, complex)
+
+
+def atomic(k) -> bool:
+    """P3.6: are law.v2 invocations atomic? spec law.atomic, default true when law.v2 is on; never in a dry run."""
+    if not v2(k) or k.dry:
+        return False
+    a = (k.spec.get("law") or {}).get("atomic")
+    return True if a is None else bool(a)
+
+
+@dataclass
+class Frame:
+    inv: Invocation
+    cas: Cascade
+    roots: tuple                    # (k.w, k.ns, k.fnreg, k.eff) when it began
+    image: list                     # (container, its saved contents, label); image[0] is k.w's top level
+    side: tuple                     # (k._fn_n, k.rng state, law rng state, linker links)
+    events: int                     # len(k.events) when it began
+    finalizers: int                 # len(cas.finalizers)
+    changes: int                    # cas.changes
+    lasting: list = field(default_factory=list)    # penalties of invocations that died inside it, replayed after its rollback
+
+
+def _journal(k) -> list:
+    return k.__dict__.setdefault("_journal", [])
+
+
+def _image(k) -> list:
+    """One shallow copy of every mutable container a law invocation can write (see the block comment), labelled by where it is."""
+    img, seen, stack = [], set(), []
+
+    def root(x, label):
+        seen.add(id(x))
+        img.append((x, dict(x), label))
+
+    w = k.w
+    root(w, "world")
+    for key, v in w.items():
+        if key in KEEP:
+            seen.add(id(v))
+        elif key == "laws" and isinstance(v, dict):
+            root(v, "w.laws")
+            stack.extend((law, f"law:{lid}") for lid, law in v.items())
+        else:
+            stack.append((v, f"w.{key}"))
+    root(k.ns, "ns")
+    for lid, ns in k.ns.items():
+        if id(ns) not in seen:
+            root(ns, f"law:{lid}")
+            stack.extend((v, f"law:{lid}") for n, v in ns.items() if n != "__builtins__" and not callable(v))
+    from charter import linker as LK
+    for lk in LK._all_links(k):                                       # law.v2: an import's exporter namespace (its exported data)
+        if id(lk._ns) not in seen:
+            root(lk._ns, "links")
+            stack.extend((v, "links") for n, v in lk._ns.items() if n != "__builtins__" and not callable(v))
+    root(k.fnreg, "fnreg")
+    if getattr(k, "eff", None) is not None:
+        stack.append((k.eff, "eff"))
+    while stack:
+        x, label = stack.pop()
+        if isinstance(x, _SCALARS) or id(x) in seen:
+            continue
+        seen.add(id(x))
+        if isinstance(x, dict):
+            img.append((x, dict(x), label))
+            stack.extend((v, label) for v in x.values())
+        elif isinstance(x, list):
+            img.append((x, list(x), label))
+            stack.extend((v, label) for v in x)
+        elif isinstance(x, set):
+            img.append((x, set(x), label))
+        elif isinstance(x, tuple):
+            stack.extend((v, label) for v in x)
+    return img
+
+
+def _put_back(img) -> list:
+    """Write every container's saved contents back in place; the labels of those that had changed, in image order."""
+    changed = []
+    for obj, saved, label in img:
+        if isinstance(obj, dict):
+            if len(obj) == len(saved) and all(a is b and obj[a] is saved[b] for a, b in zip(obj, saved)):
+                continue
+            obj.clear()
+            obj.update(saved)
+        elif isinstance(obj, list):
+            if len(obj) == len(saved) and all(a is b for a, b in zip(obj, saved)):
+                continue
+            obj[:] = saved
+        else:
+            if obj == saved:
+                continue
+            obj.clear()
+            obj |= saved
+        if label not in changed:
+            changed.append(label)
+    return changed
+
+
+def begin(k, cas, inv) -> Frame:
+    """Open the journal frame of an invocation about to run."""
+    from charter import linker as LK
+    fr = Frame(inv=inv, cas=cas, roots=(k.w, k.ns, k.fnreg, getattr(k, "eff", None)), image=_image(k),
+               side=(k._fn_n, k.rng.getstate(), k._law_rng_state(), LK.snapshot_links(k)), events=len(k.events),
+               finalizers=len(cas.finalizers), changes=cas.changes)
+    _journal(k).append(fr)
+    return fr
+
+
+def _drop_frame(k, fr) -> None:
+    j = _journal(k)
+    if fr is not None and j and j[-1] is fr:
+        j.pop()
+
+
+def commit(k, fr) -> None:
+    """The invocation finished: its frame goes; the penalties recorded in it pass to the enclosing frame."""
+    if fr is None:
+        return
+    _drop_frame(k, fr)
+    j = _journal(k)
+    if j:
+        j[-1].lasting.extend(fr.lasting)
+    fr.lasting = []
+
+
+def lasting(k, fn) -> None:
+    """Run a penalty (a flag, an account_out_of_gas notice, a law_error) that a rollback of an enclosing invocation must not undo:
+    it is recorded on the innermost open frame and replayed after that frame's rollback."""
+    fn()
+    j = _journal(k)
+    if j:
+        j[-1].lasting.append(fn)
+
+
+def abort_kind(e) -> str:
+    """hook_aborted's kind: the flag kinds of §9.4, halted (a change refused in a halted cascade) or error (a LawError)."""
+    if isinstance(e, Halted):
+        return "halted"
+    if isinstance(e, G.GasExhausted):
+        return FLAG_KINDS.get(e.kind, "gas_call")
+    if isinstance(e, DepthCapExceeded):
+        return "depth"
+    if isinstance(e, G.DepthExceeded):
+        return "gas_call"
+    return "error"
+
+
+def rollback(k, cas, fr, e) -> dict | None:
+    """Undo everything the dying invocation did (its frame's image and side state, its events, its finalizers), log hook_aborted
+    (monitor), then replay the penalties of invocations that died inside it. Returns hook_aborted's data (None: not journaled)."""
+    if fr is None:
+        return None
+    from charter import linker as LK
+    _drop_frame(k, fr)
+    top = fr.image[0][1]                                            # k.w's saved top level keeps the gas bookkeeping of now
+    for x in KEEP:
+        if x in k.w:
+            top[x] = k.w[x]
+    undone = _put_back(fr.image)
+    k.w, k.ns, k.fnreg = fr.roots[:3]
+    if fr.roots[3] is not None:
+        k.eff = fr.roots[3]
+    fn_n, rs, ls, links = fr.side
+    k._fn_n = fn_n
+    k.rng.setstate(rs)
+    k._set_law_rng_state(ls)
+    LK.restore_links(k, links)
+    dropped = k.truncate_events(fr.events)
+    del fr.cas.finalizers[fr.finalizers:]
+    fr.cas.changes = fr.changes
+    counts = {}
+    for ev in dropped:
+        counts[ev["type"]] = counts.get(ev["type"], 0) + 1
+    data = {"law": fr.inv.law, "hook": fr.inv.hook, "kind": abort_kind(e), "events_dropped": len(dropped),
+            "dropped": dict(sorted(counts.items())), "undone": undone}
+    k.log("hook_aborted", None, data, vis="monitor")
+    for fn in fr.lasting:                                            # the penalties of invocations that died inside it stand
+        lasting(k, fn)
+    fr.lasting = []
+    return data
 
 
 def _check_public(k, lid) -> None:
