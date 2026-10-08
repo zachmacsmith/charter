@@ -323,3 +323,54 @@ def test_the_vote_doc_mentions_ranked_lists_only_under_v2():
         k = world(v2=v2)
         a = k.w["agents"][agents(k)[0]]
         assert ("ranked list" in AG.action_doc("vote", k.inst, a, FX.facts(k.inst))) is has
+
+
+# ====================================================================== 5. W6f: history(about=); an association reads its record
+def test_history_about_matches_agents_named_in_event_data():
+    from charter import evidence as EV
+    k, lid, a, b, j, c, _ = court()
+    accuse(k, a, b, lid)                                                 # public: agent a, data accused b, accuser a
+    accuse(k, b, c, lid)
+    A.act(k, c, "post", {"text": "hello"})
+    api = k.api_for(enact(k, law("Reader", "x = 1\n")))
+    by = lambda **kw: [(e["type"], e["agent"]) for e in api["history"](type=["accuse", "post"], **kw)]
+    assert by(agent=b) == [("accuse", b)]                                # the actor only, as before
+    assert by(about=b) == [("accuse", a), ("accuse", b)]                 # also named as the accused
+    assert by(about=c) == [("accuse", b), ("post", c)]
+    assert by(agent=a, about=c) == []
+    assert EV.names({"agent": None, "data": {"parties": [a, b]}}, b) and not EV.names({"data": {"deep": {"to": b}}}, b)
+
+
+CONTRACT_RECORD = '''
+def on_round_start(r):
+    breach(members()[-1], "late", "1 timber")
+
+def on_round_end(r):
+    public["seen"] = [[e["type"], e["data"]["clause"]] for e in history(type="contract_breach")]
+    public["about"] = len(history(type="contract_breach", about=members()[-1]))
+'''
+
+
+def test_an_association_s_law_reads_its_members_only_record_end_to_end():
+    k = contracts_world()
+    a, b = people(k)[:2]
+    res = A.act(k, a, "create_contract", {"name": "Club", "code": law("Record", CONTRACT_RECORD)})
+    cid = re.search(r"A\d+", res).group()
+    A.act(k, b, "join_contract", {"contract": cid})
+    k.end_round()
+    k.start_round()
+    k.end_round()
+    lid = k.w["contracts"]["assoc"][cid]["laws"][0]
+    e = events(k, "contract_breach")[-1]
+    assert e["vis"] != "public" and set(e["vis"]) == {a, b}              # members-only
+    assert k.w["laws"][lid]["public"]["seen"] == [["contract_breach", "late"]] and k.w["laws"][lid]["public"]["about"] == 1
+    polity = enact(k, law("Outsider", "x = 1\n"))                        # a polity's law never reads it
+    assert k.api_for(polity)["history"](type="contract_breach") == []
+
+
+def test_the_lookup_error_lists_the_lookups():
+    k = world(sets=["context.enabled=true"])
+    with pytest.raises(A.ActionError, match="no lookup 'nope'; lookups: manual, manual_search") as ei:
+        CX.lookup(k, agents(k)[0], "nope", {})
+    assert "preview_law" in str(ei.value) and "legal_position" not in str(ei.value)
+    assert CX.lookup_names(k)[0] == "manual" and CX._lookups is not CX.lookup_names

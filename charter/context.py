@@ -633,11 +633,12 @@ def lookup(k, aid, name, args: dict) -> str:
     if name == "legal_position":                                        # law.v2 with law.digest (charter/digest.py)
         from charter import digest as DG
         return DG.act_legal_position(k, aid)
-    raise _error(f"no lookup {name!r}; lookups: {', '.join(_lookups(k))}")
+    raise _error(f"no lookup {name!r}; lookups: {', '.join(lookup_names(k))}")
 
 
-def _lookups(k) -> tuple:
-    """The lookups of this world (preview_law only under law.v2)."""
+def lookup_names(k) -> tuple:
+    """The lookups of this world (preview_law only under law.v2). W7e: named lookup_names, not _lookups: the prompt section
+    _lookups(v) below used to shadow it, so the error above called the section with a kernel."""
     from charter import lawpreview as LP
     from charter import digest as DG
     return tuple(n for n in LOOKUPS if (n != "preview_law" or LP.enabled(k)) and (n != "legal_position" or DG.enabled(k)))

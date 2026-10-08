@@ -5,6 +5,10 @@
                                                        by type (a name or a list of names), agent (the event's agent as shown)
                                                        and round (since: the first round, 0-based as round() returns it); in log
                                                        order, oldest first
+    history(..., about=aid)                            W7e: also only events that concern aid: its agent, or aid named in the
+                                                       event's data under one of DATA_AGENT_KEYS (top level only; a list there
+                                                       is read up to its first DATA_LIST_MAX entries), on the redacted copy, so
+                                                       an actor concealed from the law never matches. Bounded: no deeper search.
 
 Visibility: what a law may see is what its ACCOUNT may know as an institution, never what any one member privately knows.
   1. The public record: every event logged with vis "public" (Kernel.log has already narrowed a public event about a hidden
@@ -41,6 +45,10 @@ from charter import lawlang as L
 
 MAX_LIMIT = 50                         # events one history() call may return
 DEFAULT_LIMIT = 20
+# W7e: the data keys history(about=...) reads for the agents an event names (top level only), and how much of a list it reads
+DATA_AGENT_KEYS = ("to", "from", "src", "dst", "member", "members", "accused", "accuser", "agent", "target", "victim", "parties",
+                   "borrower", "lender", "a", "b", "by", "who", "guard", "attacker", "heir", "heirs", "electorate")
+DATA_LIST_MAX = 20
 
 
 def _account_members(k, acct) -> set | None:
@@ -165,7 +173,21 @@ def event(k, lid, eid):
     return out
 
 
-def history(k, lid, type=None, agent=None, since=None, limit=DEFAULT_LIMIT):
+def names(ev: dict, aid) -> bool:
+    """W7e: does a (redacted) event copy concern aid: its agent, or aid under one of DATA_AGENT_KEYS of its data (bounded)?"""
+    if ev.get("agent") == aid:
+        return True
+    d = ev.get("data")
+    if not isinstance(d, dict):
+        return False
+    for key in DATA_AGENT_KEYS:
+        v = d.get(key)
+        if v == aid or (isinstance(v, list) and aid in v[:DATA_LIST_MAX]):
+            return True
+    return False
+
+
+def history(k, lid, type=None, agent=None, since=None, limit=DEFAULT_LIMIT, about=None):
     meter = k.limited.meter
     meter.tick(1)
     try:
@@ -195,6 +217,10 @@ def history(k, lid, type=None, agent=None, since=None, limit=DEFAULT_LIMIT):
         if agent is not None and _clean(k, e.get("agent"), obs, hl) != agent:
             continue
         out = view(k, lid, e, hl)
+        if about is not None:                                          # W7e: on the redacted copy; a candidate costs a tick
+            meter.tick(1)
+            if not names(out, about):
+                continue
         _charge_out(k, out)
         hits.append(out)
     return list(reversed(hits))
@@ -202,4 +228,5 @@ def history(k, lid, type=None, agent=None, since=None, limit=DEFAULT_LIMIT):
 
 def law_api(k, lid) -> dict:
     return {"event": lambda eid: event(k, lid, eid),
-            "history": lambda type=None, agent=None, since=None, limit=DEFAULT_LIMIT: history(k, lid, type, agent, since, limit)}
+            "history": lambda type=None, agent=None, since=None, limit=DEFAULT_LIMIT, about=None:
+                history(k, lid, type, agent, since, limit, about)}
