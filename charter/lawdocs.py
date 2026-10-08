@@ -50,6 +50,10 @@ TOPICS = {
     "sanctions": ("Sanctions", "Fines and suspensions."),
     "discipline": ("Limiting actions and censure", "Softer and stranger sanctions."),
     "courts": ("Clauses and courts", "Courts exist only through clauses that laws declare."),
+    "court-rules": ("Courts: cases, court rules and appeals (law.v2)",
+                    "Cases are law-readable, filings and rulings are changes laws can hook (before_open_case, after_open_case, "
+                    "before_answer_case, before_rule, after_rule, before_appeal, after_appeal), and each polity's court works by "
+                    "rules its laws set."),
     "board": ("The public board, read by law", "Laws can read posts and channels."),
     "moderation": ("Hiding posts by law", "Posts can be hidden from the board without being deleted."),
     "messages": ("The private-message limit", "How many private messages each agent may send per round is set by holders of dm_rules and by law."),
@@ -384,6 +388,27 @@ E += [
      "after_settle_loan sees every repayment. Structural.", "common", "uncommon"),
 ]
 REQUIRES["settle_loan"] = lambda spec: bool((spec.get("law") or {}).get("v2"))
+# courts v2 (charter/courts.py): documented only in law.v2 worlds (REQUIRES)
+E += [
+    ("cases", "court-rules", "Read", "cases(status=None)", 'the cases under this polity\'s clauses ("open", "decided" or '
+     '"dismissed"; None: all), each {id, clause, law, accuser, accused, status, stage (2: on appeal), filed, deadline, evidence, '
+     "counter, verdict, remedy, reason, judge, votes, appealable_until, final, penalty, appeal, first}. A statute of limitations "
+     "or double jeopardy is a before_open_case(p, chain) that reads them and returns False.", "common", "uncommon"),
+    ("case", "court-rules", "Read", "case(case_id)", "one case as cases() gives it, or None (no such case, or another polity's).",
+     "common", "uncommon"),
+    ("court_rules", "court-rules", "Read", "court_rules()", "this polity's court rules in force: deadline, panel, judges, "
+     "appeal_judges, appeal_window, appeal_panel.", "common", "uncommon"),
+    ("set_court_rule", "court-rules", "Governance", "set_court_rule(key, value)", 'sets one of this polity\'s court rules while '
+     'this law is in force: "deadline" (rounds a case or an appeal waits for a ruling, 1-20; default 3), "panel" (judges deciding '
+     'a case: a majority of the panel agreeing decides, 1-9; default 1), "judges" (a right judges must hold besides judge to rule '
+     'at first instance; None: every judge), "appeal_judges" (the higher office: a right appellate judges hold besides judge; '
+     'None: no appeals), "appeal_window" (rounds after a ruling in which a party may appeal, 0-10; default 2), "appeal_panel" '
+     "(1-9; default 1). Where appeals are heard, a guilty ruling's penalty waits for the window (or the appeal). A ruling may "
+     "carry a remedy (damages, a number, or a name; a panel's is the median of its majority's): a clause's penalty "
+     "def penalty(accused, accuser, remedy) receives it (one- and two-argument penalties still work). Procedural.",
+     "common", "uncommon"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2"))) for n in ("cases", "case", "court_rules", "set_court_rule")})
 # contracts (charter/contracts.py, P4.3): documented only in worlds with contracts on (OPTIONAL), for the code of a contract
 E += [
     ("pull", "contracts", "Contracts", "pull(member, item, qty)", "a contract's law only: takes qty of item from a member into its "

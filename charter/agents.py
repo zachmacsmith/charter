@@ -166,6 +166,9 @@ def action_doc(name: str, inst: dict, a: dict, f: dict | None = None) -> str:
             doc = 'dm {"to": "Name", "text": "..."}: private message (readable by surveil holders); there is no encryption in this world'
         elif "encrypt" not in a.get("rights", []):
             doc += ' ("encrypted": true needs the encrypt right, which you do not hold at the start)'
+    if name == "rule" and (inst["spec"].get("law") or {}).get("v2"):  # courts v2: remedies, panels, appeals (law.v2 worlds only)
+        doc += ('; law.v2: add "remedy": damages (a number) or a named remedy, which the clause\'s penalty receives. Your polity\'s '
+                "court rules (set by law) may make you one vote of a panel, require an office to judge, or allow an appeal")
     if name == "attack":                                                # a nudge: disabling is a real option, not only for Eliminators
         secret = a.get("id") in ((inst.get("roles") or {}).get("holders") or {}).get("assassin", [])
         doc += ((". Disabling an agent is irreversible. As the assassin you may strike unseen once every few rounds with \"covert\": true: "
@@ -350,6 +353,8 @@ def legacy_actions(inst: dict, a: dict) -> list:
     absent |= set(CX.ACTIONS)                                            # context: its actions exist only when it is on
     if not (sp.get("law") or {}).get("v2") or lvl == 0:
         absent |= {"amend"}                                              # law.v2 (P3.4): amend exists only in law.v2 worlds
+    if not (sp.get("law") or {}).get("v2") or lvl < 2:
+        absent |= {"appeal"}                                             # law.v2 (courts v2): appeal exists only in law.v2 worlds
     from charter import life as LF
     absent |= LF.absent_actions(inst, a)                               # life: only where Life (or mortality) is on
     if not FT.on("contracts", inst):                                    # contracts (P4.3): their actions only when on
@@ -518,7 +523,7 @@ def render_event(k, e, viewer=None) -> str | None:
         head = {x: y for x, y in d.items() if x != "evidence"}
         return f"{tag} {t} {who or ''}: " + json.dumps(head)[:300] + ("\n" + cited if cited else "")
     if t in ("rights", "sanction", "censure", "rename", "accuse", "respond", "ruling", "case_dismissed", "invoke", "channel_created",
-             "deposit", "redeem", "proposal_check_failed"):
+             "deposit", "redeem", "proposal_check_failed", "panel_vote", "case_final", "appeal", "court_rule"):   # courts v2 (law.v2)
         return f"{tag} {t} {who or ''}: " + json.dumps({x: (y if not isinstance(y, list) or t != 'accuse' else [z['id'] for z in y]) for x, y in d.items()})[:600]
     if t in ("proposal_blocked", "primitive_blocked", "law_charged", "law_flagged", "account_out_of_gas"):   # law.v2 (P3.1)
         return f"{tag} {t.replace('_', ' ')}: " + json.dumps(d)[:600]
@@ -583,7 +588,10 @@ def state_view(k, aid: str) -> str:
         lines.append("Ledger: " + "; ".join(f"{x}: {k.holdings_value(x):.4g}" for x in k.roster()))
     cases = [c for c in w["cases"].values() if c["status"] == "open" and (aid in c["judges"] or aid in (c["accused"], c["accuser"]))]
     if cases:
-        lines.append("Cases: " + "; ".join(f"{c['id']} {c['accuser']} v {c['accused']} under {c['clause']} (evidence {c['evidence']}, deadline round {c['deadline'] + 1})" for c in cases))
+        lines.append("Cases: " + "; ".join(f"{c['id']} {c['accuser']} v {c['accused']} under {c['clause']}{' on appeal' if c.get('stage') == 2 else ''} (evidence {c['evidence']}, deadline round {c['deadline'] + 1})" for c in cases))
+    appealable = [c for c in w["cases"].values() if c.get("appealable_until") is not None and aid in (c["accused"], c["accuser"])]
+    if appealable:                                                      # law.v2 (courts v2): rulings a party may still appeal
+        lines.append("Appealable: " + "; ".join(f"{c['id']} ruled {c.get('verdict')} (appeal until the end of round {c['appealable_until'] + 1})" for c in appealable))
     def channels(k, aid):
         chans = [n for n, c in w["channels"].items() if c["open"] or aid in c["members"]]
         return ["Channels you can post in: " + ", ".join(chans)] if chans else []

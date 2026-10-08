@@ -28,7 +28,7 @@ from charter import roles as R                                         # roles: 
 ACTIONS = AR.actions()                                                 # every action (charter/action_registry.py), in the old order
 CONTEXT_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module == "context")   # context: lookups and files; only when it is on
 MEDIA_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module in ("media", "scholars"))   # media2: outlets, licences, Scholars
-LAW_V2_ACTIONS = ("amend",)                                            # law.v2 (P3.4): only in law.v2 worlds (off: unknown)
+LAW_V2_ACTIONS = ("amend", "appeal")                                  # law.v2 (P3.4; courts v2): only in law.v2 worlds (off: unknown)
 DM_ACTIONS = AR.dm_actions()                                         # private messages: the DM limit applies; fast mode's DM step delivers them
 CONTRACT_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module == "contracts")   # P4.3: only when contracts are on
 
@@ -1001,16 +1001,10 @@ def _accuse(k, aid, agent, law, clause, evidence):
         if e is None or not k.can_see(aid, e) and not R.saw(k, aid, e["id"]):    # roles: the Spy may cite events it read
             raise ActionError(f"you cannot cite {eid}: it does not exist or you could not see it")
         ev.append(e)
-    k.w["case_seq"] += 1
-    case = {"id": f"C{k.w['case_seq']}", "accuser": aid, "accused": agent, "clause": cid, "evidence": [e["id"] for e in ev],
-            "counter": [], "status": "open", "filed": k.r, "deadline": k.r + 3, "judges": k.holders("judge")}
-    if J.enabled(k):                                                   # jurisdictions: judges of the clause's jurisdiction only
-        case["judges"] = J.judges(k, case)
-    k.w["cases"][case["id"]] = case
-    for j in case["judges"]:
-        k.notify(j, f"New case {case['id']}: {aid} accuses {agent} under {cid}.")
-    k.log("accuse", aid, {"case": case["id"], "accused": agent, "clause": cid, "evidence": _cited(k, aid, ev)}, vis="public")
-    return f"Case {case['id']} filed" + ("" if case["judges"] else " (no judge yet: it waits in the public queue)") + "."
+    case = f"C{k.w['case_seq'] + 1}"                                   # courts v2: the open_case primitive (before_open_case: standing)
+    k.apply("open_case", jurisdiction=D.jur_of(k, k.w["clauses"][cid]["law"]), case=case, accuser=aid, accused=agent, clause=cid,
+            evidence=[e["id"] for e in ev], cited=_cited(k, aid, ev))
+    return f"Case {case} filed" + ("" if k.w["cases"][case]["judges"] else " (no judge yet: it waits in the public queue)") + "."
 
 
 def _cited(k, aid, events):
@@ -1026,26 +1020,64 @@ def _respond(k, aid, case, evidence):
         raise ActionError(f"you cannot respond to {case}")
     by_id = {e["id"]: e for e in k.events}
     ev = [by_id[e] for e in evidence if e in by_id and (k.can_see(aid, by_id[e]) or R.saw(k, aid, e))]   # roles: the Spy's reads
-    c["counter"] += [e["id"] for e in ev]
-    k.log("respond", aid, {"case": case, "evidence": _cited(k, aid, ev)}, vis="public")
+    k.apply("answer_case", jurisdiction=D.jur_of(k, k.w["clauses"].get(c["clause"], {}).get("law")), case=case, accused=aid,
+            evidence=[e["id"] for e in ev], cited=_cited(k, aid, ev))   # courts v2: the answer_case primitive
     return f"Counter-evidence added to {case}."
 
 
-def _rule(k, aid, case, verdict, reason):
+_NO_REMEDY = object()
+
+
+def _rule(k, aid, case, verdict, reason, remedy=_NO_REMEDY):
+    v2 = D.v2(k)
+    if remedy is not _NO_REMEDY and not v2:                             # courts v2: a remedy exists only under law.v2
+        raise TypeError("_rule() got an unexpected keyword argument 'remedy'")
     _need(k, aid, "judge", "rule on cases")
     c = k.w["cases"].get(case)
     if not c or c["status"] != "open":
         raise ActionError(f"no open case {case}")
+    stage, decides, panel = 1, True, 1
+    if v2:                                                             # courts v2: the bench, the panel, the remedy
+        from charter import courts as CO
+        stage = c.get("stage", 1)
+        right, panel = CO.bench(k, c)
+        if right and not k.has(aid, right):
+            raise ActionError(f"only judges holding '{right}' rule on {case}" + (" on appeal" if stage == 2 else ""))
+        if stage == 2 and aid in CO.first_judges(c):
+            raise ActionError(f"you ruled on {case} at first instance: another judge hears the appeal")
+        if aid in (c.get("votes") or {}):
+            raise ActionError(f"you already ruled on {case}")
+        try:
+            remedy = CO.remedy_of(None if remedy is _NO_REMEDY else remedy)
+        except ValueError as e:
+            raise ActionError(str(e))
     n = k.w["rulings_this_round"].get(aid, 0)
     if n >= 3:
         raise ActionError("a judge rules on at most 3 cases per round")
     k.w["rulings_this_round"][aid] = n + 1
     guilty = str(verdict).lower().startswith("guilty")
+    verdict = "guilty" if guilty else "not guilty"
+    if v2:
+        decides = CO.decides(c, panel, aid, verdict)
     k.apply("rule", jurisdiction=D.jur_of(k, k.w["clauses"].get(c["clause"], {}).get("law")), case=case,
-            verdict="guilty" if guilty else "not guilty", judge=aid, clause=c["clause"], accuser=c["accuser"], accused=c["accused"],
+            verdict=verdict, judge=aid, clause=c["clause"], accuser=c["accuser"], accused=c["accused"],
+            remedy=None if remedy is _NO_REMEDY else remedy, decides=decides, stage=stage,
             reason=str(reason)[:800])                                  # the penalty, then on_ruling, as before
-    k.log("ruling", aid, {"case": case, "verdict": c["verdict"], "reason": c["reason"]}, vis="public")
-    k.gazette(f"Case {case}: {c['verdict']} ({c['clause']}). Judge {aid}: {c['reason'][:300]}")
+    if not decides:                                                    # courts v2: one vote of a panel
+        votes = c.get("votes") or {}
+        k.log("panel_vote", aid, {"case": case, "verdict": verdict, **({"remedy": remedy} if guilty and remedy is not None else {}),
+                                  "votes": len(votes), "needed": panel // 2 + 1, "panel": panel}, vis="public")
+        return f"Your vote ({verdict}) on {case} is recorded: {len(votes)} of a panel of {panel} have voted."
+    extra = {}
+    if v2:
+        extra.update({x: c[x] for x in ("remedy", "appealable_until") if c.get(x) is not None})
+        if stage == 2:
+            extra["appeal"] = True
+        if c.get("penalty") == "pending":
+            extra["penalty"] = "deferred"
+    k.log("ruling", aid, {"case": case, "verdict": c["verdict"], "reason": c["reason"], **extra}, vis="public")
+    k.gazette(f"Case {case}: {c['verdict']} ({c['clause']})" + (f", remedy {c['remedy']}" if v2 and c.get("remedy") is not None else "")
+              + (" on appeal" if stage == 2 else "") + f". Judge {aid}: {c['reason'][:300]}")
     return f"Ruled {c['verdict']} on {case}."
 
 

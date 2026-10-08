@@ -19,6 +19,9 @@ from charter.kernel import Kernel
 D_HELPERS = ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")   # P3.1 (dispatch.law_api)
 W6A_FNS = ("refuse",)                                                                            # W6a (dispatch.law_api)
 AM_FNS = ("propose_law", "propose_amendment")                                                    # P3.4 (amendment.law_api)
+CO_FNS = ("cases", "case", "court_rules", "set_court_rule")                                       # courts v2 (courts.law_api)
+W6_V2_FNS = {*W6A_FNS, *CO_FNS}                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
+W6_FNS = {*W6_V2_FNS}                                                 # every W6 law function (contract-module ones are in CONTRACT_FNS)
 SNAPSHOT = Path(__file__).parent / "fixtures" / "charter_lawapi_snapshot.json"
 ALL_ON = ["jurisdictions.enabled=false", "conflict.enabled=true", "media2.enabled=true", "life.enabled=true",
           "shared_archive.enabled=false", "law.v2=true", "contracts.enabled=true"]   # law.v2: use and public_of exist (lawapi.V2_ONLY)
@@ -35,7 +38,7 @@ def test_classification_and_scoping_are_byte_identical_to_the_hand_lists():
     assert list(LL.API_GROUPS) == list(want["API_GROUPS"])
     assert {g: sorted(s - LA.V2_ONLY - CONTRACT_FNS) for g, s in LL.API_GROUPS.items()} == want["API_GROUPS"]   # P3.3, P4.3
     assert LL.API - LA.V2_ONLY - CONTRACT_FNS == set().union(*map(set, want["API_GROUPS"].values()))
-    assert LA.V2_ONLY == {"use", "public_of", *D_HELPERS, "set_conflict_rule", *AM_FNS, "settle_loan", *W6A_FNS}   # P3.2, P3.4, loans, W6a
+    assert LA.V2_ONLY == {"use", "public_of", *D_HELPERS, "set_conflict_rule", *AM_FNS, "settle_loan", *W6_V2_FNS}   # P3.2, P3.4, loans, W6
     assert sorted(LL.STRUCTURAL_CALLS - LA.V2_ONLY - CONTRACT_FNS) == want["STRUCTURAL_CALLS"]
     assert list(LL.HOOKS) == want["HOOKS"]
     assert sorted(LA.LEGACY_ONLY - LA.V2_ONLY) == want["LEGACY_ONLY"] and J.LEGACY_ONLY == LA.LEGACY_ONLY
@@ -60,7 +63,7 @@ def test_every_reachable_function_has_a_row_and_every_row_is_reachable():
     k = _kernel()
     api = k.api_for("_")
     assert set(api) == set(LA.LAWFNS), (sorted(set(api) - set(LA.LAWFNS)), sorted(set(LA.LAWFNS) - set(api)))
-    assert len(LA.LAWFNS) == 130 + len(CONTRACT_FNS) == 139          # P3.2: set_conflict_rule; P3.4: propose_law, propose_amendment; settle_loan; P4.3; W6a: refuse
+    assert len(LA.LAWFNS) == 129 + len(CONTRACT_FNS) + len(W6_FNS)   # 129 at w5 (P3.2, P3.4, loans); P4.3 contracts; W6 packages
     mods = {f.module for f in LA.LAWFNS.values()} - {"kernel"}
     from_modules = set()
     for m in sorted(mods):
@@ -137,5 +140,5 @@ def test_hooks_table_matches_the_dispatch_sites_and_jurisdiction_routing():
 
 def test_rows_render():
     rows = LA.rows()
-    assert len([r for r in rows if r["kind"] == "function"]) == 139 and len([r for r in rows if r["kind"] == "hook"]) == 15   # W6a: refuse
+    assert len([r for r in rows if r["kind"] == "function"]) == len(LA.LAWFNS) and len([r for r in rows if r["kind"] == "hook"]) == 15
     assert all(r["dispatch"] for r in rows if r["kind"] == "hook")

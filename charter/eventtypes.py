@@ -221,6 +221,14 @@ E("accuse", "actions", "legal_act", "public", "official", "agents", act="accuse"
 E("respond", "actions", "legal_act", "public", "official", "agents", act="respond", primitive="answer_case")
 E("ruling", "actions", "legal_act", "public", "official", "agents", act="rule", primitive="rule")
 E("case_dismissed", "kernel", "legal_act", "public", "official", "agents", primitive="rule")
+E("panel_vote", "actions", "legal_act", "public", "event", "agents", act="rule", primitive="rule",
+  note="law.v2 (courts v2): a panel judge's vote that does not (yet) decide the case")
+E("case_final", "courts", "legal_act", "public", "event", "agents", primitive="rule",
+  note="law.v2 (courts v2): a ruling becomes final (no appeal in the window, or an appeal lapsed); a deferred penalty runs")
+E("appeal", "courts", "legal_act", "public", "event", "agents", act="appeal", primitive="appeal",
+  note="law.v2 (courts v2): a party reopens a decided case before the appeal bench")
+E("court_rule", "courts", "legal_act", "public", "event", "agents", primitive="set_court_rule",
+  note="law.v2 (courts v2): a law set one of its polity's court rules")
 
 # ---------------------------------------------------------------------- the law API's effects
 E("dm_limit", "kernel", "legal_act", "public", "official", "agents", act="set_dm_limit", primitive="set_dm_limit")

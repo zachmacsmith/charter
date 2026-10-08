@@ -44,7 +44,8 @@ AGENTISH = {"a", "aid", "agent", "guard", "borrower", "attacker", "target", "src
 GROUPS = ("read", "rights", "money", "camps", "governance", "output", "names", "sanctions", "text", "meta", "projects", "projects_read")
 STRUCTURAL_GROUPS = ("rights", "money", "sanctions", "projects")     # a call in these makes a law structural
 STRUCTURAL_EXTRA = ("open_ballot", "repeal")                       # governance and meta, but structural (repeal: review F1, P1.4)
-PROCEDURAL = ("set_procedure", "set_conflict_rule", "propose_law", "propose_amendment")   # makes a law procedural (P3.2, P3.4: law.v2)
+PROCEDURAL = ("set_procedure", "set_conflict_rule", "propose_law", "propose_amendment",   # makes a law procedural (P3.2, P3.4: law.v2)
+              "set_court_rule")                                                          # courts v2 (law.v2)
 
 # Documentation mechanisms (where a function's or hook's text lives, and when it is shown):
 DOCS = {
@@ -307,6 +308,14 @@ LAWFNS = _fns(
           docs="requires", primitive="propose", v2=True),
         F("propose_amendment", "governance", scope="none", why="target is a law of the calling law's own jurisdiction (checked: "
           "same jurisdiction, rank at most the caller's); decided by its procedure", docs="requires", primitive="propose", v2=True),
+    ),
+    _module(
+        "courts",                                                       # law.v2 (courts v2): law-readable cases, court rules
+        F("cases", "read", scope="read", docs="requires", v2=True),     # only cases under clauses of the law's own account
+        F("case", "read", scope="read", docs="requires", v2=True),
+        F("court_rules", "read", scope="read", docs="requires", v2=True),
+        F("set_court_rule", "governance", scope="none", why="sets a court rule of the calling law's own polity (deadline, panel, "
+          "benches, appeals)", docs="requires", v2=True, primitive="set_court_rule"),
     ),
     _module(
         "contracts",                                                    # P4.3: associations (charter/contracts.py); only with contracts on

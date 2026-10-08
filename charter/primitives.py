@@ -7,7 +7,8 @@ open_ballot, cast_vote, close_ballot, veto, enact, repeal, amend, set_procedure,
 None; P2.4b: begin_life, end_life; P2.4c's world causes: regrow, drift, destroy, set_camp_state, create_camp, contribute,
 settle_project; P2.4d's membership, media, typed camps and leases: join, leave, admit, expel, subscribe, set_outlet_rule,
 set_media_rule, appoint, lease, improve_camp; P2.4a's conflict: attack, fortify, convert, guard_bind, guard_release; the credit
-lifecycle: offer_loan, accept_loan, repay_loan, extend_loan, default_loan, settle_loan), and its legacy
+lifecycle: offer_loan, accept_loan, repay_loan, extend_loan, default_loan, settle_loan; courts v2: open_case, answer_case, appeal,
+set_court_rule), and its legacy
 ALIASES are dispatched by dispatch.apply under exactly today's conditions; the other rows still name the function making the change
 today.
 
@@ -132,6 +133,7 @@ PARAM_SAMPLES = {
     "accuser": "a1", "accused": "a2", "action": "census", "args": [], "power": "quill", "error": "boom", "goal": {"name": "g"},
     "seat": "a5", "contract": "K1", "remedy": "fine", "level": 1, "template": "club",
     "paid": 2.0, "owed": 4.0, "rate": 0.05,                                                              # loans (routed)
+    "evidence": ["e12"], "appellant": "a2", "decides": True, "stage": 1,                                 # courts v2
     "rank": "statute", "opened_by": "L1", "proposal": "L5", "diff": "--- L5 (before)\n+++ L5 (after)\n",      # P2.3 legal acts
 }
 
@@ -563,16 +565,35 @@ _ROWS = [
       preview=("procedures",), compel_vis="public",
       sites=("dispatch:do_set_procedure", "kernel:Kernel.api_for.set_procedure", "jurisdictions:scope_api.set_procedure",
              "dispatch:do_repeal")),
-    P("rule", "core", "legal", ("jurisdiction", "case", "verdict", "judge", "clause", "accuser", "accused"), "dispatch:do_rule",
+    P("rule", "core", "legal", ("jurisdiction", "case", "verdict", "judge", "clause", "accuser", "accused", "remedy", "decides", "stage"),
+      "dispatch:do_rule",
       subject="jurisdiction", parties=("jurisdiction", "accuser", "accused"), agent_params=("judge", "accuser", "accused"), legal=True,
-      event="ruling", causes=("agent", "kernel"),
-      sites=("dispatch:do_rule", "actions:_rule", "kernel:Kernel._expire_cases", "dispatch:legacy_hooks"), why={"compel": _LNA},
-      notes="the ruling event and its gazette follow the act (actions._rule logs them after on_ruling, as before)"),
-    P("open_case", "core", "legal", ("jurisdiction", "case", "accuser", "accused", "clause"), "actions:_accuse", subject="jurisdiction",
-      parties=("accuser", "accused"), agent_params=("accuser", "accused"), legal=True, event="accuse", causes=("agent",),
-      sites=("actions:_accuse",), why={"compel": _LNA}),
-    P("answer_case", "core", "legal", ("case", "accused"), "actions:_respond", parties=("accused",), agent_params=("accused",), legal=True,
-      event="respond", causes=("agent",), sites=("actions:_respond",), why={"compel": _LNA}),
+      event="ruling", causes=("agent", "kernel"), reads=("cases", "case", "court_rules"),
+      sites=("dispatch:do_rule", "actions:_rule", "kernel:Kernel._expire_cases", "dispatch:legacy_hooks", "courts:change_rule",
+             "courts:run_penalty", "courts:expire_cases"), why={"compel": _LNA},
+      notes="the ruling event and its gazette follow the act (actions._rule logs them after on_ruling, as before). law.v2 (courts "
+            "v2): remedy (damages or a name) reaches the clause's penalty; with a panel each judge's vote is a rule (decides: "
+            "whether it decides the case); stage 2 is an appeal; a penalty waits for the appeal window (courts.expire_cases)"),
+    P("open_case", "core", "legal", ("jurisdiction", "case", "accuser", "accused", "clause", "evidence"), "dispatch:do_open_case",
+      subject="jurisdiction", parties=("jurisdiction", "accuser", "accused"), agent_params=("accuser", "accused"), legal=True,
+      event="accuse", causes=("agent",), reads=("cases", "case", "court_rules"),
+      sites=("dispatch:do_open_case", "courts:change_open_case", "actions:_accuse"), why={"compel": _LNA, "gate": _V2GATE},
+      notes="routed (courts v2): before_open_case can refuse standing, after_open_case can charge a filing fee; law.v2: the "
+            "polity's court rules set the deadline and the bench"),
+    P("answer_case", "core", "legal", ("jurisdiction", "case", "accused", "evidence"), "dispatch:do_answer_case",
+      subject="jurisdiction", parties=("jurisdiction", "accused"), agent_params=("accused",), legal=True, event="respond",
+      causes=("agent",), reads=("cases", "case"), sites=("dispatch:do_answer_case", "courts:change_answer_case", "actions:_respond"),
+      why={"compel": _LNA, "gate": _V2GATE}),
+    P("appeal", "core", "legal", ("jurisdiction", "case", "appellant", "accuser", "accused", "clause"), "dispatch:do_appeal",
+      subject="jurisdiction", parties=("jurisdiction", "accuser", "accused"), agent_params=("appellant", "accuser", "accused"),
+      legal=True, event="appeal", causes=("agent",), reads=("cases", "case", "court_rules"),
+      sites=("dispatch:do_appeal", "courts:change_appeal", "courts:act_appeal"), why={"compel": _LNA, "gate": _V2GATE},
+      notes="law.v2 (courts v2): a party reopens a decided case before the appeal bench within the appeal window; a guilty "
+            "ruling's penalty waits until the appeal is decided (or lapses)"),
+    P("set_court_rule", "core", "legal", ("jurisdiction", "key", "value"), "dispatch:do_set_court_rule", subject="jurisdiction",
+      parties=("jurisdiction",), legal=True, event="court_rule", causes=("law",), reads=("court_rules",), compel_vis="public",
+      sites=("dispatch:do_set_court_rule", "courts:change_set_rule", "courts:law_api.set_court_rule"),
+      notes="law.v2 (courts v2): a polity's case deadline, panel sizes, benches and appeal window; holds while its law is in force"),
     P("create_clause", "core", "legal", ("law", "clause"), "kernel:Kernel.api_for.clause", legal=True, causes=("law",),
       sites=("kernel:Kernel.api_for.clause",)),
     P("define_action", "core", "legal", ("law", "action", "right"), "dispatch:do_define_action", legal=True, causes=("law",),
@@ -658,7 +679,7 @@ ACTION_PRIMITIVES = {
     "found": ("found",), "fund": ("move",), "invite": ("invite",), "join": ("join",), "leave": ("leave",), "declare": ("declare",),
     "set_charter": ("set_charter",),
     # courts
-    "accuse": ("open_case",), "respond": ("answer_case",), "request_fix": ("request_fix",),
+    "accuse": ("open_case",), "respond": ("answer_case",), "appeal": ("appeal",), "request_fix": ("request_fix",),
     # force, more
     "guard": ("guard_bind", "guard_release", "move"), "join_attack": ("attack", "end_life"), "contract": ("hire_assassin", "move"),
     "buy_initiative": ("set_initiative", "destroy"),
@@ -767,7 +788,7 @@ ALIASES = (
               args=lambda p: (p["ballot"], p["agent"], p["choice"]), verdict="ignore"),
     HookAlias("on_post", "post", "after", when=lambda p, ch: p["kind"] in ("post", "anon_post", "story") and root_kind(ch) == "action",
               args=lambda p: ("anonymous" if p["kind"] == "anon_post" else p["agent"], p["text"]), verdict="ignore"),
-    HookAlias("on_ruling", "rule", "after", when=lambda p, ch: root_kind(ch) == "action",
+    HookAlias("on_ruling", "rule", "after", when=lambda p, ch: root_kind(ch) == "action" and p.get("decides") is not False,
               args=lambda p: (p["case"], p["verdict"], p["accuser"], p["accused"]), verdict="ignore"),
     HookAlias("on_dm", "dm", "after", when=lambda p, ch: bool(p["readable"]) and root_kind(ch) == "action",
               args=lambda p: (p.get("shown_as") or p["sender"], p.get("shown_to") or p["recipient"],

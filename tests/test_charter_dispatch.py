@@ -264,6 +264,7 @@ def test_routed_rows_name_dispatch_functions():
     want |= {"offer_loan", "accept_loan", "repay_loan", "extend_loan", "default_loan", "settle_loan"}   # the credit lifecycle
     want |= {"set_conflict_rule"}                                                                  # P3.2
     want |= {"create_contract", "deposit_escrow", "set_allowance", "pull", "breach"}               # P4.3: contracts
+    want |= {"open_case", "answer_case", "appeal", "set_court_rule"}  # courts v2
     assert set(D.ROUTED) == want
     for n in want:
         p = PR.get(n)

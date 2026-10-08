@@ -1061,8 +1061,12 @@ def do_set_procedure(k, jurisdiction, cls, procedure_law, key=None, own=False, r
     return {"key": key}
 
 
-def do_rule(k, jurisdiction, case, verdict, judge, clause, accuser, accused, reason="") -> dict:
-    """A judge decides a case; a guilty verdict runs the clause's penalty on the accused (a penalty's error suspends its law)."""
+def do_rule(k, jurisdiction, case, verdict, judge, clause, accuser, accused, remedy=None, decides=True, stage=1, reason="") -> dict:
+    """A judge decides a case; a guilty verdict runs the clause's penalty on the accused (a penalty's error suspends its law).
+    law.v2 (courts v2, charter/courts.py): a panel judge's vote, a remedy for the penalty, a penalty deferred for an appeal."""
+    if v2(k):
+        from charter import courts as CO
+        return CO.change_rule(k, jurisdiction, case, verdict, judge, clause, accuser, accused, remedy, decides, stage, reason)
     c = k.w["cases"][case]
     c.update({"status": "decided", "verdict": verdict, "reason": reason, "judge": judge})
     if verdict == "guilty":
@@ -2856,3 +2860,32 @@ def do_pull(k, contract, member, item, qty, lid=None) -> dict:
 def do_breach(k, contract, member, clause, remedy, lid=None) -> dict:
     from charter import contracts as CT
     return CT.change_breach(k, contract, member, clause, remedy, lid)
+
+
+# ---------------------------------------------------------------------- courts v2 (charter/courts.py; review 10 §6 item 5)
+# open_case and answer_case are routed in every world (without law.v2 the change is exactly the old actions._accuse/_respond body:
+# no hook runs); appeal and set_court_rule exist only under law.v2 (the appeal action and the law function are unknown without it).
+# Call options: cited = the evidence as the filing agent saw it (actions._cited), for the event; reason = an appeal's reasons;
+# lid = the law setting a court rule.
+OPTIONS.update({"open_case": frozenset({"cited"}), "answer_case": frozenset({"cited"}), "appeal": frozenset({"reason"}),
+                "set_court_rule": frozenset({"lid"})})
+
+
+def do_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited=None) -> dict:
+    from charter import courts as CO
+    return CO.change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited)
+
+
+def do_answer_case(k, jurisdiction, case, accused, evidence, cited=None) -> dict:
+    from charter import courts as CO
+    return CO.change_answer_case(k, jurisdiction, case, accused, evidence, cited)
+
+
+def do_appeal(k, jurisdiction, case, appellant, accuser, accused, clause, reason="") -> dict:
+    from charter import courts as CO
+    return CO.change_appeal(k, jurisdiction, case, appellant, accuser, accused, clause, reason)
+
+
+def do_set_court_rule(k, jurisdiction, key, value, lid=None) -> dict:
+    from charter import courts as CO
+    return CO.change_set_rule(k, jurisdiction, key, value, lid)

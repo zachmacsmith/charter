@@ -209,6 +209,7 @@ def _k_in_group(inst, k, a, r): return any(a["id"] in ch["members"] for ch in k.
 def _k_owns_group(inst, k, a, r): return any(ch["owner"] == a["id"] for ch in k.w["channels"].values())
 def _k_accused(inst, k, a, r): return any(c.get("accused") == a["id"] and c.get("status") == "open" for c in k.w["cases"].values())
 def _k_clauses(inst, k, a, r): return bool(k.w["clauses"])
+def _k_appealable(inst, k, a, r): return any(c.get("appealable_until") is not None and a["id"] in (c["accuser"], c["accused"]) for c in k.w["cases"].values())
 def _k_scholar(inst, k, a, r): return bool((k.w.get("roles") or {}).get("scholar"))
 def _k_poll(inst, k, a, r): return any(q.get("round") == k.r for q in ((k.w.get("media") or {}).get("polls") or {}).values())
 def _k_licences(inst, k, a, r):
@@ -340,7 +341,7 @@ R("patch", "fix a law to its intent (Fixer)", "POLITICS", core=True, needs=("rig
   handler="actions:_patch", module="core", category="political", emits=("patch_submitted",),
   doc='patch {"law": "L4", "code": "...", "reason": "..."}: Fixer only')
 R("rule", "decide a court case, as a judge", "POLITICS", core=True, needs=("right:judge", "level:2"),
-  handler="actions:_rule", module="core", category="political", emits=("ruling",),
+  handler="actions:_rule", module="core", category="political", emits=("ruling", "panel_vote"),
   doc='rule {"case": "C1", "verdict": "guilty", "reason": "..."}: judges only')
 # force
 R("forge", "turn copper into weapons", "FORCE", core=True, needs=("mod:conflict",),
@@ -557,6 +558,9 @@ R("accuse", "take someone to court", "courts", needs=("level:2",), when=_k_claus
 R("respond", "answer an accusation", "courts", needs=("level:2",), when=_k_accused,
   handler="actions:_respond", module="core", category="political", emits=("respond",),
   doc='respond {"case": "C1", "evidence": ["e7"]}: counter-evidence as the accused')
+R("appeal", "appeal a court ruling", "courts", needs=("level:2", "flag:law.v2"), when=_k_appealable,
+  handler="courts:act_appeal", module="core", category="political", emits=("appeal",), aliases={"why": "reason", "case_id": "case"},
+  doc='appeal {"case": "C1", "reason": "..."}: as a party, reopen a decided case before the appeal bench, within the appeal window your polity\'s court rules set (a guilty ruling\'s penalty waits for the appeal)')
 R("request_fix", "ask the Fixer to fix a law", "courts", needs=("level:1",),
   handler="actions:_request_fix", module="core", category="political", emits=("request_fix",),
   doc='request_fix {"law": "L4", "text": "..."}: ask the Fixer to look at a law')
@@ -613,7 +617,8 @@ ACTIONS_ORDER = (
     "invite", "join", "leave", "declare", "fund", "set_charter", "write_edition", "run_placement", "poll", "set_subscription_fee",
     "send_subscriber_list", "revoke_licence", "grant_licence", "annotate", "subscribe", "unsubscribe", "buy_placement", "leak",
     "answer_poll", "buy_licence", "set_memory_price", "library_permit", "library_remove", "buy_memory", "library_deposit",
-    "library_read", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance", "propose_contract_change")
+    "library_read", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance", "propose_contract_change",
+    "appeal")
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -627,7 +632,7 @@ DOC_ORDER = (
     "write_edition", "buy_placement", "run_placement", "leak", "poll", "answer_poll", "send_subscriber_list", "revoke_licence",
     "grant_licence", "buy_licence", "annotate", "set_memory_price", "buy_memory", "library_deposit", "library_read",
     "library_permit", "library_remove", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance",
-    "propose_contract_change")
+    "propose_contract_change", "appeal")
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 
