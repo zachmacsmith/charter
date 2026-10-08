@@ -563,7 +563,7 @@ class Kernel:
             c = k.w["currencies"].get(cur)
             if c is None or not c["backed"]:
                 raise L.LawError(f"{cur} must be an existing backed currency")
-            c["convertible"] = only or True
+            k.apply("set_money_rule", currency=cur, key="convertible", value=only or True, lid=lid)    # W8b: routed
 
         def camp_of(c):
             if c not in k.w["camps"]:
@@ -603,7 +603,7 @@ class Kernel:
 
         def enable_loans(enforce=True):
             """Loans exist while this law is in force: agents offer (lend), accept and repay them. enforce: past-due debts are seized."""
-            k.w["loan_law"], k.w["loan_enforce"] = lid, bool(enforce)
+            k.apply("set_money_rule", currency=None, key="loans", value={"enforce": bool(enforce)}, lid=lid)   # W8b: routed
 
         def forgive_loan(loan):
             return CR.forgive(k, lid, loan)                                # the settle_loan primitive (how "forgive")
@@ -621,23 +621,18 @@ class Kernel:
             k.log("censure", None, {"agent": aid, "text": str(text)[:400], "law": lid}, vis="public")
             k.w["effects"]["sanctioned_posts"] += 1
 
-        def clause(name, text, penalty):
-            cid = f"{lid}:{name}"
-            k.w["clauses"][cid] = {"law": lid, "name": str(name), "text": str(text), "penalty": k._reg(lid, penalty)}
+        def clause(name, text, penalty):                                 # W8b: routed (create_clause)
+            k.apply("create_clause", law=lid, clause=f"{lid}:{name}", name=str(name), text=str(text), key=k._reg(lid, penalty))
 
         def rename(entity, nm):
-            k.w["names"][str(entity)] = str(nm)
-            k.log("rename", None, {"entity": str(entity), "name": str(nm), "law": lid}, vis="public")
+            k.apply("rename", entity=str(entity), name=str(nm), lid=lid)                                 # W8b: routed
 
         def name(entity):
             return k.w["names"].get(str(entity), str(entity).split(":")[-1])
 
         def title(aid, text):
-            rec, text = k.agent(aid), None if text is None else str(text)[:60]
-            note = D.compel_note(k, "set_title", {"agent": aid, "text": text})   # P3.7: set_title is not routed through apply
-            rec["title"] = text
-            if note is not None:
-                D.compelled(k, note)
+            k.agent(aid)
+            k.apply("set_title", agent=aid, text=None if text is None else str(text)[:60])               # W8b: routed (P3.7 notices)
 
         def repeal(target):
             return k.repeal(str(target), by_law=lid)

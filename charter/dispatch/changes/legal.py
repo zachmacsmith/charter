@@ -264,3 +264,10 @@ def do_rule(k, jurisdiction, case, verdict, judge, clause, accuser, accused, rem
 def do_define_action(k, law, action, right, key=None) -> dict:
     k.w["actions"][action] = {"right": right, "law": law, "fn": key}
     return {"action": action}
+
+
+def do_create_clause(k, law, clause, name=None, text=None, key=None) -> dict:
+    """W8b (review 12 §2.14): a law's clause(name, text, penalty): a clause courts can find a breach of (clause is "<law>:<name>";
+    key the fnreg key of its penalty function)."""
+    k.w["clauses"][clause] = {"law": law, "name": name, "text": text, "penalty": key}
+    return {"clause": clause}

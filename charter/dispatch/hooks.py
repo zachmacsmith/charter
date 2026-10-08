@@ -63,8 +63,17 @@ def bound_laws(k, P, payload, phase) -> list:
                 seen.append(law)
         laws = seen
     laws = laws + assoc
+    secret = SECRET.get(P.name)
+    if secret is not None and secret(k, payload):                       # W8b: a hidden jurisdiction's own doings: its laws only
+        laws = [l for l in laws if J.law_jur(k, l["id"]) == payload.get("polity")]
     pos = {lid: i for i, lid in enumerate(k.w["law_order"])}
     return sorted(laws, key=lambda l: (-RANKS[rank_of(k, l["id"])], pos.get(l["id"], 1 << 30), l["id"]))
+
+
+# W8b (review 12 N1): changes about a hidden jurisdiction that no other polity's law may see (its founding, invitations and charter):
+# they bind only the hidden jurisdiction's own laws (in force only once it is declared, so in practice none). Its declaration is
+# public: before_declare binds the laws binding its founder (the polity it leaves).
+SECRET = {"found": lambda k, p: p.get("kind") == "jurisdiction", "invite": lambda k, p: True, "set_charter": lambda k, p: True}
 
 
 def _hook_fn(k, lid, hook):
@@ -104,7 +113,8 @@ def hooked(k, hook) -> bool:
 # ---------------------------------------------------------------------- redaction of payloads
 # Agents a call's options or payload make secret from laws: an unnamed killer (end_life named=False), a covert attacker.
 HIDE = {"end_life": lambda p, o: (p.get("by"),) if o.get("named") is False else (),
-        "attack": lambda p, o: (p.get("attacker"),) if p.get("covert") else ()}
+        "attack": lambda p, o: (p.get("attacker"),) if p.get("covert") else (),
+        "hire_assassin": lambda p, o: (p.get("agent"), p.get("assassin"))}       # W8b (review 12 R2): a sealed contract's parties
 
 
 def hidden_agents(k, name, p, opts) -> tuple:

@@ -314,11 +314,20 @@ def share_file(k, aid, name, to) -> str:
     init_agent(k, to)
     if f["tokens"] > space_left(k, to):
         raise _error(f"{to} has only {max(0, space_left(k, to))} tokens of file space left; the file needs {f['tokens']}")
+    k.apply("share_note", agent=aid, to=to, name=str(name))                                          # W8b: routed
+    return f"Shared a copy of {name} with {to}."
+
+
+def change_share_note(k, agent, to, name) -> dict:
+    """W8b (review 12 §2.14): the share_note primitive: a copy of an agent's file in another's files (share_file has checked the
+    recipient and its space). Hooks see who shared which file name with whom, never the text."""
+    aid = agent
+    f = _file(k, aid, name)
     files = k.w["files"][to]
     nm = _free_name(files, str(name))
     files[nm] = {"text": f["text"], "tokens": f["tokens"], "pinned": False, "origin": f"shared by {aid}"}
     k.notify(to, f"{aid} shared a file with you: {nm} ({f['tokens']} tokens). Read it with read_file {{\"name\": \"{nm}\"}}.")
-    return f"Shared a copy of {name} with {to}."
+    return {"name": nm}
 
 
 def pin(k, aid, name) -> str:

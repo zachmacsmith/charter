@@ -241,17 +241,36 @@ def refresh_outlets(k) -> None:
     by_editor = {o["editor"]: o for o in m["outlets"].values()}
     for a in cand:
         o = by_editor.get(a)
-        if o is None:
-            oid = _new_outlet(k, a)
-            k.log("outlet_opened", a, {"outlet": oid, "name": m["outlets"][oid]["name"]}, vis="public")
+        if o is None:                                                   # W8b: found and dissolve (kind "outlet") are routed
+            k.apply("found", agent=a, polity=f"O{m['seq']['outlet'] + 1}", kind="outlet", members=[a])
         elif o["status"] == "closed":
-            o["status"] = "open"
-            k.log("outlet_opened", a, {"outlet": o["id"], "name": o["name"]}, vis="public")
-    for o in m["outlets"].values():
+            k.apply("found", agent=a, polity=o["id"], kind="outlet", members=[a])
+    for o in list(m["outlets"].values()):
         if o["status"] == "open" and o["editor"] not in cand:
-            o["status"] = "closed"
-            k.log("outlet_closed", o["editor"], {"outlet": o["id"], "name": o["name"]}, vis="public")
+            k.apply("dissolve", polity=o["id"], kind="outlet", agent=o["editor"])
     _refresh_official(k)
+
+
+def change_found_outlet(k, agent, polity) -> dict:
+    """W8b: the found primitive for an outlet (kind "outlet"): a new outlet for a Media role or press holder (polity is the id it
+    gets), or its closed outlet reopened."""
+    m = k.w["media"]
+    o = m["outlets"].get(polity)
+    if o is None:
+        oid = _new_outlet(k, agent)
+        k.log("outlet_opened", agent, {"outlet": oid, "name": m["outlets"][oid]["name"]}, vis="public")
+        return {"outlet": oid}
+    o["status"] = "open"
+    k.log("outlet_opened", agent, {"outlet": o["id"], "name": o["name"]}, vis="public")
+    return {"outlet": o["id"]}
+
+
+def change_dissolve_outlet(k, polity) -> dict:
+    """W8b: the dissolve primitive for an outlet: its editor holds neither the Media role nor press (or left)."""
+    o = k.w["media"]["outlets"][polity]
+    o["status"] = "closed"
+    k.log("outlet_closed", o["editor"], {"outlet": o["id"], "name": o["name"]}, vis="public")
+    return {"outlet": o["id"]}
 
 
 def private_outlets(k, open_only=True) -> list:
@@ -869,9 +888,18 @@ def set_subscription_fee(k, aid, item=None, qty=0, outlet_ref=None):
     fee = _fee(item, qty)
     if fee:
         _check_item(k, fee["item"])
-    o["fee"] = fee
-    k.log("outlet_fee", aid, {"outlet": o["id"], "name": o["name"], "fee": fee}, vis="public")
+    k.apply("set_price", owner=aid, what="subscription", item=fee["item"] if fee else None, qty=fee["qty"] if fee else None,
+            outlet=o["id"])                                            # W8b: routed
     return f"{o['name']}'s fee is now " + (f"{fee['qty']:g} {fee['item']} per round." if fee else "nothing.")
+
+
+def change_subscription_fee(k, owner, outlet, item, qty) -> dict:
+    """W8b: the set_price primitive for an outlet's subscription fee (what "subscription"; item None: no fee)."""
+    o = k.w["media"]["outlets"][outlet]
+    fee = {"item": item, "qty": qty} if item is not None else None
+    o["fee"] = fee
+    k.log("outlet_fee", owner, {"outlet": o["id"], "name": o["name"], "fee": fee}, vis="public")
+    return {"outlet": o["id"], "fee": fee}
 
 
 def write_edition(k, aid, text, audience=None, outlet_ref=None):
@@ -1004,13 +1032,7 @@ def revoke_licence(k, aid, agent, outlet_ref=None):
     agent = _player(k, agent)
     if agent in o["revoked"]:
         raise _err(f"{agent} already has no licence from {o['name']}")
-    o["revoked"].append(agent)
-    o["licence_offers"].pop(agent, None)
-    k.notify(agent, f"{o['name']} has withdrawn your licence to post on the public board. You can post while any other outlet still "
-                    "licenses you; private messages are unaffected.")
-    k.log("licence_revoked", aid, {"outlet": o["id"], "name": o["name"], "agent": agent}, vis=[aid])
-    still = [x["name"] for x in private_outlets(k) if agent not in x["revoked"]]
-    return f"Revoked {agent}'s licence at {o['name']}; " + (f"still licensed by {', '.join(still)}." if still else "no outlet licenses them now.")
+    return k.apply("licence", outlet=o["id"], agent=agent, granted=False, actor=aid).result["text"]   # W8b: routed
 
 
 def grant_licence(k, aid, agent, item=None, qty=0, outlet_ref=None):
@@ -1021,20 +1043,47 @@ def grant_licence(k, aid, agent, item=None, qty=0, outlet_ref=None):
     fee = _fee(item, qty)
     if fee:
         _check_item(k, fee["item"])
-        o["licence_offers"][agent] = fee
-        k.notify(agent, f"{o['name']} offers you back its posting licence for {fee['qty']:g} {fee['item']}: buy_licence {{\"outlet\": \"{o['id']}\"}}.")
-        k.log("licence_offer", aid, {"outlet": o["id"], "agent": agent, "fee": fee}, vis=[aid, agent])
-        return f"Offered {agent} {o['name']}'s licence for {fee['qty']:g} {fee['item']}."
-    o["revoked"].remove(agent)
-    k.notify(agent, f"{o['name']} has restored your licence to post on the public board.")
-    k.log("licence_granted", aid, {"outlet": o["id"], "agent": agent}, vis=[aid, agent])
-    return f"Restored {agent}'s licence at {o['name']}."
+    return k.apply("licence", outlet=o["id"], agent=agent, granted=None if fee else True, actor=aid, fee=fee).result["text"]
 
 
 def buy_licence(k, aid, outlet_ref):
     o = outlet(k, outlet_ref)
     if o is None or o.get("official") or aid not in o.get("licence_offers", {}):
         raise _err(f"no licence offer to you from {outlet_ref}")
+    return k.apply("licence", outlet=o["id"], agent=aid, granted=True, actor=aid, via="buy").result["text"]
+
+
+# W8b (review 12 D6): the licence primitive. granted False: the editor revokes the agent's posting licence; True: restores it (or the
+# agent buys back an offered one, via "buy": the payment is part of the change); None: the editor offers it back for a fee.
+def change_licence(k, outlet, agent, granted, actor=None, fee=None, via=None) -> dict:
+    o = k.w["media"]["outlets"][outlet]
+    if via == "buy":
+        return _buy_licence(k, agent, o)
+    if granted is False:
+        return {"text": _revoke_licence(k, actor, agent, o)}
+    aid = actor
+    if granted is None:
+        o["licence_offers"][agent] = fee
+        k.notify(agent, f"{o['name']} offers you back its posting licence for {fee['qty']:g} {fee['item']}: buy_licence {{\"outlet\": \"{o['id']}\"}}.")
+        k.log("licence_offer", aid, {"outlet": o["id"], "agent": agent, "fee": fee}, vis=[aid, agent])
+        return {"text": f"Offered {agent} {o['name']}'s licence for {fee['qty']:g} {fee['item']}."}
+    o["revoked"].remove(agent)
+    k.notify(agent, f"{o['name']} has restored your licence to post on the public board.")
+    k.log("licence_granted", aid, {"outlet": o["id"], "agent": agent}, vis=[aid, agent])
+    return {"text": f"Restored {agent}'s licence at {o['name']}."}
+
+
+def _revoke_licence(k, aid, agent, o) -> str:
+    o["revoked"].append(agent)
+    o["licence_offers"].pop(agent, None)
+    k.notify(agent, f"{o['name']} has withdrawn your licence to post on the public board. You can post while any other outlet still "
+                    "licenses you; private messages are unaffected.")
+    k.log("licence_revoked", aid, {"outlet": o["id"], "name": o["name"], "agent": agent}, vis=[aid])
+    still = [x["name"] for x in private_outlets(k) if agent not in x["revoked"]]
+    return f"Revoked {agent}'s licence at {o['name']}; " + (f"still licensed by {', '.join(still)}." if still else "no outlet licenses them now.")
+
+
+def _buy_licence(k, aid, o) -> dict:
     fee = o["licence_offers"][aid]
     if not k.move(aid, o["editor"], fee["item"], fee["qty"], why="licence", by=aid):
         raise _err(f"the licence costs {fee['qty']:g} {fee['item']}; you have {k.bal(aid, fee['item']):g}")
@@ -1042,7 +1091,7 @@ def buy_licence(k, aid, outlet_ref):
     if aid in o["revoked"]:
         o["revoked"].remove(aid)
     k.log("licence_bought", aid, {"outlet": o["id"], "fee": fee}, vis=[aid, o["editor"]])
-    return f"Bought back {o['name']}'s licence for {fee['qty']:g} {fee['item']}."
+    return {"text": f"Bought back {o['name']}'s licence for {fee['qty']:g} {fee['item']}."}
 
 
 def annotate(k, aid, post, text, outlet_ref=None):

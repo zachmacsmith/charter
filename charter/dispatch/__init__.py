@@ -73,15 +73,16 @@ from charter.dispatch.billing import bill_gas, BILL_TO, gas_price, _oog_vis
 from charter.dispatch.api import is_number, is_text, law_api
 from charter.dispatch.changes.economy import (do_burn, do_contribute, do_convert, do_create_currency, do_destroy, do_harvest,
     do_mint, do_move, do_settle_project, _move)
-from charter.dispatch.changes.status import do_create_right, do_grant_right, do_limit_actions, do_revoke_right, do_suspend_right
+from charter.dispatch.changes.status import (do_create_right, do_grant_right, do_limit_actions, do_rename, do_revoke_right,
+    do_set_title, do_suspend_right)
 from charter.dispatch.changes.speech import do_dm, do_hide_post, do_post, do_set_dm_limit
 from charter.dispatch.changes.world import (do_create_camp, do_drift, do_improve_camp, do_lease, do_regrow, do_set_camp_rule,
     do_set_camp_state)
 from charter.dispatch.changes.lifecycle import do_begin_life, do_end_life, LIFE_CAUSES, LIFE_HOWS
-from charter.dispatch.changes.legal import (do_amend, do_cast_vote, do_close_ballot, do_decide, do_define_action, do_enact,
-    do_open_ballot, do_propose, do_repeal, do_rule, do_set_procedure, do_veto, draft, jur_of, _RIGHT_CALLS, sha, via_of)
-from charter.dispatch.changes.membership import do_admit, do_expel, do_join, do_leave
-from charter.dispatch.changes.press import do_appoint, do_set_media_rule, do_set_outlet_rule, do_subscribe
+from charter.dispatch.changes.legal import (do_amend, do_cast_vote, do_close_ballot, do_create_clause, do_decide, do_define_action,
+    do_enact, do_open_ballot, do_propose, do_repeal, do_rule, do_set_procedure, do_veto, draft, jur_of, _RIGHT_CALLS, sha, via_of)
+from charter.dispatch.changes.membership import do_admit, do_dissolve, do_expel, do_found, do_join, do_leave
+from charter.dispatch.changes.press import do_appoint, do_set_media_rule, do_set_outlet_rule, do_set_price, do_subscribe
 from charter.dispatch.changes.force import do_attack, do_fortify, do_guard_bind, do_guard_release
 from charter.dispatch.changes.loans import (do_accept_loan, do_default_loan, do_extend_loan, do_offer_loan, do_repay_loan,
     do_settle_loan)

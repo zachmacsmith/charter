@@ -23,8 +23,7 @@ from charter.dispatch.hooks import hidden_agents, _scrub
 
 NOTIFY = tuple(n for n, p in PR.PRIMITIVES.items() if p.status == "live" and p.compel and p.compel_vis == "parties")
 # NOTIFY rows not routed through apply, and how their parties learn of a law-caused change (tests/test_charter_notify.py)
-NOTIFY_SITES = {"set_title": "kernel:Kernel.api_for.title calls compel_note/compelled itself",
-                "offer_loan": "its own loan_offer event reaches the lender and the borrower",
+NOTIFY_SITES = {"offer_loan": "its own loan_offer event reaches the lender and the borrower",
                 "create_clause": "no party: a clause is the law's own record"}
 OWN_EVENT = ("offer_loan",)          # routed through apply since loans became primitives, but its own event already tells the parties
 

@@ -737,22 +737,31 @@ def _invoke(k, aid, action, args=None):
     _need(k, aid, a["right"], f"use {action}")
     if J.enabled(k) or J.association(k, J.law_jur(k, a["law"])) is not None:   # jurisdictions: an office serves only its own
         J.check_invoke(k, aid, a["law"])                               # members; P4.5: a contract's office, only its members
-    lid, fn = k.fnreg[a["fn"]]
+    lid = k.fnreg[a["fn"]][0]
     if not D.in_force(k, lid):                                         # W6a (law.v2): its law is outside its declared window
         lo, hi = D.window_of(k, lid)
         raise ActionError(f"{action}: law {lid} is not in force this round (in force from round {lo if lo is not None else 0}"
                           + (f" to round {hi}" if hi is not None else "") + ")")
     args = args if isinstance(args, list) else ([] if args is None else [args])
+    out = k.apply("invoke", agent=aid, action=action, law=lid, args=args)   # W8b: routed (before_invoke/after_invoke, law.v2)
+    return f"{action}: {out.result['text']}"
+
+
+def change_invoke(k, agent, action, law, args) -> dict:
+    """The invoke primitive's change (W8b; review 12 R6): the office's law function runs as the holder's act, and the use is logged.
+    _invoke has checked the right, the polity's scope and the law's window. Result: {"result": the logged text (at most 400
+    characters), "text": all of it, as the agent reads it}."""
+    lid, fn = k.fnreg[k.w["actions"][action]["fn"]]
     try:
-        res, why = (k.call_refusable(lid, fn, aid, *args) if D.v2(k)    # W6a: refuse exists only under law.v2
-                    else (k.call(lid, fn, aid, *args), None))
+        res, why = (k.call_refusable(lid, fn, agent, *args) if D.v2(k)    # W6a: refuse exists only under law.v2
+                    else (k.call(lid, fn, agent, *args), None))
     except L.LawError as e:
         k.law_error(lid, str(e))
         raise ActionError(f"{action} failed and its law was suspended: {e}")
     if why is not None:                                                # W6a: the office refused (rolled back; no fault)
         raise ActionError(f"{action} refused by law {lid}" + (f": {why}" if why else ""))
-    k.log("invoke", aid, {"action": action, "args": args, "law": lid, "result": str(res)[:400]}, vis="public")
-    return f"{action}: {res}"
+    k.log("invoke", agent, {"action": action, "args": args, "law": lid, "result": str(res)[:400]}, vis="public")
+    return {"result": str(res)[:400], "text": str(res)}
 
 
 # ------------------------------------------------------------------ life: bequests, Board succession, Makers and children
@@ -809,8 +818,7 @@ def _create_channel(k, aid, name, members=None, open=False):
     if name in k.w["channels"]:
         raise ActionError(f"channel {name} exists")
     mem = [m for m in (members or []) if m in k.w["agents"]] + [aid]
-    k.w["channels"][name] = {"owner": aid, "members": sorted(set(mem)), "open": bool(open)}
-    k.log("channel_created", aid, {"channel": name, "members": sorted(set(mem)), "open": bool(open)}, vis="public")
+    k.apply("found", agent=aid, polity=name, kind="channel", members=sorted(set(mem)), open=bool(open))   # W8b: routed
     return f"Channel {name} created."
 
 
@@ -824,27 +832,48 @@ def _own_channel(k, aid, channel):
 
 
 def _add_member(k, aid, channel, agent):
-    ch = _own_channel(k, aid, channel)
+    _own_channel(k, aid, channel)
     if agent not in k.w["agents"]:
         raise ActionError(f"no agent {agent}")
-    if agent not in ch["members"]:
-        ch["members"] = sorted(ch["members"] + [agent])
-    k.log("channel_member", aid, {"channel": str(channel), "agent": agent, "change": "add"}, vis="public")
+    k.apply("admit", polity=str(channel), agent=agent, kind="channel", actor=aid)                       # W8b: routed
     return f"{agent} added to {channel}."
 
 
 def _remove_member(k, aid, channel, agent):
-    ch = _own_channel(k, aid, channel)
-    ch["members"] = [m for m in ch["members"] if m != agent]
-    k.log("channel_member", aid, {"channel": str(channel), "agent": agent, "change": "remove"}, vis="public")
+    _own_channel(k, aid, channel)
+    k.apply("expel", polity=str(channel), agent=agent, kind="channel", actor=aid)                       # W8b: routed
     return f"{agent} removed from {channel}."
 
 
 def _close_channel(k, aid, channel):
     _own_channel(k, aid, channel)
-    del k.w["channels"][str(channel)]
-    k.log("channel_closed", aid, {"channel": str(channel)}, vis="public")
+    k.apply("dissolve", polity=str(channel), kind="channel", agent=aid)                                 # W8b: routed
     return f"Channel {channel} closed."
+
+
+# Channel changes (W8b, review 12 C2): the found, admit, expel and dissolve primitives with kind "channel" make them here
+# (dispatch.changes.membership dispatches on the kind); the actions above check the press right and ownership first.
+def change_channel_found(k, agent, polity, members, open) -> dict:
+    k.w["channels"][polity] = {"owner": agent, "members": list(members), "open": bool(open)}
+    k.log("channel_created", agent, {"channel": polity, "members": list(members), "open": bool(open)}, vis="public")
+    return {"channel": polity}
+
+
+def change_channel_member(k, polity, agent, change, actor) -> dict:
+    ch = k.w["channels"][polity]
+    if change == "add":
+        if agent not in ch["members"]:
+            ch["members"] = sorted(ch["members"] + [agent])
+    else:
+        ch["members"] = [m for m in ch["members"] if m != agent]
+    k.log("channel_member", actor, {"channel": polity, "agent": agent, "change": change}, vis="public")
+    return {"channel": polity, "change": change}
+
+
+def change_channel_closed(k, polity, agent) -> dict:
+    del k.w["channels"][polity]
+    k.log("channel_closed", agent, {"channel": polity}, vis="public")
+    return {"channel": polity}
 
 
 def _channel_post(k, aid, channel, text):

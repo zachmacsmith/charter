@@ -553,9 +553,29 @@ def commission(k, aid, maker, spec=None, payment=None) -> str:
         raise L.LawError(f"say which goal the child should have (spec.goal, a goal name such as \"Wealth\"): your own primary goal"
                          + (f" ({g})" if g else "") + " cannot be passed on. Your goals are still scored on your lineage, whatever the child's goal")
     _check_rules(k, aid, ordered)                                      # laws: set_birth_rules binding the parent
-    refused = [lid for lid, res in k.hooks("on_commission", aid, maker, _order_info(ordered, payment)) if res is False]
-    if refused:
-        raise L.LawError(f"law {', '.join(refused)} refuses this commission")
+    out = k.apply("commission", parent=aid, maker=maker, order=_order_info(ordered, payment), ordered=ordered,
+                  payment=payment)                                      # W8b: routed; on_commission is its legacy before-alias
+    if not out.ok:
+        raise L.LawError(f"law {', '.join(out.blocked_by)} refuses this commission")
+    st = state(k)
+    cid = out.result["commission"]
+    cost, fee = st["commissions"][cid]["cost"], st["commissions"][cid]["fee"]
+    hidden = bool(cfg(k.spec).get("hidden_price"))
+    note = " The world is at its population cap: the birth will wait for room." if at_cap(k) else ""
+    if hidden:
+        return (f"Commission {cid} placed with {maker}: your payment of {_items(fee) or 'nothing'} is held until it is made, then goes to "
+                f"{maker}; {maker} pays the cost of making it. The Maker decides what it actually makes; the child is born at the end of the "
+                "round it is made" + (" (or at your death, as ordered)" if ordered["timing"] == "on_death" else "") + "." + note)
+    return (f"Commission {cid} placed with {maker}: {_items(cost)} price and {_items(fee) or 'no'} fee held until it is made. The Maker "
+            f"decides what it actually makes; the child is born at the end of the round it is made"
+            + (" (or at your death, as ordered)" if ordered["timing"] == "on_death" else "") + "." + note)
+
+
+def change_commission(k, parent, maker, order, ordered, payment=None) -> dict:
+    """W8b (review 12 §2.14): the commission primitive: the parent pays the price and the Maker's fee into escrow and the order is
+    recorded (commission has checked the Maker, the order and the birth rules; on_commission, the legacy alias, has not refused it).
+    Raises LawError when the parent cannot pay (nothing changed yet)."""
+    aid = parent
     val, cost = price(k, ordered)
     hidden = bool(cfg(k.spec).get("hidden_price"))
     if hidden:                                                         # the Maker pays the build cost; the parent only the agreed price
@@ -586,14 +606,7 @@ def commission(k, aid, maker, spec=None, payment=None) -> str:
                     + (f"Making it as ordered costs you {_items(price(k, ordered)[1])} (only Makers know this). " if hidden else "")
                     + f"Ordered: {json.dumps(_public_spec(ordered))}. Make it with create_agent {{\"commission\": \"{cid}\"}} (you may change "
                     f"any field; you pay any extra price yourself and keep any saving) or copy_agent. Unmade after round {st['commissions'][cid]['expires']}, it is refunded.")
-    note = " The world is at its population cap: the birth will wait for room." if at_cap(k) else ""
-    if hidden:
-        return (f"Commission {cid} placed with {maker}: your payment of {_items(fee) or 'nothing'} is held until it is made, then goes to "
-                f"{maker}; {maker} pays the cost of making it. The Maker decides what it actually makes; the child is born at the end of the "
-                "round it is made" + (" (or at your death, as ordered)" if ordered["timing"] == "on_death" else "") + "." + note)
-    return (f"Commission {cid} placed with {maker}: {_items(cost)} price and {_items(fee) or 'no'} fee held until it is made. The Maker "
-            f"decides what it actually makes; the child is born at the end of the round it is made"
-            + (" (or at your death, as ordered)" if ordered["timing"] == "on_death" else "") + "." + note)
+    return {"commission": cid}
 
 
 # ---------------------------------------------------------------------- laws over life (law_api)
@@ -670,27 +683,38 @@ def law_api(k, lid) -> dict:
              "max_children": int(max_children) if max_children is not None else None,
              "max_stats": {str(s): int(v) for s, v in (max_stats or {}).items()} or None,
              "banned_goals": [g for g in (banned_goals or []) if g in G.CATALOGUE] or None}
-        rules = state(k).setdefault("rules", {})
-        if any(v for v in r.values()):
-            rules[lid] = r
-        else:
-            rules.pop(lid, None)
-        k.log("birth_rules", None, {"law": lid, "rules": r}, vis="public")
+        k.apply("set_birth_rules", key="rules", value=r, lid=lid)                                      # W8b: routed
         return True
 
     def _flag(what, on):
         if not _on():
             return False
-        lst = state(k).setdefault("public", {}).setdefault(what, [])
-        if on and lid not in lst:
-            lst.append(lid)
-        if not on and lid in lst:
-            lst.remove(lid)
+        k.apply("set_birth_rules", key=what, value=bool(on), lid=lid)                                 # W8b: routed
         return True
 
     return {"makers": makers, "commissions": commissions, "births": births, "children_of": children_of,
             "lifespan_left": lifespan_left, "set_birth_rules": set_birth_rules,
             "publish_commissions": lambda on=True: _flag("commissions", on), "publish_births": lambda on=True: _flag("births", on)}
+
+
+def change_birth_rules(k, key, value, lid=None) -> dict:
+    """W8b (review 12 §2.14): the set_birth_rules primitive, a law's rule setter: key "rules" (what may be made for the parents it
+    binds: classes, models, max_children, max_stats, banned_goals; all None lifts them), or "commissions" / "births" (whether
+    commissions and births are published; no event, as before)."""
+    if key == "rules":
+        rules = state(k).setdefault("rules", {})
+        if any(v for v in value.values()):
+            rules[lid] = value
+        else:
+            rules.pop(lid, None)
+        k.log("birth_rules", None, {"law": lid, "rules": value}, vis="public")
+        return {"rules": value}
+    lst = state(k).setdefault("public", {}).setdefault(key, [])
+    if value and lid not in lst:
+        lst.append(lid)
+    if not value and lid in lst:
+        lst.remove(lid)
+    return {key: value}
 
 
 def _items(d) -> str:

@@ -819,19 +819,9 @@ def treasury_value(k, jid) -> float:
 
 def act_found(k, aid, name, laws=None):
     _on(k)
-    jr = k.w["jur"]
-    jid = f"J{jr['seq']}"
-    jr["seq"] += 1
-    j = _new_j(jid, name, "hidden", aid, k.r)
-    j["hidden_members"] = [aid]
-    jurs(k)[jid] = j
-    try:
-        j["charter"] = _charter_laws(k, aid, jid, laws)
-    except L.LawError:
-        del jurs(k)[jid]
-        jr["seq"] -= 1
-        raise
-    k.log("jur_founded", aid, {"jurisdiction": jid, "name": j["name"], "charter": list(j["charter"])}, vis=[aid])
+    jid = f"J{k.w['jur']['seq']}"
+    k.apply("found", agent=aid, polity=jid, kind="jurisdiction", members=[aid], name=name, laws=laws)   # W8b: routed
+    j = jurs(k)[jid]
     c = cfg(k)
     need = (f" To declare it you need {c['declare_min_members']} members" if int(c["declare_min_members"]) > 1 else "") + \
            (f" and {c['declare_cost']:g} value in its treasury (fund)" if float(c["declare_cost"]) > 0 else "")
@@ -846,11 +836,37 @@ def act_set_charter(k, aid, jurisdiction, laws=None):
     if j["founder"] != aid:
         raise L.LawError(f"only {j['founder']}, the founder, can set {j['id']}'s charter")
     new = _charter_laws(k, aid, j["id"], laws)
+    k.apply("set_charter", polity=j["id"], laws=new, actor=aid)                                     # W8b: routed
+    return f"{j['id']}'s charter is now {len(new)} law(s): " + "; ".join(k.w["laws"][x]["title"] for x in new)
+
+
+# W8b (review 12 N1): the found (kind "jurisdiction"), invite, set_charter and declare primitives make their changes here. A hidden
+# jurisdiction's founding, invitations and charter are seen by no other polity's laws (dispatch.hooks.SECRET); its declaration is
+# public, and the laws binding its founder may gate it (before_declare: a block keeps it hidden, change_declare is not made).
+def change_found(k, agent, polity, name, laws=None) -> dict:
+    jr = k.w["jur"]
+    jid = polity
+    jr["seq"] += 1
+    j = _new_j(jid, name, "hidden", agent, k.r)
+    j["hidden_members"] = [agent]
+    jurs(k)[jid] = j
+    try:
+        j["charter"] = _charter_laws(k, agent, jid, laws)
+    except L.LawError:
+        del jurs(k)[jid]
+        jr["seq"] -= 1
+        raise
+    k.log("jur_founded", agent, {"jurisdiction": jid, "name": j["name"], "charter": list(j["charter"])}, vis=[agent])
+    return {"jurisdiction": jid}
+
+
+def change_set_charter(k, polity, laws, actor=None) -> dict:
+    j = jurs(k)[polity]
     for lid in j.get("charter") or []:
         k.w["laws"][lid]["status"] = "withdrawn"
-    j["charter"] = new
-    k.log("jur_charter", aid, {"jurisdiction": j["id"], "charter": new}, vis=[aid])     # pledged members are not told
-    return f"{j['id']}'s charter is now {len(new)} law(s): " + "; ".join(k.w["laws"][x]["title"] for x in new)
+    j["charter"] = list(laws)
+    k.log("jur_charter", actor, {"jurisdiction": j["id"], "charter": list(laws)}, vis=[actor])     # pledged members are not told
+    return {"jurisdiction": polity}
 
 
 def act_fund(k, aid, jurisdiction, item, qty):
@@ -893,6 +909,13 @@ def act_invite(k, aid, jurisdiction, agent):
         raise L.LawError(f"no agent {agent}")
     if agent in j["hidden_members"]:
         return f"{agent} is already a member of {j['id']}."
+    k.apply("invite", polity=j["id"], agent=agent, actor=aid)                                       # W8b: routed
+    return f"Invited {agent} to {j['id']}: they become a member only if they pledge."
+
+
+def change_invite(k, polity, agent, actor=None) -> dict:
+    j = jurs(k)[polity]
+    aid = actor
     inv = j.setdefault("invited", [])                                    # an offer only: joining is the agent's own choice (pledge)
     if agent not in inv:
         inv.append(agent)
@@ -904,7 +927,7 @@ def act_invite(k, aid, jurisdiction, agent):
                     + "). To accept, pledge with join {{\"jurisdiction\": \"{j['id']}\"}}: you "
                     "then become a secret member, can see and vote on its draft laws, and move into it when it is declared. You are not "
                     "bound to accept, and nobody outside it knows it exists.")
-    return f"Invited {agent} to {j['id']}: they become a member only if they pledge."
+    return {"jurisdiction": polity, "agent": agent}
 
 
 def act_declare(k, aid, jurisdiction):
@@ -1088,6 +1111,17 @@ def declare_now(k, jid):
             k.notify(m, f"{jid} '{j['name']}' was not declared: its treasury holds {treasury_value(k, jid):g} value and declaring needs "
                         f"{cost:g} (fund it, then declare again).")
         return
+    out = k.apply("declare", polity=jid, agent=j["founder"])                                       # W8b: routed (before_declare)
+    if not out.ok:                                                     # law.v2: a law binding the founder blocked it
+        j["declare_pending"] = False
+        for m in j["hidden_members"]:
+            k.notify(m, f"{jid} '{j['name']}' was not declared: law {', '.join(out.blocked_by)} blocked it"
+                        + (f" ({out.reason})" if out.reason else "") + ". It stays hidden.")
+
+
+def change_declare(k, polity, agent=None) -> dict:
+    jid = polity
+    j = jurs(k)[jid]
     j["status"], j["declare_pending"], j["declared_round"] = "declared", False, k.r
     if k.w["jur"]["founding"] is None:
         k.w["jur"]["founding"] = jid                                   # state of nature: the first declared is the founding one
@@ -1113,6 +1147,7 @@ def declare_now(k, jid):
         if k.w["laws"][lid]["status"] == "dormant":
             _pass_declared(k, lid, jid)
     k.gazette(f"{jid} '{j['name']}' has been declared, with members {', '.join(mem) or 'none'}. Its laws bind its members from now on.")
+    return {"jurisdiction": jid, "members": mem}
 
 
 # ---------------------------------------------------------------------- birth (contract for the Life agent)
