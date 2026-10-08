@@ -288,6 +288,7 @@ def _run(tmp_path, mode, name, seed=2, rounds=16, policy=None, resume=False):
     return inst, out
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("mode", ["sequential", "simultaneous"])
 def test_arrivals_and_departures_end_to_end(tmp_path, mode):
     inst, out = _run(tmp_path, mode, mode)
@@ -322,6 +323,7 @@ def test_arrivals_and_departures_end_to_end(tmp_path, mode):
         assert (out / "agents" / aid / "transcript.md").exists()
 
 
+@pytest.mark.slow
 def test_goal_segments_are_scored_over_their_own_rounds(tmp_path):
     inst, out = _run(tmp_path, "sequential", "seg", rounds=16)
     gt = scorer.load(out)
@@ -353,6 +355,7 @@ class Stopper:
         return self.inner.act(k, a, system, user, n, final)
 
 
+@pytest.mark.slow
 def test_resumed_run_with_events_equals_an_uninterrupted_one(tmp_path):
     _, full = _run(tmp_path, "sequential", "full", rounds=12)
     with pytest.raises(runner.RunStopped):

@@ -151,7 +151,10 @@ def _outcome(fn, *a):
         return ("error", None)
 
 
-@pytest.mark.parametrize("name", sorted(golden.CASES))
+SLOW_WINDOWS = {"E7_events_3", "E4_observer_hidden_4"}      # every goal on every window of these takes ~10-30 s
+
+
+@pytest.mark.parametrize("name", [pytest.param(n, marks=pytest.mark.slow) if n in SLOW_WINDOWS else n for n in sorted(golden.CASES)])
 def test_native_scorers_equal_legacy_scorers_on_every_window(runs, name, monkeypatch):
     """Every goal's native scorer (goals.HSCORERS) returns exactly what its legacy s_* returns, for every agent, on the whole run,
     every window and every scoring segment's view, with the parameters drawn in the run and a generic set."""

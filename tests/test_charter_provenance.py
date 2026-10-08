@@ -213,6 +213,7 @@ class _FailAfterSpy:
         return self.inner.act(k, a, system, user, n, final)
 
 
+@pytest.mark.slow
 def test_member_spy_resume_does_not_duplicate_observer_rows(tmp_path):
     sp = _spec("roles_pilot", "rounds=4", "turns=sequential", "roles.enabled=true", "observer.reads_per_round=2",
                "llm.fail_stop_fraction=0.01")                           # the first failed call stops the round

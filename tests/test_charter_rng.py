@@ -95,6 +95,7 @@ def test_schema_registers_rng_version_default_1():
     assert Kernel(generator.generate(S.load("E2"), 1)).rng_version == 1
 
 
+@pytest.mark.slow
 def test_v2_extra_harvest_leaves_later_turn_order_and_others_noise_unchanged(pairs):
     who, base, alt = pairs[2]
     extra = [e for e in alt if e["type"] == "harvest" and e["round"] == 2 and e["agent"] == who and e["data"]["x"] == [0] * len(e["data"]["x"])]
@@ -107,6 +108,7 @@ def test_v2_extra_harvest_leaves_later_turn_order_and_others_noise_unchanged(pai
     assert all(nb[x] == na[x] for x in common)
 
 
+@pytest.mark.slow
 def test_v1_extra_harvest_reshuffles_later_turn_order_and_noise(pairs):
     who, base, alt = pairs[1]
     ob, oa = _orders(base), _orders(alt)
@@ -151,6 +153,7 @@ def test_v2_dry_run_restores_law_streams():
     assert ra() == x
 
 
+@pytest.mark.slow
 def test_v2_runs_are_deterministic_and_resume_and_replay_identically(tmp_path):
     a = runner.run(_inst(2), AG.ScriptedPolicy(SEED), tmp_path / "a", **QUIET)
     b = runner.run(_inst(2), AG.ScriptedPolicy(SEED), tmp_path / "b", **QUIET)

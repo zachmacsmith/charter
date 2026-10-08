@@ -339,6 +339,7 @@ def test_pay_tribute_action_is_hidden_without_an_outside_power():
 
 
 # ------------------------------------------------------------------ a whole dry run
+@pytest.mark.slow
 def test_dry_run_with_projects_and_tribute_scores_and_resumes(tmp_path):
     from charter import runner, scorer
     s = spec.load("E2")

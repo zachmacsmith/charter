@@ -451,6 +451,7 @@ def test_v2_a_law_run_registry_collects_before_default_and_records_repayments():
     assert rep["data"]["law"] == lid and rep["data"]["seized"] is True
 
 
+@pytest.mark.slow
 def test_scripted_run_with_credit_laws_in_force(tmp_path):
     from charter import agents, runner, scorer
     sp = spec.load("E6")
