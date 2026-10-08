@@ -49,6 +49,9 @@ CASES = {
     "E2_library2_6": ("E2", 3, ["rounds=6", "law.v2=true", "law.library.edition=2", "law.library.access=catalogue",   # P3.9
                                 "start_laws=[Crown Currency, Loan Registry, Usury Law, Wealth Tax, Harvest Levy, Transfer Tax, "
                                 "Mint by Ballot]"]),
+    # P4.3: contracts (associations) with law.v2: the scripted bots found a club, a cartel, a crowdfund and a company, join, set
+    # allowances, deposit escrow, vote a change and leave (contracts.scripted_actions)
+    "contracts_small": ("E2", 3, ["rounds=5", "law.v2=true", "contracts.enabled=true"]),
 }
 V2_CASES = {"society_law_v2"}                          # their start laws are test fixtures: registered in library.LIB while they run
 
