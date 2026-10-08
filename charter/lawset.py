@@ -99,11 +99,17 @@ def _procedure_ranks(tree: ast.Module) -> set:
 
 
 # ---------------------------------------------------------------------- composability
+def _contracts_only() -> set:
+    """Law functions that exist only with contracts on (lawapi: per-law funds, swap, escrow reads), so a law calling one fails there."""
+    from charter import lawapi as LA
+    return set(LA.CONTRACTS_ONLY)
+
+
 def check(laws: list, spec: dict, level: str | None = None) -> dict:
     """Composability of a law set (in enactment order) in a world with this spec: {"errors": [...], "dropped": [names above the
     world's law level], "overlaps": [{"change", "laws": [{name, rank, hook}]}]}. Errors: a law that does not check, a rank its
     set_procedure calls cannot reach, an import that is not a library entry or a cyclic or too deep import graph, a law that can never
-    fire here. A law above the world's law level is dropped (as a regime's statutes are), not an error."""
+    fire here, a law calling a contracts-only function (open_fund, ...) where contracts are off. A law above the world's law level is dropped (as a regime's statutes are), not an error."""
     from charter import dispatch as D
     from charter import library as LB
     from charter import linker as LK
@@ -138,6 +144,10 @@ def check(laws: list, spec: dict, level: str | None = None) -> dict:
             continue
         if LEVELS.index(need) > LEVELS.index(level):
             dropped.append({"name": name, "level": need})
+            continue
+        needs = sorted((set(L.calls(tree)) - set(_defs(tree))) & _contracts_only()) if not _feature_on("contracts", spec) else []
+        if needs:
+            errors.append(f"{name}: calls {', '.join(needs)}, which exist only with contracts on (contracts.enabled)")
             continue
         if not can_fire(code, spec):
             hooked = sorted({p for _h, p in hooks_of(code) if p})
