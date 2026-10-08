@@ -422,3 +422,65 @@ def test_a_breach_victim_must_be_another_agent():
     for bad in (a, "nobody"):
         with pytest.raises(L.LawError, match="victim"):
             k.call(lid, k.ns[lid]["go"], a, bad)
+
+
+# ====================================================================== 7. review 11 §4.1 seams: case source, law_can_see, breach cases
+def test_cases_carry_a_source_defaulting_to_agent():
+    k, lid, a, b, j, _, _ = court()
+    cid = accuse(k, a, b, lid)
+    assert "source" not in k.w["cases"][cid]                             # stored only when not "agent": old records as before
+    assert k.api_for(lid)["case"](cid)["source"] == "agent"
+    assert "source" not in events(k, "accuse")[-1]["data"]
+
+
+def test_law_can_see_is_the_one_predicate_of_the_reads():
+    from charter import evidence as EV
+    assert EV.sees is EV.law_can_see
+
+
+AFTER_DM = law("Listener", "def after_dm(p, chain):\n    state['heard'] = state.get('heard', 0) + 1\n")
+
+
+@pytest.mark.parametrize("mode,heard", [(None, 1), ("all", 1), ("evidence", None)])
+def test_after_hook_delivery_follows_law_can_see_only_under_the_flag(mode, heard):
+    k = world(sets=[f"law.after_visibility={mode}"] if mode else [])
+    a, b, _ = agents(k)
+    lid = enact(k, AFTER_DM)
+    A.act(k, a, "dm", {"to": b, "text": "psst"})
+    assert k.w["laws"][lid]["state"].get("heard") == heard               # default: the gap (a law hears a private DM)
+    A.act(k, a, "post", {"text": "public"})                              # unrelated: nothing else changes
+
+
+BREACHING = "def on_round_start(r):\n    if r == 1:\n        breach({b!r}, 'delivery', 'late', {v!r})\n"
+
+
+def breach_case_world(on=True, dial="escrow_court"):
+    from charter import library as LB
+    k = contracts_world()
+    k.spec["contracts"]["enforcement"] = dial
+    k.spec["contracts"]["breach_cases"] = on
+    a, b, c, judge = people(k)[:4]
+    res = A.act(k, a, "create_contract", {"name": "Supply", "code": law("Supply", BREACHING.format(b=b, v=a))})
+    cid = re.search(r"A\d+", res).group()
+    A.act(k, b, "join_contract", {"contract": cid})
+    act = enact(k, LB.LIB["Contract Enforcement Act"]["code"])
+    k.end_round()
+    k.start_round()                                                      # round 1: the breach is recorded
+    return k, (a, b, c, judge), cid, act
+
+
+def test_escrow_court_breaches_open_courts_v2_cases_with_source_contract():
+    k, (a, b, c, judge), cid, act = breach_case_world()
+    br = k.w["contracts"]["assoc"][cid]["breaches"][-1]
+    case = k.w["cases"][br["case"]]
+    assert case["source"] == "contract" and case["accused"] == b and case["accuser"] == a
+    assert case["clause"] == f"{act}:breach_of_contract" and case["status"] == "open"
+    ev = events(k, "accuse")[-1]
+    assert ev["data"]["source"] == "contract" and ev["data"]["case"] == br["case"]
+    assert k.api_for(act)["case"](br["case"])["source"] == "contract"
+
+
+@pytest.mark.parametrize("on,dial", [(False, "escrow_court"), (True, "escrow")])
+def test_breach_cases_are_off_by_default_and_need_escrow_court(on, dial):
+    k, _, cid, _ = breach_case_world(on=on, dial=dial)
+    assert "case" not in k.w["contracts"]["assoc"][cid]["breaches"][-1] and not k.w["cases"]

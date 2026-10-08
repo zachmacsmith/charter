@@ -86,8 +86,11 @@ def about(k, data) -> str | None:
     return None
 
 
-def sees(k, lid, e) -> bool:
-    """May law `lid` read event `e`? (the module docstring's rule)"""
+def law_can_see(k, lid, e) -> bool:
+    """May law `lid` read event `e`? (the module docstring's rule.) W7e (review 11 §4.1): the one visibility predicate for laws, used
+    by event() and history() and, under spec law.after_visibility "evidence", by after-hook delivery (dispatch._enqueue). With the
+    default ("all") after-hooks still react to every change they hook, including ones whose own event the law could not read (a
+    private DM's after_dm, a member-only transfer): that gap is documented in dispatch._enqueue and closed only by the flag."""
     vis = e.get("vis")
     if vis == "public":
         return True
@@ -98,6 +101,9 @@ def sees(k, lid, e) -> bool:
         return False
     members = _account_members(k, acct)
     return members is not None and set(vis) <= members
+
+
+sees = law_can_see                                                     # the name W6f's reads and tests use
 
 
 def _hidden_laws(k, lid) -> set:
@@ -166,7 +172,7 @@ def _charge_out(k, ev: dict) -> None:
 def event(k, lid, eid):
     k.limited.meter.tick(1)
     e = _find(k, eid)
-    if e is None or not sees(k, lid, e):
+    if e is None or not law_can_see(k, lid, e):
         return None
     out = view(k, lid, e)
     _charge_out(k, out)
@@ -212,7 +218,7 @@ def history(k, lid, type=None, agent=None, since=None, limit=DEFAULT_LIMIT, abou
             meter.tick(1)
         if types is not None and e["type"] not in types:
             continue
-        if not sees(k, lid, e):
+        if not law_can_see(k, lid, e):
             continue
         if agent is not None and _clean(k, e.get("agent"), obs, hl) != agent:
             continue

@@ -85,6 +85,7 @@ DEFAULTS = {
     "templates": True,      # agents may found contracts from the templates (club, company, crowdfund, cartel)
     "scripted": True,       # dry runs: the scripted bots found, join and use contracts (own RNG stream)
     "enforcement": "escrow",    # P4.4 dial: escrow | escrow_court (a polity's courts hear breaches) | word (no escrow at all)
+    "breach_cases": False,      # W7e: under escrow_court, a breach opens a courts v2 case (source "contract"; file_breach_case)
 }
 PROCEDURES = ("members", "two_thirds", "founder")
 ENFORCEMENT = ("escrow", "escrow_court", "word")
@@ -926,6 +927,7 @@ def law_api(k, lid) -> dict:
             raise L.LawError("breach: the victim is another agent (or None)")
         k.apply("breach", contract=rec["id"], member=member, clause=str(clause)[:120], remedy=str(remedy)[:200], lid=lid,
                 **({"victim": victim} if victim is not None else {}))
+        file_breach_case(k, rec, len(rec["breaches"]) - 1)               # W7e: off unless contracts.breach_cases
         return True
 
     def escrow_of_(member):
@@ -982,6 +984,43 @@ def reputation(k, agent) -> dict:
     """An agent's breach record across every contract (P4.4: public under enforcement "word")."""
     hits = [c for c, r in recs(k).items() for b in r["breaches"] if b["member"] == agent]
     return {"breaches": len(hits), "contracts": sorted(set(hits), key=lambda c: int(c[1:]))}
+
+
+def breach_clause(k, member) -> str | None:
+    """W7e: the polity clause a breach case is opened under: a clause named breach_of_contract (the Contract Enforcement Act's) whose
+    law is in force and binds the member, the first in clause order; None if there is none."""
+    for cid, cl in k.w["clauses"].items():
+        if not cid.endswith(":breach_of_contract"):
+            continue
+        lid = cl.get("law")
+        if (k.w["laws"].get(lid) or {}).get("status") != "active" or J.association(k, J.law_jur(k, lid)) is not None:
+            continue
+        if J.enabled(k) and not J.binds(k, lid, member):
+            continue
+        return cid
+    return None
+
+
+def file_breach_case(k, rec, i) -> str | None:
+    """W7e (review 11 §4.1, "escrow_court should open W6b cases"): with contracts.enforcement escrow_court and
+    contracts.breach_cases on, breach record i of contract rec opens a courts v2 case through the routed open_case primitive (so
+    before_open_case may refuse it), source "contract", accused the member, accuser the victim (or None), evidence the
+    contract_breach event, under breach_clause(). The record keeps the case id ("case"). Off (the default): nothing happens."""
+    if enforcement(k) != "escrow_court" or not cfg(k).get("breach_cases") or not D.v2(k):
+        return None
+    b = rec["breaches"][i]
+    clause = breach_clause(k, b["member"])
+    if clause is None:
+        return None
+    ev = next((e["id"] for e in reversed(k.events) if e["type"] == "contract_breach" and e["data"].get("contract") == rec["id"]),
+              None)
+    case = f"C{k.w['case_seq'] + 1}"
+    out = k.apply("open_case", jurisdiction=D.jur_of(k, k.w["clauses"][clause]["law"]), case=case, accuser=b.get("victim"),
+                  accused=b["member"], clause=clause, evidence=[ev] if ev else [], source="contract")
+    if not out.ok:
+        return None
+    b["case"] = case
+    return case
 
 
 def court_breaches(k, member) -> list:

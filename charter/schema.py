@@ -227,6 +227,7 @@ def _ann():
         "law.notify_parties": dict(types=("bool", "null")),
         "law.gas_price": dict(kind="leaf", types=("dict", "null"), check=_check_gas_price),
         "law.atomic": dict(types=("bool", "null")),
+        "law.after_visibility": dict(types=("str", "null"), enum=("all", "evidence", None)),   # W7e (review 11 §4.1)
         **{f"law.gas.{x}": dict(types=("int",), range=(1, None)) for x in ("per_call", "python_depth", "per_cascade", "per_account_round",
                                                                             "depth_cap", "flag_limit", "flag_window")},
         **{f"law.gas.{x}": dict(types=("int",), range=NONNEG) for x in ("hook_cost", "prim_cost")},
@@ -394,6 +395,7 @@ def _ann():
         "contracts.templates": dict(types=("bool",)),
         "contracts.scripted": dict(types=("bool",)),
         "contracts.enforcement": dict(types=("str",), enum=("escrow", "escrow_court", "word")),     # P4.4: the enforcement dial
+        "contracts.breach_cases": dict(types=("bool",)),                 # W7e (review 11 §4.1): breaches open court cases
         "resources.placement": dict(types=("str",), enum=_placements),
         "prompts.core": dict(types=("dict",)),
         "prompts.manual": dict(types=("dict",)),
@@ -406,6 +408,7 @@ def _ann():
 # Keys the code reads that no DEFAULTS dict or base.yaml lists: path -> default (types and enums in ANN, docs in DOCS).
 EXTRA = {
     "rng_version": 1,
+    "law.after_visibility": None,                                      # W7e: None = "all" (after-hooks see every change, as before)
     "fixer_model": None,
     "camps.model": "legacy",
     "models.by_class": {},
@@ -713,6 +716,12 @@ DOCS = {
     "contracts.enforcement": "P4.4 dial: escrow (contracts enforce themselves through escrow), escrow_court (and a polity's "
                              "courts hear breaches: the Contract Enforcement Act) or word (no escrow at all: breach records and "
                              "reputation only)",
+    "contracts.breach_cases": "W7e (review 11 §4.1), with enforcement escrow_court: a breach a contract records opens a court case "
+                              "through courts v2 (open_case, source \"contract\", accuser the victim or none) under a polity clause "
+                              "breach_of_contract in force that binds the member (the Contract Enforcement Act's); default false",
+    "law.after_visibility": "law.v2 (W7e, review 11 §4.1): all (null, the default: an after-hook reacts to every change it hooks, "
+                            "as before) | evidence: an after-hook runs only when its law could read the change's own event "
+                            "(evidence.law_can_see, the predicate event()/history() use)",
     "resources": "resource placement and upkeep (charter/resources.py)",
     "resources.placement": "default | copper_solo | gold_solo: which resource the solo-science camp makes (types only)",
     "resources.upkeep": "each agent consumes `qty` of `item` every `every` rounds or loses an action until paid",

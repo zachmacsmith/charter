@@ -151,14 +151,23 @@ def first_judges(c) -> set:
 
 
 # ---------------------------------------------------------------------- filing and answering (routed: open_case, answer_case)
-def change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited=None) -> dict:
-    """A case is filed: numbered, its judges found and told, the accusation published (with the evidence as the accuser saw it)."""
+SOURCES = ("agent", "law", "contest", "contract")                  # W7e (review 11 §4.1): who opened a case
+
+
+def change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited=None, source="agent") -> dict:
+    """A case is filed: numbered, its judges found and told, the accusation published (with the evidence as the accuser saw it).
+    W7e: source (SOURCES), stored on the case only when it is not "agent" (so agent-opened cases are as before); a contract's
+    breach case (contracts.file_breach_case) has source "contract" and may have no accuser."""
+    source = source or "agent"                                         # (the routed payload's None: an agent's accuse)
+    assert source in SOURCES, source
     k.w["case_seq"] += 1
     assert case == f"C{k.w['case_seq']}", case
     rec = {"id": case, "accuser": accuser, "accused": accused, "clause": clause, "evidence": list(evidence or []),
            "counter": [], "status": "open", "filed": k.r, "deadline": k.r + 3, "judges": k.holders("judge")}
     if J.enabled(k):                                                   # jurisdictions: judges of the clause's jurisdiction only
         rec["judges"] = J.judges(k, rec)
+    if source != "agent":                                              # W7e: only a non-default source is recorded
+        rec["source"] = source
     if enabled(k):                                                     # law.v2: the polity's deadline and first-instance bench
         r = rules(k, polity_of(k, rec))
         rec["deadline"] = k.r + int(r["deadline"])
@@ -166,8 +175,9 @@ def change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, 
             rec["judges"] = [a for a in rec["judges"] if k.has(a, r["judges"])]
     k.w["cases"][case] = rec
     for j in rec["judges"]:
-        k.notify(j, f"New case {case}: {accuser} accuses {accused} under {clause}.")
-    k.log("accuse", accuser, {"case": case, "accused": accused, "clause": clause, "evidence": cited or []}, vis="public")
+        k.notify(j, f"New case {case}: {accuser if accuser is not None else 'a contract'} accuses {accused} under {clause}.")
+    k.log("accuse", accuser, {"case": case, "accused": accused, "clause": clause, "evidence": cited or [],
+                              **({"source": source} if source != "agent" else {})}, vis="public")
     return {"case": case, "judges": len(rec["judges"])}
 
 
@@ -345,7 +355,8 @@ def view(k, c) -> dict:
            "reason": c.get("reason"), "judge": c.get("judge"), "votes": {j: v["verdict"] for j, v in (c.get("votes") or {}).items()},
            "appealable_until": c.get("appealable_until"),
            "final": c["status"] in ("decided", "dismissed") and c.get("appealable_until") is None, "penalty": c.get("penalty"),
-           "appeal": c.get("appeal"), "first": {x: v for x, v in (c.get("first") or {}).items() if x != "votes"} or None}
+           "appeal": c.get("appeal"), "first": {x: v for x, v in (c.get("first") or {}).items() if x != "votes"} or None,
+           "source": c.get("source", "agent")}                        # W7e: agent | law | contest | contract
     return json.loads(json.dumps(out))
 
 

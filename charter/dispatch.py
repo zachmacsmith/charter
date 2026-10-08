@@ -2724,6 +2724,7 @@ def _apply_v2(k, cas, P, fn, p, opts) -> Outcome:
     extra = _extra(P, d)
     extra.update({x: v for x, v in v2d.directives.items() if _accepts(fn, x)})   # a new-style directive overrides a legacy one
     note = compel_note(k, name, p, opts)                              # P3.7: who a law-caused change concerns (before it)
+    n_ev = len(k.events)                                               # W7e: the change's own events (law.after_visibility)
     with k.cause("primitive", name):
         with _unhooked(k, unhooked):
             result = fn(k, **p, **opts, **extra)
@@ -2734,14 +2735,27 @@ def _apply_v2(k, cas, P, fn, p, opts) -> Outcome:
         prim_causes = list(k._causes)
     _legacy_after(k, P, p, chain, result)
     if P.after and not unhooked:
-        _enqueue(k, cas, P, {**p, "result": result}, depth, prim_causes, inv, hidden_agents(k, name, p, opts))
+        _enqueue(k, cas, P, {**p, "result": result}, depth, prim_causes, inv, hidden_agents(k, name, p, opts),
+                 own=[e for e in k.events[n_ev:] if e["type"] == P.event] if after_visibility(k) == "evidence" else None)
     return Outcome(ok=True, result=result, charges=d.charges + charged)
 
 
-def _enqueue(k, cas, P, payload, depth, causes, inv, hide) -> None:
+def after_visibility(k) -> str:
+    """W7e (review 11 §4.1): spec law.after_visibility, "all" (None, the default: as before) or "evidence"."""
+    return (k.spec.get("law") or {}).get("after_visibility") or "all"
+
+
+def _enqueue(k, cas, P, payload, depth, causes, inv, hide, own=None) -> None:
     """Queue (L, after_p) for every bound law with that hook, in canonical order, except accounts out of gas and R2: not when the
     change was made directly by (L, after_p) itself (the innermost law frame of its cause stack), so a hook never feeds itself; every
-    longer cycle (L reacts to M reacts to L) is legal, bounded by the depth cap and gas."""
+    longer cycle (L reacts to M reacts to L) is legal, bounded by the depth cap and gas.
+    Visibility gap (W7e, review 11 §4.1): by default a bound law's after-hook reacts to the change whatever the law could read of it
+    (evidence.law_can_see): it learns of a private DM through after_dm, of a member-only change of another account, and so on;
+    before-hooks are the same. Spec law.after_visibility "evidence" closes it for after-hooks: `own` is then the change's own events
+    (type P.event, logged by it) and a law is queued only if it may read one of them (a change that logged none is delivered as
+    before)."""
+    if own:
+        from charter import evidence as EV
     hook = f"after_{P.name}"
     if not hooked(k, hook):
         return
@@ -2751,6 +2765,8 @@ def _enqueue(k, cas, P, payload, depth, causes, inv, hide) -> None:
     for law in bound_laws(k, P, payload, "after"):
         lid = law["id"]
         if inner == (lid, hook) or _hook_fn(k, lid, hook) is None or account_of(k, lid) in st["out_of_gas"]:   # R2
+            continue
+        if own and not any(EV.law_can_see(k, lid, e) for e in own):    # W7e: law.after_visibility "evidence"
             continue
         snap = snap if snap is not None else _copy.deepcopy(payload)
         cas.queue.append(AfterItem(cas.next(), depth, lid, hook, P.name, snap, causes, hide, k.current_turn_agent(), inv))
@@ -2968,9 +2984,9 @@ OPTIONS.update({"open_case": frozenset({"cited"}), "answer_case": frozenset({"ci
                 "set_court_rule": frozenset({"lid"})})
 
 
-def do_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited=None) -> dict:
+def do_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited=None, source="agent") -> dict:
     from charter import courts as CO
-    return CO.change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited)
+    return CO.change_open_case(k, jurisdiction, case, accuser, accused, clause, evidence, cited, source)
 
 
 def do_answer_case(k, jurisdiction, case, accused, evidence, cited=None) -> dict:
