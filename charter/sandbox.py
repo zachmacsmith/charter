@@ -18,7 +18,9 @@ class DockerSandbox:
 
     def build(self):
         if not self._built:
-            subprocess.run(["docker", "build", "-q", "-t", IMAGE, str(Path(__file__).parent / "sandbox")], check=True, capture_output=True)
+            have = subprocess.run(["docker", "image", "inspect", IMAGE], capture_output=True).returncode == 0
+            if not have:                                                 # a prebuilt image (e.g. behind a proxy) is used as is
+                subprocess.run(["docker", "build", "-q", "-t", IMAGE, str(Path(__file__).parent / "sandbox")], check=True, capture_output=True)
             self._built = True
 
     def __call__(self, agent: str, code: str) -> str:
