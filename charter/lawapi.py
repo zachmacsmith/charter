@@ -44,7 +44,7 @@ AGENTISH = {"a", "aid", "agent", "guard", "borrower", "attacker", "target", "src
 GROUPS = ("read", "rights", "money", "camps", "governance", "output", "names", "sanctions", "text", "meta", "projects", "projects_read")
 STRUCTURAL_GROUPS = ("rights", "money", "sanctions", "projects")     # a call in these makes a law structural
 STRUCTURAL_EXTRA = ("open_ballot", "repeal")                       # governance and meta, but structural (repeal: review F1, P1.4)
-PROCEDURAL = ("set_procedure", "set_conflict_rule")                # governance; makes a law procedural (set_conflict_rule: P3.2)
+PROCEDURAL = ("set_procedure", "set_conflict_rule", "propose_law", "propose_amendment")   # makes a law procedural (P3.2, P3.4: law.v2)
 
 # Documentation mechanisms (where a function's or hook's text lives, and when it is shown):
 DOCS = {
@@ -297,6 +297,13 @@ LAWFNS = _fns(
         F("set_conflict_rule", "governance", scope="none", why="sets the conflict rule of the calling law's own polity (P3.2; only "
           "a constitution-rank law may)", docs="requires", v2=True),
     ),
+    _module(
+        "amendment",                                                    # law.v2 (P3.4): laws propose laws and amendments (D-16: L3)
+        F("propose_law", "governance", scope="none", why="a draft of the calling law's own jurisdiction, decided by its procedure",
+          docs="requires", primitive="propose", v2=True),
+        F("propose_amendment", "governance", scope="none", why="target is a law of the calling law's own jurisdiction (checked: "
+          "same jurisdiction, rank at most the caller's); decided by its procedure", docs="requires", primitive="propose", v2=True),
+    ),
 )
 # P4.2: the power column of the rows every polity may call today (charter/powers.py; the legacy_reserve rows carry it on their own
 # line). Kept off the rows' lines, like the P1.7 block below.
@@ -347,8 +354,8 @@ def _hooks(*hooks: Hook) -> dict:
 HOOKTABLE = _hooks(
     Hook("on_enact", "()", "ignored", ("dispatch.py:do_enact",), None, note="also in every dry-run preview"),
     Hook("on_repeal", "()", "ignored", ("dispatch.py:do_repeal",), True, note="a law's repeal(target) runs it too"),
-    Hook("on_round_start", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run"), None),   # the round_start phase
-    Hook("on_round_end", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run"), None),       # the round_end phase
+    Hook("on_round_start", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run", "lawpreview.py:_window"), None),   # the round_start phase; the previewer
+    Hook("on_round_end", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run", "lawpreview.py:_window"), None),       # the round_end phase; the previewer
     Hook("on_harvest", "(agent, camp, x, y)", "deduct",
          ("dispatch.py:legacy_hooks", "kernel.py:Kernel.probe"), False, jur="agent:0",
          note="agents' harvests only (laws cannot harvest); Kernel.probe calls it in previews"),

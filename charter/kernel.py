@@ -20,6 +20,7 @@ from contextlib import contextmanager
 
 from charter import context as CX                                     # context: files and scratchpads (charter/context.py)
 from charter import accounts as AC                                     # accounts: owner keys -> holder records (P4.1)
+from charter import amendment as AM                                    # law.v2 (P3.4): amendment by procedure, proposals by law
 from charter import conflict as CF                                  # conflict: attacks, forts, assassin (off by default)
 from charter import credit as CR
 from charter import dispatch as D                                     # Kernel.apply: primitives, legacy hook aliases (P2.1)
@@ -651,6 +652,7 @@ class Kernel:
         if LK.enabled(k):                                              # law.v2: use(ref), public_of(lid) (charter/linker.py)
             api.update(LK.law_api(k, lid))
             api.update(D.law_api(k, lid))                              # law.v2 (P3.1): root_kind(chain) etc., law_id(), treasury()
+            api.update(AM.law_api(k, lid))                             # law.v2 (P3.4): propose_law, propose_amendment (from L3)
         return api
 
     # ------------------------------------------------------------------ laws
@@ -694,7 +696,11 @@ class Kernel:
 
     def enact(self, lid, via=None):
         """The enact primitive (dispatch.do_enact): via says how (procedure, veto_window, preview; else start, intervention or
-        kernel from the cause stack). Raises LawError when the law fails to load (callers record a failed proposal)."""
+        kernel from the cause stack). Raises LawError when the law fails to load (callers record a failed proposal).
+        law.v2 (P3.4): an amendment draft (record with `amends`) is not enacted itself: the amend primitive replaces its target's
+        code (via "procedure"; amendment.enact_amendment)."""
+        if self.w["laws"][lid].get("amends"):
+            return AM.enact_amendment(self, lid, via)
         self.apply("enact", jurisdiction=D.jur_of(self, lid), law=lid, via=via or D.via_of(self))
 
     def repeal(self, target, by_law=None, via=None):

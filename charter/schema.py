@@ -221,6 +221,8 @@ def _ann():
         **{f"law.gas.{x}": dict(types=("int",), range=(1, None)) for x in ("per_call", "python_depth", "per_cascade", "per_account_round",
                                                                             "depth_cap", "flag_limit", "flag_window")},
         **{f"law.gas.{x}": dict(types=("int",), range=NONNEG) for x in ("hook_cost", "prim_cost")},
+        "law.gas.preview": dict(types=("int",), range=(1, None)), "law.previews_per_turn": dict(types=("int",), range=NONNEG),
+        "law.preview_tokens": dict(types=("int",), range=(1, None)),
         "law.library.edition": dict(types=("int",), enum=(1, 2)),
         "law.library.access": dict(types=("str",), enum=("none", "catalogue", "instantiate")),
         "parallel_calls": dict(types=("int",), range=(1, None)),
@@ -414,6 +416,7 @@ EXTRA = {
     # law.v2 budgets (P3.1, review 09 §9.2, I-8, D-12): read by dispatch.gas_cfg only when law.v2 is on
     "law.gas.per_call": 10_000, "law.gas.python_depth": 20, "law.gas.per_cascade": 100_000, "law.gas.per_account_round": 1_000_000,
     "law.gas.depth_cap": 8, "law.gas.hook_cost": 20, "law.gas.prim_cost": 5, "law.gas.flag_limit": 3, "law.gas.flag_window": 5,
+    "law.gas.preview": 300_000, "law.previews_per_turn": 3, "law.preview_tokens": 1500,             # the law previewer (P3.5)
     "law.library.edition": 1,
     "law.library.access": "none",
 }
@@ -630,6 +633,9 @@ DOCS = {
     "law.gas.prim_cost": "law.v2: steps charged for each change a hook causes",
     "law.gas.flag_limit": "law.v2: flags within flag_window rounds that suspend a law",
     "law.gas.flag_window": "law.v2: rounds over which flags are counted",
+    "law.gas.preview": "law.v2: steps one preview_law may run (charter/lawpreview.py)",
+    "law.previews_per_turn": "law.v2: preview_law lookups each agent may make per round",
+    "law.preview_tokens": "law.v2: token budget of a rendered preview report",
     "law.library": "the law library's edition and what agents may do with it (ARCHITECTURE §3.11; charter/library.py)",
     "law.library.edition": "1: today's library laws (every existing spec) | 2: readable rewrites built from lib:* blocks (needs law.v2)",
     "law.library.access": "none | catalogue: agents see the lib:* blocks (refs, exports, code) | instantiate: catalogue, and library "

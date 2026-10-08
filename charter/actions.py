@@ -28,7 +28,8 @@ from charter import roles as R                                         # roles: 
 ACTIONS = AR.actions()                                                 # every action (charter/action_registry.py), in the old order
 CONTEXT_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module == "context")   # context: lookups and files; only when it is on
 MEDIA_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module in ("media", "scholars"))   # media2: outlets, licences, Scholars
-DM_ACTIONS = AR.dm_actions()                                           # private messages: the DM limit applies; fast mode's DM step delivers them
+LAW_V2_ACTIONS = ("amend",)                                            # law.v2 (P3.4): only in law.v2 worlds (off: unknown)
+DM_ACTIONS = AR.dm_actions()                                         # private messages: the DM limit applies; fast mode's DM step delivers them
 
 
 class ActionError(Exception):
@@ -122,6 +123,8 @@ def _act(k, aid: str, name: str, args: dict) -> str:
     hidden_here = (set() if CX.enabled(k) else set(CONTEXT_ACTIONS)) | (set() if MD.enabled(k) else set(MEDIA_ACTIONS))   # context, media2: off = unknown
     if not D.v2(k):                                                    # P3.5: preview_law exists only under law.v2
         hidden_here.add("preview_law")
+    if not D.v2(k):                                                     # law.v2 (P3.4): amend is unknown without it
+        hidden_here |= set(LAW_V2_ACTIONS)
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):
@@ -595,6 +598,45 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
     k.apply("propose", jurisdiction=None, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
     return f"Proposed {lid} '{law['title']}' ({law['cls']}); status: {k.w['laws'][lid]['status']}."
+
+
+def _amend(k, aid, law, code, reason="", intent=None):
+    """law.v2 (P3.4): propose new code for a law in force. The draft (amends = law) goes through the propose primitive and the
+    procedure of max(class of the old code, the new code, every following dependent after relinking) and max(rank); when it passes,
+    the law keeps its id, state, public and place in the order (charter/amendment.py)."""
+    from charter import amendment as AM
+    if not str(code or "").strip():
+        raise ActionError("amend needs the law's complete new code, not only a description. " + LAW_TEMPLATE)
+    law = str(law)
+    jid = J.law_jur(k, law)                                            # "J0" when jurisdictions are off
+    if J.enabled(k):
+        j = J.jurs(k).get(jid)
+        member = J.member_of(k, aid) == jid or bool(j and j["status"] == "hidden" and aid in j["hidden_members"])
+        if law in k.w["laws"] and not member:
+            raise ActionError(f"{law} is a law of {jid}; only its members can propose amendments to it")
+    if PW.has_power(k, jid, "propose_right"):
+        _need(k, aid, "propose", "propose amendments")
+    if PW.law_level(k, jid) == "L0":
+        raise ActionError("no laws can be made in this world (law level L0)")
+    try:
+        lid = AM.amendment_draft(k, law, str(code), aid, reason, intent=intent)
+        AM.check_level(k, jid, k.w["laws"][lid])
+    except L.LawError as e:
+        raise ActionError(f"your amendment was refused: {e}. " + (LAW_TEMPLATE if "syntax" in str(e) or "title" in str(e) else ""))
+    diff = None
+    if PW.has_power(k, jid, "dry_run"):
+        try:
+            diff = k.dry_run(lid)                                       # the amendment applied to the law on a copy of the world
+        except Exception as e:
+            k.w["laws"][lid]["status"] = "failed_check"                 # the dry run restored a copy of the world
+            k.log("proposal_check_failed", aid, {"law": lid, "error": str(e)}, vis=[aid])
+            raise ActionError(f"your amendment failed the 3-round dry run: {e}")
+    k.apply("propose", jurisdiction=D.jur_of(k, lid), draft=D.draft(k, lid), actor=aid, preview=diff)
+    k.decide(lid)
+    rec = k.w["laws"][lid]
+    deps = "; ".join(f"{d['law']} {d['outcome'].replace('_', ' ')}" for d in rec.get("dependents") or ())
+    return (f"Proposed {lid}, an amendment of {law} ({rec['cls']}, rank {rec['rank']})" + (f"; dependents: {deps}" if deps else "")
+            + f"; status: {k.w['laws'][lid]['status']}.")
 
 
 def _vote(k, aid, ballot, choice):

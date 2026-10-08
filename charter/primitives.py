@@ -475,11 +475,13 @@ _ROWS = [
       why={"compel": "secret powers: no law knows them", "gate": "secret powers: no law can see their use"}),
     # ------------------------------------------------------------------ legal acts (review 09 §5; routed by P2.3)
     P("propose", "core", "legal", ("jurisdiction", "draft"), "dispatch:do_propose", subject="jurisdiction", parties=("jurisdiction",),
-      legal=True, event="proposal", causes=("agent",), reads=("laws", "proposer"),
-      sites=("dispatch:do_propose", "actions:_propose", "jurisdictions:propose", "kernel:Kernel.new_law", "dispatch:legacy_hooks"),
-      why={"compel": "P3.3: propose_law / propose_amendment"},
-      notes="draft: dispatch.draft (code, class, rank, calls, hooks, rights granted/revoked/suspended); the action checks the right, "
-            "the law level and the 3-round dry run before the act; then the procedure decides (decide)"),
+      legal=True, event="proposal", causes=("agent", "law"), reads=("laws", "proposer"),
+      sites=("dispatch:do_propose", "actions:_propose", "jurisdictions:propose", "kernel:Kernel.new_law", "dispatch:legacy_hooks",
+             "actions:_amend", "amendment:propose_by_law"),
+      notes="draft: dispatch.draft (code, class, rank, calls, hooks, rights granted/revoked/suspended, imports, exports, amends); "
+            "the action checks the right, the law level and the 3-round dry run before the act; then the procedure decides "
+            "(decide). law.v2 (P3.4): the amend action and the law functions propose_law / propose_amendment (no dry run; the "
+            "procedure decides when the proposing call's cascade drains)"),
     P("decide", "core", "legal", ("jurisdiction", "law", "cls", "rank", "procedure_law"), "dispatch:do_decide", subject="jurisdiction",
       parties=("jurisdiction",), before=False, blockable=False, legal=True, event="proposal_failed", causes=("kernel",),
       sites=("dispatch:do_decide", "kernel:Kernel.decide", "kernel:Kernel._decide", "jurisdictions:decide", "kernel:Kernel.passed",
@@ -510,9 +512,13 @@ _ROWS = [
       notes="via: law (a law's repeal()), procedure (an enacted repeal law), intervention, kernel"),
     P("amend", "core", "legal", ("jurisdiction", "law", "old_sha", "new_sha", "diff", "via", "by"), "dispatch:do_amend",
       subject="jurisdiction", parties=("jurisdiction",), legal=True, entrenched=("fixer_patch",), event="patched",
-      causes=("agent", "kernel"), sites=("dispatch:do_amend", "actions:_patch", "kernel:Kernel.apply_patch"),
-      why={"compel": "P3.3: propose_amendment", "gate": "entrenched: fixer_patch (the Board's veto window reviews it)"},
-      notes="today only the Fixer's patch amends (via fixer; an intervention's via intervention); the patch action queues it"),
+      causes=("agent", "kernel"), sites=("dispatch:do_amend", "actions:_patch", "kernel:Kernel.apply_patch",
+                                         "amendment:enact_amendment"),
+      why={"compel": "laws propose amendments (propose_amendment: the propose primitive); the procedure amends",
+           "gate": "entrenched: fixer_patch (the Board's veto window reviews it)"},
+      notes="the Fixer's patch (via fixer; an intervention's via intervention; the patch action queues it); law.v2 (P3.4): an "
+            "amendment draft that passed its procedure (via procedure, amendment.enact_amendment; logged as amended; a block "
+            "strikes it down)"),
     P("suspend_law", "core", "legal", ("law", "error"), "kernel:Kernel.law_error", before=False, blockable=False, legal=True,
       event="law_error", causes=("kernel",), reads=("laws",), preview=("laws",), sites=("kernel:Kernel.law_error",),
       why={"gate": "a hook error: limited death of a law (review 09 §9)"}),
@@ -571,6 +577,7 @@ ACTION_PRIMITIVES = {
     "harvest": ("harvest", "move", "destroy", "end_life"), "create_agent": ("begin_life",),
     # politics
     "propose": ("propose",), "vote": ("cast_vote",), "veto": ("veto",), "name_successor": ("name_successor",), "patch": ("amend",),
+    "amend": ("propose",),                                               # law.v2 (P3.4): the amend primitive applies when it passes
     "rule": ("rule",),
     # force
     "forge": ("convert",), "fortify": ("fortify",), "attack": ("attack", "end_life"), "forge_dm": ("dm", "move"),

@@ -15,6 +15,7 @@ An entry:  register(name, purpose, section, core=False, pre=False, msg=False, ne
   needs     a tuple of requirements, all of which must hold:
               "mod:<key>"     spec <key>.enabled (or "mod:typed" for typed camps, "mod:leases", "mod:dm", "mod:shared_archive")
               "opt:<key>.<o>" spec <key>.<o> is not false (a module option that defaults to on, e.g. "opt:media2.polls")
+              "flag:<key>.<o>" spec <key>.<o> is true (an option that defaults to off, e.g. "flag:law.v2")
               "right:<r>"     the agent holds right r ("right:harvest:*" any harvest right)
               "cls:<c>"       the agent's class (or second class) is c; "notcls:<c>" it is not
               "level:<n>"     law level at least Ln
@@ -143,6 +144,9 @@ def _need(inst, a, rights, n) -> bool:
     if kind == "opt":
         mod, _, opt = v.partition(".")
         return (inst["spec"].get(mod) or {}).get(opt, True) is not False
+    if kind == "flag":
+        mod, _, opt = v.partition(".")
+        return bool((inst["spec"].get(mod) or {}).get(opt))
     if kind == "right":
         return any(r.startswith("harvest:") for r in rights) if v == "harvest:*" else v in rights
     if kind == "cls":
@@ -317,6 +321,9 @@ R("create_agent", "make a new agent (Makers): to order, or your own", "PRODUCE",
 R("propose", "write a law: change the rules", "POLITICS", core=True, needs=("right:propose", "level:1"),
   handler="actions:_propose", module="core", category="political", emits=("proposal", "proposal_check_failed", "proposal_preview", "jur_no_jurisdiction"), aliases={"law": "code", "text": "code", "source": "code"},
   doc='propose {"code": "<law source>", "intent": "plain-language statement"}: submit a law (needs propose)')
+R("amend", "rewrite a law in force, through the procedure", "POLITICS", core=True, needs=("right:propose", "level:1", "flag:law.v2"),
+  handler="actions:_amend", module="core", category="political", aliases={"target": "law", "law_id": "law", "text": "code", "source": "code", "why": "reason"},
+  doc='amend {"law": "L4", "code": "<the complete new law source>", "reason": "..."}: propose new code for a law in force (needs propose); it keeps its id, state and public data; the procedure of the highest class it or a law importing it reaches decides')
 R("vote", "decide a ballot", "POLITICS", core=True, needs=("level:1",), when=_k_ballot, edge=("vote",),
   handler="actions:_vote", module="core", category="political", emits=("vote",), aliases={"option": "choice", "vote": "choice", "answer": "choice", "value": "choice", "position": "choice", "selection": "choice", "ballot_id": "ballot"},
   doc='vote {"ballot": "B3", "choice": "yes"}: vote on a ballot you are in the electorate of (approval ballots: a list of names)')
@@ -561,7 +568,7 @@ R("invoke", "use a hidden power you know, or an action a law defined", "powers",
 # ---------------------------------------------------------------------- frozen older orders (see the module docstring)
 # actions.ACTIONS: the order the "unknown action" error lists actions in (it reaches logged results)
 ACTIONS_ORDER = (
-    "harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "request_fix",
+    "harvest", "run_python", "post", "dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend", "request_fix",
     "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive", "publish", "write_digest", "report",
     "create_channel", "channel_post", "add_member", "remove_member", "close_channel", "anon_post", "set_dm_limit", "lend",
     "accept_loan", "repay_loan", "extend_loan", "contribute", "pay_tribute", "reply", "forge_dm", "bequest", "name_successor",
@@ -575,7 +582,7 @@ ACTIONS_ORDER = (
     "library_read")
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
-    "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch",
+    "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
     "request_fix", "invoke", "accuse", "respond", "rule", "read_archive", "search_archive", "write_archive", "publish",
     "write_digest", "report", "create_channel", "channel_post", "add_member", "remove_member", "close_channel", "anon_post", "lend",
     "accept_loan", "repay_loan", "extend_loan", "set_dm_limit", "contribute", "pay_tribute", "manual", "manual_search",
