@@ -400,11 +400,16 @@ EXTRA = {
     "prompts.manual": None,
     "prompts.profiles": {},
     "prompts.assign": [],
+    "law.v2": False,
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
 DOCS = {
-    "endowment_gini": "target Gini of starting holdings (lognormal values tuned to it)",
+    "law": "the legal system's semantics (review 09; ARCHITECTURE §6)",
+    "law.v2": "new-style law hooks before_<primitive>(p, chain) / after_<primitive>(p, chain) that fire for every change whatever "
+              "caused it, cascades drained at the end of each root cause, gas per call, cascade and account, depth cap 8, flags "
+              "(charter/dispatch.py, P3.1); false: today's hooks only (every existing run)",
+    "endowment_gini":"target Gini of starting holdings (lognormal values tuned to it)",
     "veto_window": "rounds the Board has to veto a structural or procedural law",
     "fixer_per_round": "patches the Fixer may make per round",
     "fixer_objective": "override text for the Fixer objective",

@@ -183,6 +183,20 @@ E("repeal", "kernel", "legal_act", "public", "official", "agents", primitive="re
 E("procedure_restored", "kernel", "legal_act", "public", "event", "agents",
   note="rendered since the event registry (was dropped from feeds)", primitive="set_procedure")
 E("law_error", "kernel", "legal_act", "public", "official", "agents", primitive="suspend_law")
+# law.v2 (P3.1, review 09 §9.4, D-18): blocks, charges, flags and halting points of new-style hooks. Never logged without law.v2.
+E("proposal_blocked", "dispatch", "legal_act", "public", "official", "agents", primitive="propose",
+  note="a before_propose hook blocked a draft before its procedure ran (with the laws and the reason)")
+E("primitive_blocked", "dispatch", "summary", "public|parties|monitor", "event", "agents",
+  note="a before-hook blocked a change: public for legal acts, else the agents it concerns; monitor when the cause could not be "
+       "refused and the change went ahead (data.overridden)")
+E("law_charged", "dispatch", "legal_act", "parties", "event", "agents", primitive="move",
+  note="a before-hook's charge, paid by the payer to the charging law's treasury (the payer is told)")
+E("law_flagged", "dispatch", "summary", "public", "official", "agents",
+  note="a law's hook hit a limit (gas_call, depth, gas_cascade, gas_round); flag_limit flags in flag_window rounds suspend it")
+E("account_out_of_gas", "dispatch", "summary", "public|parties", "event", "agents",
+  note="an account (polity) used its gas for the round: its laws' new-style hooks are skipped until the next round; members told")
+E("cascade_halted", "dispatch", "record", "monitor", "silent", None,
+  note="a cascade halted (per-cascade gas) or dropped queued reactions of dead invocations")
 E("patch_submitted", "actions", "legal_act", "public", "official", "agents", act="patch", primitive="amend")
 E("patched", "kernel", "legal_act", "public", "official", "agents", primitive="amend")
 E("patch_failed", "kernel", "legal_act", "public", "official", "agents", primitive="amend")

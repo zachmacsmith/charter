@@ -23,6 +23,8 @@ from charter import generator, manual, runner, scorer
 from charter import spec as S
 from charter.kernel import Kernel
 
+import charter_law_v2_laws as V2
+
 GOLDEN = Path(__file__).parent / "fixtures" / "charter_golden.json"
 
 # society, shrunk: every post-review module on (context, conflict, media2, jurisdictions, life with mortality, roles with the
@@ -42,7 +44,10 @@ CASES = {
                                        "outside_power.enabled=true", "outside_power.every=2"]),
     "society_small_4": ("society", 5, SOCIETY_SMALL),
     "E2_rng2_drift_5": ("E2", 3, ["rounds=5", "rng_version=2", "conditions.drift=true", "camps.drift_every=2"]),   # P5.3 streams
+    # P3.1: law.v2 (new-style hooks from any cause, cascades, gas) with library-style v2 laws (tests/charter_law_v2_laws.py) in force
+    "society_law_v2": ("society", 5, SOCIETY_SMALL + ["rounds=3", "law.v2=true", "start_laws=" + json.dumps(V2.GOLDEN_LAWS)]),
 }
+V2_CASES = {"society_law_v2"}                          # their start laws are test fixtures: registered in library.LIB while they run
 
 PROMPT_CASES = {                                       # (preset, seed): system prompt and manual of every agent, with a kernel
     "prompts_society_5": ("society", 5),
@@ -66,6 +71,13 @@ def score_fingerprint(out: Path) -> dict:
 
 
 def fingerprint(name: str, tmp: Path) -> dict:
+    if name in V2_CASES:
+        with V2.registered():
+            return _fingerprint(name, tmp)
+    return _fingerprint(name, tmp)
+
+
+def _fingerprint(name: str, tmp: Path) -> dict:
     preset, seed, sets = CASES[name]
     sp = S.apply_overrides(S.load(preset), sets + ["shared_archive.enabled=false"])
     inst = generator.generate(sp, seed)

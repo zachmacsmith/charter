@@ -324,19 +324,66 @@ def resolve(spec: dict) -> dict:
         if n in off:
             continue
         mapping[n] = t
-    return {"preset": preset, "mapping": mapping}
+    out = {"preset": preset, "mapping": mapping}
+    if (spec.get("law") or {}).get("v2"):                               # law.v2 (P3.1): the new-style hooks, prompt and article
+        out["v2"] = True
+    return out
+
+
+# ---------------------------------------------------------------------- law.v2 hooks (P3.1): documented only in law.v2 worlds
+V2_PROMPT = ("Hooks on any change: before_<change>(p, chain) and after_<change>(p, chain) run for every change of that kind, "
+             "whoever caused it (an agent, a law, the world). p is the change (a copy); chain lists its causes, root first. "
+             "before_ may return False (block), a number (a charge paid to your treasury) or "
+             '{"block", "charge", "reason"}; after_ reacts. Helpers: root_kind(chain), caused_by_agent(chain), '
+             "caused_by_law(chain, law), chain_laws(chain), law_id(), treasury(). Changes: move, harvest, end_life, propose, "
+             "enact, ... (codex/law/v2-hooks lists them all).")
+V2_LIMITS = ("Limits: each hook call has 10,000 steps; a cascade (everything one action, world event or round step causes, with every "
+             "law's reactions) has 100,000; each jurisdiction's laws together have 1,000,000 per round; a law can cause changes at "
+             "most 8 reactions deep. A hook that runs out stops (its changes so far stand) and its law is flagged publicly; 3 flags "
+             "within 5 rounds suspend the law. A law never gates its own doings (or its own charges), and an after-hook is never "
+             "called for a change it made itself. Old hooks (on_transfer, on_harvest, ...) keep their meaning.")
+
+
+def v2_doc(spec: dict, original: str) -> str:
+    """The prompt's law-language text in worlds without the hidden layer's law_docs mapping: unchanged, plus the law.v2 hooks line
+    in law.v2 worlds."""
+    return original + ("\n" + V2_PROMPT if (spec.get("law") or {}).get("v2") else "")
+
+
+def v2_article() -> dict:
+    """codex/law/v2-hooks: every hookable change (the routed primitives), its payload, and what a before-verdict can do to it."""
+    from charter import dispatch as D, primitives as PR
+    lines = ["# Hooks on any change (law.v2)", "", V2_PROMPT, "", V2_LIMITS, "",
+             "Verdicts of before_<change>: None or True (no objection), False (block), a number > 0 (a charge of the change's good "
+             "to its payer, paid to your treasury after the change), or a dict with block, charge, reason (and the change's "
+             "directives). A block of an agent's own action fails the action with your law's id and reason; a block of a law's "
+             "call ends that call. after_<change> gets p['result'] too.", "", "Changes you can hook:"]
+    for n in D.ROUTED:
+        P = PR.get(n)
+        hooks = [h for h in P.hooks]
+        if not hooks:
+            continue
+        what = ", ".join(hooks) + f" -- p: {', '.join(P.params)}"
+        notes = [x for x, on in (("cannot be blocked", P.before and not P.blockable),
+                                 ("a number charges " + (P.charge or ("",))[0], bool(P.charge)),
+                                 ("a change to the rule system: hooking it makes a law procedural", P.legal)) if on]
+        lines.append(f"- `{n}`: {what}" + (f" ({'; '.join(notes)})" if notes else ""))
+    lines += ["", "These work in any law of a world with law.v2, whether or not the rules you were given mention them."]
+    return {"tier": "common", "title": "Hooks on any change (law.v2)", "text": "\n".join(lines) + "\n", "documents": list(D.HELPERS)}
 
 
 def api_doc(resolved: dict, original: str) -> str:
     """The prompt's law-language section. Preset full without overrides: the original text, unchanged."""
     m = resolved["mapping"]
     if resolved["preset"] == "full" and all(t == "prompt" or n in ALWAYS_ARTICLE or n in ARTICLE_ONLY for n, t in m.items()):
-        return original
+        return original + ("\n" + V2_PROMPT if resolved.get("v2") else "")
     lines = [SKELETON]
     for g in GROUP_ORDER:
         items = [ENTRIES[n]["prompt"] for n in ENTRIES if m.get(n) == "prompt" and ENTRIES[n]["group"] == g]
         if items:
             lines.append(f"{g}: " + ", ".join(items))
+    if resolved.get("v2"):
+        lines.append(V2_PROMPT)
     lines.append(FOOTER)
     return "\n".join(lines)
 
@@ -364,4 +411,6 @@ def articles(resolved: dict) -> dict:
                 body.append(f"- `{sig}`" + (f": {e['detail']}" if e["detail"] else ""))
             body += ["", "These work in any law, whether or not the rules you were given mention them."]
             out[aid] = {"tier": tier, "title": title, "text": "\n".join(body) + "\n", "documents": names}
+    if resolved.get("v2"):
+        out["codex/law/v2-hooks"] = v2_article()
     return out

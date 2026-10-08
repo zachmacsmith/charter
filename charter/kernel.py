@@ -263,11 +263,15 @@ class Kernel:
     def bal(self, owner, item):
         if owner == "reserve":
             return self.w["reserve"].get(item, 0.0)
+        if isinstance(owner, str) and owner.startswith("estate:"):           # law.v2: a deceased's estate account until probate
+            return MO.estate_bal(self, owner.split(":", 1)[1], item)
         if isinstance(owner, str) and owner.startswith("reserve:"):         # jurisdictions: another jurisdiction's reserve
             return J.pool(self, owner).get(item, 0.0)
         return self.agent(owner)["holdings"].get(item, 0.0)
 
     def _add(self, owner, item, qty):
+        if isinstance(owner, str) and owner.startswith("estate:"):           # law.v2: an estate account (journaled internal write)
+            return MO.estate_add(self, owner.split(":", 1)[1], item, qty)
         tgt = self.w["reserve"] if owner == "reserve" else J.pool(self, owner) if isinstance(owner, str) and owner.startswith("reserve:") \
             else self.agent(owner)["holdings"]                           # jurisdictions: "reserve:<jid>"
         tgt[item] = round(tgt.get(item, 0.0) + qty, 6)
@@ -300,6 +304,8 @@ class Kernel:
             return None
         if vis == "public" and "jur" in self.w:                          # jurisdictions: events about a hidden one reach its members only
             vis = J.vis(self, data, vis)
+        if getattr(self, "_unhooked", False) and isinstance(data, dict):   # law.v2: a change in a halted cascade ran without hooks
+            data = {**data, "unhooked": True}
         chain = list(self._causes)                                     # the cause chain, outermost (the round) first
         hide = getattr(self, "_concealed", None)
         if hide and vis != "monitor":                                  # an event that hides its actor (anonymous post, forged DM, covert
@@ -321,7 +327,7 @@ class Kernel:
     #   {"intervention": "iv1"}                       reserved (interventions)
     # Frames are never mutated once pushed, so events share them. The stack is empty between rounds (checkpoints hold none).
     # Size: kind-keyed frames add ~25% to events.jsonl in the golden runs; {"kind": ..., ...} frames added ~40%.
-    CAUSE_KINDS = ("round", "phase", "turn", "action", "law", "world", "kernel", "intervention")
+    CAUSE_KINDS = ("round", "phase", "turn", "action", "law", "world", "kernel", "intervention", "primitive")   # primitive: law.v2
 
     @contextmanager
     def concealing(self, *agents):
@@ -353,7 +359,8 @@ class Kernel:
         """Push a cause frame for the duration of the block: `with k.cause("law", lid, hook="on_transfer"): ...`. Details that
         are None are left out. root=True (an action item; later phase steps, world events, interventions) opens a cascade
         (dispatch.Cascade) whose after-queue drains when the frame exits; the flag is not part of the frame. A root frame inside
-        another joins the outer cascade (P3.1 makes nesting an error)."""
+        another joins the outer cascade. The after-queue drains while the root frame is still on the stack (law.v2, P3.1: each
+        queued hook runs in the cause context of the change it reacts to)."""
         assert kind in self.CAUSE_KINDS, kind
         n = len(self._causes)
         self._causes.append({kind: value, **{x: v for x, v in info.items() if v is not None}})
@@ -364,9 +371,13 @@ class Kernel:
         try:
             yield
         finally:
-            del self._causes[n:]
-            if opened:
-                D.drain(self, cascades.pop())
+            try:
+                if opened:
+                    D.drain(self, cascades[-1])
+            finally:
+                if opened:
+                    cascades.pop()
+                del self._causes[n:]
 
     def _cascade_stack(self) -> list:
         """The open cascades (at most one in P2.1); empty between rounds, so checkpoints and dry runs hold none."""
@@ -378,12 +389,14 @@ class Kernel:
         return cs[-1] if cs else None
 
     def chain(self, viewer=None) -> tuple:
-        """The cause chain from the open root frame inward, as {"kind", "id", ...meta} copies (dispatch.frame_view); () outside
-        any root frame. `viewer` (a law id) drops what a law may not see (a turn's call key); P3.1 adds the rest of review 09 §4.4."""
+        """The cause chain from the open root frame inward, as {"kind", "id", ...meta} copies (dispatch.chain_view); () outside
+        any root frame (an implicit cascade's chain starts with its kernel:<primitive> root). `viewer` (a law id) redacts what a law
+        may not see (review 09 §4.4, D-18): the turn's call key, concealed actors, the observer, interventions, hidden laws."""
         cas = self.cascade()
         if cas is None:
             return ()
-        return tuple(D.frame_view(f, viewer) for f in self._causes[cas.index:])
+        return D.chain_view(self, self._causes[cas.index:], viewer, implicit_root=cas.root if cas.implicit else None,
+                            concealed=tuple(getattr(self, "_concealed", None) or ()), turn_agent=self.current_turn_agent())
 
     def current_cause(self) -> tuple:
         """The active cause chain (outermost first), as copies: read-only for callers such as law hooks."""
@@ -435,7 +448,11 @@ class Kernel:
 
     def call(self, lid, fn, *args):
         with self.cause("law", lid, hook=getattr(fn, "__name__", None)):
-            return self.limited(fn, *args)
+            try:
+                return self.limited(fn, *args)
+            except D.Blocked as e:                                     # law.v2: a change the law asked for was blocked by another
+                self.w["effects"]["kernel_refusals"].append(e.reason)  # law: its call ends there, without fault (never raised
+                return None                                            # without law.v2)
 
     def api_for(self, lid):
         k = self
@@ -632,6 +649,7 @@ class Kernel:
 
     def new_law(self, code, author, intent_override=None):
         tree = L.check(code)
+        self._check_hooks(code)
         title, intent = L.header(code)
         cls = L.classify(tree)
         self.w["law_seq"] += 1
@@ -641,9 +659,20 @@ class Kernel:
                                "repeal_target": L.is_repeal(tree), "defines_action": L.uses_define_action(tree), "preview": None}
         return lid
 
+    def _api(self, lid) -> dict:
+        """A law's namespace API: api_for, plus under law.v2 the chain helpers, law_id() and treasury() (dispatch.law_helpers)."""
+        api = self.api_for(lid)
+        return {**api, **D.law_helpers(self, lid)} if D.v2(self) else api
+
+    def _check_hooks(self, code) -> None:
+        """R5: new-style before_<p>/after_<p> hooks need law.v2 (and a routed primitive with that phase)."""
+        if "before_" in code or "after_" in code:
+            L.check_hooks(L.check(code), D.v2(self), D.ROUTED)
+
     def _load(self, lid):
         law = self.w["laws"][lid]
-        ns = L.load_module(law["code"], lid, self.api_for(lid), law["state"], self.limited)
+        self._check_hooks(law["code"])
+        ns = L.load_module(law["code"], lid, self._api(lid), law["state"], self.limited)
         ns["title"] = ns["intent"] = None
         ns.update({"title": self.api_for(lid)["title"]})               # the API function, not the module's title string
         self.ns[lid] = ns
@@ -771,7 +800,7 @@ class Kernel:
         self.ns = {}
         for lid, data in st["ns_data"].items():
             law = self.w["laws"][lid]
-            ns = L.load_module(law["code"], lid, self.api_for(lid), law["state"], self.limited)
+            ns = L.load_module(law["code"], lid, self._api(lid), law["state"], self.limited)
             ns["title"] = ns["intent"] = None
             ns.update({"title": self.api_for(lid)["title"]})
             ns.update(data)
@@ -911,12 +940,13 @@ class Kernel:
         before = self.view()
         self.dry = True
         try:
-            self.enact(lid, via="preview")
-            for _ in range(rounds):
-                self.hooks("on_round_start", self.r)
-                self.hooks("on_round_end", self.r)
-                self._close_ballots_dry()
-                self.w["round"] += 1
+            with D.isolated(self):                                      # law.v2: the preview's cascades are its own
+                self.enact(lid, via="preview")
+                for _ in range(rounds):
+                    self.hooks("on_round_start", self.r)
+                    self.hooks("on_round_end", self.r)
+                    self._close_ballots_dry()
+                    self.w["round"] += 1
             after = self.view()
             return self.diff(before, after)
         finally:
@@ -1112,12 +1142,12 @@ class Kernel:
             self.w["dm_sent"] = {}
 
         def settle_loans():
-            with self.cause("kernel", "loans"):
+            with self.cause("kernel", "loans", root=True):               # P3.1: kernel round steps are root frames (cascades)
                 self.settle_loans()
 
         def pending_patches():
             for p in list(self.w["pending_patches"]):
-                with self.cause("kernel", "patch", law=p["law"]):
+                with self.cause("kernel", "patch", law=p["law"], root=True):
                     self.apply_patch(p["law"], p["patch"])
             self.w["pending_patches"] = []
 
@@ -1137,11 +1167,11 @@ class Kernel:
         1), typed camps' sealed inputs (step 2), the laws' on_round_end, jurisdictions (step 4: leaving, joining, declarations),
         camps' world update (step 5), life (step 6: deaths of old age and births), loans."""
         def close_ballots():
-            with self.cause("kernel", "ballots"):
+            with self.cause("kernel", "ballots", root=True):
                 self.close_ballots()
 
         def veto_queue():
-            with self.cause("kernel", "vetoes"):
+            with self.cause("kernel", "vetoes", root=True):
                 self.process_veto_queue()
 
         def regrow():
@@ -1150,7 +1180,7 @@ class Kernel:
                     self.apply("regrow", camp=cid)
 
         def expire_cases():
-            with self.cause("kernel", "cases"):
+            with self.cause("kernel", "cases", root=True):
                 self._expire_cases()
 
         def record():
@@ -1186,19 +1216,22 @@ class Kernel:
             return None
         plid, fn = self.fnreg[key]
         snap = self._snapshot()
-        self.dry = True
+        self.dry = self.quiet = True                                    # R4: no new-style hook runs in an internal probe
         try:
-            return self.call(plid, fn, Proposal("probe", author, "probe", "probe", cls, self.r))
+            with D.isolated(self):
+                return self.call(plid, fn, Proposal("probe", author, "probe", "probe", cls, self.r))
         except L.LawError:
             return None
         finally:
-            self.dry = False
+            self.dry = self.quiet = False
             self._restore(snap)
 
     def probe(self, kind):
         """What active laws would do to a test harvest or transfer (effect-based, rolled back): used by effect predicates."""
         snap = self._snapshot()
-        self.dry = True
+        self.dry = self.quiet = True                                    # R4: no new-style hook runs in an internal probe
+        iso = D.isolated(self)
+        iso.__enter__()
         try:
             self._reset_effects()
             agents = [a for a, v in self.w["agents"].items() if v["cls"] not in ("board", "fixer")] or list(self.w["agents"])
@@ -1221,7 +1254,8 @@ class Kernel:
         except L.LawError:
             return {"deduction_frac": 0.0, "tax_frac": 0.0, "gazetted": 0}
         finally:
-            self.dry = False
+            iso.__exit__(None, None, None)
+            self.dry = self.quiet = False
             self._restore(snap)
 
     def decisive_set(self, cls="procedural"):

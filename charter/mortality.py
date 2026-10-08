@@ -69,6 +69,11 @@ def state(k) -> dict:
     return st
 
 
+def _hooks_live(k) -> bool:
+    from charter import dispatch as D
+    return D.hooks_live(k)
+
+
 def alive(k, aid) -> bool:
     v = k.w["agents"].get(aid)
     return bool(v) and v.get("departed") is None and v["cls"] != "observer"
@@ -120,7 +125,17 @@ def estate_take(k, aid, item, qty, why) -> float:
     return take
 
 
-def _ledger(h, item, qty) -> None:                                     # Kernel._add's arithmetic, on an estate's goods
+def estate_add(k, aid, item, qty) -> None:
+    """law.v2: the owner key "estate:<aid>" in Kernel._add (a move into or out of an open estate, e.g. an inheritance law's
+    after_end_life): a journaled internal write. Refused (LawError) once the estate is probated or if there is none."""
+    e = (k.w.get("mortality") or {}).get("estates", {}).get(aid)
+    if not e or e["status"] != "open":
+        raise L.LawError(f"no open estate for {aid}")
+    _ledger(e["holdings"], item, qty)
+    e["journal"].append({"op": "move", "item": item, "qty": qty})
+
+
+def _ledger(h, item, qty) -> None:                                    # Kernel._add's arithmetic, on an estate's goods
     h[item] = round(h.get(item, 0.0) + qty, 6)
     if abs(h[item]) < 1e-9:
         del h[item]
@@ -180,6 +195,14 @@ def _disable(k, aid, cause, by, public, named, v) -> dict:
                   vis="public" if public else "monitor")
 
     def bequest():                                                        # probate: today's bequest, from the estate
+        cas = k.cascade()
+        if cas is not None and _hooks_live(k):
+            def probate():                                                # law.v2 (P3.1): at the end of the cascade, after the
+                _release(k, aid)                                          # after_end_life hooks (review 09 §13.3)
+                _run_bequest(k, aid, cause, by if named else None)
+            cas.at_end(k, probate)
+            d["outcome"] = {"probate": "deferred"}
+            return
         _release(k, aid)
         d["outcome"] = _run_bequest(k, aid, cause, by if named else None)  # an unnamed (covert) attacker gets nothing and gives nothing away
 

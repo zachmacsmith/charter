@@ -110,7 +110,10 @@ def act(k, aid: str, name: str, args: dict) -> str:
     """Dispatch one action; everything it logs carries an action cause frame (kernel.cause), a root frame: the action item's
     primitives (Kernel.apply) form one cascade."""
     with k.cause("action", str(name), agent=None if k.current_turn_agent() == aid else aid, root=True):
-        return _act(k, aid, name, args)
+        try:
+            return _act(k, aid, name, args)
+        except D.Blocked as e:                                          # law.v2: a law's before-hook blocked this action's change
+            raise ActionError(str(e)) from None
 
 
 def _act(k, aid: str, name: str, args: dict) -> str:
