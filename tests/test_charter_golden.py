@@ -46,6 +46,9 @@ CASES = {
     "E2_rng2_drift_5": ("E2", 3, ["rounds=5", "rng_version=2", "conditions.drift=true", "camps.drift_every=2"]),   # P5.3 streams
     # P3.1: law.v2 (new-style hooks from any cause, cascades, gas) with library-style v2 laws (tests/charter_law_v2_laws.py) in force
     "society_law_v2": ("society", 5, SOCIETY_SMALL + ["rounds=3", "law.v2=true", "start_laws=" + json.dumps(V2.GOLDEN_LAWS)]),
+    "E2_library2_6": ("E2", 3, ["rounds=6", "law.v2=true", "law.library.edition=2", "law.library.access=catalogue",   # P3.9
+                                "start_laws=[Crown Currency, Loan Registry, Usury Law, Wealth Tax, Harvest Levy, Transfer Tax, "
+                                "Mint by Ballot]"]),
 }
 V2_CASES = {"society_law_v2"}                          # their start laws are test fixtures: registered in library.LIB while they run
 

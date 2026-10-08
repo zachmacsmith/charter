@@ -273,7 +273,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         rs = RunState(shared_snap=shared_snap, const=const, agents=agents, out=out)
         _setup(k, inst, rs, schedule, live, notices, 0, log)          # interventions: --live, --notice and setup entries
         for name in inst["spec"].get("start_laws") or []:              # library laws in force from round 0 (spec start_laws)
-            k.enact(k.new_law(LB.LIB[name]["code"], "constitution"))
+            k.enact(k.new_law(LB.code(name, inst), "constitution"))    # law.library.edition 2: the rewrite (P3.9)
         rs.start_values = {a: k.holdings_value(a) for a in agents}
         reason_f, ev_f = open(out / "reasoning.jsonl", "w"), open(out / "events.jsonl", "w")
         (out / "turns.jsonl").write_text("")

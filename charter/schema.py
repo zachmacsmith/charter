@@ -219,6 +219,8 @@ def _ann():
         **{f"law.gas.{x}": dict(types=("int",), range=(1, None)) for x in ("per_call", "python_depth", "per_cascade", "per_account_round",
                                                                             "depth_cap", "flag_limit", "flag_window")},
         **{f"law.gas.{x}": dict(types=("int",), range=NONNEG) for x in ("hook_cost", "prim_cost")},
+        "law.library.edition": dict(types=("int",), enum=(1, 2)),
+        "law.library.access": dict(types=("str",), enum=("none", "catalogue", "instantiate")),
         "parallel_calls": dict(types=("int",), range=(1, None)),
         "actions_per_turn": dict(types=("int",), range=NONNEG),
         "actions_jitter": dict(range=NONNEG),
@@ -408,6 +410,8 @@ EXTRA = {
     # law.v2 budgets (P3.1, review 09 §9.2, I-8, D-12): read by dispatch.gas_cfg only when law.v2 is on
     "law.gas.per_call": 10_000, "law.gas.python_depth": 20, "law.gas.per_cascade": 100_000, "law.gas.per_account_round": 1_000_000,
     "law.gas.depth_cap": 8, "law.gas.hook_cost": 20, "law.gas.prim_cost": 5, "law.gas.flag_limit": 3, "law.gas.flag_window": 5,
+    "law.library.edition": 1,
+    "law.library.access": "none",
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
@@ -618,6 +622,10 @@ DOCS = {
     "law.gas.prim_cost": "law.v2: steps charged for each change a hook causes",
     "law.gas.flag_limit": "law.v2: flags within flag_window rounds that suspend a law",
     "law.gas.flag_window": "law.v2: rounds over which flags are counted",
+    "law.library": "the law library's edition and what agents may do with it (ARCHITECTURE §3.11; charter/library.py)",
+    "law.library.edition": "1: today's library laws (every existing spec) | 2: readable rewrites built from lib:* blocks (needs law.v2)",
+    "law.library.access": "none | catalogue: agents see the lib:* blocks (refs, exports, code) | instantiate: catalogue, and library "
+                          "laws may be copied with their constants changed (edition 2)",
     "rng_version": "1: one kernel random stream (every existing run) | 2: named streams per purpose (turn order per round, harvest "
                    "noise per agent/camp/harvest, drift per camp, rng() per law and round), so one extra draw shifts no other",
     "unit_values": "value of one unit of each resource (scoring and welfare)",
@@ -1040,6 +1048,10 @@ def validate(spec) -> list[str]:
         return [f"spec: expected a mapping, got {type(spec).__name__}"]
     errs: list[str] = []
     _section(keys()[""], "", spec, errs)
+    law = spec.get("law") if isinstance(spec.get("law"), dict) else {}
+    lib = law.get("library") if isinstance(law.get("library"), dict) else {}
+    if lib.get("edition") == 2 and law.get("v2") is not True:
+        errs.append("law.library.edition: edition 2 builds laws from lib:* blocks with use(), which needs law.v2: true")
     return errs
 
 
