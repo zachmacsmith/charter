@@ -34,7 +34,7 @@ def _spec(preset="E2", extra=()):
 def test_examples_pass_and_every_institution_goal_has_examples():
     assert GR.check_examples(list(GR.INSTITUTION)) == []
     assert all(len(g.examples) >= 1 for g in GR.INSTITUTION.values())
-    assert set(GR.INSTITUTION) == {"Company", "Bank", "Insurer", "Cartel", "Protection racket"}
+    assert set(GR.INSTITUTION) == {"Company", "Bank", "Insurer", "Cartel", "Protection racket", "Chronicler"}   # Chronicler: the Historian's
 
 
 def test_institution_goals_stay_out_of_the_catalogue():
@@ -59,7 +59,7 @@ def test_text_then_rule_is_what_the_agent_is_shown():
 
 def test_rules_doc_lists_the_institution_goals():
     doc = GR.rules_markdown()
-    assert "## Institution goals (5 goals, P6.4)" in doc and all(f"| {n} |" in doc for n in GR.INSTITUTION)
+    assert "## Institution goals (6 goals, P6.4)" in doc and all(f"| {n} |" in doc for n in GR.INSTITUTION)
 
 
 # ------------------------------------------------------------------ History accessors

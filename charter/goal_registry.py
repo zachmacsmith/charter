@@ -1014,7 +1014,7 @@ _INSTITUTION_ROWS = [
          params=IG.defaults_sampler("Protection racket"), score=IG.h_protection, needs=frozenset({'events', 'states'})),
     # Not an institution goal, but kept with them for the same reasons (never drawn: weight 0; assigned with goals.explicit; text
     # then rule shown): the Historian's goal, scored on its directory (charter/directories.py, snapshot["directories"]).
-    Goal('Chronicler', 'Knowledge', 0, gate="institution", requires=('directories',), share="direct",
+    Goal('Chronicler', 'Institution', 0, gate="institution", requires=('directories',), share="direct",
          text='write the history of this world in your {dir}: round-by-round accounts (rounds/r01.md, ...), profiles of '
               'individuals (people/<Name>.md) and evidence (evidence/), covering this world and what earlier worlds left',
          rule='Over the scored rounds, for the directory {dir} (0 unless you kept it), {combine}: (a) the share of the scored '

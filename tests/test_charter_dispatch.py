@@ -269,6 +269,7 @@ def test_routed_rows_name_dispatch_functions():
     want |= {"create_contract", "deposit_escrow", "set_allowance", "pull", "breach"}               # P4.3: contracts
     want |= {"open_case", "answer_case", "appeal", "set_court_rule"}  # courts v2
     want |= {"set_publication"}                                         # review 12 WP2 (W8c)
+    want |= {"dir_write", "dir_grant"}                                  # directories (charter/directories.py)
     want |= {"swap", "open_fund"}                                     # P4.4 (W6e)
     want |= {"authorize", "deauthorize", "act_for"}                   # P4.5 (W7a): agency
     want |= {"set_company_rule"}                                      # W8e: company law
@@ -289,7 +290,7 @@ def test_routed_rows_name_dispatch_functions():
             assert qual == f"do_{n}", p.fn
             assert D._fn(p) is getattr(D, f"do_{n}") and callable(D._fn(p))                     # the package re-exports it
         else:                                                           # W8b: the owner module's change is the apply function
-            assert n in w8b and qual.startswith("change_") and callable(D._fn(p)), p.fn
+            assert (n in w8b or mod == "directories") and qual.startswith("change_") and callable(D._fn(p)), p.fn   # + directories
         assert set(D.OPTIONS[n]).isdisjoint(p.params), n
     assert not any(p.routed for n, p in PR.PRIMITIVES.items() if n not in want)
 
