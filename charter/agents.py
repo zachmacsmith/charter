@@ -535,6 +535,9 @@ def render_event(k, e, viewer=None) -> str | None:
         return f"{tag} law {d.get('law')} set the conflict rule of {d.get('jurisdiction')}: {d.get('rule')}"
     if t == "compelled":                                                # law.v2 (P3.7, D-5): a law's change that concerns you
         return f"{tag} {compelled_text(d, viewer)}"
+    if t == "law_refused":                                              # W7e (law.v2): an after-hook refused after your action
+        return (f"{tag} law {d.get('law')} refused after your {d.get('primitive')} (its {d.get('hook') or 'hook'} was undone; "
+                f"your action stands): {d.get('reason') or 'no reason given'}")
     if t == "story":
         return f"{tag} STORY by {who}: {d['headline']}\n  {d['text']}"
     if t == "digest":
@@ -573,7 +576,8 @@ def state_view(k, aid: str) -> str:
                       for c, v in w["camps"].items() if not v.get("secret") and (v.get("known_by") is None or aid in v["known_by"] or k.has(aid, "harvest:" + c)))
     curs = "; ".join(f"{c}: P={k.price(c):.4g}, supply {v['supply']:.4g}, {'backed' if v['backed'] else 'UNBACKED'}"
                      + (", convertible" if v.get("convertible") else "") + CR.currency_note(k, c, v) for c, v in w["currencies"].items()) or "none"
-    laws = "; ".join(f"{l['id']} '{l['title']}' ({l['cls']})" for l in k.active_laws()) or "none"
+    from charter import dispatch as D                                  # W7e: a law's declared window (law.v2)
+    laws = "; ".join(f"{l['id']} '{l['title']}' ({l['cls']}){D.window_note(k, l['id'])}" for l in k.active_laws()) or "none"
     ballots = "; ".join(f"{b['id']}: {b['question']} {b['options']}" for b in w["ballots"].values()
                         if b["status"] == "open" and aid in b["electorate"]) or "none"
     lines = [f"Your holdings: {hold} (value {k.holdings_value(aid):.4g}). Your rights: {rights}.",

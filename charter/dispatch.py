@@ -874,7 +874,8 @@ def draft(k, lid) -> dict:
     never parses code. calls: the law-API functions it calls (sorted); hooks: the hooks it defines; rights: constant rights it
     grants, revokes or suspends; repeals: a repeal law's target. rank: the record's (an amendment's: max of its target's and its
     own, P3.4), else "statute" (P3.2). imports ([{alias, ref}]) and exports (names) from lawlang.static_info; amends: the law an
-    amendment draft amends (None), and for one its reason and dependents (linker.preview_amend at proposal)."""
+    amendment draft amends (None), and for one its reason and dependents (linker.preview_amend at proposal). W7e (law.v2):
+    in_force_from / in_force_until, the draft's declared validity window (W6a; None: open on that side)."""
     import ast
     law = k.w["laws"][lid]
     tree = ast.parse(law["code"])
@@ -888,7 +889,8 @@ def draft(k, lid) -> dict:
     return {"id": lid, "title": law["title"], "intent": law["intent"], "code": law["code"], "cls": law["cls"],
             "rank": law.get("rank") or (L.declared(tree, "rank") if v2(k) else None) or "statute", "author": law["author"], "calls": sorted(L.calls(tree) & L.API), "hooks": hooks,
             "rights": {x: sorted(v) for x, v in rights.items()}, "repeals": law["repeal_target"],
-            **({"imports": info["imports"], "exports": info["exports"], "amends": law.get("amends")} if v2(k) else {}),   # law.v2 only
+            **({"imports": info["imports"], "exports": info["exports"], "amends": law.get("amends"),               # law.v2 only
+                "in_force_from": L.window(tree)[0], "in_force_until": L.window(tree)[1]} if v2(k) else {}),   # W7e: W6a's window
             **({"reason": law.get("amend_reason") or "", "dependents": [dict(x) for x in law.get("dependents") or ()]}
                if law.get("amends") else {})}
 
@@ -1558,7 +1560,8 @@ def law_api(k, lid) -> dict:
 #   - in a before_<p> hook (invoke, _run_before): the refusal is the verdict {"block": True, "reason": reason}, so the change is
 #     blocked under the polity's conflict rule like any block, and the actor is told the reason (an agent's action fails with it;
 #     a transfer's error names it; a law's call ends, its move returns False);
-#   - anywhere else run through invoke (after_<p> hooks): the invocation is rolled back, nothing more;
+#   - anywhere else run through invoke (after_<p> hooks): the invocation is rolled back; W7e: when an agent's action caused the
+#     change, that agent is told (law_refused {law, hook, primitive, reason}, dispatch.after_refused);
 #   - in code the kernel calls through Kernel.call (old hooks, on_round_start/end, offices, ballot callbacks, procedures, penalties):
 #     that call is rolled back and returns None; an office (define_action) fails the agent's invoke with the reason
 #     (actions._invoke uses Kernel.call_refusable). Kernel.call journals only laws whose code names refuse (refuses), so others pay
@@ -1636,6 +1639,23 @@ def window_of(k, lid) -> tuple:
     """W6a: (in_force_from, in_force_until) of a law's current code (None: open on that side)."""
     code = (k.w["laws"].get(lid) or {}).get("code")
     return code_window(code) if isinstance(code, str) and "in_force_" in code else (None, None)
+
+
+def window_note(k, lid) -> str:
+    """W7e: a law's declared window for agents' text (law list, read_law, previews): "" when it declares none or law.v2 is off, else
+    e.g. " [in force while round() is 3-9; out of force now]". The numbers are the law's own (round(), in_force_*), which an
+    agent's "Round N" header shows as N = round() + 1."""
+    if not v2(k):
+        return ""
+    lo, hi = window_of(k, lid)
+    return window_text(lo, hi, in_force(k, lid))
+
+
+def window_text(lo, hi, now=True) -> str:
+    if lo is None and hi is None:
+        return ""
+    span = f"is {lo}-{hi}" if lo is not None and hi is not None else (f">= {lo}" if lo is not None else f"<= {hi}")
+    return f" [in force while round() {span}{'' if now else '; out of force now'}]"
 
 
 def in_force(k, lid) -> bool:
@@ -2466,7 +2486,9 @@ def drain_v2(k, cas: Cascade) -> None:
                 P = PR.get(it.primitive)
                 chain = chain_view(k, it.causes[cas.index:], it.law, implicit_root=cas.root if cas.implicit else None,
                                    concealed=it.hide, turn_agent=it.turn_agent)
-                invoke(k, cas, it.law, it.hook, hook_payload(k, P, it.payload, it.law, it.hide), chain, it.depth, it.parent)
+                out = invoke(k, cas, it.law, it.hook, hook_payload(k, P, it.payload, it.law, it.hide), chain, it.depth, it.parent)
+                if isinstance(out, Refused):                         # W7e: the acting agent hears of an after-hook's refusal
+                    after_refused(k, it, out.reason)
             finally:
                 k._causes = saved
         if cas.halted and cas.queue:
@@ -2484,6 +2506,30 @@ def drain_v2(k, cas: Cascade) -> None:
     if cas.halted or cas.dropped:
         k.log("cascade_halted", None, {"root": cas.root["id"], "by": cas.halted, "dropped": cas.dropped}, vis="monitor")
         cas.dropped = 0
+
+
+def acting_agent(k, causes, turn_agent=None) -> str | None:
+    """W7e: the agent whose action is the innermost action frame of a cause stack (its turn's agent when the frame leaves it out),
+    or None (a world, kernel or intervention cause, or a round phase)."""
+    for f in reversed(causes):
+        if next(iter(f)) == "action":
+            a = f.get("agent") or turn_agent
+            return a if a in k.w["agents"] else None
+    return None
+
+
+def after_refused(k, it, reason) -> None:
+    """W7e: an after-hook called refuse(reason): besides the monitor's hook_aborted, tell the acting agent (when an agent's action
+    caused the change) with a `law_refused` event {law, hook, primitive, reason}; a law of a hidden jurisdiction the agent does not
+    belong to reads as "hidden" (as compelled does)."""
+    aid = acting_agent(k, it.causes, it.turn_agent)
+    if aid is None:
+        return
+    data = {"law": it.law, "hook": it.hook, "primitive": it.primitive, "reason": reason}
+    lj = J.law_jur(k, it.law)
+    if "jur" in k.w and k._hidden_jur(lj) and aid not in set(J.members(k, lj)):
+        data = {**data, "law": "hidden", "hook": None}
+    k.log("law_refused", None, {x: v for x, v in data.items() if v is not None}, vis=[aid])
 
 
 # ---------------------------------------------------------------------- blocks

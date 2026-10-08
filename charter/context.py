@@ -431,8 +431,10 @@ def read_law(k, aid, ref) -> str:
     if (k.spec.get("jurisdictions") or {}).get("enabled") and law.get("status") in ("dormant", "hidden_draft") and not _J.binds(k, law["id"], aid):
         raise _error(f"{law['id']} is a draft of a hidden jurisdiction you do not belong to")
     patches = law.get("patches") or []
+    from charter import dispatch as _D
     head = (f"{law['id']} '{law['title']}' ({law.get('cls')}, {law.get('status')}), proposed by {law.get('author')}"
-            + (f", enacted in round {law['enacted_round'] + 1}" if law.get("enacted_round") is not None else "") + f".\nIntent: {law.get('intent', '')}")
+            + (f", enacted in round {law['enacted_round'] + 1}" if law.get("enacted_round") is not None else "")
+            + f"{_D.window_note(k, law['id'])}.\nIntent: {law.get('intent', '')}")        # W7e: its declared window (law.v2)
     hist = ("\nPatches: " + "; ".join(f"round {p.get('round', 0) + 1} by {p.get('by')}: {str(p.get('reason', ''))[:120]}" for p in patches)) if patches else ""
     from charter import stages as _ST
     return f"{head}{_ST.describe(law)}{hist}\nCode:\n{law['code']}"           # law.v2 (W6c): a multi-stage procedure's state
