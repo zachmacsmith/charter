@@ -323,7 +323,8 @@ def test_scoping_is_generated_from_the_law_api_metadata():
     inst = generator.generate(S.apply_overrides(make_spec(), ["jurisdictions.enabled=false", "conflict.enabled=true",
                                                               "media2.enabled=true", "life.enabled=true"]), 1)
     api = Kernel(inst).api_for("_")
-    assert set(api) == LL.API and set(LA.LAWFNS) <= LL.API
+    v2_only = {n for n, f in LA.LAWFNS.items() if getattr(f, "v2", False)}    # law.v2 functions (use, public_of) are absent when it is off
+    assert set(api) == LL.API - v2_only and set(LA.LAWFNS) <= LL.API
     undeclared = []
     for name, fn in api.items():
         params = list(inspect.signature(fn).parameters)

@@ -299,6 +299,8 @@ def pass_on(k, role, from_aid) -> None:
     new = random.Random(f"{k.inst['seed']}|roles|pass|{_stream(role)}|{k.r}|{from_aid}").choice(pool)
     lst.append(new)
     if role == "spy":                                                # a role's right changes only with the role (via "role")
+        if RT.RIGHT_OF_ROLE["spy"] not in k.w["rights"]:                 # a Spy passed on in a world whose catalogue lacks the right
+            k.apply("create_right", right=RT.RIGHT_OF_ROLE["spy"], via="role")
         k.apply("grant_right", agent=new, right=RT.RIGHT_OF_ROLE["spy"], via="role")
         st["reads"].pop(new, None)
     st["passed"].append({"round": k.r, "role": role, "from": from_aid, "to": new})
