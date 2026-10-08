@@ -16,6 +16,11 @@ Loans (exist only while a law enables them, as before)
   `lend` with `refinance` = an outstanding loan of the borrower; on acceptance the new money pays off the old lender first.
   Laws can cap interest (`set_interest_cap`), `restructure_loan`, `forgive_loan`, lend from the reserve (`lend_from_reserve`,
   an offer the borrower must accept) and buy a loan for the reserve (`buy_loan`: the reserve pays the lender, then is owed).
+  The lifecycle is primitives (primitives.py's loans rows, routed through Kernel.apply: dispatch.py's loans block): offer_loan,
+  accept_loan, repay_loan, extend_loan, default_loan (at the due round) and settle_loan(loan, paid, how) (every repayment, a
+  seizure, a forgiveness, a restructuring that leaves nothing owed). The functions below check, then apply; change_* make the
+  changes. Under law.v2 laws hook them (before_offer_loan may refuse a usurious offer, before_accept_loan a defaulter's borrowing,
+  before_default_loan collects first; after_settle_loan sees repayments) and record what they collected with settle_loan.
 Credit records are public: per agent, loans taken, repaid, repaid late, defaults, outstanding debt (value), lent outstanding,
   interest paid and received. Everyone sees them in their state view; laws read `credit_record(agent)`.
 
@@ -75,6 +80,22 @@ def outstanding(ln) -> float:
     return max(0.0, ln["repay_qty"] - ln["repaid"])
 
 
+TERMS = ("id", "item", "qty", "repay_item", "repay_qty", "due_in", "offered", "rate", "compound", "refinance")
+
+
+def terms_of(ln) -> dict:
+    """A loan's terms as the offer_loan/accept_loan payload carries them (what a before-hook judges an offer by)."""
+    return {x: ln.get(x) for x in TERMS}
+
+
+def new_loan(lid, lender, borrower, t) -> dict:
+    """The record of a new offer (keys in their historical order: events and snapshots are unchanged)."""
+    return {"id": lid, "lender": lender, "borrower": borrower, "item": t["item"], "qty": t["qty"], "repay_item": t["repay_item"],
+            "repay_qty": t["repay_qty"], "principal": t["repay_qty"], "due_in": t["due_in"], "due": None, "offered": t["offered"],
+            "status": "offered", "repaid": 0.0, "rate": t["rate"], "compound": t["compound"], "interest": 0.0,
+            "refinance": t["refinance"]}
+
+
 def implied_rate(k, ln) -> float:
     """Per-round rate an offer charges: its stated rate plus the premium of repay_qty over qty (by value), spread over due_in."""
     v0 = ln["qty"] * k._v(ln["item"])
@@ -124,13 +145,11 @@ def lend(k, aid, to, item, qty, repay_qty=None, due_in=1, repay_item=None, rate=
         if old["repay_item"] != item:
             raise L.LawError(f"refinancing {refinance} must lend {old['repay_item']}, the item it is owed in")
     k.w["loan_seq"] += 1
-    ln = {"id": f"N{k.w['loan_seq']}", "lender": lender, "borrower": to, "item": item, "qty": qty, "repay_item": repay_item or item,
-          "repay_qty": repay_qty, "principal": repay_qty, "due_in": due_in, "due": None, "offered": k.r, "status": "offered",
-          "repaid": 0.0, "rate": rate, "compound": bool(compound), "interest": 0.0, "refinance": old["id"] if old else None}
+    ln = new_loan(f"N{k.w['loan_seq']}", lender, to, {"item": item, "qty": qty, "repay_item": repay_item or item, "repay_qty": repay_qty,
+                                                      "due_in": due_in, "offered": k.r, "rate": rate, "compound": bool(compound),
+                                                      "refinance": old["id"] if old else None})
     _check_cap(k, ln)
-    k.w["loans"][ln["id"]] = ln
-    k.log("loan_offer", None if lender == "reserve" else lender,
-          {x: v for x, v in ln.items() if x not in ("status", "repaid", "due", "principal", "interest")}, vis=[x for x in (lender, to) if x != "reserve"])
+    k.apply("offer_loan", lender=lender, borrower=to, terms=terms_of(ln))    # dispatch.do_offer_loan (law.v2: before_offer_loan)
     terms = f"{qty:g} {item} now, {repay_qty:g} {ln['repay_item']} back within {due_in} rounds" + (
         f", plus {rate:g} per round {'compounding' if compound else 'simple'} interest" if rate else "")
     return f"Loan {ln['id']} offered to {to}: {terms}" + (f"; it pays off {old['id']} first" if old else "") + "."
@@ -154,20 +173,7 @@ def accept(k, aid, loan):
     if k.bal(ln["lender"], ln["item"]) + 1e-9 < ln["qty"]:
         ln["status"] = "expired"
         raise L.LawError(f"{ln['lender']} no longer holds {ln['qty']:g} {ln['item']}; the offer has lapsed")
-    to_old = min(ln["qty"], outstanding(old)) if old else 0.0
-    if to_old > 0 and old["lender"] != ln["lender"]:
-        k.move(ln["lender"], old["lender"], ln["item"], to_old, why=f"loan:{old['id']}", by=ln["lender"])
-    if ln["qty"] - to_old > 1e-12:
-        k.move(ln["lender"], aid, ln["item"], ln["qty"] - to_old, why=f"loan:{ln['id']}", by=ln["lender"])
-    ln.update({"status": "active", "due": k.r + ln["due_in"], "accepted": k.r, "accrued_round": k.r})
-    if old:
-        old["repaid"] += to_old
-        old["status"] = "refinanced" if old["repaid"] + 1e-9 >= old["repay_qty"] else old["status"]
-        k.log("loan_refinanced", aid, {"loan": old["id"], "by": ln["id"], "lender": old["lender"], "paid": to_old, "item": ln["item"],
-                                       "status": old["status"]}, vis="public")
-    k.log("loan_active", aid, {"loan": ln["id"], "lender": ln["lender"], "item": ln["item"], "qty": ln["qty"],
-                               "repay_item": ln["repay_item"], "repay_qty": ln["repay_qty"], "due": ln["due"], "rate": ln["rate"],
-                               "compound": ln["compound"]}, vis="public")
+    to_old = k.apply("accept_loan", loan=ln["id"], lender=ln["lender"], borrower=aid, terms=terms_of(ln)).result["to_old"]
     return (f"Loan {ln['id']} accepted: you received {ln['qty'] - to_old:g} {ln['item']}" + (f" ({to_old:g} went to pay off {old['id']})" if old else "")
             + f" and owe {ln['repay_qty']:g} {ln['repay_item']} by round {ln['due'] + 1}" + (f", growing by interest at {ln['rate']:g} per round" if ln["rate"] else "") + ".")
 
@@ -178,15 +184,9 @@ def repay(k, aid, loan, qty=None):
         raise L.LawError(f"you have no outstanding loan {loan}")
     owed = outstanding(ln)
     pay = min(owed, float(qty) if qty is not None else owed)
-    if pay <= 0 or not k.move(aid, ln["lender"], ln["repay_item"], pay, why=f"loan:{ln['id']}", by=aid):
+    if pay <= 0 or not k.apply("repay_loan", loan=ln["id"], borrower=aid, lender=ln["lender"], item=ln["repay_item"],
+                               qty=pay).result["paid"]:
         raise L.LawError(f"you hold less than {pay:g} {ln['repay_item']}")
-    ln["repaid"] += pay
-    if ln["repaid"] + 1e-9 >= ln["repay_qty"]:
-        if ln["status"] == "defaulted":
-            ln["late"] = True
-        ln["status"] = "repaid"
-    k.log("loan_payment", aid, {"loan": ln["id"], "lender": ln["lender"], "paid": pay, "item": ln["repay_item"],
-                                "status": ln["status"], "owed": outstanding(ln)}, vis="public")
     return f"Paid {pay:g} {ln['repay_item']} on loan {ln['id']} ({ln['status']}; {outstanding(ln):g} still owed)."
 
 
@@ -202,13 +202,119 @@ def extend(k, aid, loan, rounds, rate=None):
     if rate is not None:
         if float(rate) > ln["rate"] + 1e-12 or float(rate) < 0:
             raise L.LawError("a rollover can keep or lower the rate, not raise it (offer a refinancing loan instead)")
+        rate = float(rate)
+    k.apply("extend_loan", loan=ln["id"], lender=aid, borrower=ln["borrower"], rounds=rounds, rate=rate)   # dispatch.do_extend_loan
+    return f"Loan {ln['id']} now due by round {ln['due'] + 1} at {ln['rate']:g} per round."
+
+
+# ---------------------------------------------------------------------- loans: the changes (dispatch.do_<primitive>)
+# The credit lifecycle's primitives (primitives.py, the loans rows) make their change here; the callers above (and settle, the law
+# API below) check first. Under law.v2 each one gets before_/after_ hooks (dispatch.apply_v2), whoever caused it.
+SETTLE_HOWS = ("repay", "seize", "due", "paid", "forgive", "restructure")
+LAW_SETTLE_HOWS = ("paid", "seize", "forgive")                      # what a law's settle_loan may say
+
+
+def change_offer(k, lender, borrower, terms) -> dict:
+    ln = new_loan(terms["id"], lender, borrower, terms)
+    k.w["loans"][ln["id"]] = ln
+    k.log("loan_offer", None if lender == "reserve" else lender,
+          {x: v for x, v in ln.items() if x not in ("status", "repaid", "due", "principal", "interest")},
+          vis=[x for x in (lender, borrower) if x != "reserve"])
+    return {"loan": ln["id"]}
+
+
+def change_accept(k, loan, lender, borrower) -> dict:
+    ln = k.w["loans"][loan]
+    old = k.w["loans"].get(ln.get("refinance") or "")
+    if old and old["status"] not in ("active", "defaulted"):
+        old = None
+    to_old = min(ln["qty"], outstanding(old)) if old else 0.0
+    if to_old > 0 and old["lender"] != lender:
+        k.move(lender, old["lender"], ln["item"], to_old, why=f"loan:{old['id']}", by=lender)
+    if ln["qty"] - to_old > 1e-12:
+        k.move(lender, borrower, ln["item"], ln["qty"] - to_old, why=f"loan:{ln['id']}", by=lender)
+    ln.update({"status": "active", "due": k.r + ln["due_in"], "accepted": k.r, "accrued_round": k.r})
+    if old:
+        old["repaid"] += to_old
+        old["status"] = "refinanced" if old["repaid"] + 1e-9 >= old["repay_qty"] else old["status"]
+        k.log("loan_refinanced", borrower, {"loan": old["id"], "by": ln["id"], "lender": old["lender"], "paid": to_old,
+                                            "item": ln["item"], "status": old["status"]}, vis="public")
+    k.log("loan_active", borrower, {"loan": ln["id"], "lender": ln["lender"], "item": ln["item"], "qty": ln["qty"],
+                                    "repay_item": ln["repay_item"], "repay_qty": ln["repay_qty"], "due": ln["due"], "rate": ln["rate"],
+                                    "compound": ln["compound"]}, vis="public")
+    return {"loan": loan, "to_old": to_old, "refinanced": old["id"] if old else None, "due": ln["due"]}
+
+
+def change_repay(k, loan, borrower, lender, item, qty) -> dict:
+    """The borrower's payment: a move to the lender, then settle_loan(how "repay") records it."""
+    ln = k.w["loans"][loan]
+    if not k.move(borrower, lender, item, qty, why=f"loan:{loan}", by=borrower):
+        return {"paid": 0.0}
+    k.apply("settle_loan", loan=loan, paid=qty, how="repay")
+    k.log("loan_payment", borrower, {"loan": loan, "lender": lender, "paid": qty, "item": item, "status": ln["status"],
+                                     "owed": outstanding(ln)}, vis="public")
+    return {"paid": qty, "status": ln["status"], "owed": outstanding(ln)}
+
+
+def change_extend(k, loan, lender, borrower, rounds, rate) -> dict:
+    ln = k.w["loans"][loan]
+    if rate is not None:
         ln["rate"] = float(rate)
-    ln["due"] = max(ln["due"], k.r) + rounds
+    ln["due"] = max(ln["due"], k.r) + int(rounds)
     was = ln["status"]
     ln["status"] = "active"
     ln["accrued_round"] = max(ln.get("accrued_round", k.r), k.r)
-    k.log("loan_extended", aid, {"loan": ln["id"], "borrower": ln["borrower"], "due": ln["due"], "rate": ln["rate"], "was": was}, vis="public")
-    return f"Loan {ln['id']} now due by round {ln['due'] + 1} at {ln['rate']:g} per round."
+    k.log("loan_extended", lender, {"loan": loan, "borrower": borrower, "due": ln["due"], "rate": ln["rate"], "was": was}, vis="public")
+    return {"due": ln["due"], "rate": ln["rate"], "was": was}
+
+
+def change_default(k, loan, lender, borrower, owed, data=None) -> dict:
+    """At the due round: an active loan with something unpaid is in default. Nothing happens to a loan a before-hook settled,
+    extended or restructured meanwhile (law.v2)."""
+    ln = k.w["loans"][loan]
+    if ln["status"] != "active" or k.r < ln["due"] or outstanding(ln) <= 1e-9:
+        return {"defaulted": False}
+    ln["status"] = "defaulted"
+    ln["defaulted_round"] = k.r
+    k.log("loan_defaulted", ln["borrower"], {"loan": loan, "lender": ln["lender"], "repaid": ln["repaid"], "owed": ln["repay_qty"],
+                                             "item": ln["repay_item"], **(data or {})}, vis="public")
+    return {"defaulted": True}
+
+
+def change_settle(k, loan, paid, how, lid=None, data=None) -> dict:
+    """Record `paid` (already moved) against the loan; close it when nothing is owed. Logs: forgive -> loan_forgiven; a close by
+    seize/due/paid -> loan_repaid; a law's partial payment -> loan_payment; repay and restructure log nothing here (their callers
+    log loan_payment and loan_restructured)."""
+    ln = k.w["loans"][loan]
+    was = ln["status"]
+    ln["repaid"] += paid
+    if how == "forgive":
+        ln["status"] = "forgiven"
+        k.log("loan_forgiven", None, {"loan": loan, "law": lid}, vis="public")
+        return {"status": "forgiven", "closed": True}
+    closed = ln["repaid"] + 1e-9 >= ln["repay_qty"] if how != "restructure" else outstanding(ln) <= 1e-9
+    if closed:
+        if was == "defaulted" and how in ("repay", "seize", "paid"):
+            ln["late"] = True
+        ln["status"] = "repaid"
+    if how in ("seize", "due", "paid"):
+        extra = dict(data or {}) if lid is None else {"seized": how == "seize", "how": how, "law": lid}
+        if closed:
+            k.log("loan_repaid", ln["borrower"], {"loan": loan, "lender": ln["lender"], "repaid": ln["repaid"], "owed": ln["repay_qty"],
+                                                  "item": ln["repay_item"], **extra}, vis="public")
+        elif lid is not None and paid > 0:
+            k.log("loan_payment", ln["borrower"], {"loan": loan, "lender": ln["lender"], "paid": paid, "item": ln["repay_item"],
+                                                   "status": ln["status"], "owed": outstanding(ln), **extra}, vis="public")
+    return {"status": ln["status"], "closed": closed, "owed": outstanding(ln)}
+
+
+def forgive(k, lid, loan) -> bool:
+    """forgive_loan(loan) (Kernel.api_for): settle_loan(loan, 0, "forgive")."""
+    ln = k.w["loans"].get(str(loan))
+    if not ln or ln["status"] not in ("active", "defaulted"):
+        return False
+    k.apply("settle_loan", loan=ln["id"], paid=0.0, how="forgive", lid=lid)
+    return True
 
 
 # ---------------------------------------------------------------------- loans: each round
@@ -218,7 +324,7 @@ def settle(k):
     lapse = cfg(k)["offer_lapse"]
     cap = interest_cap(k)
     kind = consequence(k)
-    for ln in k.w["loans"].values():
+    for ln in list(k.w["loans"].values()):                            # law.v2: a before-hook may add a loan (lend_from_reserve)
         if ln["status"] == "offered" and k.r > ln["offered"] + lapse:
             ln["status"] = "expired"
         if ln["status"] != "active":
@@ -236,17 +342,18 @@ def settle(k):
         if k.r < ln["due"]:
             continue
         seize = kind in ("seize", "seize_sanction") and k.loans_enabled()
+        take = 0.0
         if seize:
             take = min(outstanding(ln), k.bal(ln["borrower"], ln["repay_item"]))
             if take > 0:
                 k.move(ln["borrower"], ln["lender"], ln["repay_item"], take, why=f"loan:{ln['id']}")
-                ln["repaid"] += take
-        ln["status"] = "repaid" if ln["repaid"] + 1e-9 >= ln["repay_qty"] else "defaulted"
-        if ln["status"] == "defaulted":
-            ln["defaulted_round"] = k.r
-        k.log("loan_" + ln["status"], ln["borrower"], {"loan": ln["id"], "lender": ln["lender"], "repaid": ln["repaid"],
-                                                       "owed": ln["repay_qty"], "item": ln["repay_item"], "seized": seize,
-                                                       "consequence": kind}, vis="public")
+            else:
+                take = 0.0
+        data = {"seized": seize, "consequence": kind}
+        if take > 0 or ln["repaid"] + 1e-9 >= ln["repay_qty"]:          # the seizure is recorded; a loan paid in full is settled
+            k.apply("settle_loan", loan=ln["id"], paid=take, how="seize" if take > 0 else "due", data=data)
+        if ln["status"] == "active":                                    # what is unpaid is in default (dispatch.do_default_loan)
+            k.apply("default_loan", loan=ln["id"], lender=ln["lender"], borrower=ln["borrower"], owed=outstanding(ln), data=data)
         if ln["status"] == "defaulted" and kind in ("sanction", "seize_sanction") and k.loans_enabled():
             b = ln["borrower"]
             if k.cls_of(b) not in ("board", "fixer"):
@@ -465,7 +572,10 @@ def law_api(k, lid) -> dict:
             ln["due"] = k.r + max(1, int(due_in))
         if rate is not None:
             ln["rate"] = max(0.0, min(float(rate), cfg(k)["max_rate"]))
-        ln["status"] = "repaid" if outstanding(ln) <= 1e-9 else "active"
+        if outstanding(ln) <= 1e-9:                                     # nothing left owed: the loan is settled
+            k.apply("settle_loan", loan=ln["id"], paid=0.0, how="restructure", lid=lid)
+        else:
+            ln["status"] = "active"
         ln["accrued_round"] = k.r
         k.log("loan_restructured", None, {"loan": ln["id"], "borrower": ln["borrower"], "owed": outstanding(ln), "due": ln["due"],
                                           "rate": ln["rate"], "law": lid}, vis="public")
@@ -488,13 +598,32 @@ def law_api(k, lid) -> dict:
         ln["lender"] = "reserve"
         return True
 
-    return {"set_par": set_par, "suspend_redemption": suspend_redemption, "set_interest_cap": set_interest_cap,
+    def settle_loan(loan, paid=0, how="paid"):
+        """law.v2: record a payment on a loan that the law collected itself (with move or a seizure): `paid` of its repayment item,
+        at most what is still owed; how "paid" or "seize"; "forgive" also forgives what is then left. A loan paid in full is closed
+        as repaid (late, if it was in default). Returns what is still owed, or False (no outstanding loan, bad arguments)."""
+        ln = k.w["loans"].get(str(loan))
+        if not ln or ln["status"] not in ("active", "defaulted") or how not in LAW_SETTLE_HOWS:
+            return False
+        try:
+            paid = float(paid or 0)
+        except (TypeError, ValueError):
+            return False
+        if paid != paid or paid < 0:
+            return False
+        out = k.apply("settle_loan", loan=ln["id"], paid=min(paid, outstanding(ln)), how=how, lid=lid)
+        return out.result["owed"] if "owed" in out.result else 0.0
+
+    api = {"set_par": set_par, "suspend_redemption": suspend_redemption, "set_interest_cap": set_interest_cap,
             "set_default_consequence": set_default_consequence, "restructure_loan": restructure_loan,
             "lend_from_reserve": lend_from_reserve, "buy_loan": buy_loan,
             "credit_record": lambda a: record(k, a), "reserve_ratio": lambda cur: reserve_ratio(k, cur),
             "redemption_open": lambda cur: (k._cur(cur) is not None) and redemption_open(k, cur),
             "par": lambda cur: dict(k._cur(cur).get("par") or {}) or None, "interest_cap": lambda: interest_cap(k),
             "circulation": lambda cur: (k._cur(cur) is not None) and circulation(k, cur)}
+    if (k.spec.get("law") or {}).get("v2"):                            # law.v2 only (lawapi row v2=True): elsewhere the name is unknown
+        api["settle_loan"] = settle_loan
+    return api
 
 
 # ---------------------------------------------------------------------- what agents see

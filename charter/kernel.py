@@ -550,12 +550,7 @@ class Kernel:
             k.w["loan_law"], k.w["loan_enforce"] = lid, bool(enforce)
 
         def forgive_loan(loan):
-            ln = k.w["loans"].get(str(loan))
-            if not ln or ln["status"] not in ("active", "defaulted"):
-                return False
-            ln["status"] = "forgiven"
-            k.log("loan_forgiven", None, {"loan": ln["id"], "law": lid}, vis="public")
-            return True
+            return CR.forgive(k, lid, loan)                                # the settle_loan primitive (how "forgive")
 
         def loans_view():
             return {i: dict(ln) for i, ln in k.w["loans"].items()}

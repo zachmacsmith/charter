@@ -1399,6 +1399,17 @@ def per_round_rate(ln):
 
 
 # ---------------------------------------------------------------------- edition-2 laws
+# Loans in edition 2 use the loan primitives' hooks (law.v2; dispatch.py's loans block): before_offer_loan and before_accept_loan
+# refuse, before_default_loan runs at the due round before an unpaid loan defaults, settle_loan(loan, paid, how) records what a law
+# collected, after_settle_loan sees every repayment.
+# Loans without the enable_loans switch (investigated, not done): whether loans exist at all is the world's own state
+# (Kernel.loans_enabled, w["loan_law"]), read outside the law API by the action registry (lend, accept_loan, repay_loan and
+# extend_loan are offered only while a loan law is in force), the agents' prompt and scripted bots (credit activity only once loans
+# exist, which changes their random draws) and credit.state_lines. A registry run by law alone needs loans to exist without any law:
+# every edition-2 world would then offer the loan actions from round 0 (a different action list, prompt and scripted run in every
+# edition-2 world, E2_library2_6 included) and a law that wants no loans would refuse them with before_offer_loan; or it needs a
+# primitive by which a law makes loans exist, which is the same switch under another name. That is a decision about the world, not
+# about these laws, so enable_loans stays the one switch the loan rewrites keep (GAPS).
 law2("Loan Registry", f'''
 title = "Loan Registry"
 intent = "Agents may lend to each other; debts past due are seized from the borrower's holdings."
@@ -1409,22 +1420,18 @@ take = use("{ref("Seize")}")
 def on_enact():
     enable_loans(False)                      # loans exist: agents offer, accept and repay them; this law does the enforcing
 
-def on_round_start(r):
-    book = loans()
-    for i in credit["defaulted_now"](book, r):
-        ln = book[i]
-        due = credit["owed"](ln)
-        got = take["seize"](ln["borrower"], ln["lender"], ln["repay_item"], due, "loan " + i + " is past due")
-        if got > 0:
-            restructure_loan(i, due - got)   # the record now owes only what the seizure did not cover
+def before_default_loan(p, chain):           # at the due round, before an unpaid loan defaults
+    ln = loans()[p["loan"]]
+    got = take["seize"](ln["borrower"], ln["lender"], ln["repay_item"], credit["owed"](ln))
+    if got > 0:
+        settle_loan(p["loan"], got, "seize") # paid in full: settled and nothing defaults; in part: the rest defaults
 ''', gap='''
-Holdings match edition 1 when the seizure covers the debt: at the due round the lender gets what the borrower holds of the repayment
-item. Differences: (1) the loan record first shows a default (loan_defaulted, seized false; credit record `defaults` +1) and then a
-loan_restructured to repaid, because a law can neither enforce at settlement time nor record a repayment on a loan (only
-restructure_loan and forgive_loan exist); (2) a partial seizure re-activates the remaining debt (restructure_loan sets status
-active), so it accrues interest for one more round, defaults again and is seized again every round until paid, where edition 1 seizes
-once and leaves the loan defaulted; (3) each seizure is announced in the gazette. Missing primitives: a loan-settlement hook or a
-`settle_loan(loan, paid)` that records a repayment, and loans as a contract that exists without a switch (enable_loans stays).''')
+Holdings and the loan record match edition 1: at the due round, before the loan can default, the lender gets what the borrower holds
+of the repayment item and the law records it with settle_loan; a debt the seizure covers is repaid (no default on the credit record),
+a partial seizure leaves the rest in default, seized once. Differences: (1) the events: the loan_repaid of a full seizure names the
+law (how "seize") instead of the consequence, a partial seizure logs a loan_payment before the loan_defaulted, and the
+loan_defaulted says seized false, consequence none (as the agents' state lines say "on default: none"); (2) the switch
+enable_loans(False) stays: loans exist only while a law enables them (see the note above).''')
 
 law2("Handshake Loans", f'''
 title = "Handshake Loans"
@@ -1454,58 +1461,66 @@ rank = "statute"
 credit = use("{ref("Credit Helpers")}")
 CAP = 0.05
 
-def cap_loans():
+def too_dear(terms):
+    return credit["per_round_rate"](terms) > CAP + 1e-9
+
+def refusal(terms):
+    return {{"block": True, "reason": "the Usury Law caps interest at " + str(CAP) + " per round; this loan charges "
+             + str(round_to(credit["per_round_rate"](terms), 4)) + " (its rate plus the premium of the repayment over the loan)"}}
+
+def before_offer_loan(p, chain):
+    if too_dear(p["terms"]):
+        return refusal(p["terms"])
+
+def before_accept_loan(p, chain):            # an offer made before this law
+    if too_dear(p["terms"]):
+        return refusal(p["terms"])
+
+def cap_rates():                             # loans taken before this law: their rate is cut to the cap
     book = loans()
-    done = state.setdefault("cut", [])
     for i in book:
-        ln = book[i]
-        if ln["status"] != "active" or i in done or credit["per_round_rate"](ln) <= CAP + 1e-9:
-            continue
-        p = credit["premium"](ln)
-        if p <= CAP:
-            restructure_loan(i, None, None, CAP - p)            # lower the rate so that rate + premium = CAP
-        else:
-            fair = ln["qty"] * value(ln["item"]) / value(ln["repay_item"]) * (1 + CAP * ln["due_in"])
-            restructure_loan(i, max(0, fair - ln["repaid"]), None, 0)   # cut the repayment to the most CAP allows, no rate
-            done.append(i)
-        gazette("Usury Law: loan " + i + " now charges at most " + str(CAP) + " per round.")
+        if book[i]["status"] == "active" and book[i].get("rate", 0) > CAP:
+            restructure_loan(i, None, None, CAP)
+            gazette("Usury Law: loan " + i + " now charges at most " + str(CAP) + " per round.")
 
 def on_enact():
     public["interest_cap"] = CAP
-    cap_loans()
+    cap_rates()
 
 def on_round_end(r):
-    cap_loans()
+    cap_rates()
 ''', gap='''
-Edition 1 (set_interest_cap) makes the kernel refuse any loan offer or acceptance above the cap and caps older loans' rates as they
-accrue. A law cannot refuse a loan offer (there is no loan hook, like on_transfer for transfers), so edition 2 lets the offer be made
-and accepted and rewrites the loan at the end of the round it became active, before any interest accrues: the rate is lowered so that
-rate + premium = 5%, or, when the premium alone is above 5%, the repayment is cut to the most 5% per round allows and the rate set to
-0; each rewrite is gazetted (and logged as loan_restructured). Offers still open are not touched. The cap is published as
-public["interest_cap"]; the Usury Law effect predicate accepts it in edition-2 worlds. Missing primitive: an on_loan(offer) hook that
-can refuse.''')
+Like edition 1 (set_interest_cap), a loan offer or acceptance above the cap is refused (before_offer_loan, before_accept_loan): the
+lend or accept_loan action fails, naming the law and the cap. Differences: (1) a loan taken before the law whose rate is above the
+cap has its rate cut at enactment (and at each round's end) with restructure_loan, logged as loan_restructured and gazetted, where
+edition 1 cuts it as interest accrues (loan_rate_capped); (2) the refusal is a law's block, so its text differs, and interest_cap()
+reads None: the cap is published as public["interest_cap"], which the Usury Law effect predicate accepts in edition-2 worlds.''')
 
 law2("Debtor Sanctions", f'''
 title = "Debtor Sanctions"
 intent = "Loans are enforced by sanction, not seizure: a borrower in default is limited in what they can do and cannot borrow again until they repay."
 rank = "statute"
-credit = use("{ref("Credit Helpers")}")
 ACTIONS = 2
 ROUNDS = 3
 
 def on_enact():
     enable_loans(False)                      # loans exist; nothing is seized
 
-def on_round_start(r):
+def after_default_loan(p, chain):            # the sanction, at the default
+    b = p["borrower"]
+    if p["result"]["defaulted"] and b is not None and class_of(b) not in ["board", "fixer"]:
+        limit_actions(b, ACTIONS, ROUNDS)
+
+def before_accept_loan(p, chain):            # no new borrowing while in default
     book = loans()
-    for i in credit["defaulted_now"](book, r):
-        b = book[i]["borrower"]
-        if class_of(b) not in ["board", "fixer"]:
-            limit_actions(b, ACTIONS, ROUNDS)
+    for i in book:
+        if book[i]["borrower"] == p["borrower"] and book[i]["status"] == "defaulted":
+            return {{"block": True, "reason": "the borrower is in default on loan " + i + " and may not borrow until it is repaid"}}
 ''', gap='''
-The sanction is the same (limit_actions: 2 actions for 3 rounds at the default; edition 1 reads credit.sanction_actions and
-credit.sanction_rounds from the spec, edition 2 has them as constants), but a law cannot bar a borrower in default from taking new
-loans: there is no hook on a loan acceptance. Missing primitive: an on_loan hook (or a borrowing right a law can suspend).''')
+Same as edition 1: the defaulter is limited at the default (limit_actions: 2 actions for 3 rounds) and cannot accept a new loan while
+in default (before_accept_loan refuses). Differences: edition 1 reads credit.sanction_actions and credit.sanction_rounds from the
+spec, edition 2 has them as constants; the bar is a law's block (its error text names the law, and credit.barred, the kernel's own
+bar, reads False); the switch enable_loans(False) stays (see the note at Loan Registry).''')
 
 law2("Harvest Levy", f'''
 title = "Harvest Levy"

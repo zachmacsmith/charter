@@ -6,7 +6,8 @@ suspend_right, limit_actions, create_right, post, dm, hide_post, set_camp_rule, 
 open_ballot, cast_vote, close_ballot, veto, enact, repeal, amend, set_procedure, rule, define_action, with on_proposal still receiving
 None; P2.4b: begin_life, end_life; P2.4c's world causes: regrow, drift, destroy, set_camp_state, create_camp, contribute,
 settle_project; P2.4d's membership, media, typed camps and leases: join, leave, admit, expel, subscribe, set_outlet_rule,
-set_media_rule, appoint, lease, improve_camp; P2.4a's conflict: attack, fortify, convert, guard_bind, guard_release), and its legacy
+set_media_rule, appoint, lease, improve_camp; P2.4a's conflict: attack, fortify, convert, guard_bind, guard_release; the credit
+lifecycle: offer_loan, accept_loan, repay_loan, extend_loan, default_loan, settle_loan), and its legacy
 ALIASES are dispatched by dispatch.apply under exactly today's conditions; the other rows still name the function making the change
 today.
 
@@ -125,6 +126,7 @@ PARAM_SAMPLES = {
     "by_law": None, "old_sha": "9f1c", "new_sha": "0a2b", "case": "C1", "verdict": "guilty", "judge": "a4", "clause": "L5:c",
     "accuser": "a1", "accused": "a2", "action": "census", "args": [], "power": "quill", "error": "boom", "goal": {"name": "g"},
     "seat": "a5", "contract": "K1", "remedy": "fine", "level": 1,
+    "paid": 2.0, "owed": 4.0, "rate": 0.05,                                                              # loans (routed)
     "rank": "statute", "opened_by": "L1", "proposal": "L5", "diff": "--- L5 (before)\n+++ L5 (after)\n",      # P2.3 legal acts
 }
 
@@ -134,6 +136,7 @@ def P(name, feature, effect, params, fn, **kw) -> Primitive:
 
 
 _LNA = "laws never act for an agent (kernel invariant): an agent's own choice"
+_V2GATE = "law.v2: before_<p> gates it (routed through Kernel.apply; no legacy alias)"
 _PHYS = "physics: no law may stop it"
 
 _ROWS = [
@@ -412,20 +415,46 @@ _ROWS = [
     P("set_power_rule", "hidden", "rule", ("key", "value"), "hidden:law_api.disclose_capability_use", event="powers_disclosure",
       causes=("law",), reads=("capability_holders",), preview=("rules.powers_disclosed",), compel_vis="public",
       sites=("hidden:law_api.disclose_capability_use",)),
-    # ------------------------------------------------------------------ loans (credit)
-    P("offer_loan", "credit", "relation", ("lender", "borrower", "terms"), "credit:lend", subject="lender", parties=("lender", "borrower"),
-      agent_params=("lender", "borrower"), event="loan_offer", causes=("agent", "law"), reads=("loans", "credit_record"),
-      preview=("rules.loans",), compel_vis="parties", sites=("credit:lend",), notes="only while a law enables loans"),
-    P("open_loan", "credit", "relation", ("loan", "lender", "borrower"), "credit:accept", subject="borrower", parties=("lender", "borrower"),
-      agent_params=("lender", "borrower"), event="loan_active", causes=("agent",), reads=("loans",), preview=("rules.loans",),
-      sites=("credit:accept",), why={"compel": _LNA}),
-    P("settle_loan", "credit", "status", ("loan", "status"), "credit:settle", event="loan_repaid", causes=("agent", "law", "world"),
-      reads=("loans", "credit_record"), preview=("rules.loans",), compel_vis="public",
-      sites=("credit:settle", "credit:repay", "kernel:Kernel.api_for.forgive_loan"),
-      notes="repaid, defaulted (enforced: a seizure, logged as a sanction), forgiven by law"),
-    P("loan_terms", "credit", "rule", ("loan", "terms"), "credit:extend", event="loan_extended", causes=("agent", "law", "world"),
-      reads=("loans",), preview=("rules.loans",), compel_vis="public",
-      sites=("credit:extend", "credit:law_api.restructure_loan", "credit:settle", "credit:accept")),
+    # ------------------------------------------------------------------ loans (credit): the lifecycle is routed through Kernel.apply
+    # (dispatch.py, the loans block). terms: the loan's terms as offered (id, item, qty, repay_item, repay_qty, due_in, offered,
+    # rate, compound, refinance), so a before-hook judges an offer without a look-up. settle_loan records `paid` against a loan (the
+    # goods were moved by its cause) and closes it when nothing is owed; how: repay (the borrower's payment), seize (enforcement),
+    # due (nothing left owed at the due round), paid (a law recorded a payment it collected), forgive, restructure (a law's rewrite
+    # left nothing owed). Their callers keep their checks (credit.lend/accept/repay/extend), as P2.3's legal acts do.
+    P("offer_loan", "credit", "relation", ("lender", "borrower", "terms"), "dispatch:do_offer_loan", subject="lender",
+      parties=("lender", "borrower"), agent_params=("lender", "borrower"), event="loan_offer", causes=("agent", "law"),
+      reads=("loans", "credit_record"), preview=("rules.loans",), compel_vis="parties", why={"gate": _V2GATE},
+      sites=("dispatch:do_offer_loan", "credit:lend"),
+      notes="only while a law enables loans; credit.lend checks the terms and the interest cap and draws the loan's id first"),
+    P("accept_loan", "credit", "relation", ("loan", "lender", "borrower", "terms"), "dispatch:do_accept_loan", subject="borrower",
+      parties=("lender", "borrower"), agent_params=("lender", "borrower"), event="loan_active", causes=("agent",), reads=("loans",),
+      preview=("rules.loans",), sites=("dispatch:do_accept_loan", "credit:accept"), why={"compel": _LNA, "gate": _V2GATE},
+      notes="the lender's goods reach the borrower (a refinancing pays the old lender first: loan_refinanced); credit.accept checks "
+            "the offer, its lapse, the interest cap and the default bar of a sanction consequence"),
+    P("repay_loan", "credit", "move", ("loan", "borrower", "lender", "item", "qty"), "dispatch:do_repay_loan", subject="borrower",
+      parties=("borrower", "lender"), agent_params=("borrower", "lender"), event="loan_payment", causes=("agent",),
+      reads=("loans", "credit_record"), preview=("rules.loans",), sites=("dispatch:do_repay_loan", "credit:repay"),
+      why={"compel": _LNA, "gate": _V2GATE}, notes="a move to the lender, then settle_loan (how repay): in part or in full, also late"),
+    P("extend_loan", "credit", "rule", ("loan", "lender", "borrower", "rounds", "rate"), "dispatch:do_extend_loan", subject="lender",
+      parties=("lender", "borrower"), agent_params=("lender", "borrower"), event="loan_extended", causes=("agent",), reads=("loans",),
+      preview=("rules.loans",), sites=("dispatch:do_extend_loan", "credit:extend"), why={"compel": _LNA, "gate": _V2GATE},
+      notes="the lender's rollover: a later due round, the same or a lower rate (None keeps it); revives a defaulted loan"),
+    P("default_loan", "credit", "status", ("loan", "lender", "borrower", "owed"), "dispatch:do_default_loan", subject="borrower",
+      parties=("borrower", "lender"), agent_params=("borrower", "lender"), event="loan_defaulted", causes=("world",),
+      reads=("loans", "credit_record"), preview=("rules.loans",), compel_vis="public", blockable=False,
+      sites=("dispatch:do_default_loan", "credit:settle"),
+      notes="at the due round what is unpaid is in default (after the consequence's seizure). Not blockable, but a before-hook may "
+            "settle, extend or restructure the loan first, and then nothing defaults; the consequence's sanction follows it"),
+    P("settle_loan", "credit", "status", ("loan", "paid", "how"), "dispatch:do_settle_loan", event="loan_repaid",
+      causes=("agent", "law", "world"), reads=("loans", "credit_record"), preview=("rules.loans",), compel_vis="public",
+      why={"gate": _V2GATE},
+      sites=("dispatch:do_settle_loan", "credit:settle", "credit:law_api.settle_loan", "credit:law_api.restructure_loan",
+             "credit:forgive"),
+      notes="repaid (by the borrower, at the due round, by a seizure, or recorded by a law), forgiven by law, or closed by a "
+            "restructuring"),
+    P("loan_terms", "credit", "rule", ("loan", "terms"), "credit:law_api.restructure_loan", event="loan_restructured",
+      causes=("law", "world"), reads=("loans",), preview=("rules.loans",), compel_vis="public",
+      sites=("credit:law_api.restructure_loan", "credit:settle"), notes="a law's restructuring; the interest cap's rate cut"),
     P("loan_assign", "credit", "relation", ("loan", "to"), "credit:law_api.buy_loan", event="loan_bought", causes=("law",),
       reads=("loans",), preview=("rules.loans",), compel_vis="public", sites=("credit:law_api.buy_loan",)),
     # ------------------------------------------------------------------ typed camps and leases
@@ -586,7 +615,8 @@ ACTION_PRIMITIVES = {
     "write_file": ("write_note",), "pin": ("write_note",), "unpin": ("write_note",), "rename_file": ("write_note",),
     "share_file": ("share_note",), "delete_file": ("write_note",), "buy_memory": ("set_capacity", "move"),
     # finance
-    "lend": ("offer_loan",), "accept_loan": ("open_loan", "move"), "repay_loan": ("move", "settle_loan"), "extend_loan": ("loan_terms",),
+    "lend": ("offer_loan",), "accept_loan": ("accept_loan", "move"), "repay_loan": ("repay_loan", "move", "settle_loan"),
+    "extend_loan": ("extend_loan",),
     "deposit": ("convert", "mint"), "redeem": ("convert", "burn"),
     # jurisdictions
     "found": ("found",), "fund": ("move",), "invite": ("invite",), "join": ("join",), "leave": ("leave",), "declare": ("declare",),

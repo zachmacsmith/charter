@@ -198,6 +198,7 @@ LAWFNS = _fns(
         F("restructure_loan", "money", power="legacy_reserve", primitive="loan_terms"),
         F("lend_from_reserve", "money", ((0, "borrower"),), power="legacy_reserve", primitive="offer_loan"),
         F("buy_loan", "money", power="legacy_reserve", primitive="loan_assign"),
+        F("settle_loan", "money", power="legacy_reserve", primitive="settle_loan", docs="requires", v2=True),   # a law-run registry
         F("credit_record", "read", ((0, "a"),), scope="read"),
         F("reserve_ratio", "read"),
         F("redemption_open", "read"),

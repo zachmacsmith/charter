@@ -240,12 +240,12 @@ E("departure", "events", "record", "monitor", "silent", None, primitive="end_lif
 
 # ---------------------------------------------------------------------- credit
 E("loan_offer", "credit", "primitive", "parties", "event", "agents", act="lend", primitive="offer_loan")
-E("loan_active", "credit", "primitive", "public", "event", "agents", act="accept_loan", primitive="open_loan")
-E("loan_payment", "credit", "primitive", "public", "event", "agents", act="repay_loan", primitive="move")
-E("loan_repaid", "credit", "summary", "public", "event", "agents", note="logged as 'loan_' + status (credit.settle)", primitive="settle_loan")
-E("loan_defaulted", "credit", "summary", "public", "event", "agents", note="logged as 'loan_' + status (credit.settle)", primitive="settle_loan")
-E("loan_extended", "credit", "primitive", "public", "event", "credit", act="extend_loan", primitive="loan_terms")
-E("loan_refinanced", "credit", "summary", "public", "event", "credit", act="accept_loan", primitive="loan_terms")
+E("loan_active", "credit", "primitive", "public", "event", "agents", act="accept_loan", primitive="accept_loan")
+E("loan_payment", "credit", "primitive", "public", "event", "agents", act="repay_loan", primitive="repay_loan")
+E("loan_repaid", "credit", "summary", "public", "event", "agents", note="a loan closed as repaid (dispatch.do_settle_loan); the borrower's own payment logs loan_payment", primitive="settle_loan")
+E("loan_defaulted", "credit", "summary", "public", "event", "agents", note="at the due round (dispatch.do_default_loan)", primitive="default_loan")
+E("loan_extended", "credit", "primitive", "public", "event", "credit", act="extend_loan", primitive="extend_loan")
+E("loan_refinanced", "credit", "summary", "public", "event", "credit", act="accept_loan", primitive="accept_loan")
 E("loan_restructured", "credit", "legal_act", "public", "event", "credit", primitive="loan_terms")
 E("loan_bought", "credit", "legal_act", "public", "event", "credit", primitive="loan_assign")
 E("loan_rate_capped", "credit", "summary", "public", "event", "credit", primitive="loan_terms")

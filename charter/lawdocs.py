@@ -316,6 +316,17 @@ E += [
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2")))
                  for n in ("root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury")})
+# loans as primitives (credit.py, dispatch.py's loans block): a law-run registry records what it collected; documented only in law.v2
+# worlds (REQUIRES), where the loan hooks exist (before_offer_loan, before_accept_loan, before_default_loan, after_settle_loan, ...)
+E += [
+    ("settle_loan", "credit", "Money", 'settle_loan(loan, paid=0, how="paid")',
+     "records a payment on a loan that this law collected itself (with move, or a seizure: how \"seize\"), at most what is still "
+     "owed; a loan paid in full is closed as repaid. how \"forgive\" also forgives what is then left. Returns what is still owed, or "
+     "False. Loan hooks: before_offer_loan(p, chain) (p: lender, borrower, terms) and before_accept_loan may return False to refuse; "
+     "before_default_loan runs at the due round before an unpaid loan defaults (settle or extend it there and nothing defaults); "
+     "after_settle_loan sees every repayment. Structural.", "common", "uncommon"),
+]
+REQUIRES["settle_loan"] = lambda spec: bool((spec.get("law") or {}).get("v2"))
 ENTRIES ={e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}
 GROUP_ORDER = ["Hooks", "Read", "Rights", "Money", "Camps", "Governance", "Output", "Names", "Sanctions", "Messages", "Text", "Meta", "Powers",
                "Jurisdictions", "Media", "Life"]
