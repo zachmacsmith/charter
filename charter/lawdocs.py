@@ -469,6 +469,13 @@ E += [
      "common", "common"),
     ("reputation", "contracts", "Contracts", "reputation(agent)", "an agent's breach record across every contract: {\"breaches\": n, "
      "\"contracts\": [ids]}.", "common", "common"),
+    # P4.5
+    ("shareholders", "contracts", "Contracts", "shareholders(currency)", "who holds a contract's currency (its shares) now: "
+     "{holder: qty}, agents and other contracts' treasuries (a member's escrow counts as the member's; the issuer's own treasury "
+     "is left out). In a contract's own law a bare name is its own (\"shares\" -> \"A1.shares\"). A contract's law may also "
+     "create_currency(name), mint(cur, qty, to) and burn(cur, qty, frm) its own currency only (burning only what it holds), "
+     "create_right(name) and grant(member, right) / revoke(agent, right) its own rights, and define_action(right, name, fn) "
+     "offices bound to them (all named \"<contract>.<name>\").", "prompt", "common"),
 ]
 OPTIONAL.update({e[0]: "contracts" for e in E if e[1] == "contracts"})
 ENTRIES ={e[0]: {"name": e[0], "topic": e[1], "group": e[2], "prompt": e[3], "detail": e[4], "core": e[5], "minimal": e[6]} for e in E}

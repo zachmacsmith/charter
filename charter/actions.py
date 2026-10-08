@@ -735,8 +735,8 @@ def _invoke(k, aid, action, args=None):
         known = [n for n, v in k.w["actions"].items() if not (isinstance(v, dict) and v.get("secret"))]
         raise ActionError(f"no such action '{action}' (the attempt used one of your actions). Actions defined by laws: {', '.join(known) or 'none'}")
     _need(k, aid, a["right"], f"use {action}")
-    if J.enabled(k):                                                   # jurisdictions: an office serves only its own members
-        J.check_invoke(k, aid, a["law"])
+    if J.enabled(k) or J.association(k, J.law_jur(k, a["law"])) is not None:   # jurisdictions: an office serves only its own
+        J.check_invoke(k, aid, a["law"])                               # members; P4.5: a contract's office, only its members
     lid, fn = k.fnreg[a["fn"]]
     if not D.in_force(k, lid):                                         # W6a (law.v2): its law is outside its declared window
         lo, hi = D.window_of(k, lid)

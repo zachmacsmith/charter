@@ -557,6 +557,29 @@ R("propose_contract_change", "propose new code for a contract", "contracts", nee
   doc='propose_contract_change {"contract": "A1", "code": "<law code>", "replaces": "L7"}: new code for a contract you belong to '
       '(replaces: one of its laws, or none to add a law; empty code with replaces ends that law); its procedure decides (by '
       'default its members vote, closing at the end of the round)')
+# P4.5: agency and standing orders (charter/contracts.py)
+R("authorize", "let another agent or a contract office act for you", "contracts", needs=("mod:contracts",),
+  handler="contracts:act_authorize", module="contracts", category="economic", emits=("agency_granted",),
+  aliases={"grantee": "agent", "per_round": "qty"},
+  doc='authorize {"agent": "Name", "action": "transfer", "item": "grain", "qty": 2, "to": ["Name2"], "rounds": 5} (or "office": '
+      '"A1.treasurer" instead of agent: any holder of that contract right): they may give (transfer) or deposit in escrow '
+      '(deposit_escrow, "to": contract ids) up to qty of your item per round on your behalf, only to the listed recipients if '
+      'you give "to", for "rounds" rounds if you give it. You see every use; you can revoke it any time. Votes cannot be delegated')
+R("revoke_authorization", "end an authorization you gave", "contracts", needs=("mod:contracts",),
+  handler="contracts:act_revoke_authorization", module="contracts", category="economic", emits=("agency_revoked",),
+  aliases={"id": "auth", "authorization": "auth"},
+  doc='revoke_authorization {"auth": "G1"}: at once; no law can stop it')
+R("act_for", "act for an agent who authorized you", "contracts", needs=("mod:contracts",),
+  handler="contracts:act_act_for", module="contracts", category="economic", emits=("agency_used",),
+  aliases={"id": "auth", "authorization": "auth", "recipient": "to"},
+  doc='act_for {"auth": "G1", "to": "Name", "qty": 2} (a transfer) or {"auth": "G1", "contract": "A1", "qty": 2} (an escrow '
+      'deposit): use an authorization someone gave you (or your contract office): their goods, within its limits; they see it')
+R("standing_order", "pay someone automatically every round", "contracts", needs=("mod:contracts",),
+  handler="contracts:act_standing_order", module="contracts", category="economic",
+  aliases={"recipient": "to", "amount": "qty"},
+  doc='standing_order {"to": "Name", "item": "grain", "qty": 1, "every": 1, "keep": 0, "times": 0}: a one-member contract that '
+      'pays qty of item to "to" (an agent or a contract treasury "assoc:A1") every "every" rounds from your allowance, only while '
+      'you keep at least "keep", "times" payments (0: until you cancel it with leave_contract)')
 # courts
 R("accuse", "take someone to court", "courts", needs=("level:2",), when=_k_clauses,
   handler="actions:_accuse", module="core", category="political", emits=("accuse",),
@@ -604,7 +627,8 @@ R("close_channel", "end your group", "groups", when=_k_owns_group,
   handler="actions:_close_channel", module="core", category="talk", emits=("channel_closed",),
   doc='close_channel {"channel": "..."}: channel owner only')
 # powers
-R("invoke", "use a hidden power you know, or an action a law defined", "powers", needs=("level:1", "any:mod:hidden|level:4"),
+R("invoke", "use a hidden power you know, or an action a law defined", "powers",
+  needs=("level:1", "any:mod:hidden|level:4|mod:contracts"),           # P4.5: a contract's offices exist at any law level
   handler="actions:_invoke", module="core", category="political", emits=("invoke", "invoke_unknown"),
   doc='invoke {"action": "name", "args": [...]}: use an action a law defined, if you hold its right')
 
@@ -624,7 +648,8 @@ ACTIONS_ORDER = (
     "send_subscriber_list", "revoke_licence", "grant_licence", "annotate", "subscribe", "unsubscribe", "buy_placement", "leak",
     "answer_poll", "buy_licence", "set_memory_price", "library_permit", "library_remove", "buy_memory", "library_deposit",
     "library_read", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance", "propose_contract_change",
-    "appeal", "legal_position")
+    "appeal", "legal_position",
+    "authorize", "revoke_authorization", "act_for", "standing_order")    # P4.5
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -638,7 +663,8 @@ DOC_ORDER = (
     "write_edition", "buy_placement", "run_placement", "leak", "poll", "answer_poll", "send_subscriber_list", "revoke_licence",
     "grant_licence", "buy_licence", "annotate", "set_memory_price", "buy_memory", "library_deposit", "library_read",
     "library_permit", "library_remove", "create_contract", "join_contract", "leave_contract", "deposit_escrow", "set_allowance",
-    "propose_contract_change", "appeal", "legal_position")
+    "propose_contract_change", "appeal", "legal_position",
+    "authorize", "revoke_authorization", "act_for", "standing_order")    # P4.5
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 

@@ -255,6 +255,10 @@ class Kernel:
         if c.get("par"):
             return CR.par_price(self, cur)
         res = c.get("reserve", "reserve")
+        if str(res).startswith(AC.ASSOC):                               # P4.5: an association's shares, at net asset value (D-15)
+            pool = AC.holdings(self, res)
+            backing = sum(self.w["unit"].get(k, 0) * v for k, v in pool.items())
+            return backing / c["supply"] if c["supply"] > 1e-9 else 1.0
         pool = self.w["reserve"] if res == "reserve" else J.pool(self, res) if str(res).startswith("reserve:") \
             else self.w.setdefault("reserves", {}).setdefault(res, {})     # jurisdictions: "reserve:<jid>" is a jurisdiction's reserve
         backing = sum(self.w["unit"].get(k, 0) * v for k, v in pool.items())

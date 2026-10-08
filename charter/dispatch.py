@@ -555,7 +555,7 @@ def do_mint(k, currency, qty, to, lid=None, via="law") -> dict:
     if via == "law":
         e = k.w["effects"]
         e["minted"][currency] = e["minted"].get(currency, 0.0) + qty
-        if to != "reserve":
+        if to != "reserve" and not str(to).startswith((AC.ASSOC, AC.ESCROW)):     # P4.5: shares minted into an account
             cl = k.cls_of(to)
             e["minted_to_class"][cl] = e["minted_to_class"].get(cl, 0.0) + qty
         k.log("mint", None, {"currency": currency, "qty": qty, "to": to, "law": lid}, vis="monitor")
@@ -2950,3 +2950,37 @@ def do_swap(k, contract, a, b, give, get, lid=None) -> dict:
 def do_open_fund(k, law, name) -> dict:
     from charter import contracts as CT
     return CT.change_open_fund(k, law, name)
+
+
+# P4.5: agency (charter/contracts.py). authorize and act_for are gated (before_authorize, before_act_for: a polity law may regulate
+# agency); deauthorize is not blockable (the grantor may always revoke). act_for's change is the grantor's own transfer or deposit,
+# made by the grantee and applied as its own primitive inside (its hooks, taxes and blocks apply). memo: the transfer's purpose.
+OPTIONS.update({"authorize": frozenset(), "deauthorize": frozenset(), "act_for": frozenset({"memo"})})
+
+
+def check_authorize(k, p):
+    from charter import contracts as CT
+    return CT.check_authorize(k, p)
+
+
+def check_act_for(k, p):
+    from charter import contracts as CT
+    return CT.check_act_for(k, p)
+
+
+CHECKS.update({"authorize": check_authorize, "act_for": check_act_for})
+
+
+def do_authorize(k, grantor, grantee, auth, scope) -> dict:
+    from charter import contracts as CT
+    return CT.change_authorize(k, grantor, grantee, auth, scope)
+
+
+def do_deauthorize(k, grantor, grantee, auth) -> dict:
+    from charter import contracts as CT
+    return CT.change_deauthorize(k, grantor, grantee, auth)
+
+
+def do_act_for(k, grantor, grantee, auth, action, item, qty, to, memo=None) -> dict:
+    from charter import contracts as CT
+    return CT.change_act_for(k, grantor, grantee, auth, action, item, qty, to, memo)
