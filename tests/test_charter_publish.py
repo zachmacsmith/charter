@@ -95,3 +95,20 @@ def test_load_cards(tmp_path):
     assert P.load_cards(tmp_path / "one.json") == {"*": {"title": "T"}}
     assert P.load_cards(tmp_path / "many.yaml") == {"r1": {"title": "A"}, "r2": {"tags": ["x"]}}
     assert P.parse_rounds("rounds 1–23") == [1, 23] and P.parse_rounds(None) is None
+
+
+def test_raw_archive_scrubs_writing_checkout_and_refuses_leftovers(tmp_path):
+    run = tmp_path / "ckout" / "charter" / "out" / "spec" / "r1"
+    run.mkdir(parents=True)
+    root = str(tmp_path / "ckout")
+    (run / "run.json").write_text(json.dumps({"argv": [f"{root}/charter/__main__.py"], "dir": f"{root}/runs/x"}))
+    stage = tmp_path / "stage"
+    out = stage / "raw" / "spec" / "r1.tar.gz"
+    P.raw_archive(run, out, "spec")
+    with tarfile.open(out) as tf:
+        text = tf.extractfile("spec/r1/run.json").read().decode()
+    assert root not in text and "charter/__main__.py" in text
+    assert P.check_staging(stage) == []
+    (run / "notes.md").write_text("see /home/someone/elsewhere/file")
+    P.raw_archive(run, out, "spec")
+    assert any("local path left" in p for p in P.check_staging(stage))

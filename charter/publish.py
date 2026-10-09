@@ -51,7 +51,12 @@ def _home() -> str:
 
 def _local_prefixes(run: Path) -> list[str]:
     """Absolute path prefixes that may appear in a run's logs: the run's own location (resolved and as given), and home."""
-    out = {str(run.resolve().parent.parent), str(run.parent.parent.absolute())}
+    out = {str(run.resolve().parent.parent), str(run.parent.parent.absolute()), str(Path.cwd()),
+           str(Path(__file__).resolve().parents[1])}                   # this checkout
+    for q in (run.resolve(), run.absolute()):                          # the checkout that wrote the run (<root>/charter/out/...)
+        parts = q.as_posix().split("/charter/out/")
+        if len(parts) > 1 and parts[0]:
+            out.add(parts[0])
     for p in list(out):
         if p.startswith("/private/"):
             out.add(p[len("/private"):])
@@ -152,6 +157,14 @@ def check_staging(stage: Path) -> list[str]:
             for m in tf.getmembers():
                 if NEVER.search(m.name):
                     problems.append(f"never published: {tar.name}:{m.name}")
+                elif m.isfile():
+                    try:
+                        text = tf.extractfile(m).read().decode()
+                    except UnicodeDecodeError:
+                        continue
+                    hit = LOCAL.search(text)
+                    if hit:
+                        problems.append(f"local path left in {tar.name}:{m.name}: ...{text[max(0, hit.start() - 20):hit.end() + 40]}...")
     return problems
 
 
