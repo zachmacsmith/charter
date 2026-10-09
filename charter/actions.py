@@ -12,6 +12,7 @@ import difflib
 from charter import accounts as AC                                     # accounts: balance caps (P4.1)
 from charter import action_registry as AR                             # every action's row: handler, doc, category
 from charter import camps as C
+from charter import channels as CH                                    # channels.v2 (wave 9 C): off = nothing changes here
 from charter import code as DC                                         # the default code (code.enabled): Acts as repeal targets
 from charter import context as CX                                     # context: lookups and files (charter/context.py)
 from charter import conflict as CF
@@ -136,6 +137,7 @@ def _act(k, aid: str, name: str, args: dict) -> str:
     if not DR.enabled(k):                                              # directories: only where some directory is provisioned
         hidden_here |= set(DR.ACTIONS)
     hidden_here |= AR.hidden(k.spec)                                   # review 14 A: the design arm's flags (none by default)
+    hidden_here |= AR.channel_hidden(k.spec)                           # wave 9 C: channels.v2's verbs (off: unknown, as before)
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):
@@ -167,7 +169,7 @@ def _act(k, aid: str, name: str, args: dict) -> str:
                 ref = mine[0]["id"] if mine else None
             if ref:
                 name, args = "create_agent", {"commission": ref}
-    fn = AR.resolve(AR.REG[name].handler)
+    fn = AR.resolve(CH.OVERRIDES[name] if name in CH.OVERRIDES and CH.on(k) else AR.REG[name].handler)   # channels.v2: post ...
     args = _normalise_args(name, args)
     if name == "veto" and isinstance(args, dict):                      # {"should_veto": false} means: no veto
         flag = args.get("should_veto", args.get("veto", True))
@@ -329,6 +331,8 @@ def _dm_check(k, aid, to, encrypted=False):
         if not k.spec["channels"].get("encryption", True):
             raise ActionError("encryption does not exist in this world")
         _need(k, aid, "encrypt", "send encrypted messages")
+    if CH.active(k):                                                   # channels.v2: the recipient's inbox writers
+        CH.check_dm(k, aid, to)
     used, lim = k.w["dm_sent"].get(aid, 0), k.dm_limit(aid)
     if used >= lim:
         raise ActionError(f"you have sent your {lim} private messages for this round: 0 left, so every further dm or reply this round "
@@ -347,8 +351,13 @@ def _deliver(k, aid, to, text, encrypted=False, extra=None):
     forged DM carries data["shown_as"] (the apparent sender) and a reply to one carries data["shown_to"] (whom the replier believes
     they answered). Feeds show the apparent names except to the true recipient (agents.render_event); laws (on_dm) see the apparent ones."""
     extra = extra or {}                                                # laws (on_dm) see DMs only when the world allows it (readable)
-    return k.apply("dm", sender=aid, recipient=to, text=str(text)[:2000], encrypted=encrypted, shown_as=extra.get("shown_as"),
-                   shown_to=extra.get("shown_to"), extra=extra).result["event"]
+    if CH.active(k):                                                   # channels.v2: a DM lands in the recipient's inbox
+        extra = CH.dm_extra(k, aid, to, extra)
+    eid = k.apply("dm", sender=aid, recipient=to, text=str(text)[:2000], encrypted=encrypted, shown_as=extra.get("shown_as"),
+                  shown_to=extra.get("shown_to"), extra=extra).result["event"]
+    if CH.active(k):
+        CH.after_dm(k, aid, to, text, eid)
+    return eid
 
 
 _BAD_ESCAPE = __import__("re").compile(r'\\(?!["\\/bfnrtu])')
@@ -841,6 +850,11 @@ def _own_channel(k, aid, channel):
     ch = k.w["channels"].get(str(channel))
     if not ch:
         raise ActionError(f"no channel {channel}")
+    if ch.get("v") == 2:                                               # channels.v2: the owner, or an institution's speak office
+        if ch["inbox"] or ch["owner"] == CH.WORLD:
+            raise ActionError(f"{channel} is an inbox or a square: its members are not managed")
+        CH.check_manage(k, aid, ch)
+        return ch
     if ch["owner"] != aid:
         raise ActionError(f"only the channel's owner ({ch['owner']}) can change it")
     return ch
@@ -879,15 +893,19 @@ def change_channel_member(k, polity, agent, change, actor) -> dict:
     if change == "add":
         if agent not in ch["members"]:
             ch["members"] = sorted(ch["members"] + [agent])
+            if ch.get("v") == 2:
+                CH.on_member(k, ch, agent, change)
     else:
         ch["members"] = [m for m in ch["members"] if m != agent]
-    k.log("channel_member", actor, {"channel": polity, "agent": agent, "change": change}, vis="public")
+    k.log("channel_member", actor, {"channel": polity, "agent": agent, "change": change},
+          vis=CH.register_vis(k, ch, [agent]) if ch.get("v") == 2 else "public")   # channels.v2: an unlisted one's stays private
     return {"channel": polity, "change": change}
 
 
 def change_channel_closed(k, polity, agent) -> dict:
-    del k.w["channels"][polity]
-    k.log("channel_closed", agent, {"channel": polity}, vis="public")
+    ch = k.w["channels"].pop(polity)
+    k.log("channel_closed", agent, {"channel": polity},
+          vis=CH.register_vis(k, ch, [agent]) if ch.get("v") == 2 else "public")   # channels.v2: an unlisted one's stays private
     return {"channel": polity}
 
 

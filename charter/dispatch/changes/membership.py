@@ -57,9 +57,13 @@ def do_expel(k, polity, agent, kind=None, lid=None, actor=None) -> dict:
     return J.change_expel(k, polity, agent)
 
 
-def do_found(k, agent, polity, kind=None, members=None, open=False, name=None, laws=None) -> dict:
+def do_found(k, agent, polity, kind=None, members=None, open=False, name=None, laws=None, settings=None) -> dict:
     """W8b: a channel (actions.change_channel_found: members, open), a jurisdiction founded in secret (jurisdictions.change_found:
-    name, laws; polity is the id it gets) or an outlet (media.change_found_outlet: a new one, or a closed one reopened)."""
+    name, laws; polity is the id it gets) or an outlet (media.change_found_outlet: a new one, or a closed one reopened). Wave 9 C:
+    a channels.v2 channel (settings: owner, selectors, listing, identity, retention; channels.change_found)."""
+    if kind == "channel" and settings is not None:
+        from charter import channels as CH
+        return CH.change_found(k, agent, polity, members, open, settings)
     if kind == "channel":
         from charter import actions as A
         return A.change_channel_found(k, agent, polity, members, open)

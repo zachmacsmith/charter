@@ -55,6 +55,7 @@ def bound_laws(k, P, payload, phase) -> list:
     id). Without jurisdictions: every active law. With them: laws of declared jurisdictions (any in a dry run) binding the subject
     (before) or any party (after); a payload naming nothing bindable is seen by all of them."""
     laws = [l for l in k.active_laws() if in_force(k, l["id"])]        # W6a: laws outside their declared window are skipped
+    allv = laws
     assoc = []
     if "contracts" in k.w:                                             # P4.3: associations' laws see their members' changes only
         from charter import contracts as CT                            # (contracts.sees; D-24: no polity legal acts)
@@ -80,6 +81,9 @@ def bound_laws(k, P, payload, phase) -> list:
                 seen.append(law)
         laws = seen
     laws = laws + assoc
+    if "channels_v2" in k.w:                                            # wave 9 C: the owning institution's laws see its channels
+        from charter import channels as CH
+        laws = laws + [l for l in CH.owner_laws(k, P, payload, allv) if l not in laws]
     secret = SECRET.get(P.name)
     if secret is not None and secret(k, payload):                       # W8b: a hidden jurisdiction's own doings: its laws only
         laws = [l for l in laws if J.law_jur(k, l["id"]) == payload.get("polity")]
@@ -156,13 +160,21 @@ def _scrub(x, hide):
     return x
 
 
+def _channel_readable(k, lid, cid) -> bool:
+    """Wave 9 C (channels.v2): a channel post's text reaches the laws of the institution owning the channel (its own code reads
+    its own channel) and, for a channel everyone reads, every law (public speech); never a closed channel's to other laws."""
+    from charter import channels as CH
+    return CH.law_reads(k, lid, cid)
+
+
 def hook_payload(k, P, payload, viewer, hide=()) -> dict:
     """A deep copy of the payload as a law may see it: the row's redact function, then hidden agents as None (anywhere in it)."""
     p = _copy.deepcopy(payload)
     if P.name == "dm" and (not p.get("readable") or p.get("encrypted")):   # as the legacy on_dm: a law reads a DM's text only where
         p["text"] = None                                                 # the world lets laws read DMs and it is not encrypted (V18)
     if P.name == "post" and p.get("kind") == "channel_post":           # a private channel's text: never to laws (legacy on_post never
-        p["text"] = None                                                 # saw channel posts; V18). Who posted where stays visible.
+        if not ("channels_v2" in k.w and _channel_readable(k, viewer, p.get("outlet"))):   # saw channel posts; V18). Who posted
+            p["text"] = None                                             # where stays visible. Channels v2: see _channel_readable
     if P.redact and viewer is not None:
         mod, _, fn = P.redact.partition(":")
         p = getattr(importlib.import_module(f"charter.{mod}"), fn)(k, p, viewer)

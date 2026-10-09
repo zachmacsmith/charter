@@ -460,6 +460,14 @@ E += [
 ]
 REQUIRES.update({n: (lambda spec: bool((spec.get("law") or {}).get("v2")) and bool((spec.get("law") or {}).get("publication")))
                  for n in ("publication", "publish", "unpublish")})
+# channels v2 (charter/channels.py, wave 9 C): documented only in worlds with channels.v2 on (REQUIRES)
+E += [
+    ("send_message", "output", "Output", "send_message(to, text)", "a message in the name of this law's own institution (a "
+     "polity or a contract): to an agent or an institution it lands in its inbox, to a channel it is a post (one the institution "
+     "owns or may write in). True if delivered. A standing message, an auto-reply (after_post on your inbox) or a relay.",
+     "prompt", "common"),
+]
+REQUIRES["send_message"] = lambda spec: bool((spec.get("channels") or {}).get("v2")) and bool((spec.get("law") or {}).get("v2"))
 # contracts (charter/contracts.py, P4.3): documented only in worlds with contracts on (OPTIONAL), for the code of a contract
 E += [
     ("pull", "contracts", "Contracts", "pull(member, item, qty)", "a contract's law only: takes qty of item from a member into its "
@@ -562,6 +570,8 @@ def resolve(spec: dict) -> dict:
         out["v2"] = True
         if (spec.get("contracts") or {}).get("enabled"):                # P4.3: contracts' changes are listed only where they exist
             out["contracts"] = True
+        if (spec.get("channels") or {}).get("v2"):                      # wave 9 C: set_channel is listed only where it exists
+            out["channels"] = True
     return out
 
 
@@ -585,7 +595,7 @@ def v2_doc(spec: dict, original: str) -> str:
     return original + ("\n" + V2_PROMPT if (spec.get("law") or {}).get("v2") else "")
 
 
-def v2_article(contracts: bool = False) -> dict:
+def v2_article(contracts: bool = False, channels: bool = False) -> dict:
     """codex/law/v2-hooks: every hookable change (the routed primitives), its payload, and what a before-verdict can do to it."""
     from charter import dispatch as D, primitives as PR
     lines = ["# Hooks on any change (law.v2)", "", V2_PROMPT, "", V2_LIMITS, "",
@@ -599,6 +609,8 @@ def v2_article(contracts: bool = False) -> dict:
         if P.feature == "contracts" and not contracts:                  # P4.3: absent where contracts are off
             continue
         if P.feature == "directories":                                  # hookable, but listed in the directories' manual entry
+            continue
+        if n == "set_channel" and not channels:                         # wave 9 C: only where channels.v2 is on
             continue
         hooks = [h for h in P.hooks]
         if not hooks:
@@ -657,5 +669,5 @@ def articles(resolved: dict) -> dict:
             body += ["", "These work in any law, whether or not the rules you were given mention them."]
             out[aid] = {"tier": tier, "title": title, "text": "\n".join(body) + "\n", "documents": names}
     if resolved.get("v2"):
-        out["codex/law/v2-hooks"] = v2_article(resolved.get("contracts", False))
+        out["codex/law/v2-hooks"] = v2_article(resolved.get("contracts", False), resolved.get("channels", False))
     return out

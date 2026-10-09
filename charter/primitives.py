@@ -155,6 +155,7 @@ PARAM_SAMPLES = {
     "scope": {"action": "transfer", "item": "grain", "qty": 2.0, "to": None, "rounds": None, "office": False},
     "under": "J1",                                                                                       # W8e: incorporation
     "members": ["a1", "a2"],                                                                              # W8b: found
+    "channel": "guild",                                                                                   # wave 9 C: set_channel
     "dir": "chronicle", "path": "people/", "access": "read",                                             # directories
 }
 
@@ -342,12 +343,14 @@ _ROWS = [
       preview=("rules.forge_ban",), compel_vis="public", sites=("conflict:change_arms_rule", "conflict:law_api.ban_forging")),
     # ------------------------------------------------------------------ speech and the press
     P("post", "core", "speech", ("agent", "kind", "text", "shown_as", "outlet"), "dispatch.changes.speech:do_post", routed=True, subject="agent", parties=("agent",),
-      agent_params=("agent",), event="post", causes=("agent",), reads=("posts", "current_post"),
+      agent_params=("agent",), event="post", causes=("agent", "law"), reads=("posts", "current_post"),
       redact="primitives:redact_shown_as", sites=("dispatch.changes.speech:do_post", "dispatch.legacy:legacy_hooks", "actions:_post", "actions:_anon_post", "actions:_publish", "actions:_report",
                                                    "actions:_channel_post", "media:submit", "media:annotate", "media:poll",
-                                                   "media:run_placement"),
-      why={"compel": _LNA}, notes="kind: post, anon_post, story, report, channel_post, submission, annotation, poll, placement; "
-                                   "media2 needs a licence; anonymous authors are monitor-only"),
+                                                   "media:run_placement", "channels:post_to", "channels:law_api.send_message"),
+      notes="kind: post, anon_post, story, report, channel_post, submission, annotation, poll, placement; "
+            "media2 needs a licence; anonymous authors are monitor-only. Wave 9 C (channels.v2): a channel post (outlet: the channel; "
+            "the owning institution's laws are bound too), and a law's send_message (agent None: a message in its institution's "
+            "name, never an agent's: laws still never act for an agent)"),
     P("dm", "core", "speech", ("sender", "recipient", "text", "encrypted", "shown_as", "shown_to", "readable"), "dispatch.changes.speech:do_dm", routed=True,
       subject="sender", parties=("sender", "recipient"), agent_params=("sender", "recipient"), event="dm", causes=("agent",),
       gates=("set_dm_limit",), redact="primitives:redact_shown_as",
@@ -361,8 +364,16 @@ _ROWS = [
       agent_params=("agent",), event="subscribe", causes=("agent", "law", "world"), reads=("outlets",),
       preview=("rules.compelled_subscribers",), compel_vis="parties", legacy_vis="monitor",
       sites=("dispatch.changes.press:do_subscribe", "media:change_subscribe", "media:subscribe", "media:unsubscribe",
-             "media:law_api.compel_subscription", "media:_charge_fees", "media:on_birth"),
-      notes="via (a call option): agent (subscribe/unsubscribe), law (compel_subscription), lapse (a fee not paid), birth"),
+             "media:law_api.compel_subscription", "media:_charge_fees", "media:on_birth", "channels:change_subscribe",
+             "channels:act_join_channel", "channels:act_leave_channel"),
+      notes="via (a call option): agent (subscribe/unsubscribe), law (compel_subscription), lapse (a fee not paid), birth; "
+            "channel (wave 9 C, channels.v2: join_channel/leave_channel follow a channel; outlet is the channel's id, and the "
+            "laws of the institution owning it are bound too: channels.owner_laws)"),
+    P("set_channel", "core", "rule", ("agent", "channel", "key", "value"), "channels:change_set_channel", routed=True,
+      subject="agent", parties=("agent",), agent_params=("agent",), event="channel_set", causes=("agent",),
+      sites=("channels:change_set_channel", "channels:act_set_channel"), why={"compel": _LNA, "gate": _V2GATE},
+      notes="wave 9 C (channels.v2): a channel's setting (purpose, readers, writers, listed, inbox, identity, retention, rate) by "
+            "its owner, or an institution's speak office holder; the owning institution's laws are bound (channels.owner_laws)"),
     P("licence", "media2", "relation", ("outlet", "agent", "granted"), "media:change_licence", routed=True, subject="agent",
       parties=("agent",), agent_params=("agent",), event="licence_granted", causes=("agent",),
       sites=("media:change_licence", "media:grant_licence", "media:revoke_licence", "media:buy_licence"),
@@ -836,6 +847,9 @@ ACTION_PRIMITIVES = {
     # groups
     "create_channel": ("found",), "channel_post": ("post",), "add_member": ("admit",), "remove_member": ("expel",),
     "close_channel": ("dissolve",),
+    # channels v2 (wave 9 C): send's first primitive is dm (to an agent) or post (to an inbox or a channel): ANY_FIRST
+    "send": ("dm", "post"), "read": LOOKUP, "open_channel": ("found",), "set_channel": ("set_channel",),
+    "join_channel": ("subscribe",), "leave_channel": ("subscribe",),
     # contracts (P4.3)
     "create_contract": ("create_contract",), "join_contract": ("join",), "leave_contract": ("leave",),
     "deposit_escrow": ("deposit_escrow",), "set_allowance": ("set_allowance",), "propose_contract_change": ("propose",),
@@ -847,6 +861,10 @@ ACTION_PRIMITIVES = {
     "dir_list": LOOKUP, "dir_read": LOOKUP, "dir_search": LOOKUP, "dir_write": ("dir_write",), "dir_edit": ("dir_write",),
     "dir_move": ("dir_write",), "dir_delete": ("dir_write",), "dir_grant": ("dir_grant",),
 }
+
+# Actions whose first primitive depends on their arguments (any primitive they list may be the one the action is "for": a block of
+# it refuses the action, dispatch.routing._refusable).
+ANY_FIRST = frozenset({"send"})
 
 # Law functions that write but cause no primitive (outputs), with why. Every other writing LawFn names its primitive.
 LAW_OUTPUTS = {
@@ -891,7 +909,8 @@ TIER_OF = {
           "set_money_rule", "set_title", "rename", "set_arms_rule", "set_lease_rules", "set_birth_rules",
           "set_succession_rule", "set_project_rule", "set_power_rule", "loan_terms", "loan_assign", "create_clause",
           "start_project",
-          "dir_write", "dir_grant"),                                   # directories
+          "dir_write", "dir_grant",                                    # directories
+          "set_channel"),                                              # wave 9 C (channels.v2)
     "L-route": (),
 }
 

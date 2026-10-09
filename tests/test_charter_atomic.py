@@ -162,7 +162,9 @@ JUR_ONLY = {"admit", "expel", "lawful_attack"}
 # A contract's own functions (pull, forfeit, refund, breach, swap, open_fund) exist only in an association's law
 # (contracts.scope_api): the association variant below (test_a_killed_contract_invocation_leaves_no_trace, W7e) covers them.
 CONTRACT_ONLY = {n for n, f in LA.LAWFNS.items() if f.module == "contracts"}
-WRITERS = sorted(n for n, f in LA.LAWFNS.items() if f.primitive and n not in CONTRACT_ONLY)
+# Wave 9 C: send_message exists only under channels.v2 (tests/test_channels_v2.py covers its rollback).
+CHANNEL_ONLY = {n for n, f in LA.LAWFNS.items() if f.module == "channels"}
+WRITERS = sorted(n for n, f in LA.LAWFNS.items() if f.primitive and n not in CONTRACT_ONLY | CHANNEL_ONLY)
 
 
 def test_every_writer_has_a_call():

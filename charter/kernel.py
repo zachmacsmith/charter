@@ -39,6 +39,7 @@ from charter import outside as O
 from charter import powers as PW                                      # the power table (P4.2): the Board's veto window, levels
 from charter import projects as P
 from charter import publication as PUB                                # review 12 WP2 (law.publication): the publication layer
+from charter import channels as CH                                    # wave 9 C (channels.v2): one channel structure (off: nothing)
 
 from charter import features as FT                                    # the feature table: phases and merge order (features.py)
 from charter import rights as RT                                      # the rights registry: names, docs, secrecy, entrenchment
@@ -122,6 +123,7 @@ class Kernel:
             self.eff: dict = {}                                            # agent -> camp -> [(round, efficiency)]
             self.turn_log: list[dict] = []                                 # per agent turn: {round, agent, reasoning, stated_reasoning, actions, results}
         FT.run("init", self, {"effects": effects})                     # features' install/init_state in today's order (features.PHASES)
+        CH.install(self)                                               # channels.v2: squares and inboxes (off: nothing)
         self._causes = []                                              # empty between rounds (checkpoints hold none)
 
     # ------------------------------------------------------------------ basics
@@ -698,7 +700,8 @@ class Kernel:
             "rng": k.law_rng.random if k.rng_version < 2 else (lambda: k._law_stream(lid).random()),
             "bounty_number": lambda c: camp_of(c)["fn"].get("N") if camp_of(c).get("compute") == "factoring" else None,
             "channels": lambda: {n: {"owner": c["owner"], "members": list(c["members"]), "open": c["open"]} for n, c in k.w["channels"].items()
-                                 if not PUB.enabled(k) or PUB.channel_visible(k, lid, n)},   # V17: the register laws may read
+                                 if (not PUB.enabled(k) or PUB.channel_visible(k, lid, n))     # V17: the register laws may read
+                                 and (not CH.active(k) or CH.law_visible(k, lid, n))},        # channels.v2: unlisted, its owner's only
             "posts": posts, "current_post": lambda: k.current_post, "hidden_posts": lambda: list(k.w["hidden"]),
             "hide_post": hide_post, "unhide_post": unhide_post,
             "create_right": create_right, "grant": grant, "revoke": revoke, "define_action": define_action,
@@ -717,6 +720,8 @@ class Kernel:
         }
         if LK.enabled(k):                                              # law.v2: use(ref), public_of(lid) (charter/linker.py)
             api.update(LK.law_api(k, lid))
+            if CH.active(k):                                           # channels.v2: send_message (charter/channels.py)
+                api.update(CH.law_api(k, lid))
             api.update(D.law_api(k, lid))                              # law.v2 (P3.1): root_kind(chain) etc., law_id(), treasury()
             api.update(AM.law_api(k, lid))                             # law.v2 (P3.4): propose_law, propose_amendment (from L3)
             api.update(CO.law_api(k, lid))                             # law.v2 (courts v2): cases, case, court_rules, set_court_rule
@@ -1256,6 +1261,7 @@ class Kernel:
         def reset_counters():
             self.w["harvest_count"], self.w["quota_used"], self.w["fixes_this_round"], self.w["rulings_this_round"] = {}, {}, 0, {}
             self.w["dm_sent"] = {}
+            CH.round_start(self)                                       # channels.v2: rate counts, new inboxes (off: nothing)
 
         def settle_loans():
             with self.cause("kernel", "loans", root=True):               # P3.1: kernel round steps are root frames (cascades)
@@ -1489,6 +1495,8 @@ class Kernel:
             return True
         if isinstance(vis, str) and vis.startswith("channel:"):
             ch = self.w["channels"].get(vis.split(":", 1)[1])
+            if ch and ch.get("v") == 2:                                 # channels.v2: readers, retention (charter/channels.py)
+                return CH.can_see(self, aid, ch, event)
             return bool(ch) and (ch["open"] or aid in ch["members"])
         return False
 

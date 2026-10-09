@@ -6,6 +6,9 @@ from __future__ import annotations
 
 
 def do_subscribe(k, agent, outlet, on, via="agent", lid=None) -> dict:
+    if via == "channel":                                              # wave 9 C (channels.v2): following a channel (outlet: its id)
+        from charter import channels as CH
+        return CH.change_subscribe(k, agent, outlet, on)
     from charter import media as MD
     return MD.change_subscribe(k, agent, outlet, on, via, lid)
 

@@ -63,7 +63,7 @@ OPTIONS = {
     # scholar, title, text (a deposit's); set_capacity: scholar; set_initiative: item (what is spent); hire_assassin: text (the sealed
     # message, never shown to hooks); commission: ordered (the full order) and payment; set_money_rule: why (a suspension's reason);
     # start_project: record (the drawn project); create_clause: name, text, key (its penalty's fnreg key).
-    "found": frozenset({"open", "name", "laws"}), "invite": frozenset({"actor"}), "declare": frozenset(),
+    "found": frozenset({"open", "name", "laws", "settings"}), "invite": frozenset({"actor"}), "declare": frozenset(),
     "set_charter": frozenset({"actor"}), "dissolve": frozenset({"heirs"}), "invoke": frozenset(),
     "commission": frozenset({"ordered", "payment"}), "set_will": frozenset(), "name_successor": frozenset(),
     "licence": frozenset({"actor", "fee", "via"}), "set_price": frozenset({"outlet"}),
@@ -77,4 +77,7 @@ OPTIONS = {
     "start_project": frozenset({"record", "lid"}),
     # directories: text = the file's new text; to = a move's new path
     "dir_write": frozenset({"text", "to"}), "dir_grant": frozenset(),
+    # wave 9 C (channels.v2): found's settings (a v2 channel's owner, selectors, listing, identity, retention, rate); subscribe's
+    # via "channel" (join_channel, leave_channel)
+    "set_channel": frozenset(),
 }

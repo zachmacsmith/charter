@@ -24,12 +24,13 @@ CO_FNS = ("cases", "case", "court_rules", "set_court_rule")                     
 W7E_FNS = ("is_number", "is_text")                                                              # W7e (dispatch.law_api)
 W8E_FNS = ("company_rule", "company_rules", "companies")   # W8e (contracts.law_api; contracts-module rows, so in CONTRACT_FNS)
 PUB_FNS = ("publication", "publish", "unpublish")                                             # W8c (publication.law_api)
-W6_V2_FNS = {*W6A_FNS, *CO_FNS, *EV_FNS, *W7E_FNS, *PUB_FNS}                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
-W6_FNS = {*W6_V2_FNS}                                                 # every W6 law function (contract-module ones are in CONTRACT_FNS)
+W6_V2_FNS = {*W6A_FNS, *CO_FNS, *EV_FNS, *W7E_FNS, *PUB_FNS, "send_message"}   # wave 9 C: send_message (channels.law_api)                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
+CH_FNS = {"send_message"}                                             # wave 9 C (channels.law_api; law.v2 and channels.v2 worlds)
+W6_FNS = {*W6_V2_FNS}                                        # every W6 law function (contract-module ones are in CONTRACT_FNS)
 SNAPSHOT = Path(__file__).parent / "fixtures" / "charter_lawapi_snapshot.json"
 ALL_ON = ["jurisdictions.enabled=false", "conflict.enabled=true", "media2.enabled=true", "life.enabled=true",
           "shared_archive.enabled=false", "law.v2=true", "contracts.enabled=true",
-          "law.publication=true"]                                        # W8c: publish, unpublish, publication   # law.v2: use and public_of exist (lawapi.V2_ONLY)
+          "law.publication=true", "channels.v2=true"]                                        # W8c: publish, unpublish, publication   # law.v2: use and public_of exist (lawapi.V2_ONLY)
 CONTRACT_FNS = {n for n, f in LA.LAWFNS.items() if f.module == "contracts"}   # P4.3: new rows, after the snapshot (contracts on only)
 assert set(W8E_FNS) <= CONTRACT_FNS                                     # W8e: company law rows are contract-module rows
 
@@ -42,8 +43,8 @@ def test_classification_and_scoping_are_byte_identical_to_the_hand_lists():
     """API_GROUPS, STRUCTURAL_CALLS, HOOKS and the scoping tables, generated from the table, equal what was written by hand."""
     want = json.loads(SNAPSHOT.read_text())
     assert list(LL.API_GROUPS) == list(want["API_GROUPS"])
-    assert {g: sorted(s - LA.V2_ONLY - CONTRACT_FNS) for g, s in LL.API_GROUPS.items()} == want["API_GROUPS"]   # P3.3, P4.3
-    assert LL.API - LA.V2_ONLY - CONTRACT_FNS == set().union(*map(set, want["API_GROUPS"].values()))
+    assert {g: sorted(s - LA.V2_ONLY - CONTRACT_FNS - CH_FNS) for g, s in LL.API_GROUPS.items()} == want["API_GROUPS"]   # P3.3, P4.3
+    assert LL.API - LA.V2_ONLY - CONTRACT_FNS - CH_FNS == set().union(*map(set, want["API_GROUPS"].values()))
     assert LA.V2_ONLY == {"use", "public_of", *D_HELPERS, "set_conflict_rule", *AM_FNS, "settle_loan", *W6_V2_FNS}   # P3.2, P3.4, loans, W6
     assert sorted(LL.STRUCTURAL_CALLS - LA.V2_ONLY - CONTRACT_FNS) == want["STRUCTURAL_CALLS"]
     assert list(LL.HOOKS) == want["HOOKS"]

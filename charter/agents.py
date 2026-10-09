@@ -10,6 +10,7 @@ import random
 
 from charter import action_registry as AR                             # every action's doc line (Act.doc)
 from charter import archive
+from charter import channels as CH                                    # channels.v2 (wave 9 C): off = nothing changes here
 from charter import context as CX                                     # context: fixed-layer prompts (charter/context.py)
 from charter import conflict as CF
 from charter import credit as CR
@@ -372,10 +373,14 @@ def legacy_actions(inst: dict, a: dict) -> list:
         absent |= {n for n, x in AR.REG.items() if x.module == "contracts"}
     absent |= {n for n, x in AR.REG.items() if x.module == "directories"}   # directories: core-prompt worlds only (context on)
     absent |= AR.hidden(sp)                                             # review 14 A: the design arm's flags (read_library unless asked)
-    return [k for k in ACTION_DOC if k not in absent] + {
+    absent |= AR.channel_hidden(sp)                                     # wave 9 C: channels.v2's verbs only where it is on
+    out = [k for k in ACTION_DOC if k not in absent] + {
         "board": ["veto"], "fixer": ["patch"], "scientist": ["read_archive", "search_archive", "write_archive"],
         "media": ["publish", "write_digest", "report", "create_channel", "add_member", "remove_member", "close_channel"]}.get(a["cls"], []) + (["rule"] if lvl >= 2 else []) \
         + (["set_dm_limit"] if "dm_rules" in a["rights"] and inst["spec"]["channels"].get("dm", True) else [])
+    if AR.channels_v2(sp):                                              # wave 9 C: open_channel replaces create_channel
+        out = [x for x in out if x not in AR.OLD_CHANNEL_ACTIONS]
+    return out
 
 
 @SC.section("actions", layers=("legacy",), sep="\n\n")
@@ -559,15 +564,22 @@ def render_event(k, e, viewer=None) -> str | None:
     if t == "report":
         return f"{tag} REPORT by {who} on {d['about']}'s post {d['source']}: {d['text']}"
     if t == "channel_post":
+        if d.get("v2"):                                                # channels.v2: as, anonymous, inbox recipients
+            return CH.render(k, e, tag, viewer)
         return f"{tag} #{d['channel']} {who}: {d['text']}"
+    if t in ("channel_opened", "channel_set", "channel_subscribed"):     # channels.v2: opened, set, joined or left
+        return CH.render_event(k, e, tag)
     return FT.render_event(k, e, tag, viewer)                          # the feature modules' renderers (features.TAILS order)
 
 
 def feed(k, aid: str, since: int, max_items: int = 80) -> tuple[str, int]:
     digest_only = k.spec["conditions"].get("feed_mode") == "digest_only"
+    pull = CH.pull(k)                                                   # channels.v2, pull: channel posts are counted, not pushed
     lines = []
     for e in k.events[since:]:
         if not k.can_see(aid, e):
+            continue
+        if pull and CH.pulled(k, aid, e):
             continue
         if digest_only and e["type"] == "post" and e["agent"] != aid:
             continue
@@ -617,6 +629,8 @@ def state_view(k, aid: str) -> str:
     if appealable:                                                      # law.v2 (courts v2): rulings a party may still appeal
         lines.append("Appealable: " + "; ".join(f"{c['id']} ruled {c.get('verdict')} (appeal until the end of round {c['appealable_until'] + 1})" for c in appealable))
     def channels(k, aid):
+        if CH.active(k):                                                # channels.v2: inbox, followed channels, unread counts
+            return CH.state_lines(k, aid)
         chans = [n for n, c in w["channels"].items() if c["open"] or aid in c["members"]]
         return ["Channels you can post in: " + ", ".join(chans)] if chans else []
 

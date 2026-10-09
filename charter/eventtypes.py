@@ -173,8 +173,17 @@ E("treasury_coins", "actions", "summary", "public", "event", "agents", act="depo
   note="rendered since the event registry (was dropped from feeds)", primitive="mint")
 E("redeem", "actions", "primitive", "parties", "event", "agents", act="redeem", primitive="convert")
 E("channel_created", "actions", "primitive", "public", "official", "agents", act="create_channel", flags="messages", primitive="found")
-E("channel_member", "actions", "primitive", "public", "official", "agents", act="add_member", note="also remove_member", primitive="admit")
-E("channel_closed", "actions", "primitive", "public", "official", "agents", act="close_channel", primitive="dissolve")
+E("channel_member", "actions", "primitive", "public|parties", "official", "agents", act="add_member", note="also remove_member", primitive="admit")
+E("channel_closed", "actions", "primitive", "public|parties", "official", "agents", act="close_channel", primitive="dissolve")
+# wave 9 C (channels.v2, charter/channels.py): channel_post carries channel_id (and as, anonymous, to) under v2
+E("channel_opened", "channels", "primitive", "public|parties", "event", "agents", act="open_channel", primitive="found",
+  note="channels.v2: a listed channel's opening is public; an unlisted one's reaches its owner and members only")
+E("channel_set", "channels", "primitive", "channel", "event", "agents", act="set_channel", primitive="set_channel")
+E("channel_subscribed", "channels", "primitive", "parties", "event", "agents", act="join_channel", note="also leave_channel",
+  primitive="subscribe")
+E("channel_seeded", "channels", "record", "monitor", "silent", None, note="channels.v2: the squares and inboxes the kernel made")
+E("message_refused", "channels", "record", "monitor", "silent", None,
+  note="channels.v2: a law's send_message that could not be delivered (why)")
 E("anon_truth", "actions", "truth", "monitor", "silent", None, act="anon_post", primitive="post")
 E("forged_dm", "actions", "truth", "monitor", "silent", None, act="forge_dm", aliases=("forgery_truth",),
   note="forgery_truth: the name before the merge with hidden powers' forgeries (old runs)", primitive="dm")

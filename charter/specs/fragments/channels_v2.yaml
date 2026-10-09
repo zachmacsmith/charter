@@ -1,0 +1,11 @@
+# Channels v2 (review 14 §4.6; ARCHITECTURE D-33, D-37; charter/channels.py): one channel structure for every communication form.
+# Put it after a preset, e.g.
+#   extends: [society, charter/specs/fragments/channels_v2.yaml]
+# or the same keys with --set. Every agent and institution gets an inbox (@<id>); the world gets its square(s), rate-limited;
+# anyone may open a channel (add code.enabled: true to seed the Press Act, which restores today's press gate); delivery is pull:
+# channel posts are counted in the state and opened with read, DMs and your own inbox are pushed.
+channels:
+  v2: true
+  delivery: pull
+  square: one
+  square_rate: 2

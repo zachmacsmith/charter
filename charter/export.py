@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCHEMA_VERSION = 2           # major: a column removed, renamed, or changed in type or meaning (docs/data_format.md)
-SCHEMA_MINOR = 0             # additive changes (a new column or table) since the major
+SCHEMA_MINOR = 1             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns
 TYPES = ("str", "int", "float", "bool", "json")
 
 
@@ -322,6 +322,8 @@ SCHEMA: dict[str, tuple] = {
         ("encrypted", "bool", "DM sent encrypted"),
         ("reply_to", "str", "msg_id it replies to, when given"),
         ("data_json", "json", "the full event payload"),
+        ("as_account", "str", "channels v2: the account it was sent in the name of (an institution, or an agent who authorized "
+                              "the sender); null otherwise"),
     ),
     "channels": _cols(
         RUN_ID,
@@ -340,12 +342,17 @@ SCHEMA: dict[str, tuple] = {
         ("n_senders", "int", "distinct senders"),
         ("members_json", "json", "members at the end of the run (kernel: [] once closed; dm/group: the participants); null for "
                                  "public, outlet, submissions, gazette and system channels"),
+        ("purpose", "str", "channels v2: the channel's purpose"),
+        ("listed", "bool", "channels v2: listed in the directory (false: an unlisted address)"),
+        ("inbox", "bool", "channels v2: the owner's inbox (send to the owner delivers here)"),
+        ("readers_json", "json", "channels v2: the readers selector (at creation, or as last set)"),
+        ("writers_json", "json", "channels v2: the writers selector (at creation, or as last set)"),
     ),
     "channel_members": _cols(
         RUN_ID,
         ("channel_id", "str", "kernel or dm/group channel"),
         ("agent", "str", "agent id"),
-        ("role", "str", "owner or member"),
+        ("role", "str", "owner, member or subscriber (channels v2: join_channel)"),
         ("from_round", "int", "round the spell began (kernel: creation or admission; dm/group: first message)"),
         ("to_round", "int", "last round of the spell (removal or close); null = to the end of the run"),
         ("source", "str", "kernel or derived"),
@@ -904,6 +911,8 @@ def _channel(e, et, d, poll_outlet) -> tuple[str, str]:
     t, vis = e.get("type"), e.get("vis")
     if e.get("channel_id"):                                             # channels v2 (doc 14) names it on the event
         return f"ch:{e['channel_id']}", "channel"
+    if d.get("channel_id"):                                             # channels v2 (wave 9 C): in the event's data
+        return f"ch:{d['channel_id']}", "channel"
     if isinstance(vis, str) and vis.startswith("channel:"):
         return f"ch:{vis.split(':', 1)[1]}", "channel"
     ck = CHANNEL_OF.get(t)
@@ -929,6 +938,31 @@ def _channel(e, et, d, poll_outlet) -> tuple[str, str]:
             if len(who) >= 3:
                 return "group:" + "|".join(who), "group"
     return f"system:{t}", "system"
+
+
+def _v2_readers(kc) -> list | None:
+    """channels v2: the readers of a post, where the selector names them (agents, the channel's members or subscribers, and its
+    owner); None where it resolves by state the export does not hold (everyone, an institution's members, an office, an address)."""
+    sel = (kc.get("v2") or {}).get("readers")
+    sels = sel if isinstance(sel, list) else [sel]
+    out = {kc["owner"]} if kc.get("owner") else set()
+    for x in sels:
+        if not isinstance(x, dict) or set(x) - {"agents", "members", "subscribers"} or x.get("members") not in (None, True):
+            return None
+        out |= set(x.get("agents") or ())
+        if x.get("members") is True:
+            out |= {a for a, (_, role) in kc["members"].items() if role != "subscriber"}
+        if x.get("subscribers"):
+            out |= {a for a, (_, role) in kc["members"].items() if role == "subscriber"}
+    return sorted(str(a) for a in out if a)
+
+
+def _v2_cols(kc) -> dict:
+    v = (kc or {}).get("v2")
+    if v is None:
+        return {"purpose": None, "listed": None, "inbox": None, "readers_json": None, "writers_json": None}
+    return {"purpose": _s(v.get("purpose")), "listed": bool(v.get("listed")), "inbox": bool(v.get("inbox")),
+            "readers_json": v.get("readers"), "writers_json": v.get("writers")}
 
 
 def _text_of(d) -> str | None:
@@ -1088,6 +1122,31 @@ def v2_tables(run: Path, meta: dict, h, inh, ever, with_prompts: bool = False) -
         r = e.get("round")
         if t == "poll" and d.get("poll") is not None:
             poll_outlet[str(d["poll"])] = d.get("outlet")
+        v2s = (d.get("channels") or []) if t == "channel_seeded" else [dict(d, id=d.get("channel"))] if t == "channel_opened" else []
+        for c in v2s:                                                   # channels v2 (wave 9 C): squares, inboxes, opened channels
+            cid = f"ch:{c.get('id')}"
+            old = kch.get(cid)
+            if old is not None:
+                for a in list(old["members"]):
+                    close_spell(cid, old, a, r)
+            owner = _s(c.get("owner"))
+            kch[cid] = {"owner": owner, "open": c.get("writers") == {"all": True}, "created_round": old["created_round"] if old else r,
+                        "closed_round": None, "members": {}, "v2": {x: c.get(x) for x in ("purpose", "listed", "inbox", "readers",
+                                                                                           "writers")}}
+            for a in c.get("members") or []:
+                kch[cid]["members"][str(a)] = [r, "owner" if str(a) == owner else "member"]
+        if t == "channel_set" and f"ch:{d.get('channel')}" in kch and d.get("key") in ("purpose", "listed", "inbox", "readers", "writers"):
+            ch = kch[f"ch:{d.get('channel')}"]
+            ch["v2"][d["key"]] = d.get("value")
+            if d["key"] == "writers":
+                ch["open"] = d.get("value") == {"all": True}
+        if t == "channel_subscribed" and f"ch:{d.get('channel')}" in kch:
+            cid = f"ch:{d.get('channel')}"
+            ch, a = kch[cid], str(d.get("agent"))
+            if d.get("on") and a not in ch["members"]:
+                ch["members"][a] = [r, "subscriber"]
+            elif not d.get("on") and a in ch["members"] and ch["members"][a][1] == "subscriber":
+                close_spell(cid, ch, a, r)
         if t == "channel_created" and d.get("channel") is not None:
             cid = f"ch:{d['channel']}"
             ch = kch.get(cid)
@@ -1117,7 +1176,10 @@ def v2_tables(run: Path, meta: dict, h, inh, ever, with_prompts: bool = False) -
         cid, ck = _channel(e, et, d, poll_outlet)
         vis = e.get("vis")
         rec = sorted({str(x) for x in vis}) if isinstance(vis, list) else None
-        if ck == "channel" and cid in kch and not kch[cid]["open"]:
+        if ck == "channel" and cid in kch and kch[cid].get("v2") is not None:   # channels v2: who could read it at the time
+            if rec is None:
+                rec = _v2_readers(kch[cid])
+        elif ck == "channel" and cid in kch and not kch[cid]["open"]:
             rec = sorted(kch[cid]["members"])
         if t == "anon_post":
             sender = anon_author.get(str(e.get("id")))
@@ -1128,7 +1190,7 @@ def v2_tables(run: Path, meta: dict, h, inh, ever, with_prompts: bool = False) -
                      "audience": _audience(vis), "recipients_json": rec, "n_recipients": None if rec is None else len(rec),
                      "title": _s(d.get("headline") or d.get("title") or (d.get("question") if t == "poll" else None)),
                      "text": _text_of(d), "encrypted": bool(d.get("encrypted")), "reply_to": _s(d.get("reply_to")),
-                     "data_json": e.get("data")})
+                     "data_json": e.get("data"), "as_account": _s(d.get("as"))})
     msgs.sort(key=lambda m: (m["channel_id"], m["seq"]))
 
     # --- channels and their members
@@ -1159,7 +1221,7 @@ def v2_tables(run: Path, meta: dict, h, inh, ever, with_prompts: bool = False) -
                         "created_round": kc["created_round"] if kc else (min(rounds) if rounds else None),
                         "closed_round": kc["closed_round"] if kc else None, "first_round": min(rounds) if rounds else None,
                         "last_round": max(rounds) if rounds else None, "n_messages": len(ms), "n_senders": len(senders),
-                        "members_json": members})
+                        "members_json": members, **_v2_cols(kc)})
         if part and not kc:
             mem_rows += [{"channel_id": cid, "agent": a, "role": "member", "from_round": min(rounds) if rounds else None,
                           "to_round": None, "source": "derived"} for a in part]

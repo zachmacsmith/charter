@@ -232,8 +232,9 @@ def _refusable(k, cas, P, chain) -> bool:
         return True
     root = chain[0] if chain else {}
     if root.get("kind") == "action" and cas.changes == 0:
-        own = PR.ACTION_PRIMITIVES.get(str(root.get("id", "")).split(":", 1)[-1])
-        return isinstance(own, tuple) and bool(own) and own[0] == P.name
+        act = str(root.get("id", "")).split(":", 1)[-1]
+        own = PR.ACTION_PRIMITIVES.get(act)
+        return isinstance(own, tuple) and bool(own) and (own[0] == P.name or (act in PR.ANY_FIRST and P.name in own))
     return False
 
 

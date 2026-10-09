@@ -1812,8 +1812,12 @@ def act_authorize(k, aid, agent=None, office=None, action="transfer", item=None,
     if (agent is None) == (office is None):
         raise L.LawError('name either an agent ("agent") or a contract office ("office": a contract right such as "A1.treasurer")')
     act = str(action or "transfer")
-    if act not in AGENCY_ACTIONS:
-        raise L.LawError(f"{act} cannot be authorized (only {', '.join(AGENCY_ACTIONS)}; vote never)")
+    from charter import channels as CH                                # wave 9 C (channels.v2): sending in the grantor's name
+    acts = {**AGENCY_ACTIONS, **(CH.AGENCY if CH.on(k) else {})}
+    if act not in acts:
+        raise L.LawError(f"{act} cannot be authorized (only {', '.join(acts)}; vote never)")
+    if act == "send" and not item:
+        item = "message"
     if not item or not isinstance(item, str):
         raise L.LawError("name the item the authorization covers")
     q = _qty({"qty": qty})

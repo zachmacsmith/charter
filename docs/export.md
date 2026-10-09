@@ -70,7 +70,7 @@ Not yet exported: `state_deltas` (per-round snapshot diffs) and `observer_assess
 
 ## Tables
 
-Dataset schema version **2.0** (`schema_version` 2, `schema_minor` 0). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
+Dataset schema version **2.1** (`schema_version` 2, `schema_minor` 1). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
 
 ### `runs`
 
@@ -375,6 +375,7 @@ Dataset schema version **2.0** (`schema_version` 2, `schema_minor` 0). Types: `s
 | `encrypted` | bool | DM sent encrypted |
 | `reply_to` | str | msg_id it replies to, when given |
 | `data_json` | json | the full event payload |
+| `as_account` | str | channels v2: the account it was sent in the name of (an institution, or an agent who authorized the sender); null otherwise |
 
 ### `channels`
 
@@ -394,6 +395,11 @@ Dataset schema version **2.0** (`schema_version` 2, `schema_minor` 0). Types: `s
 | `n_messages` | int | messages in the channel |
 | `n_senders` | int | distinct senders |
 | `members_json` | json | members at the end of the run (kernel: [] once closed; dm/group: the participants); null for public, outlet, submissions, gazette and system channels |
+| `purpose` | str | channels v2: the channel's purpose |
+| `listed` | bool | channels v2: listed in the directory (false: an unlisted address) |
+| `inbox` | bool | channels v2: the owner's inbox (send to the owner delivers here) |
+| `readers_json` | json | channels v2: the readers selector (at creation, or as last set) |
+| `writers_json` | json | channels v2: the writers selector (at creation, or as last set) |
 
 ### `channel_members`
 
@@ -402,7 +408,7 @@ Dataset schema version **2.0** (`schema_version` 2, `schema_minor` 0). Types: `s
 | `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
 | `channel_id` | str | kernel or dm/group channel |
 | `agent` | str | agent id |
-| `role` | str | owner or member |
+| `role` | str | owner, member or subscriber (channels v2: join_channel) |
 | `from_round` | int | round the spell began (kernel: creation or admission; dm/group: first message) |
 | `to_round` | int | last round of the spell (removal or close); null = to the end of the run |
 | `source` | str | kernel or derived |

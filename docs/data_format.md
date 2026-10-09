@@ -1,6 +1,6 @@
 # Published data format (export schema 2)
 
-Status: **built** (schema 2.0). `charter/export.py` implements it; `docs/export.md` holds the generated column tables and wins
+Status: **built** (schema 2.1: 2.0 plus the channels v2 columns). `charter/export.py` implements it; `docs/export.md` holds the generated column tables and wins
 where the two differ. This page fixes the contract the site reader and `charter publish` code against. Where the build had to
 depart from the agreed spec, the text below says so in a **Built:** note.
 
@@ -76,6 +76,7 @@ post_hidden and post_revealed land in `system:<type>`.
 | `encrypted` | bool | DM sent encrypted |
 | `reply_to` | str | msg_id it replies to, when given |
 | `data_json` | json | the full event payload |
+| `as_account` | str | channels v2 (schema 2.1): the account the message was sent in the name of |
 
 **`channel_id` grammar** (stable; a site may parse the prefix):
 
@@ -92,6 +93,16 @@ post_hidden and post_revealed land in `system:<type>`.
 
 Channels v2 (doc 14) emits `channel_id` on the event itself; those become `ch:<id>` with `channel_source = kernel`. Derived ids stay
 valid for old runs.
+
+**Built (schema 2.1, wave 9 C, spec `channels.v2`):** the event carries `channel_id` in its `data` (the exporter reads it there as
+well as at the top level). A channel post is `ch:<channel>`; a post in the one-square world's square stays type `post`, `vis`
+public, with `channel_id` `square` (so `ch:square`); a DM carries the recipient's inbox, `ch:@<agent>`; a message to an
+institution is a `channel_post` in `ch:@<institution>`. `as_account` names the account a message was sent in the name of (an
+institution, or an agent who authorized the sender); `sender` stays the true writer (null for a law's `send_message`).
+`recipients_json` of a v2 channel post: the owner plus the agents its readers selector names (agents, members, subscribers);
+null where the selector resolves by state the export does not hold (everyone, an institution's members, an office, an
+address). The kernel's squares and inboxes come from the monitor-only `channel_seeded` record, opened channels from
+`channel_opened`; `channel_subscribed` spells have role `subscriber`. With `channels.v2` off nothing in the raw log changes.
 
 **Built** (the closest thing where the spec could not be met literally):
 
@@ -126,6 +137,7 @@ valid for old runs.
 | `n_messages` | int | |
 | `n_senders` | int | distinct senders |
 | `members_json` | json | members at the end of the run (null for public channels) |
+| `purpose`, `listed`, `inbox`, `readers_json`, `writers_json` | | channels v2 only (schema 2.1): the channel's settings (null otherwise) |
 
 ### `channel_members` (membership intervals; one row per agent per spell in a channel)
 
@@ -134,7 +146,7 @@ valid for old runs.
 | `run_id` | str | |
 | `channel_id` | str | |
 | `agent` | str | |
-| `role` | str | owner or member |
+| `role` | str | owner or member (channels v2: subscriber) |
 | `from_round` | int | round the spell began (kernel: creation or admission; derived dm/group: first message) |
 | `to_round` | int | last round of the spell (removal or close); null = to the end of the run |
 | `source` | str | kernel or derived |

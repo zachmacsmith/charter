@@ -415,6 +415,12 @@ def _ann():
         "goals.outcome_only": dict(types=("bool",)),
         "actions.core_only": dict(types=("bool",)),
         "institutions.unified": dict(types=("bool",)),                  # review 14 WP-D (P4.6): one institution store
+        "channels.v2": dict(types=("bool",)),                           # wave 9 C: channels v2 (charter/channels.py)
+        "channels.delivery": dict(types=("str",), enum=("push", "pull")),
+        "channels.square": dict(types=("str",), enum=("one", "per_camp", "none")),
+        "channels.square_rate": dict(types=("int",), range=NONNEG),
+        "channels.found_right": dict(types=("str", "null")),
+        "channels.headlines": dict(types=("int",), range=(1, None)),
         "contracts.scripted": dict(types=("bool",)),
         "contracts.enforcement": dict(types=("str",), enum=("escrow", "escrow_court", "word")),     # P4.4: the enforcement dial
         "contracts.breach_cases": dict(types=("bool",)),                 # W7e (review 11 §4.1): breaches open court cases
@@ -492,6 +498,9 @@ EXTRA = {
     "goals.outcome_only": False,
     "actions.core_only": False,
     "institutions.unified": False,                                     # review 14 WP-D: off = the two stores, byte-identical
+    # wave 9 C, channels v2 (charter/channels.py; review 14 §4.6, D-37): off = byte-identical
+    "channels.v2": False, "channels.delivery": "pull", "channels.square": "one", "channels.square_rate": 2,
+    "channels.found_right": None, "channels.headlines": 8,
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
@@ -521,6 +530,17 @@ DOCS = {
                             "contract dissolution; a secret founding is a publication, not a status). Off: today, byte-identical",
     "actions.core_only": "review 14 A: only the core surface (action_registry.CORE_SURFACE, ~30 actions) exists; every other action "
                          "is unknown",
+    "channels.v2": "wave 9 C (charter/channels.py; review 14 §4.6, D-37): one channel structure (owner, reader and writer "
+                   "selectors, listing, sender identity, retention); every agent and institution has an inbox; send, read, "
+                   "open_channel, set_channel, join_channel, leave_channel; anyone may open a channel (the Press Act gates it where "
+                   "seeded). Off (default): nothing changes",
+    "channels.delivery": "channels.v2: pull (default: channel posts are counted in the state and opened with read; DMs and your "
+                         "own inbox are pushed) | push (every post reaches the feed)",
+    "channels.square": "channels.v2: the world's square(s): one (default) | per_camp (one per camp, for the agents present there: "
+                       "a harvest right or an open typed camp) | none",
+    "channels.square_rate": "channels.v2: posts per agent per round in a square (0: no limit)",
+    "channels.found_right": "channels.v2: the right opening a channel needs without the default code's Press Act (null: anyone)",
+    "channels.headlines": "channels.v2 with pull delivery: channels shown with counts and headlines in an agent's state",
     "endowment_gini": "target Gini of starting holdings (lognormal values tuned to it)",
     "veto_window": "rounds the Board has to veto a structural or procedural law",
     "fixer_per_round": "patches the Fixer may make per round",

@@ -68,6 +68,8 @@ class Act:
     seams: tuple = ()                           # "module:qualname" where the kernel reads its rows
     start: tuple = ()                           # store keys read once, at generation (start_rule), not at run time
     doc: str = ""
+    when: Callable | None = None                # spec -> bool: selected only in worlds where it holds (None: always; the Press Act:
+                                                # channels.v2), so no other world's code or Act ids change
 
     def __post_init__(self):
         tree = L.check(self.source)
@@ -158,7 +160,7 @@ def resolve(sp: dict) -> dict | None:
     else:
         over = sel if isinstance(sel, dict) else {}
         chosen = [(a, {**a.today(sp), **(over.get(a.name) or {})}) for a in ACTS.values()
-                  if not (a.name in over and over[a.name] is None)]
+                  if not (a.name in over and over[a.name] is None) and (a.when is None or a.when(sp))]
         name = "today" if not over else "today+custom"
     acts = []
     for i, (a, params) in enumerate(chosen, 1):
@@ -376,4 +378,4 @@ def view_rules(k) -> dict:
     return {f"code {act}": rows_of(k, act) for act in dc["acts"]}
 
 
-from charter.code import communications, court_rules   # noqa: E402,F401  (registration order: today's ids A1, A2, ...)
+from charter.code import communications, court_rules, press   # noqa: E402,F401  (registration order: today's ids A1, A2, ...)

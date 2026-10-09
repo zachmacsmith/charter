@@ -319,6 +319,12 @@ LAWFNS = _fns(
           docs="requires", v2=True, primitive="set_publication"),
     ),
     _module(
+        "channels",                                                     # wave 9 C (channels.v2 worlds only: Kernel.api_for)
+        F("send_message", "output", scope="none", why="a message in the name of the calling law's own institution; `to` (an "
+          "agent, an institution or a channel) is its recipient, not an agent the law acts on or binds", docs="requires",
+          primitive="post", v2=True),
+    ),
+    _module(
         "amendment",                                                    # law.v2 (P3.4): laws propose laws and amendments (D-16: L3)
         F("propose_law", "governance", scope="none", why="a draft of the calling law's own jurisdiction, decided by its procedure",
           docs="requires", primitive="propose", v2=True),
@@ -384,7 +390,8 @@ CONTRACT_COLUMN = {
     **{f.name: "allow" for f in LAWFNS.values() if f.group in CONTRACT_ALLOW_GROUPS},
     **{n: "allow" for n in ("name", "gazette", "notify", "open_ballot", "set_procedure", "repeal", "breach", "admit", "expel", "use",
                             "public_of", "root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury",
-                            "refuse", "open_fund")},                    # W6a: a contract's law may refuse too; P4.4 funds
+                            "refuse", "open_fund",                      # W6a: a contract's law may refuse too; P4.4 funds
+                            "send_message")},                           # wave 9 C: messages in its own name (channels.v2)
     **{n: "escrow" for n in ("move", "fine", "pull", "forfeit", "refund", "swap")},
     # P4.5: its own currencies (shares), rights and offices only: contracts.scope_api names them "<cid>.<name>", mints to anyone,
     # burns only what it holds, grants only to members (escrow-style: never beyond what the association itself created or holds)

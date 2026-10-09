@@ -643,6 +643,9 @@ def lookup(k, aid, name, args: dict) -> str:
     if name == "legal_position":                                        # law.v2 with law.digest (charter/digest.py)
         from charter import digest as DG
         return DG.act_legal_position(k, aid)
+    from charter import channels as CH
+    if name == "read" and CH.active(k):                                 # channels.v2: the directory, or a channel's latest posts
+        return CH.read(k, aid, args.get("channel", args.get("to", first)), args.get("n", 10))
     from charter import directories as DR
     if name in DR.LOOKUPS and DR.enabled(k):                            # directories: list, read, search (access checked there)
         return DR.lookup(k, aid, name, args)
@@ -655,8 +658,9 @@ def lookup_names(k) -> tuple:
     from charter import lawpreview as LP
     from charter import digest as DG
     from charter import directories as DR
+    from charter import channels as CH
     return tuple(n for n in LOOKUPS if (n != "preview_law" or LP.enabled(k)) and (n != "legal_position" or DG.enabled(k))) \
-        + (DR.LOOKUPS if DR.enabled(k) else ())
+        + (DR.LOOKUPS if DR.enabled(k) else ()) + (("read",) if CH.active(k) else ())
 
 
 def dm_step_lookup(k, aid, q) -> str:
@@ -1095,8 +1099,12 @@ def feed_layer(k, aid, since, budget) -> tuple[str, int, dict]:
         items.append((1, len(k.events), "Your manual " + "; ".join(
             x for x in (("has new sections: " + ", ".join(new)) if new else "", ("has updated sections: " + ", ".join(upd)) if upd else "") if x)
             + " (fetch with the manual lookup)."))
+    from charter import channels as CH
+    pull = CH.pull(k)                                                   # channels.v2, pull: channel posts are counted, not pushed
     for i, e in enumerate(k.events[since:], since):
         if not k.can_see(aid, e):
+            continue
+        if pull and CH.pulled(k, aid, e):
             continue
         if digest_only and e["type"] == "post" and e["agent"] != aid:
             continue

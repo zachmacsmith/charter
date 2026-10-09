@@ -65,7 +65,7 @@ def test_every_action_row_is_complete():
 
 def test_actions_dispatch_through_the_registry_without_trampolines():
     direct = [n for n, x in AR.REG.items() if not x.handler.startswith("actions:")]
-    assert len(direct) >= 36 and not any(hasattr(A, "_" + n) for n in direct)
+    assert len(direct) >= 36 and not any(hasattr(A, "_" + n) for n in direct if n != "send")   # actions._send: the transfer helper
     assert all(hasattr(A, x.handler.split(":")[1]) for x in AR.REG.values() if x.handler.startswith("actions:"))
 
 
@@ -81,6 +81,7 @@ def test_unknown_action_error_lists_actions_in_the_old_order():
     from charter import directories as DR
     hidden = set(A.CONTEXT_ACTIONS) | set(A.MEDIA_ACTIONS) | set(A.LAW_V2_ACTIONS) | set(A.CONTRACT_ACTIONS) | set(DR.ACTIONS)   # E6: context, media2, law.v2, contracts, directories off
     hidden |= AR.hidden(k.spec)                                         # review 14 A: read_library exists only on request
+    hidden |= AR.channel_hidden(k.spec)                                 # wave 9 C: channels.v2's verbs exist only where it is on
     assert str(e.value) == "unknown action 'no_such_action'. Actions: " + ", ".join(x for x in A.ACTIONS if x not in hidden)
 
 

@@ -52,14 +52,15 @@ from typing import Callable
 
 CORE_ORDER = ("TALK AND TRADE", "INFORMATION", "MEMORY", "PRODUCE", "POLITICS", "FORCE", "LINEAGE")
 NICHE_ORDER = ("your role", "camps", "commons", "files", "press", "finance", "jurisdictions", "contracts", "courts", "force, more",
-               "inheritance", "groups", "powers", "directories")
+               "inheritance", "groups", "channels", "powers", "directories")
 NICHE_PHRASE = {"your role": "use your role's other tools", "camps": "survey, improve or lease camps",
                 "commons": "fund projects or pay the tribute", "files": "keep files, pin them or buy memory from a Scholar",
                 "press": "subscribe to outlets, buy placements, leak, answer polls, post anonymously or use the library",
                 "finance": "lend, borrow and use coins", "jurisdictions": "found, fund or join jurisdictions",
                 "contracts": "found, join or leave contracts (clubs, companies, crowdfunds, cartels, exchanges)",
                 "courts": "go to court or call the Fixer", "force, more": "guard others, join attacks, hire the assassin or buy initiative",
-                "inheritance": "decide your inheritance or copy an agent", "groups": "run private groups", "powers": "use a word of power or an action a law defined",
+                "inheritance": "decide your inheritance or copy an agent", "groups": "run private groups",
+                "channels": "open, change, join or leave channels", "powers": "use a word of power or an action a law defined",
                 "directories": "move, delete or share files in your directories"}
 UNIVERSAL_RIGHTS = ()                                                   # rights everyone holds (none at present): never an edge
 CATEGORIES = ("productive", "economic", "political", "talk")           # activity categories, in scorer.CATEGORIES' key order
@@ -194,6 +195,8 @@ def available(inst, k, a, rights=None) -> list:
                 continue
         if act.when is not None and live and not act.when(inst, k, a, rights):
             continue
+        if act.name in OLD_CHANNEL_ACTIONS and channels_v2(inst["spec"]):   # wave 9 C: open_channel and send replace them
+            continue
         out.append(act)
     return out
 
@@ -222,7 +225,26 @@ def doc_for(name, spec) -> str | None:
     """An action's doc template in this world's wording, or None for the registry's (agents.action_doc)."""
     if name in NO_TEMPLATE_DOC and not templates_offered(spec):
         return NO_TEMPLATE_DOC[name]
+    if name in CHANNEL_DOC and channels_v2(spec):                       # wave 9 C: post and standing_order with channels
+        return CHANNEL_DOC[name]
     return None
+
+
+# ---------------------------------------------------------------------- channels v2 (wave 9 C; spec channels.v2, off by default)
+OLD_CHANNEL_ACTIONS = ("create_channel", "channel_post")               # replaced by open_channel and send under channels.v2
+CHANNEL_ACTIONS = ("send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")   # only under channels.v2
+CHANNEL_DOC = {
+    "post": 'post {"text": "...", "channel": null, "as": null}: speak in the square (no channel) or in a channel you may write in; '
+            '"as": an institution whose speak office you hold',
+    "standing_order": 'standing_order {"to": "Name", "item": "grain", "qty": 1, "every": 1, "keep": 0, "times": 0}: a one-member '
+                      'contract that pays qty of item to "to" every "every" rounds from your allowance (times: 0 = no limit); or '
+                      'standing_order {"act": "send", "to": "<agent, institution or channel>", "text": "...", "every": 1, '
+                      '"times": 0}: a timed or recurring message sent in the name of the standing order. Cancel with leave_contract',
+}
+
+
+def channels_v2(spec) -> bool:
+    return bool(((spec or {}).get("channels") or {}).get("v2"))
 
 
 def layout(acts, rights) -> tuple:
@@ -675,6 +697,35 @@ R("remove_member", "drop someone from your group", "groups", when=_k_owns_group,
 R("close_channel", "end your group", "groups", when=_k_owns_group,
   handler="actions:_close_channel", module="core", category="talk", emits=("channel_closed",),
   doc='close_channel {"channel": "..."}: channel owner only')
+# channels v2 (wave 9 C, charter/channels.py; spec channels.v2): five verbs; the templates are examples in the manual, not verbs
+_CH = ("flag:channels.v2",)
+R("send", "message an agent, an institution's inbox or a channel", "TALK AND TRADE", core=True, needs=_CH,
+  handler="channels:act_send", module="core", category="talk",
+  aliases={"message": "text", "msg": "text", "recipient": "to", "agent": "to", "target": "to", "channel": "to"},
+  doc='send {"to": "Name, institution or channel", "text": "...", "as": null}: to an agent, a private message; to an institution, '
+      'its inbox; to a channel, a post. "as": an institution whose speak office you hold, or an agent who authorized you to '
+      'send for it. Messages to an agent or an inbox count against your private-message limit')
+R("read", "a channel's latest posts, or the directory", "INFORMATION", core=True, pre=True, needs=_CH,
+  args='{"channel": "<id>", "n": 10}', handler="channels:act_read", module="core", category="productive",
+  aliases={"name": "channel", "id": "channel", "to": "channel"},
+  doc='read {"channel": "<id>", "n": 10}: the latest posts of a channel you may read (marks them read); read {} lists the '
+      'directory of listed channels and inboxes')
+R("open_channel", "open a channel: a group, a newspaper, a chamber, a secret cell", "channels", needs=_CH,
+  handler="channels:act_open_channel", module="core", category="talk", emits=("channel_opened",),
+  doc='open_channel {"name": "...", "purpose": "...", "readers": {"members": true}, "writers": {"all": true}, "listed": true, '
+      '"identity": "named", "retention": "all", "members": ["Name"], "template": null, "as": null}: a channel you own (or, "as", an '
+      'institution whose speak office you hold); unlisted channels get a secret address (see the manual\'s Channels section)')
+R("set_channel", "change a channel you own", "channels", needs=_CH,
+  handler="channels:act_set_channel", module="core", category="talk", emits=("channel_set",),
+  aliases={"key": "field", "setting": "field"},
+  doc='set_channel {"channel": "<id>", "field": "readers", "value": {"subscribers": true}}: fields purpose, readers, writers, '
+      'listed, identity, retention, rate, inbox (owner only)')
+R("join_channel", "follow a channel", "channels", needs=_CH,
+  handler="channels:act_join_channel", module="core", category="talk", emits=("channel_subscribed",),
+  doc='join_channel {"channel": "<id>"}: follow (subscribe to) a channel you know of')
+R("leave_channel", "stop following a channel", "channels", needs=_CH,
+  handler="channels:act_leave_channel", module="core", category="talk",
+  doc='leave_channel {"channel": "<id>"}: stop following a channel')
 # powers
 R("invoke", "use a hidden power you know, or an action a law defined", "powers",
   needs=("level:1", "any:mod:hidden|level:4|mod:contracts"),           # P4.5: a contract's offices exist at any law level
@@ -798,6 +849,11 @@ def hidden(spec) -> set:
     return out
 
 
+def channel_hidden(spec) -> set:
+    """Wave 9 C: actions that do not exist because of channels.v2 (on: the old create_channel and channel_post; off: its verbs)."""
+    return set(OLD_CHANNEL_ACTIONS) if channels_v2(spec) else set(CHANNEL_ACTIONS)
+
+
 # ---------------------------------------------------------------------- frozen older orders (see the module docstring)
 # actions.ACTIONS: the order the "unknown action" error lists actions in (it reaches logged results)
 ACTIONS_ORDER = (
@@ -816,7 +872,8 @@ ACTIONS_ORDER = (
     "appeal", "legal_position",
     "authorize", "revoke_authorization", "act_for", "standing_order",    # P4.5
     "dir_list", "dir_read", "dir_search", "dir_write", "dir_edit", "dir_move", "dir_delete", "dir_grant",   # directories
-    "read_library")                                                     # review 14 A
+    "read_library",                                                     # review 14 A
+    "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")   # wave 9 C (channels.v2)
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -833,7 +890,8 @@ DOC_ORDER = (
     "propose_contract_change", "appeal", "legal_position",
     "authorize", "revoke_authorization", "act_for", "standing_order",    # P4.5
     "dir_list", "dir_read", "dir_search", "dir_write", "dir_edit", "dir_move", "dir_delete", "dir_grant",   # directories
-    "read_library")                                                     # review 14 A
+    "read_library",                                                     # review 14 A
+    "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")   # wave 9 C (channels.v2)
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 
