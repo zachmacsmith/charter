@@ -111,9 +111,11 @@ from charter import lawlang as L
 from charter import library as LB
 from charter import powers as PW
 from charter import stages as ST                                       # law.v2 (W6c): ballot rule functions
+from charter import succession as SU                                   # institutions.succession: vacancies, escheat, party death
 
 KEY = "contracts"
 EVENT_TYPES = ET.rendered_by("contracts")
+SU_EVENTS = ("office_vacant", "office_filled", "office_abolished", "assets_locked", "institution_escheat", "party_died")
 DEFAULTS = {
     "enabled": False,       # associations: anyone may found a contract with its own treasury, escrow, allowances and code (needs law.v2)
     "max_founded": 3,       # contracts one agent may found
@@ -608,7 +610,7 @@ def act_create_contract(k, aid, name=None, code=None, template=None, params=None
         if parent is not None:
             allow |= {x for x in (INC.rules(k, parent).get("grants") or ()) if x in G.GRANTABLE and PW.has_power(k, parent, x)}
         for x in codes:
-            INS.parse_offices(x)
+            INS.parse_offices(x, SU.on(k))
     for x in codes:
         check_code(x, allow)
     if parent is not None:
@@ -770,7 +772,7 @@ def _adopt(k, rec, pr) -> str:
         law["status"] = "failed_check"
         return _fail(k, rec, pr, f"it failed to load: {e}")
     if pr["replaces"]:
-        _retire(k, rec, pr["replaces"])
+        _retire(k, rec, pr["replaces"], replaced_by=lid)
     pr["status"] = "adopted"
     k.log("contract_changed", pr["by"], {"contract": cid, "law": lid, "title": law["title"], "replaces": pr["replaces"]},
           vis="public")
@@ -811,9 +813,10 @@ def _on_enact(k, lid) -> None:
                 law_error(k, lid, str(e))
 
 
-def _retire(k, rec, lid) -> None:
+def _retire(k, rec, lid, replaced_by=None) -> None:
     """One of the contract's laws ends (replaced, repealed by its own law, or the contract dissolved): its on_repeal runs, its
-    procedure goes, its importers are pinned (law.v2)."""
+    procedure goes, its importers are pinned (law.v2); institutions.succession: the offices it declared are abolished (those the
+    replacing law declares again are kept)."""
     law = k.w["laws"][lid]
     ns = k.ns.get(lid) or {}
     if law["status"] == "active" and "on_repeal" in ns:
@@ -827,6 +830,8 @@ def _retire(k, rec, lid) -> None:
     for nm, act in list(k.w["actions"].items()):                       # P4.5: its offices go with it (as dispatch.do_repeal's)
         if isinstance(act, dict) and act.get("law") == lid:
             del k.w["actions"][nm]
+    if "offices" in k.w:                                                # institutions.succession (off: nothing)
+        INS.on_law_repealed(k, lid, replaced_by)
     if rec["procedure"] not in PROCEDURES and k.fnreg.get(rec["procedure"], (None,))[0] == lid:
         rec["procedure"] = (TEMPLATES.get(rec["template"] or "") or {}).get("procedure", "members")
         if rec["procedure"] not in PROCEDURES:
@@ -1434,6 +1439,10 @@ def public_record(k, cid) -> dict | None:
         out["powers"] = list(rec["consent"])
     if INS.has_offices(k, rec["id"]):
         out["offices"] = {o: INS.holders(k, rec["id"], o) for o in INS.offices(k, rec["id"])}
+        if SU.on(k):                                                    # institutions.succession: how each is refilled
+            out["succession"] = {o: (INS.office(k, rec["id"], o) or {}).get("succession") for o in INS.offices(k, rec["id"])}
+    if SU.on(k) and rec.get("locked"):
+        out["locked"] = dict(rec["locked"])
     return out
 
 
@@ -1444,7 +1453,14 @@ def _claims(k, r) -> str:
     if r.get("consent"):
         out += f"; claims over members: {', '.join(r['consent'])}"
     if INS.has_offices(k, r["id"]):
-        out += "; offices " + ", ".join(f"{o} ({', '.join(INS.holders(k, r['id'], o)) or 'vacant'})" for o in INS.offices(k, r["id"]))
+        if SU.on(k):                                                    # institutions.succession: informed consent at join
+            out += "; offices " + ", ".join(
+                f"{o} ({', '.join(INS.holders(k, r['id'], o)) or 'vacant'}; refilled by "
+                f"{SU.describe((INS.office(k, r['id'], o) or {}).get('succession'))})" for o in INS.offices(k, r["id"]))
+        else:
+            out += "; offices " + ", ".join(f"{o} ({', '.join(INS.holders(k, r['id'], o)) or 'vacant'})" for o in INS.offices(k, r["id"]))
+    if SU.on(k) and r.get("laws") and SU.party_death(k, r) != "estate":
+        out += f"; if a member dies: {SU.party_death(k, r)}"
     return out
 
 
@@ -1614,7 +1630,9 @@ def change_leave(k, agent, polity, via) -> dict:
     rec["leaving"].pop(agent, None)
     if agent in rec["members"]:
         rec["members"].remove(agent)
-    _drop_rights(k, polity, agent)                                      # P4.5: its rights (offices) are its members' only
+    dead = (k.w["agents"].get(agent) or {}).get("dead") is not None
+    with SU.cause(k, "death" if dead else SU.LEAVE_CAUSE.get(via, "exit")):   # institutions.succession: the vacancy's cause
+        _drop_rights(k, polity, agent)                                  # P4.5: its rights (offices) are its members' only
     k.log("contract_left", agent, {"contract": polity, "why": via, "refunded": back}, vis="public")
     return {"status": "left", "refunded": back}                       # the last members' leaving dissolves it (end_round)
 
@@ -1644,6 +1662,8 @@ def _dissolve(k, rec, heirs=()) -> None:
     heirs = [a for a in heirs if a in k.w["agents"]]
     before = dict(rec["reserve"])
     steps = INC.wind_up_order(k, rec)                                   # W8e (D-27): its wind-up clause, bounded by its parent's
+    if SU.on(k):                                                        # institutions.succession: its clause, else polity law, else lock
+        steps = SU.wind_up_plan(k, rec, steps)
     for lid in list(rec["laws"]):
         ns = k.ns.get(lid) or {}
         if k.w["laws"][lid]["status"] == "active" and "on_dissolve" in ns:
@@ -1652,22 +1672,27 @@ def _dissolve(k, rec, heirs=()) -> None:
             except L.LawError as e:
                 with k.cause("law", lid, hook="on_dissolve"):
                     law_error(k, lid, str(e))
-    for lid in list(rec["laws"]):
-        _retire(k, rec, lid)
+    with SU.cause(k, None):                                             # the end of its offices is no vacancy
+        for lid in list(rec["laws"]):
+            _retire(k, rec, lid)
     _close_funds(k)
     holders, paid, escheat = {}, {}, {}
     if "shareholders" not in steps:
-        for a in list(k.w["agents"]):
-            _drop_rights(k, cid, a)
+        with SU.cause(k, None):
+            for a in list(k.w["agents"]):
+                _drop_rights(k, cid, a)
     for step in steps:                                                  # default: shareholders, then the last members
         if step == "shareholders":
             holders = _pay_shareholders(k, rec)                         # P4.5: residual claims, pro rata to its shareholders
-            for a in list(k.w["agents"]):
-                _drop_rights(k, cid, a)
+            with SU.cause(k, None):
+                for a in list(k.w["agents"]):
+                    _drop_rights(k, cid, a)
         elif step == "members":
             paid = _pay_heirs(k, rec, heirs)
         elif step == "parent":
             escheat = _escheat(k, rec)
+        elif step.startswith("escheat:"):                               # institutions.succession: polity law, or locked
+            SU.escheat(k, rec, heirs, step)
     rec["status"] = "dissolved"
     if paid or holders or escheat:
         k.log("contract_wound_up", None, {"contract": cid, "heirs": heirs, "paid": paid,
@@ -2079,6 +2104,8 @@ def end_round(k) -> None:
                     _fail(k, rec, pr, f"voted down ({b['id']})")
         for m in list(rec["members"]):
             if (k.w["agents"].get(m) or {}).get("departed") is not None:
+                if SU.on(k) and m not in rec["leaving"] and (k.w["agents"][m].get("dead") is not None):
+                    SU.on_party_death(k, rec, m)                        # institutions.succession: its party_death clause
                 rec["leaving"].setdefault(m, "departed")
         batch = []
         for aid, why in sorted(rec["leaving"].items(), key=lambda t: order(t[0])):
@@ -2133,6 +2160,8 @@ def state_lines(k, aid) -> list[str]:
 
 def render_event(k, e, tag, viewer=None) -> str | None:
     d, t, who = e["data"], e["type"], e["agent"]
+    if t in SU_EVENTS:                                                  # institutions.succession's events (rendered here)
+        return SU.render_event(k, e, tag, viewer)
     c = d.get("contract")
     if t == "contract_created":
         return (f"{tag} {who} founded contract {c} '{d['name']}'" + (f" ({d['template']})" if d.get("template") else "")

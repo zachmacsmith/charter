@@ -260,6 +260,15 @@ unchanged from the base). `sha` is the blob sha (full sha256 hex of the text).
 A per-type payload schema and `type_version` are deferred: the registry does not version payloads yet. Until it does, payload keys
 only grow (BACKLOG).
 
+**Added (wave 9 succession, `institutions.succession`; additive, no schema bump):** six registered types, none a message:
+`office_vacant` {institution, office, right, from, cause: death | exit | expelled | term | removed}, `office_filled`
+{institution, office, right, successor, rule, source: clause | act | law, from}, `office_abolished` {institution, office, right,
+law, past}, `institution_escheat` {institution, variant: polity | family | members | lock, to, paid}, `assets_locked`
+{institution, goods, loans, channels}, `party_died` {contract, member, clause, heirs?}. `successor_named` gains an optional
+`office` key (an office designation rather than a Board seat). Office holdings are not a table yet: the office records live in the
+world state (`k.w["offices"]`, holders and past holders with since, term_end, until and cause), not in the round snapshots, so an
+`offices` table needs a snapshot field first (deferred; the events above carry every change of holder).
+
 ## Layout on Hugging Face (publish's concern, recorded for reference)
 
 `runs/<spec>/<run_id>/<table>.parquet` plus `manifest.json`, `raw/<run_id>.tar.zst` (no checkpoints), and an index table of runs.

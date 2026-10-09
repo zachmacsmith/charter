@@ -242,12 +242,18 @@ def matches(k, ch, sel, aid, depth=0) -> bool:
             return True
         if key in GRANT_SELECTORS:                                      # wave 9 E (institutions.grants): offices are records
             from charter import institutions as IN
-            if key == "officers_or_members" and not IN.has_offices(k, v):
+            if key == "officers_or_members" and (not IN.has_offices(k, v) or (_succession(k) and not IN.officers(k, v))):
                 if is_member(k, v, aid):
                     return True
             elif aid in IN.officers(k, v):
                 return True
     return False
+
+
+def _succession(k) -> bool:
+    """institutions.succession: while every office of an institution is vacant, its inbox falls back to its members."""
+    from charter import succession as SU
+    return SU.on(k)
 
 
 def _has(sel, key) -> bool:

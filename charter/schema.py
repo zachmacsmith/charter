@@ -416,6 +416,7 @@ def _ann():
         "actions.core_only": dict(types=("bool",)),
         "institutions.unified": dict(types=("bool",)),                  # review 14 WP-D (P4.6): one institution store
         "institutions.grants": dict(types=("bool",)),                   # review 14 WP-E: powers from grants (charter/grants.py)
+        "institutions.succession": dict(types=("bool",)),               # review 14 §7.2: vacancies and succession (succession.py)
         "channels.v2": dict(types=("bool",)),                           # wave 9 C: channels v2 (charter/channels.py)
         "channels.delivery": dict(types=("str",), enum=("push", "pull")),
         "channels.square": dict(types=("str",), enum=("one", "per_camp", "none")),
@@ -500,6 +501,7 @@ EXTRA = {
     "actions.core_only": False,
     "institutions.unified": False,                                     # review 14 WP-D: off = the two stores, byte-identical
     "institutions.grants": False,                                      # review 14 WP-E: off = the power table's kinds column
+    "institutions.succession": False,                                  # review 14 §7.2: off = no vacancies, byte-identical
     # wave 9 C, channels v2 (charter/channels.py; review 14 §4.6, D-37): off = byte-identical
     "channels.v2": False, "channels.delivery": "pull", "channels.square": "one", "channels.square_rate": 2,
     "channels.found_right": None, "channels.headlines": 8,
@@ -536,6 +538,12 @@ DOCS = {
                            "default code resolves up the institution tree (regime.tree; every preset is a one-node tree, J0); "
                            "offices declared in code (offices = {...}) are records with holders; inboxes are read by officers. "
                            "Off: today, byte-identical",
+    "institutions.succession": "review 14 §7.2 (charter/succession.py; needs institutions.grants): an office holding ends in a "
+                               "vacancy (death, exit, expulsion, term end, removal: office_vacant) that the institution's code "
+                               "(an office's succession clause, on_vacancy) or the enclosing polity's Succession Act fills; "
+                               "dissolved institutions' holdings go by their wind-up clause, else the polity's Dissolution and "
+                               "Escheat Act, else are locked; contracts may declare party_death. The two Acts are default code "
+                               "(code.enabled), overridable unless MANDATORY. Off: today, byte-identical",
     "actions.core_only": "review 14 A: only the core surface (action_registry.CORE_SURFACE, ~30 actions) exists; every other action "
                          "is unknown",
     "channels.v2": "wave 9 C (charter/channels.py; review 14 §4.6, D-37): one channel structure (owner, reader and writer "

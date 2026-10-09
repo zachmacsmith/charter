@@ -638,6 +638,31 @@ default false; off, byte-identical):
   `institutions.offices`, `office`, `holders`, `officers`. Channels: selectors `{"officers": iid}` and `{"officers_or_members": iid}`;
   an institution's inbox is read by its officers once it declares an office, its members before. No vacancy or succession yet.
 
+Wave 9 succession (review 14 §7.2, §3.4; review 18 §2.5, Q6; D-38; `charter/succession.py`, `charter/code/succession_act.py`),
+behind spec `institutions.succession` (needs `institutions.grants`; default false; off, byte-identical):
+- Vacancies: an office holding ends by death or departure (found at the end of the round, the round_end step `succession` after
+  deaths of old age), exit or expulsion (contracts.change_leave), term end (term_end reached) or removal (a law's revoke). Each goes
+  through the revoke_right change (via "vacancy" for a dead holder whose right already lapsed), so institutions.on_right stays the one
+  writer of the record; `past` gains the cause; `office_vacant` is public; an office without a living holder has no usable grants
+  (`institutions.usable_grants`). A dissolution or an abolition ends holdings without a vacancy.
+- Filling: law hooks `on_vacancy(p)` (the governing polities' mandatory laws, the institution's own laws, then overridable polity
+  laws only where the institution declared nothing), then the office's succession clause (`offices = {"x": {..., "succession":
+  {"rule": designation | hereditary | election | cooptation | seniority | lot | none, "else": ...}}}`; library.SUCCESSION_CLAUSES)
+  or the governing polity's Succession Act (default code, store-based, only in worlds with the flag: RULE election | receiver |
+  none, RECEIVER, MANDATORY). `code.resolve_clause` walks `code.chain` nearest first: the nearest mandatory Act, else the
+  institution's clause, else the nearest Act, else the residual (none: the office stays vacant). Elections are plurality ballots
+  through the institution's procedure; `office_filled`. `name_successor {"office", "agent"}` designates for any office; the
+  Board's seats keep their own path (the seeded designation rule), unchanged.
+- Law v2 conflict handling: a law declaring `mandatory = False` is overridable; resolve_v2 drops its before-verdict where a law of an
+  institution it governs gave an explicit verdict. Every other law (and every Act whose MANDATORY row is true) is mandatory.
+- Dissolution (contracts._dissolve): the contract's own wind-up clause unless a mandatory Act overrides it; else shareholders, then
+  the Dissolution and Escheat Act's TO (polity | family | members); no Act (a state of nature): locked (goods and loans owed stay
+  frozen in the treasury, rights released, owned channels read-only; `assets_locked`). Passing to estates exists only as the
+  family variant. Contracts may declare `party_death = "end" | "estate" (default) | "heirs"` (`party_died`).
+- Repeal abolishes the offices a law declared (`office_abolished`; a contract law replaced by one declaring the same office keeps
+  it). officers_or_members selectors fall back to members while every office is vacant. Founding docs and the contract listing show
+  each office's succession rule.
+
 ---
 
 ## 8. Run store, provenance, History, interventions and forks
@@ -965,6 +990,7 @@ contracts: P2.1 → P4.1 → P4.2 → P4.3 (needs P3.1). Critical path to forks 
 | D-35 | No root (user, 8 Oct; review 14) | No world constitution: polities are roots of an institution tree; any institution can be founded under a willing parent; J0 is the root a preset seeds, its kernel privileges become default code; polities and contracts become one account kind (P4.6). Start worlds in a state of nature, not the #convention anarchy regime (frozen for old runs). W9 B: the anarchy constitution and regime are frozen (code comments; tests pin their bytes and the presets that may name them: full10, haiku100); the new-world state of nature is the `nature_design` preset (state_of_nature + contracts + the design arm + the S0 demography, with a void `nature` constitution); the convention is the Assurance Founding contract template (`library.CONTRACT_TEMPLATES`) |
 | D-36 | Demography (user, 8 Oct; review 15 v2.1) | Lifespans absolute (not scaled by run length); founder ages iid from the stationary distribution; no population cap (carrying capacity from food/land/fertility is the only ceiling; a run-stopping budget guard for model cost); two-parent births priced to be doable; initial conditions set incentives and boom-bust or Malthusian dynamics must be possible outcomes, not smoothed away. S0 implements the demography part behind flags (defaults unchanged): `life.scale: none`, `life.age_structure: stationary` (`age_sampling: iid`), no cap with either unless `cap_mult` is set, `life.max_population` (budget stop, STOPPED.md), `life.default_heirs: children`, `life.audit_fixes`, `roles.maker_refill`; recommended settings in `charter/specs/fragments/demography.yaml` |
 | D-37 | Institutions and channels (user, 9 Oct; review 14 §4.6, §7.1) | Institutions bind non-members only by force (or recognition by agents already bound); consent binds members. Allegiance clauses allowed when visible at join. Channels are one structure (owner, writer/reader selectors including address-as-capability, listing, sender identity, retention); DMs, squares, inboxes, presses, chambers and secret cells are templates. Every agent and institution has an inbox. Delivery pull by default for new worlds (DMs and own inbox pushed). Starting conditions are configuration, not a kernel state. Institutions as members postponed |
+| D-38 | Continuity and succession (user, 9 Oct; review 14 §7.2) | Institutions do not die with their founder. Death, exit, expulsion, term end and removal make a vacancy the institution's code may hook; each office declares a succession rule (library clauses). Where the institution is silent the enclosing polity's law decides, nearest first (Succession Act; Dissolution and Escheat Act: polity, family or members); each polity law is mandatory or overridable. With no governing polity vacancies stay vacant and a dissolved institution's holdings are locked (spaceless worlds: goods and claims locked, rights released, channels read-only). Contracts end when no party is left; their code may say what a party's death does (default: its estate). Passing to estates is only ever polity law. Repeal abolishes the offices a law declared |
 
 ---
 

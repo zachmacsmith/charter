@@ -258,9 +258,17 @@ def resolve_v2(k, P, payload, verdicts) -> DecisionV2:
         allow, charge, exempt, reason, specific (W6a)}]), run as the constitution's call; its output is validated, and any_block decides when it
         fails or returns something invalid. Directives as any_block.
     The polity: the payload's jurisdiction (legal acts with jurisdictions on), else that of the first verdict's law; J0 without
-    jurisdictions."""
+    jurisdictions.
+    institutions.succession (review 14 §7.2): first, a polity law that declares itself overridable (`mandatory = False`) loses its
+    verdict wherever a law of an institution it governs gave an explicit one (succession.filter_overridable)."""
     if not verdicts:
         return DecisionV2()
+    if (k.spec.get("institutions") or {}).get("succession"):
+        from charter import succession as SU
+        if SU.on(k):
+            verdicts = SU.filter_overridable(k, verdicts)
+            if not verdicts:
+                return DecisionV2()
     pol = payload.get("jurisdiction") if "jur" in k.w and isinstance(payload.get("jurisdiction"), str) else _polity(k, verdicts[0].law)
     if "contracts" in k.w:                                              # W8e: an incorporated company's acts: its parent's rule
         from charter import incorporation as INC

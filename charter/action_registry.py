@@ -230,6 +230,13 @@ def doc_for(name, spec) -> str | None:
         out = CHANNEL_DOC[name]
     if name in GRANT_DOC and grants(spec):                              # wave 9 E: declaring offices and powers at founding
         out = (out if out is not None else REG[name].doc) + GRANT_DOC[name]
+        from charter import succession as SU
+        if SU.on_spec(spec):                                            # institutions.succession: how each office is refilled
+            out += SU.DOC + (SU.CONTRACT_DOC if name == "create_contract" else "")
+    if name == "name_successor" and grants(spec):
+        from charter import succession as SU
+        if SU.on_spec(spec):
+            out = (out if out is not None else REG[name].doc) + SU.NAME_DOC
     return out
 
 

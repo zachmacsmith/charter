@@ -145,7 +145,8 @@ REG: dict[str, Feature] = {f.name: f for f in FEATURES}
 CORE_RNG = ("archetypes", "prompts", "dm_extra", "memory_turns", "conditional_goals", "strategy_prompt", "archive_split",
             "archive_required", "explicit2", "archive_sample",
             "law", "intervention",                                      # rng_version 2: each law's rng() (kernel); an intervention's own draws
-            "regime_laws")                                             # W6d: a regime's sampled law set (regimes.py)
+            "regime_laws",                                             # W6d: a regime's sampled law set (regimes.py)
+            "succession")                                              # institutions.succession: the lot rule's draw
 
 
 def get(name: str) -> Feature:
@@ -170,7 +171,8 @@ PHASES: dict[str, list[tuple[str, str]]] = {
     "round_end": [("conflict", "resolve_attacks"), ("camps", "end_of_round"), ("core", "close_ballots"), ("core", "veto_queue"),
                   ("law", "on_round_end"), ("jurisdictions", "end_round"), ("contracts", "end_round"), ("core", "regrow"),
                   ("camps", "world_update"),
-                  ("life", "end_of_round"), ("core", "expire_cases"), ("credit", "end_round"), ("core", "record"), ("core", "advance")],
+                  ("life", "end_of_round"), ("core", "succession"), ("core", "expire_cases"), ("credit", "end_round"),
+                  ("core", "record"), ("core", "advance")],
     # runner-level, declared (call sites inline in runner.run until P5.3): the observer reads and acts after the turns, then
     # Kernel.end_round, then the editors write next round's editions
     "after_turns": [("observer", "Observer.turn"), ("core", "end_round"), ("media", "editorial_turns")],

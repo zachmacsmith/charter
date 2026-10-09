@@ -253,6 +253,9 @@ def do_repeal(k, jurisdiction, law, by_law, via) -> dict:
     for nm, act in list(k.w["actions"].items()):
         if act["law"] == law:
             del k.w["actions"][nm]
+    if "offices" in k.w:                                                # institutions.succession: its offices are abolished
+        from charter import institutions as IN
+        IN.on_law_repealed(k, law)
     k.log("repeal", None, {"law": law, "by": by_law, **({"via": via} if via == "expired" else {})}, vis="public")   # W6a: expiry
     return {"status": rec["status"]}
 

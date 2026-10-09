@@ -53,8 +53,10 @@ enacted laws, J0's laws):
   Holding is an explicit record, k.w["offices"][iid][office] = {"id": "<iid>.<office>", "office", "title", "powers" (names),
   "grants": [{"grantor": iid, "grantee": "<iid>.<office>", "action", "item", "qty", "to", "rounds"}], "seats", "term", "law",
   "declared", "holders": [{"holder", "since", "term_end"}], "past": [{"holder", "since", "term_end", "until"}]},
-  kept in step with the right: dispatch's grant_right / revoke_right changes call on_right. Vacancies (death, exit, term end) and
-  succession are WP-F's: a dead or departed holder stays in the record (holders() skips it) until that package's vacancy path.
+  kept in step with the right: dispatch's grant_right / revoke_right changes call on_right. Vacancies (death, exit, term end,
+  removal) and succession: charter/succession.py (institutions.succession; an office may then declare "succession": {"rule": ...},
+  stored on the record, and a holding's end records its cause in `past`). Without that flag a dead or departed holder stays in the
+  record (holders() skips it). Under it, the repeal of the law that declared an office abolishes the office (on_law_repealed).
   Reads: offices(k, iid), office(k, iid, name), holders(k, iid, office), officers(k, iid) (holders of any office).
 """
 from __future__ import annotations
@@ -329,8 +331,9 @@ def _office_grant(name, g) -> dict:
     return {"action": act, "item": item, "qty": None if qty is None else float(qty), "to": to, "rounds": rounds}
 
 
-def parse_offices(code) -> dict:
-    """The offices a law's code declares ({} when none), checked: a LawError says what is wrong."""
+def parse_offices(code, succession=False) -> dict:
+    """The offices a law's code declares ({} when none), checked: a LawError says what is wrong. succession (institutions.succession):
+    an office may also declare its succession clause (succession.check_clause)."""
     from charter import grants as G
     from charter import lawlang as L
     v = G._declared(str(code or ""), "offices")
@@ -343,8 +346,9 @@ def parse_offices(code) -> dict:
         if not _office_name(name):
             raise L.LawError(f"offices: an office name is 1-24 letters, digits or _ (got {name!r})")
         d = {} if d is None else d
-        if not isinstance(d, dict) or any(x not in OFFICE_FIELDS for x in d):
-            raise L.LawError(f"offices.{name}: an object with {', '.join(OFFICE_FIELDS)}")
+        fields = OFFICE_FIELDS + (("succession",) if succession else ())
+        if not isinstance(d, dict) or any(x not in fields for x in d):
+            raise L.LawError(f"offices.{name}: an object with {', '.join(fields)}")
         powers, holders_ = d.get("powers") or [], d.get("holders") or []
         if not isinstance(powers, list) or not all(isinstance(x, (str, dict)) for x in powers):
             raise L.LawError(f"offices.{name}.powers: a list of names or bounded grants {{action, item, qty, to, rounds}}")
@@ -358,6 +362,9 @@ def parse_offices(code) -> dict:
                 raise L.LawError(f"offices.{name}.{f}: a whole number from 1 (or None)")
         out[name] = {"title": str(d.get("title") or name.replace("_", " ").title())[:60], "powers": names, "grants": grants,
                      "holders": list(holders_), "seats": d.get("seats"), "term": d.get("term")}
+        if succession:
+            from charter import succession as SU
+            out[name]["succession"] = SU.check_clause(name, d["succession"]) if d.get("succession") is not None else None
     return out
 
 
@@ -368,11 +375,12 @@ def declare_offices(k, iid, lid) -> list:
     from charter import dispatch as D
     from charter import grants as G
     from charter import lawlang as L
+    from charter import succession as SU
     if not G.on(k):
         return []
     law = k.w["laws"].get(lid) or {}
     try:
-        decl = parse_offices(law.get("code"))
+        decl = parse_offices(law.get("code"), SU.on(k))
     except L.LawError:
         return []
     if not decl:
@@ -389,6 +397,8 @@ def declare_offices(k, iid, lid) -> list:
         mine[name] = {"id": right, "office": name, "title": d["title"], "powers": d["powers"],
                       "grants": [{"grantor": iid, "grantee": right, **g} for g in d["grants"]], "seats": d["seats"],
                       "term": d["term"], "law": lid, "declared": k.r, "holders": [], "past": []}
+        if "succession" in d:                                           # institutions.succession: its clause (None: polity law)
+            mine[name]["succession"] = d["succession"]
         new.append(name)
         for h in d["holders"]:
             aid = (rec or {}).get("founder") if h == "founder" else h
@@ -416,7 +426,56 @@ def on_right(k, agent, right, granted: bool) -> None:
         o["holders"].append({"holder": agent, "since": k.r, "term_end": k.r + o["term"] if o["term"] else None})
     elif not granted and cur is not None:
         o["holders"].remove(cur)
-        o["past"].append({**cur, "until": k.r})
+        from charter import succession as SU
+        if SU.on(k):                                                    # institutions.succession: the end is a vacancy (cause)
+            past = {**cur, "until": k.r, "cause": SU.current_cause(k)}
+            o["past"].append(past)
+            SU.vacated(k, iid, name, past)
+        else:
+            o["past"].append({**cur, "until": k.r})
+
+
+def on_law_repealed(k, lid, replaced_by=None) -> list:
+    """institutions.succession: a law left force (repealed; an association's law retired, replaced or ended with its contract). The
+    offices it declared are abolished: their holders lose the right (no vacancy), an `office_abolished` event each, and the record
+    goes. An office the replacing law (replaced_by) declares again is kept, bound to that law, with its new declaration's fields.
+    Off: nothing. Returns the abolished offices' names."""
+    from charter import lawlang as L
+    from charter import succession as SU
+    if not SU.on(k) or OFFICES not in k.w:
+        return []
+    from charter import jurisdictions as J
+    iid = J.law_jur(k, lid)
+    mine = (k.w[OFFICES] or {}).get(iid) or {}
+    again = {}
+    if replaced_by is not None:
+        try:
+            again = parse_offices((k.w["laws"].get(replaced_by) or {}).get("code"), True)
+        except L.LawError:
+            again = {}
+    out = []
+    for name, o in list(mine.items()):
+        if o["law"] != lid:
+            continue
+        if name in again:
+            d = again[name]
+            o.update({"law": replaced_by, "title": d["title"], "powers": d["powers"], "seats": d["seats"], "term": d["term"],
+                      "grants": [{"grantor": iid, "grantee": o["id"], **g} for g in d["grants"]], "succession": d["succession"]})
+            continue
+        with SU.cause(k, None):
+            for h in list(o["holders"]):
+                k.apply("revoke_right", agent=h["holder"], right=o["id"], via="vacancy")
+        del mine[name]
+        k.log("office_abolished", None, {"institution": iid, "office": name, "right": o["id"], "law": lid,
+                                         "past": [h["holder"] for h in o["past"]]}, vis="public")
+        out.append(name)
+    return out
+
+
+def usable_grants(k, iid, name) -> list:
+    """The office's agency-format grants usable now: none while the office is vacant (no living holder; review 18 §2.5)."""
+    o = office(k, iid, name)
+    return list(o["grants"]) if o is not None and holders(k, iid, name) else []
 
 
 def office(k, iid, name):

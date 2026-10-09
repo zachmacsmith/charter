@@ -234,7 +234,7 @@ def root(k) -> str:
 def chain(k, polity) -> list:
     """Whose rows a polity reads, in order. Off: its own, then ROOT's. institutions.grants (review 14 §6.2 W8d): its own node, its
     ancestors (parent links, any depth), then the tree nodes marked code_default (the compiled one-node tree marks J0: today);
-    after these, the Act's residual."""
+    after these, the Act's residual. institutions.succession: resolve_clause walks the same chain with each Act's mandatory flag."""
     from charter import grants as G
     if not G.on(k):
         return ([polity] if polity else []) + [ROOT]
@@ -256,6 +256,34 @@ def rule(k, polity, act: str, key: str, default):
     if rows is None or key not in rows:
         return ACTS[act].residual[key]
     return rows[key]
+
+
+def governing(k, iid, act: str) -> list:
+    """[(node, rows)] for every node in chain(k, iid) holding rows of `act`, nearest first ([] with the code off)."""
+    dc = k.w.get("default_code")
+    if dc is None:
+        return []
+    st = dc["store"]
+    return [(x, rows) for x in chain(k, iid) if (rows := (st.get(x) or {}).get(act)) is not None]
+
+
+def resolve_clause(k, iid, act: str, own):
+    """institutions.succession (review 14 §7.2): a polity Act against an institution's own clause. Each Act's `mandatory` row says
+    whether it applies regardless of the institution's clause (mandatory) or only where the institution declared nothing
+    (overridable). The nearest mandatory Act up the chain wins; else the institution's own clause (own, when not None); else the
+    nearest Act; else the Act's residual. Returns (source, node, value): ("act", node, rows) | ("own", None, own) |
+    ("residual", None, residual rows)."""
+    found = governing(k, iid, act)
+    a = ACTS[act]
+    full = lambda rows: {**a.residual, **rows}
+    m = next(((n, r) for n, r in found if r.get("mandatory")), None)
+    if m is not None:
+        return "act", m[0], full(m[1])
+    if own is not None:
+        return "own", None, own
+    if found:
+        return "act", found[0][0], full(found[0][1])
+    return "residual", None, dict(a.residual)
 
 
 def is_act(rec) -> bool:
@@ -404,3 +432,4 @@ def view_rules(k) -> dict:
 
 
 from charter.code import communications, court_rules, press   # noqa: E402,F401  (registration order: today's ids A1, A2, ...)
+from charter.code import succession_act   # noqa: E402,F401  (institutions.succession only: the Succession and Escheat Acts)

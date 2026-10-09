@@ -1367,8 +1367,11 @@ class Kernel:
             D.bill_gas(self)                                           # P3.8: law.gas_price (off by default): gas billed to treasuries
             self.w["round"] += 1
             self._reset_effects()
+        def succession():                                              # institutions.succession (off: nothing): vacancies, filling
+            from charter import succession as SU
+            SU.end_round(self)
         return {"close_ballots": close_ballots, "veto_queue": veto_queue, "regrow": regrow, "expire_cases": expire_cases,
-                "record": record, "advance": advance}
+                "succession": succession, "record": record, "advance": advance}
 
     def round_summary(self):
         w = self.w

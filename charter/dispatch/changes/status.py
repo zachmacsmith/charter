@@ -1,7 +1,8 @@
 """Rights and sanctions (P2.1, P2.4c, P2.4d): grant_right, revoke_right, suspend_right, limit_actions, create_right (the only
 writers of an agent's rights list and the rights catalogue outside the kernel, tests/test_charter_rights_writes.py); W8b: a law's
 titles and names (set_title, rename). Call options:
-via (grant/revoke: "law", or the module whose own change carries the right: "lease", "role", "hidden"), quiet (a new camp's harvest
+via (grant/revoke: "law", or the module whose own change carries the right: "lease", "role", "hidden"; revoke: "vacancy",
+institutions.succession's end of an office holding, which logs office_vacant instead), quiet (a new camp's harvest
 right, granted without a `rights` event, as today), why (a loan default's sanction says why)."""
 from __future__ import annotations
 
@@ -32,6 +33,9 @@ def do_revoke_right(k, agent, right, lid=None, via="law") -> dict:
         if "offices" in k.w:                                            # wave 9 E: an office's holding record (institutions.grants)
             from charter import institutions as IN
             IN.on_right(k, agent, right, False)
+    elif via == "vacancy" and "offices" in k.w:                         # institutions.succession: a dead holder's right lapsed with
+        from charter import institutions as IN                          # its death; its holding record still ends here
+        IN.on_right(k, agent, right, False)
     return {"changed": changed}
 
 

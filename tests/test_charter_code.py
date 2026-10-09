@@ -60,7 +60,8 @@ def roster_limits(k):
 
 # ------------------------------------------------------------------ the registry
 def test_registry_acts_are_well_formed():
-    assert list(DC.ACTS) == [COMMS, COURT, "Press Act"]                  # today's order: ids A1, A2 (A3 only under channels.v2)
+    assert list(DC.ACTS) == [COMMS, COURT, "Press Act", "Succession Act", "Dissolution and Escheat Act"]   # today's order: ids
+    # A1, A2 (the Press Act only under channels.v2; the last two only under institutions.succession)
     for act in DC.ACTS.values():
         tree = L.check(act.source)
         assert L.header(act.source)[0] == act.name and L.classify(tree) == "ordinary"

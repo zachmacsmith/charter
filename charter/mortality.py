@@ -35,7 +35,9 @@ the Fixer). Namings are private by default; the law function set_succession_publ
 the current ones). When a member leaves the game its successor, if alive and still off the Board, takes the seat: its class becomes
 "board" and it gives up every right except veto (messaging and transfers need no right). Otherwise the seat stays empty. The veto
 needs a majority of the remaining members, and there is none once every seat is empty (Kernel.board / process_veto_queue). No law
-can add or remove members: class is not law-writable and veto is entrenched.
+can add or remove members: class is not law-writable and veto is entrenched. institutions.succession (charter/succession.py): this
+is the seeded designation rule of the Board's seats, unchanged; the same action names a successor to any office an agent holds
+({"office": "<iid>.<office>", "agent": ...}), read by an office's designation rule.
 
 State lives in k.w["mortality"] (created on first use, so worlds that never use it are unchanged).
 """
@@ -450,7 +452,15 @@ def _pass_files(k, aid, to, cause, by) -> dict:
 
 
 # ---------------------------------------------------------------------- Board succession
-def name_successor(k, aid, agent) -> str:
+def name_successor(k, aid, agent, office=None) -> str:
+    """The Board's seat succession (designation, seeded: the Board member names its successor), and with institutions.succession any
+    office the agent holds: {"office": "<iid>.<office>", "agent": ...} (succession.designate; a non-Board holder of exactly one
+    office may leave the office out)."""
+    from charter import succession as SU
+    if office is not None and not SU.on(k):                             # off: exactly as before (no such argument)
+        raise TypeError("name_successor() got an unexpected keyword argument 'office'")
+    if SU.on(k) and (office is not None or (k.cls_of(aid) != "board" and len(SU.held_offices(k, aid)) == 1)):
+        return SU.designate(k, aid, office if office is not None else SU.held_offices(k, aid)[0], agent)
     if not active(k.spec):
         raise L.LawError("there is no Board succession in this world")
     if k.cls_of(aid) != "board":
@@ -566,6 +576,8 @@ def render_event(k, e, tag, viewer=None) -> str | None:
     d, t = e["data"], e["type"]
     if t in ("disabled", "succession", "seat_empty"):
         return f"{tag} {d['text']}"
+    if t == "successor_named" and d.get("office"):                     # institutions.succession: an office's designation
+        return f"{tag} {e['agent']} names {d['successor']} as successor in {d['office']}"
     if t == "successor_named":
         return f"{tag} {e['agent']} names {d['successor']} as successor to their Board seat"
     if t == "succession_rule":

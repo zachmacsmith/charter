@@ -487,6 +487,19 @@ E("agency_used", "contracts", "primitive", "parties", "event", "contracts", act=
   note="every use of an authorization, done or not, with {grantor, grantee, auth}: shown to both")
 E("fund_closed", "contracts", "summary", "public", "event", "contracts", primitive="move",
   note="a fund whose law is out of force: its goods go to the account's treasury")
+# institutions.succession (charter/succession.py; review 14 §7.2): vacancies, filling, abolition, escheat, locking, party death
+E("office_vacant", "succession", "summary", "public", "event", "contracts", primitive="revoke_right",
+  note="an office holding ended by death, exit, expulsion, term end or removal: {institution, office, right, from, cause}")
+E("office_filled", "succession", "legal_act", "public", "event", "contracts", primitive="grant_right",
+  note="a vacancy filled by the office's rule, the polity's Succession Act or a law's on_vacancy hook: {rule, source, successor}")
+E("office_abolished", "succession", "legal_act", "public", "event", "contracts", primitive="repeal",
+  note="the law that declared an office left force: the office and its holdings end (no vacancy)")
+E("institution_escheat", "succession", "legal_act", "public", "event", "contracts", primitive="dissolve",
+  note="a dissolved institution's remaining holdings by the polity's Dissolution and Escheat Act: {variant, to, paid}")
+E("assets_locked", "succession", "summary", "public", "event", "contracts", primitive="dissolve",
+  note="a dissolved institution with nobody to receive its holdings: goods and loans owed frozen, channels read-only")
+E("party_died", "succession", "summary", "public", "event", "contracts", primitive="leave",
+  note="a contract member died: its party_death clause (end | estate | heirs) applies")
 
 
 # ---------------------------------------------------------------------- natural audiences (review 12 WP2, §4.2)

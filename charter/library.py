@@ -3804,6 +3804,41 @@ def before_offer_loan(p, chain):
 repeat offenders (loan hooks: before_offer_loan). Edition 2's Usury Law (LIB) is the plain cap.""", fires="before_offer_loan")
 
 
+# ====================================================================== succession clauses (review 14 §7.2; institutions.succession)
+# The rules an office's declaration may name, as small clause templates: {"rule": ..., params} goes into the office's declaration
+# (offices = {"treasurer": {..., "succession": <clause>}}); charter/succession.py checks and runs them. Kept out of every listing
+# (they are clauses of an office declaration, not laws), so worlds without the flag see nothing new; the founding docs describe them
+# under the flag. RECALL is an ordinary law clause: removal by the institution's own procedure, which the vacancy path then serves.
+SUCCESSION_CLAUSES: dict[str, dict] = {
+    "designation": {"clause": {"rule": "designation", "else": "election"},
+                    "text": "the holder names its successor (name_successor with the office); nobody named: the else rule"},
+    "hereditary": {"clause": {"rule": "hereditary", "order": "primogeniture"},
+                   "text": "the holder's living children who are members: the eldest (primogeniture) or all of them as far as the "
+                           "seats allow (partition)"},
+    "election": {"clause": {"rule": "election", "closes_in": 1},
+                 "text": "the members elect a successor by ballot through the institution's procedure (plurality)"},
+    "cooptation": {"clause": {"rule": "cooptation"}, "text": "the remaining officers elect the successor"},
+    "seniority": {"clause": {"rule": "seniority", "among": "members"},
+                  "text": "the longest-standing member (or, among officers, the longest-serving officer)"},
+    "lot": {"clause": {"rule": "lot"}, "text": "a draw among the eligible members"},
+    "none": {"clause": {"rule": "none"}, "text": "the office stays vacant until the institution's code fills it"},
+}
+RECALL = '''
+title = "Recall"
+intent = "Any member may call a recall of the holder of OFFICE (an office of this institution): the members vote; a majority of those voting removes the holder, and the office's succession rule refills it."
+OFFICE = "treasurer"
+
+def recall(holder):
+    open_ballot("Recall " + str(holder) + " from " + OFFICE + "?", members(), ["yes", "no"], "majority_voting", 1, removed)
+    public["recall"] = holder
+
+def removed(result):
+    if result[0] == "yes" and public.get("recall"):
+        revoke(public["recall"], OFFICE)
+    public["recall"] = None
+'''
+
+
 # ====================================================================== library contract templates (review 14 B)
 # Contract code (an association's own law: create_contract {"code": ...}), not polity law, so they are kept apart from TOOLKIT
 # (whose entries a regime, start_laws or a polity may enact). Listed with the toolkit's "contracts" family wherever the toolkit is

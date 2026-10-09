@@ -103,7 +103,13 @@ Then import the module at the bottom of `charter/code/__init__.py`, in the order
 | Publication Act | constitution | V1-V2, V6-V10, V13, V15, V19, G7, G8, G11 | store `publication[polity][event_type] -> audience` | needs W8c's publication layer (`publication.py`, `law.publication`); the store becomes the Act's rows |
 | Association Act | statute | C1, C3 | hooks `before_found`/`before_admit` (kind channel) | hook-based: needs the native-hook twin (deferred, below) |
 | Credit Act | statute | K4 defaults | store `credit` | `credit.py` defaults become rows |
-| Succession Act | statute | I1-I3, I7 | `after_end_life` with `estate_access` | hook-based |
+| Succession Act (estates) | statute | I1-I3, I7 | `after_end_life` with `estate_access` | hook-based; the office part is delivered (below) |
+
+Delivered under `institutions.succession` (charter/code/succession_act.py; selected only in those worlds, after the Press Act):
+the **Succession Act** (vacant offices of institutions that say nothing: RULE election | receiver | none, RECEIVER, MANDATORY;
+residual none) and the **Dissolution and Escheat Act** (a dissolved institution's holdings where it declares no wind-up: TO polity |
+family | members, MANDATORY; residual: locked). Both store-based; `code.resolve_clause` weighs each Act's MANDATORY row against the
+institution's own clause up `code.chain`. Presets pick a variant with `code.select: {"Succession Act": {"RULE": "receiver"}}`.
 | Press Act | statute | D1-D4 | grants at generation (`start`), `before_post` for stories, licences | mixed: start keys plus hooks |
 | Franchise Act | constitution | G3, G4 | `before_propose` refuse; grants | WP5; residual proposing rule: every member (D10) |
 | Founding Act | constitution | G10 | the constitution a new polity starts with | WP5; also decides which Acts a new polity seeds (today all polities fall back to J0's rows) |
