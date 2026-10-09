@@ -234,7 +234,7 @@ def write_catalog(rows: list[dict], stage: Path) -> None:
     import pyarrow as pa
     import pyarrow.parquet as pq
     cols = {c: [r.get(c) for r in rows] for c in CATALOG_COLS}
-    pq.write_table(pa.table(cols), stage / "catalog.parquet", compression="zstd")
+    pq.write_table(pa.table(cols), stage / "catalog.parquet")
 
 
 # ------------------------------------------------------------------ dataset card
