@@ -28,6 +28,9 @@ LAW_API_VERSION = 1
 # The law API's classification, generated from the table in charter/lawapi.py (one row per function and hook): group -> names.
 API_GROUPS = LA.api_groups()
 API = set().union(*API_GROUPS.values())
+# Wave 9 E (institutions.grants): new names of law functions whose old names stay; a law calling the new name is classified as
+# calling the old one (the functions exist only where the flag is on: contracts.law_api).
+ALIASES = {"child_rule": "company_rule", "child_rules": "company_rules", "children": "companies"}
 STRUCTURAL_CALLS = LA.STRUCTURAL_CALLS                                 # rights, money, sanctions, projects, open_ballot, repeal
 PROCEDURAL_CALLS = LA.PROCEDURAL_CALLS                                 # set_procedure
 L4_CALLS = LA.L4_CALLS                                                 # define_action
@@ -128,7 +131,9 @@ def api_used(tree: ast.AST) -> set[str]:
     own |= {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del))}
     own |= {a.arg for a in ast.walk(tree) if isinstance(a, ast.arg)}
     named = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id in API} - own
-    return calls(tree) | named
+    out = calls(tree) | named
+    alias = {ALIASES[n] for n in (calls(tree) | {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}) - own if n in ALIASES}
+    return out | alias
 
 
 def _classify_one(tree: ast.AST) -> str:

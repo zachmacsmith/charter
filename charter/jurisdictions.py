@@ -165,7 +165,9 @@ def install(k) -> None:
     k.w["jur"] = {"member": {}, "seq": 1, "founding": None if nature else "J0", "start": "nature" if nature else "j0",
                   "pending": {"leave": {}, "join": {}}, "admission": {}}
     if not nature:
-        j0 = _new_j("J0", c["j0_name"], "declared", None, 0, legacy=True)
+        from charter import grants as G                                # wave 9 E: the seeded tree root's name (default j0_name)
+        root = G.node(k, "J0") if G.on(k) else None
+        j0 = _new_j("J0", root["name"] if root else c["j0_name"], "declared", None, 0, legacy=True)
         j0["declared_round"] = 0
         _put(k, j0)
     for aid in k.w["agents"]:

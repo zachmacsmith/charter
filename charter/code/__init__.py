@@ -103,7 +103,12 @@ def enabled(x) -> bool:
 
 
 def selection(sp: dict):
-    """The code a world selects: its regime's `code` field, else spec code.select, else "today"."""
+    """The code a world selects: (institutions.grants) its written tree's root `code`; its regime's `code` field, else spec
+    code.select, else "today"."""
+    from charter import grants as G
+    tc = G.written_code(sp)
+    if tc is not None:
+        return tc
     reg = sp.get("regime")
     if reg is not None:
         from charter import regimes as RG
@@ -220,15 +225,34 @@ def store(k) -> dict | None:
     return k.w.get("default_code")
 
 
+def root(k) -> str:
+    """The node the regime seeds the default code in: ROOT ("J0"); institutions.grants: the tree's root (J0 in every preset)."""
+    from charter import grants as G
+    return G.code_root(k) if G.on(k) else ROOT
+
+
+def chain(k, polity) -> list:
+    """Whose rows a polity reads, in order. Off: its own, then ROOT's. institutions.grants (review 14 §6.2 W8d): its own node, its
+    ancestors (parent links, any depth), then the tree nodes marked code_default (the compiled one-node tree marks J0: today);
+    after these, the Act's residual."""
+    from charter import grants as G
+    if not G.on(k):
+        return ([polity] if polity else []) + [ROOT]
+    out = G.ancestors(k, polity) if polity else []
+    return out + [x for x in G.code_defaults(k) if x not in out]
+
+
 def rule(k, polity, act: str, key: str, default):
     """The seam: the value of `key` of `act` in `polity` (see the module docstring)."""
     dc = k.w.get("default_code")
     if dc is None:
         return default
     st = dc["store"]
-    rows = (st.get(polity) or {}).get(act) if polity else None
-    if rows is None:
-        rows = (st.get(ROOT) or {}).get(act)
+    rows = None
+    for x in chain(k, polity):
+        rows = (st.get(x) or {}).get(act)
+        if rows is not None:
+            break
     if rows is None or key not in rows:
         return ACTS[act].residual[key]
     return rows[key]
@@ -269,7 +293,8 @@ def seed(k, inst: dict) -> list:
         return []
     from charter import linker as LK
     v2 = LK.enabled(k)
-    dc = k.w["default_code"] = {"code": rec["name"], "acts": {}, "store": {ROOT: {}}}
+    node = root(k)
+    dc = k.w["default_code"] = {"code": rec["name"], "acts": {}, "store": {node: {}}}
     out = []
     for a in rec["acts"]:
         act = ACTS[a["name"]]
@@ -283,7 +308,7 @@ def seed(k, inst: dict) -> list:
         if v2:
             LK.on_new_law(k, lid)                                     # version 1 and the code store: an amendment's base
         dc["acts"][act.name] = lid
-        dc["store"][ROOT][act.name] = twin_rows(act, code, k.spec)
+        dc["store"][node][act.name] = twin_rows(act, code, k.spec)
         k.log("code_act", None, {"law": lid, "title": title, "rank": a["rank"], "params": dict(a["params"]), "run": "native"},
               vis="monitor")
         out.append(lid)
@@ -303,7 +328,7 @@ def on_code_changed(k, lid: str) -> None:
         acts = list(k.w["default_code"]["acts"].values())
         pos = next((i for i, x in enumerate(order) if x not in acts or acts.index(x) > acts.index(lid)), len(order))
         order.insert(pos, lid)
-    k.w["default_code"]["store"].setdefault(ROOT, {})[act.name] = rows
+    k.w["default_code"]["store"].setdefault(root(k), {})[act.name] = rows
     k.log("code_act", None, {"law": lid, "title": rec["title"], "run": "source", "rows": dict(rows)}, vis="monitor")
 
 
@@ -327,7 +352,7 @@ def switch_to_source(k, lid: str) -> None:
 def rows_of(k, act: str) -> dict:
     """The rows in force for an Act (the root polity's), with the residual for keys it does not set."""
     a = ACTS[act]
-    return {key: rule(k, ROOT, act, key, a.residual[key]) for key in a.residual}
+    return {key: rule(k, root(k), act, key, a.residual[key]) for key in a.residual}
 
 
 def label(rec) -> str:

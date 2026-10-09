@@ -230,7 +230,7 @@ class Kernel:
         Act's LIMIT (the seam: default code), or the hard cap without the Act (its residual: no rationing)."""
         n = self.w["dm_limit"]["all"]
         if n is None:
-            n = DC.rule(self, DC.ROOT, "Communications Act", "limit", int((self.spec.get("dm_step") or {}).get("dms_per_round", 5)))
+            n = DC.rule(self, DC.root(self), "Communications Act", "limit", int((self.spec.get("dm_step") or {}).get("dms_per_round", 5)))
         return self.dm_cap() if n is None else n
 
     def set_dm_limit(self, n, agent=None, by=None):

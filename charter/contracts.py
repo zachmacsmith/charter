@@ -102,6 +102,7 @@ from charter import accounts as AC
 from charter import dispatch as D
 from charter import eventtypes as ET
 from charter import features as FT
+from charter import grants as G                                        # wave 9 E: powers from grants (institutions.grants)
 from charter import incorporation as INC                               # W8e: incorporation and company rules (D-27, D-28)
 from charter import institutions as INS                               # institutions.unified: one store (P4.6)
 from charter import jurisdictions as J
@@ -539,12 +540,13 @@ def instantiate(code: str, params: dict | None) -> str:
     return "\n".join(lines)
 
 
-def check_code(code) -> ast.Module:
-    """Contract code must pass the law check (law.v2 rules) and call no function an association may not call."""
+def check_code(code, allow=()) -> ast.Module:
+    """Contract code must pass the law check (law.v2 rules) and call no function an association may not call. allow (wave 9 E,
+    institutions.grants): powers the association holds by grant (its consent claim, its parent's grant): their functions pass."""
     if not isinstance(code, str) or not code.strip():
         raise L.LawError("a contract needs code (a law module) or a template")
     tree = L.check(code, v2=True)
-    denied = sorted(L.calls(tree) & LA.CONTRACT_DENIED)
+    denied = sorted(n for n in L.calls(tree) & LA.CONTRACT_DENIED if LA.POWER_OF.get(n) not in allow)
     if denied:
         raise L.LawError(f"a contract's code may not call {', '.join(denied)}: contracts hold no compulsion, rights, camp, "
                          "currency or force powers (they can take only what members deposit or allow)")
@@ -600,8 +602,15 @@ def act_create_contract(k, aid, name=None, code=None, template=None, params=None
     most = int(c["max_laws"] if parent is None else INC.rules(k, parent).get("max_laws", c["max_laws"]))
     if len(codes) > most:
         raise L.LawError(f"a contract may have at most {most} laws" + (f" (under {parent}'s company law)" if parent else ""))
+    allow = ()
+    if G.on(k):                                                         # wave 9 E: what its code claims (checked) and its offices
+        allow = set(G.declared_powers(codes))
+        if parent is not None:
+            allow |= {x for x in (INC.rules(k, parent).get("grants") or ()) if x in G.GRANTABLE and PW.has_power(k, parent, x)}
+        for x in codes:
+            INS.parse_offices(x)
     for x in codes:
-        check_code(x)
+        check_code(x, allow)
     if parent is not None:
         _check_incorporation(k, aid, parent, procedure if tname else None)   # own code: its on_enact may set the form
     name = str(name or (tname or "contract").title()).strip()[:60] or "Contract"
@@ -685,7 +694,7 @@ def act_propose_contract_change(k, aid, contract, code=None, replaces=None, temp
         if t is None:
             raise L.LawError(f"no template {template!r} (templates: {', '.join(TEMPLATES)})")
         code = instantiate(t["code"], params)
-    check_code(code)
+    check_code(code, G.extra(k, rec["id"]) if G.on(k) else ())
     if replaces is not None and str(replaces) not in rec["laws"]:
         raise L.LawError(f"{replaces} is not a law of {cid} (its laws: {', '.join(rec['laws']) or 'none'})")
     if replaces is None and len(rec["laws"]) >= max_laws(k, rec):
@@ -766,6 +775,7 @@ def _adopt(k, rec, pr) -> str:
     k.log("contract_changed", pr["by"], {"contract": cid, "law": lid, "title": law["title"], "replaces": pr["replaces"]},
           vis="public")
     _on_enact(k, lid)
+    INS.on_law_in_force(k, lid)                                         # wave 9 E (institutions.grants; off: nothing)
     if rec["status"] == "suspended" and any(k.w["laws"][x]["status"] == "active" for x in rec["laws"]):
         rec["status"] = "active"
     return f"{cid} adopted {lid} '{law['title']}'" + (f" in place of {pr['replaces']}" if pr["replaces"] else "") + "."
@@ -918,6 +928,7 @@ def scope_api(k, lid, api: dict) -> dict:
     cid = J.law_jur(k, lid)
     rec = recs(k)[cid]
     tk = treasury_key(cid)
+    ext = G.extra(k, cid)                                               # wave 9 E: powers held by grant (empty with the flag off)
     out = {}
     for name, fn in api.items():
         row = LA.LAWFNS.get(name)
@@ -940,6 +951,8 @@ def scope_api(k, lid, api: dict) -> dict:
         if x in ("treasury", "reserve", tk):
             return tk
         if isinstance(x, str) and ((x.startswith(esc) and not word) or x.startswith(f"{AC.FUND}{lid}:")):
+            return x
+        if "unlimited_seizure" in ext and x in rec["members"]:          # wave 9 E: a granted seizure, from members only
             return x
         return None
 
@@ -966,6 +979,43 @@ def scope_api(k, lid, api: dict) -> dict:
         """A fine is taken from the member's escrow only (never more): what was taken."""
         return out["forfeit"](aid, item, qty) if "forfeit" in out else 0.0
     out["fine"] = fine
+
+    if ext:                                                             # wave 9 E: compulsion by grant, over members only (D-37)
+        def member_only(name, fn):
+            specs = LA.LAWFNS[name].agents
+
+            def wrap(*a, **kw):
+                for pos, pname in specs:
+                    ag = J._arg(a, kw, pos, pname)
+                    if ag is not None and ag not in rec["members"]:
+                        refuse(name, ag)
+                        return LA.LAWFNS[name].refused
+                return fn(*a, **kw)
+            return wrap
+        for name, row in LA.LAWFNS.items():
+            if row.power in ext and row.contract == "deny" and name in api:
+                out[name] = member_only(name, api[name])
+        if "compel_members" in ext:
+            def fine_members(aid, item, qty):
+                """A fine from a member's holdings (not only its escrow) into the treasury: what was taken."""
+                if aid not in rec["members"]:
+                    refuse("fine", aid)
+                    return 0.0
+                take = min(float(qty), k.bal(aid, item))
+                if take > 0 and k.move(aid, tk, item, take, why=f"law:{lid}", by=None):
+                    return take
+                return 0.0
+            out["fine"] = fine_members
+            if "set_dm_limit" in api:
+                base_dm = out["set_dm_limit"]
+
+                def set_dm_limit(n, agent=None):
+                    if agent is None:                                   # every member (never the world default)
+                        for m in list(rec["members"]):
+                            api["set_dm_limit"](n, m)
+                        return True
+                    return base_dm(n, agent)
+                out["set_dm_limit"] = set_dm_limit
 
     def members():
         return list(rec["members"])
@@ -1278,7 +1328,8 @@ def law_api(k, lid) -> dict:
             "breaches": breaches_, "swap": swap, "open_fund": open_fund,
             "funds": lambda: AC.funds_of(k, AC.account_of(k, lid)), "enforcement": enforcement_,
             "reputation": lambda agent: reputation(k, agent), "shareholders": shareholders_,
-            "company_rule": company_rule, "company_rules": company_rules, "companies": companies_}
+            "company_rule": company_rule, "company_rules": company_rules, "companies": companies_,
+            **({"child_rule": company_rule, "child_rules": company_rules, "children": companies_} if G.on(k) else {})}
 
 
 def _goods(x) -> dict:
@@ -1379,6 +1430,21 @@ def public_record(k, cid) -> dict | None:
            "admission": rec["admission"], "breaches": [dict(b) for b in rec["breaches"]], "funds": AC.funds_of(k, rec["id"])}
     if rec.get("parent") is not None:                                   # W8e: incorporated (absent otherwise: the record as before)
         out["parent"] = rec["parent"]
+    if rec.get("consent"):                                              # wave 9 E: what joining consents to (absent: none claimed)
+        out["powers"] = list(rec["consent"])
+    if INS.has_offices(k, rec["id"]):
+        out["offices"] = {o: INS.holders(k, rec["id"], o) for o in INS.offices(k, rec["id"])}
+    return out
+
+
+def _claims(k, r) -> str:
+    """Wave 9 E: the static facts a joiner consents to (its claimed powers, its offices); '' when it has none (always with the flag
+    off)."""
+    out = ""
+    if r.get("consent"):
+        out += f"; claims over members: {', '.join(r['consent'])}"
+    if INS.has_offices(k, r["id"]):
+        out += "; offices " + ", ".join(f"{o} ({', '.join(INS.holders(k, r['id'], o)) or 'vacant'})" for o in INS.offices(k, r["id"]))
     return out
 
 
@@ -1490,6 +1556,10 @@ def change_create(k, agent, contract, name, template, code, params, admission, u
                                       "laws": list(installed), "admission": rec["admission"], **inc}, vis="public")
     for lid in installed:
         _on_enact(k, lid)
+    if G.on(k):                                                        # wave 9 E: its consent claim and the offices its code declares
+        G.record_consent(k, rec, code)
+        for lid in installed:
+            INS.on_law_in_force(k, lid)
     return {"contract": contract, "laws": installed}
 
 
@@ -2040,11 +2110,13 @@ def state_lines(k, aid) -> list[str]:
         if aid in rec["members"]:
             left = " (you leave at the end of this round)" if aid in rec["leaving"] else ""
             inc = f"; incorporated under {rec['parent']}" if rec.get("parent") is not None else ""   # W8e
+            inc += _claims(k, rec)                                     # wave 9 E ('' with the flag off)
             out.append(f"Your contract {cid} '{rec['name']}' ({rec['template'] or 'own code'}{inc}; {len(rec['members'])} members; laws "
                        f"{', '.join(rec['laws']) or 'none'}{'; SUSPENDED' if rec['status'] == 'suspended' else ''}){left}: your "
                        f"escrow {_fmt(rec['escrow'].get(aid))}; your allowance per round {_fmt(rec['allowances'].get(aid))}; its "
                        f"treasury {_fmt(rec['reserve'])}.")
-    others = [f"{c} '{r['name']}' ({r['template'] or 'own code'}, {len(r['members'])} members{', closed' if r['admission'] == 'closed' else ''})"
+    others = [f"{c} '{r['name']}' ({r['template'] or 'own code'}, {len(r['members'])} members{', closed' if r['admission'] == 'closed' else ''}"
+              f"{_claims(k, r)})"
               for c, r in recs(k).items() if r["status"] != "dissolved" and aid not in r["members"]]
     if others:
         out.append("Contracts you could join: " + "; ".join(others) + ".")

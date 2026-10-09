@@ -225,6 +225,9 @@ def do_enact(k, jurisdiction, law, via) -> dict:
     if "on_enact" in ns:
         k.call(lid, ns["on_enact"])
     k.log("enact", rec["author"], {"law": lid, "title": rec["title"], "class": rec["cls"]}, vis="public")
+    if "grants" in (k.spec.get("institutions") or {}):                 # wave 9 E: offices the law declares (institutions.grants)
+        from charter import institutions as IN
+        IN.on_law_in_force(k, lid)
     return {"status": rec["status"]}
 
 

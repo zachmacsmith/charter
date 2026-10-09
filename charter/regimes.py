@@ -40,6 +40,9 @@ toolkit template, library.TOOLKIT; any library law; a regimes.STATUTES law), res
                  parameters, the default), none (no Act: the residual rules; state_of_nature), or {Act: params | null} (today's
                  code with an Act's constants changed, or dropped). Checked by schema (code.check_selection); resolved at
                  generation into inst["code"] (code.resolve), never into the regime record, so worlds with code off are unchanged.
+  tree           the institution tree a regime seeds (review 14 §2.3; read only with spec institutions.grants, charter/grants.py):
+                 [{id: J0, name, members: all, code, grants: seed | {power: value}, opts: {fixer, code_default}}]. A regime
+                 without one compiles to a one-node tree (J0, today's code, the seed grant), so every preset is unchanged.
 The resolved set is checked for composability (lawset.check: static rules, level, rank, import DAG, a law that can never fire is an
 error, overlaps recorded) and its dimensions are derived from the laws (lawset.dimensions), recorded beside the declared `expect`.
 Each law made from a template records its provenance (template, params, rank) on its law record (k.w["laws"][lid]["template"]).
@@ -620,7 +623,7 @@ LAW_SET_REGIMES: dict[str, dict] = {
 }
 
 FIELDS = ("constitution", "statutes", "rights", "spec", "no_vote_needed", "expect", "summary", "description", "laws", "drop", "amend",
-          "code")
+          "code", "tree")
 LAW_ENTRY_KEYS = ("template", "rank", "params")
 
 

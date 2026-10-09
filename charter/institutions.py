@@ -36,7 +36,26 @@ On:
                  (HANDLERS), then sync. Exit stays each kind's (D-26: a polity's on_exit is law; an association's exit is kept)
     dissolve     a contract's dissolution is routed (the dissolve primitive, kind "association"): laws' before/after hooks see it.
                  A block cannot keep a memberless contract (dormancy is WP-F): it is dissolved all the same
-Not here: grants (WP-E), dormancy and succession (WP-F), recognition and institutions as members (WP-G), channels (WP-C).
+Not here: grants (WP-E: charter/grants.py), dormancy and succession (WP-F), recognition and institutions as members (WP-G),
+channels (WP-C).
+
+Offices (WP-E, institutions.grants on; review 14 §3.1, §7.2). An office is a named right "<iid>.<office>" its code declares with a
+top-level constant, read statically when the law comes into force (an association's founding code and adopted changes, a polity's
+enacted laws, J0's laws):
+    offices = {"treasurer": {"title": "Treasurer", "powers": ["pay"], "holders": ["founder"], "seats": 1, "term": 4}}
+  title    what the office is called (default: the name)
+  powers   what its holder may do: names (the institution's defined actions the right gates, "speak" to speak for it) and bounded
+           grants in P4.5 agency format, {"action": "transfer", "item": "grain", "qty": 5, "to": None, "rounds": None}: a standing
+           authorization from the institution (grantor) to whoever holds the office (grantee), review 18 §2.3. The verbs are
+           GRANT_VERBS; using a grant `as` the institution (every use an agency_used event) is review 18 H2, not built here
+  holders  its first holders ("founder" or agent ids; members only for an association)
+  seats    how many may hold it (None: any; recorded, not enforced); term: rounds a holding lasts (None: no term)
+  Holding is an explicit record, k.w["offices"][iid][office] = {"id": "<iid>.<office>", "office", "title", "powers" (names),
+  "grants": [{"grantor": iid, "grantee": "<iid>.<office>", "action", "item", "qty", "to", "rounds"}], "seats", "term", "law",
+  "declared", "holders": [{"holder", "since", "term_end"}], "past": [{"holder", "since", "term_end", "until"}]},
+  kept in step with the right: dispatch's grant_right / revoke_right changes call on_right. Vacancies (death, exit, term end) and
+  succession are WP-F's: a dead or departed holder stays in the record (holders() skips it) until that package's vacancy path.
+  Reads: offices(k, iid), office(k, iid, name), holders(k, iid, office), officers(k, iid) (holders of any office).
 """
 from __future__ import annotations
 
@@ -50,6 +69,8 @@ UNIFIED = ("published", "members", "parent")      # fields the unified record ad
 LEGACY_STATUS = {"forming": "hidden", "active": "declared"}       # a polity's old names (an association's are unchanged)
 _FROM_LEGACY = {"hidden": "forming", "declared": "active"}
 HANDLERS = {"polity": "charter.jurisdictions", "association": "charter.contracts"}   # each kind's membership changes
+OFFICES = "offices"                                                  # k.w["offices"] (institutions.grants): office records
+OFFICE_FIELDS = ("title", "powers", "holders", "seats", "term")
 _EMPTY = MappingProxyType({})
 
 
@@ -253,7 +274,16 @@ def laws(k, iid) -> list:
 
 
 def offices(k, iid) -> list:
-    """The institution's offices: actions defined by its laws (define_action), by name."""
+    """The institution's offices. institutions.grants: the offices its code declared (`offices = {...}`, below), by name, in
+    declaration order. Off: actions defined by its laws (define_action), by name (defined_actions)."""
+    from charter import grants as G
+    if G.on(k):
+        return list(((k.w.get(OFFICES) or {}).get(iid) or {}).keys())
+    return defined_actions(k, iid)
+
+
+def defined_actions(k, iid) -> list:
+    """Actions defined by the institution's laws (define_action), by name."""
     from charter import jurisdictions as J
     out = []
     for name, a in sorted((k.w.get("actions") or {}).items()):
@@ -261,3 +291,169 @@ def offices(k, iid) -> list:
         if isinstance(lid, str) and J.law_jur(k, lid) == iid:
             out.append(name)
     return out
+
+
+# ---------------------------------------------------------------------- offices (institutions.grants; see the module docstring)
+def _office_name(x) -> bool:
+    return isinstance(x, str) and 0 < len(x) <= 24 and all(c.isalnum() or c == "_" for c in x)
+
+
+# The verbs an office grant may cover (review 18 §2.3: the closed list an officer may use `as` the institution; never vote,
+# attack, commission or bequest). The use path (`as` on these verbs, agency_used events) is review 18 H2's; this package records
+# the grants in P4.5 agency format so H2 has one record to read.
+GRANT_VERBS = ("transfer", "deposit_escrow", "lend", "accept_loan", "repay_loan", "contribute", "harvest", "lease", "accept_lease",
+               "send", "post", "open_channel", "set_channel", "dir_write", "dir_grant", "accuse")
+GRANT_KEYS = ("action", "item", "qty", "to", "rounds")
+
+
+def _office_grant(name, g) -> dict:
+    """One bounded office grant, checked: the P4.5 agency scope {action, item, qty (per round), to (recipients | None), rounds}."""
+    from charter import lawlang as L
+    if any(x not in GRANT_KEYS for x in g):
+        raise L.LawError(f"offices.{name}.powers: a grant is {{{', '.join(GRANT_KEYS)}}}")
+    act = g.get("action")
+    if act not in GRANT_VERBS:
+        raise L.LawError(f"offices.{name}.powers: an office grant's action is one of {', '.join(GRANT_VERBS)} (never vote or attack)")
+    item = g.get("item") or ("message" if act in ("send", "post") else None)
+    if item is not None and not isinstance(item, str):
+        raise L.LawError(f"offices.{name}.powers: item is a name")
+    qty = g.get("qty")
+    if qty is not None and (isinstance(qty, bool) or not isinstance(qty, (int, float)) or qty < 0):
+        raise L.LawError(f"offices.{name}.powers: qty is a number per round (or None: no bound)")
+    to = g.get("to")
+    if to is not None and not (isinstance(to, list) and all(isinstance(x, str) for x in to)):
+        raise L.LawError(f"offices.{name}.powers: to is a list of recipients (or None: any)")
+    rounds = g.get("rounds")
+    if rounds is not None and (isinstance(rounds, bool) or not isinstance(rounds, int) or rounds < 1):
+        raise L.LawError(f"offices.{name}.powers: rounds is a whole number from 1 (or None: until changed)")
+    return {"action": act, "item": item, "qty": None if qty is None else float(qty), "to": to, "rounds": rounds}
+
+
+def parse_offices(code) -> dict:
+    """The offices a law's code declares ({} when none), checked: a LawError says what is wrong."""
+    from charter import grants as G
+    from charter import lawlang as L
+    v = G._declared(str(code or ""), "offices")
+    if v is None:
+        return {}
+    if not isinstance(v, dict):
+        raise L.LawError("offices is a literal {name: {title, powers, holders, seats, term}}")
+    out = {}
+    for name, d in v.items():
+        if not _office_name(name):
+            raise L.LawError(f"offices: an office name is 1-24 letters, digits or _ (got {name!r})")
+        d = {} if d is None else d
+        if not isinstance(d, dict) or any(x not in OFFICE_FIELDS for x in d):
+            raise L.LawError(f"offices.{name}: an object with {', '.join(OFFICE_FIELDS)}")
+        powers, holders_ = d.get("powers") or [], d.get("holders") or []
+        if not isinstance(powers, list) or not all(isinstance(x, (str, dict)) for x in powers):
+            raise L.LawError(f"offices.{name}.powers: a list of names or bounded grants {{action, item, qty, to, rounds}}")
+        names = [x for x in powers if isinstance(x, str)]
+        grants = [_office_grant(name, x) for x in powers if isinstance(x, dict)]
+        if not isinstance(holders_, list) or not all(isinstance(x, str) for x in holders_):
+            raise L.LawError(f"offices.{name}.holders: a list of agent ids or \"founder\"")
+        for f in ("seats", "term"):
+            n = d.get(f)
+            if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 1):
+                raise L.LawError(f"offices.{name}.{f}: a whole number from 1 (or None)")
+        out[name] = {"title": str(d.get("title") or name.replace("_", " ").title())[:60], "powers": names, "grants": grants,
+                     "holders": list(holders_), "seats": d.get("seats"), "term": d.get("term")}
+    return out
+
+
+def declare_offices(k, iid, lid) -> list:
+    """Law lid of institution iid came into force (flag on): the offices its code declares that iid does not have yet become
+    records and rights; their first holders are granted the right (a public `rights` event each). Returns the new offices' names.
+    A malformed declaration declares nothing (it was checked at founding; a later law's is skipped)."""
+    from charter import dispatch as D
+    from charter import grants as G
+    from charter import lawlang as L
+    if not G.on(k):
+        return []
+    law = k.w["laws"].get(lid) or {}
+    try:
+        decl = parse_offices(law.get("code"))
+    except L.LawError:
+        return []
+    if not decl:
+        return []
+    mine = k.w.setdefault(OFFICES, {}).setdefault(iid, {})
+    rec = get(k, iid)
+    new = []
+    for name, d in decl.items():
+        if name in mine:
+            continue
+        right = f"{iid}.{name}"
+        if right not in k.w["rights"]:
+            k.apply("create_right", right=right)
+        mine[name] = {"id": right, "office": name, "title": d["title"], "powers": d["powers"],
+                      "grants": [{"grantor": iid, "grantee": right, **g} for g in d["grants"]], "seats": d["seats"],
+                      "term": d["term"], "law": lid, "declared": k.r, "holders": [], "past": []}
+        new.append(name)
+        for h in d["holders"]:
+            aid = (rec or {}).get("founder") if h == "founder" else h
+            if aid not in k.w["agents"] or k.w["agents"][aid].get("departed") is not None:
+                continue
+            if kind_of(k, iid) == "association" and not is_member(k, iid, aid):
+                continue
+            try:
+                k.apply("grant_right", agent=aid, right=right, lid=lid)
+            except D.PhysicsError:
+                continue
+    return new
+
+
+def on_right(k, agent, right, granted: bool) -> None:
+    """dispatch's grant_right / revoke_right changed an agent's right: if it is a declared office, its holding record follows."""
+    if not isinstance(right, str) or "." not in right:
+        return
+    iid, _, name = right.partition(".")
+    o = ((k.w.get(OFFICES) or {}).get(iid) or {}).get(name)
+    if o is None:
+        return
+    cur = next((h for h in o["holders"] if h["holder"] == agent), None)
+    if granted and cur is None:
+        o["holders"].append({"holder": agent, "since": k.r, "term_end": k.r + o["term"] if o["term"] else None})
+    elif not granted and cur is not None:
+        o["holders"].remove(cur)
+        o["past"].append({**cur, "until": k.r})
+
+
+def office(k, iid, name):
+    """The office record (or None). name: "treasurer" or "<iid>.treasurer"."""
+    if isinstance(name, str) and name.startswith(f"{iid}."):
+        name = name[len(iid) + 1:]
+    return ((k.w.get(OFFICES) or {}).get(iid) or {}).get(name)
+
+
+def holders(k, iid, name) -> list:
+    """The office's current holders (live agents only: a dead holder stays in the record until WP-F's vacancy path)."""
+    o = office(k, iid, name)
+    if o is None:
+        return []
+    ag = k.w["agents"]
+    return [h["holder"] for h in o["holders"] if h["holder"] in ag and ag[h["holder"]].get("departed") is None]
+
+
+def officers(k, iid) -> list:
+    """Holders of any office of the institution, in office then holding order, each once."""
+    out = []
+    for name in ((k.w.get(OFFICES) or {}).get(iid) or {}):
+        for a in holders(k, iid, name):
+            if a not in out:
+                out.append(a)
+    return out
+
+
+def has_offices(k, iid) -> bool:
+    return bool((k.w.get(OFFICES) or {}).get(iid))
+
+
+def on_law_in_force(k, lid) -> None:
+    """A law came into force (dispatch do_enact; an association's founding code or adopted change): its institution's offices.
+    Off: nothing."""
+    from charter import grants as G
+    if not G.on(k):
+        return
+    from charter import jurisdictions as J
+    declare_offices(k, J.law_jur(k, lid), lid)

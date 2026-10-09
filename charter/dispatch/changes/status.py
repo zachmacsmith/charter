@@ -16,6 +16,9 @@ def do_grant_right(k, agent, right, lid=None, quiet=False, via="law") -> dict:
         a["rights"] = sorted(a["rights"] + [right])
         if via == "law" and not quiet:
             k.log("rights", None, {"agent": agent, "right": right, "change": "grant", "law": lid}, vis="public")
+        if "offices" in k.w:                                            # wave 9 E: an office's holding record (institutions.grants)
+            from charter import institutions as IN
+            IN.on_right(k, agent, right, True)
     return {"changed": changed}
 
 
@@ -26,6 +29,9 @@ def do_revoke_right(k, agent, right, lid=None, via="law") -> dict:
         a["rights"] = [x for x in a["rights"] if x != right]
         if via == "law":
             k.log("rights", None, {"agent": agent, "right": right, "change": "revoke", "law": lid}, vis="public")
+        if "offices" in k.w:                                            # wave 9 E: an office's holding record (institutions.grants)
+            from charter import institutions as IN
+            IN.on_right(k, agent, right, False)
     return {"changed": changed}
 
 

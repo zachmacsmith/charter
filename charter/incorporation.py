@@ -181,8 +181,13 @@ def _num(x) -> bool:
 
 def check_rule(k, key, value):
     """A company rule's value, checked and normalised (LawError on a bad key or value)."""
+    from charter import grants as G
+    if key == "grants" and G.on(k):                                    # wave 9 E: the parent's grant to its children (child rules)
+        if not isinstance(value, (list, tuple)) or any(x not in G.GRANTABLE for x in value) or len(set(value)) != len(value):
+            raise L.LawError(f"child rule grants is a list of distinct powers from {', '.join(G.GRANTABLE)}")
+        return list(value)
     if key not in RULES:
-        raise L.LawError(f"no company rule {key!r}: one of {', '.join(RULES)}")
+        raise L.LawError(f"no company rule {key!r}: one of {', '.join(RULES)}" + (", grants" if G.on(k) else ""))
     if key == "enforcement":
         if value not in ENFORCEMENT:
             raise L.LawError(f"company rule enforcement is one of {', '.join(ENFORCEMENT)}")

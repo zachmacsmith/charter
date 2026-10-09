@@ -18,6 +18,13 @@ k.w["contracts"]["assoc"]; "personal" is reserved):
 A record may carry `powers` overrides ({power: value}, absent today: no record has one, so state is unchanged); an override cannot
 take an entrenched power away from its holder.
 
+Wave 9 E (review 14 §3.2; spec institutions.grants with institutions.unified; charter/grants.py): with the flag on the kind no
+longer decides. has_power asks grants.value, which reads the grant sources: seed (the preset's tree root holds the polity column,
+j0 values included: J0_ONLY are the seed-only powers), consent (an institution's template declares its column as a default, without
+the seed-only powers, and its founding code may claim grants.CONSENTABLE more, over members only), parent (a parent's child rule
+`grants`, within the parent's own powers), recognition (a stub, WP-G). The `kinds` column stays as the data those defaults come
+from; with no claims and no child-rule grants every power set equals the flag-off one (tests/test_grants.py).
+
 Branches that remain (not power questions; input for the J0-as-contract milestone, review 06 §9.3), see REMAINING below.
 """
 from __future__ import annotations
@@ -159,13 +166,22 @@ def _resolve(k, account, rec, value):
     raise ValueError(value)
 
 
+def _grants(k) -> bool:
+    i = k.spec.get("institutions") or {}
+    return bool(i.get("grants")) and bool(i.get("unified"))
+
+
 def has_power(k, account, power: str):
     """Does the account hold the power? True/False, or the setting's value for a "spec" power (law_levels: a LEVEL_PRESETS name).
     An unknown power is a KeyError."""
     p = POWERS[power]
     rec = _record(k, account)
-    kind = (rec or {}).get("kind", "polity")
-    got = _resolve(k, account, rec, p.value(kind))
+    if _grants(k):                                                       # wave 9 E: grant sources, not the kind (charter/grants.py)
+        from charter import grants as G
+        raw = G.value(k, account, power)
+    else:
+        raw = p.value((rec or {}).get("kind", "polity"))
+    got = _resolve(k, account, rec, raw)
     over = (rec or {}).get("powers") or {}
     if power in over and not (p.entrenched and got and not over[power]):
         got = _resolve(k, account, rec, over[power])

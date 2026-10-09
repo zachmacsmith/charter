@@ -223,11 +223,35 @@ def purpose_overrides(spec) -> dict:
 
 def doc_for(name, spec) -> str | None:
     """An action's doc template in this world's wording, or None for the registry's (agents.action_doc)."""
+    out = None
     if name in NO_TEMPLATE_DOC and not templates_offered(spec):
-        return NO_TEMPLATE_DOC[name]
-    if name in CHANNEL_DOC and channels_v2(spec):                       # wave 9 C: post and standing_order with channels
-        return CHANNEL_DOC[name]
-    return None
+        out = NO_TEMPLATE_DOC[name]
+    elif name in CHANNEL_DOC and channels_v2(spec):                     # wave 9 C: post and standing_order with channels
+        out = CHANNEL_DOC[name]
+    if name in GRANT_DOC and grants(spec):                              # wave 9 E: declaring offices and powers at founding
+        out = (out if out is not None else REG[name].doc) + GRANT_DOC[name]
+    return out
+
+
+# ---------------------------------------------------------------------- grants and offices (wave 9 E; spec institutions.grants)
+GRANT_DOC = {
+    "create_contract": '. Its code may declare, as top-level constants, offices = {"treasurer": {"title": "Treasurer", "powers": '
+                       '["pay", {"action": "transfer", "item": "grain", "qty": 5}], "holders": ["founder"], "seats": 1, "term": '
+                       '4}} (each office is the right "<id>.<office>", granted to its holders, who are recorded; its powers name '
+                       'what the right unlocks and bounded standing grants per round from the institution; an office with '
+                       '"speak" among its powers speaks for it) and '
+                       'powers = ["compel_members", "unlimited_seizure", "hook_legal_acts"] (claims over members only: fines '
+                       'and sanctions beyond escrow, seizure from their holdings, hooks on their legal acts elsewhere). Whoever '
+                       'joins sees and accepts them; nothing reaches non-members',
+    "found": '. A charter law may declare offices the same way: offices = {"judge": {"title": "Judge", "powers": ["rule"], '
+             '"holders": ["founder"], "term": 6}} (each office is the right "<id>.<office>", created and granted when the law '
+             'takes effect; its holders are recorded)',
+}
+
+
+def grants(spec) -> bool:
+    i = (spec or {}).get("institutions") or {}
+    return bool(i.get("grants")) and bool(i.get("unified"))
 
 
 # ---------------------------------------------------------------------- channels v2 (wave 9 C; spec channels.v2, off by default)

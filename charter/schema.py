@@ -415,6 +415,7 @@ def _ann():
         "goals.outcome_only": dict(types=("bool",)),
         "actions.core_only": dict(types=("bool",)),
         "institutions.unified": dict(types=("bool",)),                  # review 14 WP-D (P4.6): one institution store
+        "institutions.grants": dict(types=("bool",)),                   # review 14 WP-E: powers from grants (charter/grants.py)
         "channels.v2": dict(types=("bool",)),                           # wave 9 C: channels v2 (charter/channels.py)
         "channels.delivery": dict(types=("str",), enum=("push", "pull")),
         "channels.square": dict(types=("str",), enum=("one", "per_camp", "none")),
@@ -498,6 +499,7 @@ EXTRA = {
     "goals.outcome_only": False,
     "actions.core_only": False,
     "institutions.unified": False,                                     # review 14 WP-D: off = the two stores, byte-identical
+    "institutions.grants": False,                                      # review 14 WP-E: off = the power table's kinds column
     # wave 9 C, channels v2 (charter/channels.py; review 14 §4.6, D-37): off = byte-identical
     "channels.v2": False, "channels.delivery": "pull", "channels.square": "one", "channels.square_rate": 2,
     "channels.found_right": None, "channels.headlines": 8,
@@ -528,6 +530,12 @@ DOCS = {
     "institutions.unified": "one store k.w[\"institutions\"] for jurisdictions and contract associations (one record kind; "
                             "jurisdictions and contracts' associations become views; one found, one membership path, routed "
                             "contract dissolution; a secret founding is a publication, not a status). Off: today, byte-identical",
+    "institutions.grants": "review 14 WP-E (charter/grants.py; needs institutions.unified): an institution's powers come from "
+                           "grant sources (seed: the preset's tree root; consent: its template and the powers its founding code "
+                           "claims; parent: its parent's child rule grants; recognition: none yet), not from its kind; the "
+                           "default code resolves up the institution tree (regime.tree; every preset is a one-node tree, J0); "
+                           "offices declared in code (offices = {...}) are records with holders; inboxes are read by officers. "
+                           "Off: today, byte-identical",
     "actions.core_only": "review 14 A: only the core surface (action_registry.CORE_SURFACE, ~30 actions) exists; every other action "
                          "is unknown",
     "channels.v2": "wave 9 C (charter/channels.py; review 14 §4.6, D-37): one channel structure (owner, reader and writer "
@@ -1044,9 +1052,15 @@ def _check_regime(path, v) -> list:
             from charter import regimes as RG
             fields = RG.FIELDS + ("base", "name", "cantons_text")
             return ([f"{p}.{k}: unknown regime field{_close(k, fields)}" for k in x if k not in fields] + _check_law_set(p, x)
-                    + (_check_code(f"{p}.code", x["code"]) if "code" in x else []))
+                    + (_check_code(f"{p}.code", x["code"]) if "code" in x else [])
+                    + (_check_tree(f"{p}.tree", x["tree"]) if "tree" in x else []))
         return [f"{p}: expected a regime name, a distribution over names, an inline definition or null, got {x!r}"]
     return _values(path, v, one)
+
+
+def _check_tree(path, v) -> list:
+    from charter import grants as G
+    return G.check_tree(path, v)
 
 
 def _check_goal_weights(path, v) -> list:

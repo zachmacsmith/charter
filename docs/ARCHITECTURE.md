@@ -618,6 +618,26 @@ world is byte-identical, checked by the goldens and `difftest` against the base)
   `status`, `published`, `all_`. Not done here: grants (WP-E), dormancy and succession (WP-F), recognition and institutions as
   members (WP-G).
 
+Wave 9 WP-E (review 14 §2.3, §3.2, §6.1 row E; `charter/grants.py`), behind spec `institutions.grants` (needs `institutions.unified`;
+default false; off, byte-identical):
+- Powers from grants, not kind: `powers.has_power` asks `grants.value`: seed (the preset's tree root: today's polity column, the
+  j0 values included; `powers.J0_ONLY` are the seed-only powers), consent (the template's default column, plus what the founding
+  code claims with `powers = [...]` from `grants.CONSENTABLE`: compel_members, unlimited_seizure, hook_legal_acts; frozen at founding
+  in record key `consent`, shown to would-be joiners), parent (a parent's child rule `grants`, `grants.GRANTABLE`, only powers the
+  parent holds), recognition (stub). A claim opens the compulsion functions to an association's code (`contracts.check_code` allow,
+  `contracts.scope_api`) over members only: non-members are refused (`contract_out_of_scope`), per D-37. Company rules are child
+  rules: `child_rule`, `child_rules`, `children` are the new names (old ones kept; `lawlang.ALIASES` classifies the new as the old).
+- `regime.tree` (regime field `tree`, checked by `grants.check_tree`): every preset compiles to a one-node tree (J0, members all,
+  the regime's code, the seed grant, opts fixer and code_default); a state-of-nature start to none. A written tree has one node for
+  now (child nodes need their own Acts: WP-I). `code.rule` resolves through `code.chain`: the institution's node, its ancestors,
+  the code_default nodes, then the residual; `code.root(k)` replaces the literal `code.ROOT` at the seams.
+- Offices: `offices = {name: {title, powers, holders, seats, term}}` in an institution's code makes the right `<iid>.<name>` and a
+  holding record in `k.w["offices"]` (holders with since and term_end, past holders with until), kept in step by the grant_right /
+  revoke_right changes. An office's `powers` are names (what the right unlocks, "speak") and bounded grants in P4.5 agency format
+  (`{action, item, qty, to, rounds}`, grantor the institution, grantee the office; review 18 §2.3: the use path `as` is H2).
+  `institutions.offices`, `office`, `holders`, `officers`. Channels: selectors `{"officers": iid}` and `{"officers_or_members": iid}`;
+  an institution's inbox is read by its officers once it declares an office, its members before. No vacancy or succession yet.
+
 ---
 
 ## 8. Run store, provenance, History, interventions and forks

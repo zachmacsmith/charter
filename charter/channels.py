@@ -41,6 +41,9 @@ import re
 
 FIELDS = ("purpose", "readers", "writers", "listed", "inbox", "identity", "retention", "rate")
 SELECTORS = ("agents", "members", "office", "subscribers", "all", "camp", "address", "any")
+# Wave 9 E (institutions.grants): {"officers": "<iid>"} holders of any office the institution's code declares; {"officers_or_members":
+# "<iid>"} its officers when it has declared an office, else its members (an institution's inbox readers under the flag).
+GRANT_SELECTORS = ("officers", "officers_or_members")
 IDENTITIES = ("named", "anonymous")
 RETENTIONS = ("all", "joined")
 SQUARES = ("one", "per_camp", "none")
@@ -130,9 +133,32 @@ def is_member(k, iid, aid) -> bool:
     return IN.is_member(k, iid, aid)
 
 
+def grants_on(k) -> bool:
+    from charter import grants as G
+    return G.on(k)
+
+
+def extra_selectors(k) -> tuple:
+    """Selector keys this world adds to SELECTORS (wave 9 E: GRANT_SELECTORS under institutions.grants)."""
+    return GRANT_SELECTORS if grants_on(k) else ()
+
+
+def _speaks(office) -> bool:
+    """An office record that speaks for its institution: "speak" among its powers, or a send/post grant (review 18 §2.3)."""
+    return "speak" in office.get("powers", ()) or any(g["action"] in ("send", "post") for g in office.get("grants", ()))
+
+
 def may_speak_for(k, aid, iid) -> bool:
-    """`as` an institution: a holder of its speak office ("<iid>.speak", a right its code creates and grants)."""
-    return owner_kind(k, iid) in ("jurisdiction", "association") and k.has(aid, f"{iid}.speak")
+    """`as` an institution: a holder of its speak office ("<iid>.speak", a right its code creates and grants). institutions.grants:
+    also a holder of any office its code declares with "speak" among the office's powers."""
+    if owner_kind(k, iid) not in ("jurisdiction", "association"):
+        return False
+    if k.has(aid, f"{iid}.speak"):
+        return True
+    if grants_on(k):
+        from charter import institutions as IN
+        return any(_speaks(IN.office(k, iid, o) or {}) and aid in IN.holders(k, iid, o) for o in IN.offices(k, iid))
+    return False
 
 
 def name_of_owner(k, owner) -> str:
@@ -142,18 +168,18 @@ def name_of_owner(k, owner) -> str:
 
 
 # ---------------------------------------------------------------------- selectors
-def check_selector(sel, path="selector"):
-    """A selector, checked (raises ActionError). Lists and {"any": [...]} are unions."""
+def check_selector(sel, path="selector", extra=()):
+    """A selector, checked (raises ActionError). Lists and {"any": [...]} are unions. extra: keys this world adds (selectors(k))."""
     if isinstance(sel, list):
-        return [check_selector(x, path) for x in sel]
+        return [check_selector(x, path, extra) for x in sel]
     if not isinstance(sel, dict) or not sel:
         raise _err(f"{path} must be an object such as {{\"all\": true}}, {{\"agents\": [\"Name\"]}}, {{\"members\": true}}, "
                    f"{{\"members\": \"<institution>\"}}, {{\"office\": \"<institution>.<right>\"}}, {{\"subscribers\": true}} or "
                    f"{{\"address\": true}}")
     out = {}
     for key, v in sel.items():
-        if key not in SELECTORS:
-            raise _err(f"{path}: unknown selector {key!r} (selectors: {', '.join(SELECTORS)})")
+        if key not in SELECTORS and key not in extra:
+            raise _err(f"{path}: unknown selector {key!r} (selectors: {', '.join(SELECTORS + tuple(extra))})")
         if key == "agents":
             if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
                 raise _err(f"{path}: agents is a list of names")
@@ -161,7 +187,11 @@ def check_selector(sel, path="selector"):
         elif key == "any":
             if not isinstance(v, list):
                 raise _err(f"{path}: any is a list of selectors")
-            out[key] = [check_selector(x, path) for x in v]
+            out[key] = [check_selector(x, path, extra) for x in v]
+        elif key in GRANT_SELECTORS:
+            if not isinstance(v, str) or not v:
+                raise _err(f"{path}: {key} names an institution such as \"A1\"")
+            out[key] = v
         elif key in ("office", "camp"):
             if not isinstance(v, str) or not v:
                 raise _err(f"{path}: {key} names " + ("a right such as \"J1.speak\"" if key == "office" else "a camp"))
@@ -210,6 +240,13 @@ def matches(k, ch, sel, aid, depth=0) -> bool:
             return True
         if key == "any" and any(matches(k, ch, x, aid, depth) for x in v):
             return True
+        if key in GRANT_SELECTORS:                                      # wave 9 E (institutions.grants): offices are records
+            from charter import institutions as IN
+            if key == "officers_or_members" and not IN.has_offices(k, v):
+                if is_member(k, v, aid):
+                    return True
+            elif aid in IN.officers(k, v):
+                return True
     return False
 
 
@@ -231,6 +268,8 @@ def describe(sel) -> str:
         parts.append({"agents": lambda: ", ".join(v) or "nobody", "members": lambda: "its members" if v is True else f"members of {v}",
                       "office": lambda: f"holders of {v}", "subscribers": lambda: "subscribers", "all": lambda: "everyone",
                       "camp": lambda: f"agents at {v}", "address": lambda: "anyone with the address",
+                      "officers": lambda: f"officers of {v}",
+                      "officers_or_members": lambda: f"officers of {v} (its members while it has no office)",
                       "any": lambda: " or ".join(describe(x) for x in v)}[key]())
     return " or ".join(parts)
 
@@ -325,7 +364,8 @@ def _inbox_record(k, owner) -> dict:
     if owner_kind(k, owner) == "agent":
         return _record(k, inbox_id(owner), owner, purpose=f"{owner}'s inbox", readers={"agents": [owner]}, writers={"all": True},
                        listed=True, inbox=True)
-    return _record(k, inbox_id(owner), owner, purpose=f"{name_of_owner(k, owner)}'s inbox", readers={"members": owner},
+    readers = {"officers_or_members": owner} if grants_on(k) else {"members": owner}   # wave 9 E: its officers read it
+    return _record(k, inbox_id(owner), owner, purpose=f"{name_of_owner(k, owner)}'s inbox", readers=readers,
                    writers={"all": True}, listed=True, inbox=True)
 
 
@@ -506,7 +546,7 @@ def found_right(k):
     """The right opening a channel needs: None (anyone: the residual) unless the Press Act (default code) or spec
     channels.found_right says otherwise."""
     from charter import code as DC
-    return DC.rule(k, DC.ROOT, "Press Act", "right", cfg(k)["found_right"])
+    return DC.rule(k, DC.root(k), "Press Act", "right", cfg(k)["found_right"])
 
 
 # ---------------------------------------------------------------------- actions
@@ -700,8 +740,8 @@ def act_open_channel(k, aid, name, purpose="", readers=None, writers=None, liste
         if t is None:
             raise _err(f"no channel template {template!r} (templates: {', '.join(TEMPLATES)})")
         t = _fill(t, owner)
-    readers = check_selector(readers if readers is not None else t.get("readers", {"all": True}), "readers")
-    writers = check_selector(writers if writers is not None else t.get("writers", {"all": True}), "writers")
+    readers = check_selector(readers if readers is not None else t.get("readers", {"all": True}), "readers", extra_selectors(k))
+    writers = check_selector(writers if writers is not None else t.get("writers", {"all": True}), "writers", extra_selectors(k))
     listed = t.get("listed", True) if listed is None else bool(listed)
     rate = t.get("rate") if rate is None else rate
     if identity not in IDENTITIES or retention not in RETENTIONS:
@@ -746,7 +786,7 @@ def act_set_channel(k, aid, channel, field, value=None):
     if key not in FIELDS:
         raise _err(f"field is one of {', '.join(FIELDS)}")
     if key in ("readers", "writers"):
-        value = check_selector(value, key)
+        value = check_selector(value, key, extra_selectors(k))
     elif key in ("listed", "inbox"):
         if not isinstance(value, bool):
             raise _err(f"{key} is true or false")
