@@ -87,6 +87,35 @@ def _api(model, system, user, schema, thinking_budget, max_tokens):
                                           "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0}
 
 
+# Subscription usage (claude_code backend): every `claude -p` stream carries a rate_limit_event with the utilization (0..1) of the
+# account's windows (five_hour, seven_day). The runner reads USAGE before each round and stops the run at llm.usage_stop.
+USAGE: dict = {}
+
+
+def note_usage(info: dict) -> None:
+    import time as _t
+    wins = {n: float(w["utilization"]) for n, w in (info.get("unifiedWindows") or {}).items()
+            if isinstance(w, dict) and w.get("utilization") is not None}
+    if wins:
+        USAGE.clear()
+        USAGE.update({"windows": wins, "status": info.get("status"), "at": _t.time()})
+
+
+def usage_stop(llm_cfg: dict | None = None) -> str | None:
+    """Why to stop (the subscription is at or over the stop level in some window), or None. Level: env CHARTER_USAGE_STOP, else
+    spec llm.usage_stop, else 0.9 (stop with 10% left); null or >= 1 disables. Only the claude_code backend reports usage."""
+    v = os.environ.get("CHARTER_USAGE_STOP")
+    level = (llm_cfg or {}).get("usage_stop", 0.9) if v is None else (None if v.lower() in ("", "none", "null") else float(v))
+    if level is None or level >= 1 or not USAGE.get("windows"):
+        return None
+    if USAGE.get("status") not in (None, "allowed", "allowed_warning"):
+        return f"subscription usage limit reached ({USAGE.get('status')})"
+    over = {n: u for n, u in USAGE["windows"].items() if u >= level}
+    if not over:
+        return None
+    return "subscription usage " + ", ".join(f"{n} window {u:.0%} used" for n, u in sorted(over.items())) + f" (stop at {level:.0%})"
+
+
 def _claude_code(model, system, user, schema, thinking_budget):
     cmd = ["claude", "-p", user, "--output-format", "stream-json", "--verbose", "--model", model, "--system-prompt", system,
            "--tools", "", "--json-schema", json.dumps(schema), "--no-session-persistence", "--disable-slash-commands",
@@ -108,6 +137,8 @@ def _claude_code(model, system, user, schema, thinking_budget):
             withheld += sum(1 for b in blocks if not b.get("thinking"))   # the model thought, but the CLI gave no text
         if e.get("type") == "result":
             result = e
+        if e.get("type") == "rate_limit_event":
+            note_usage(e.get("rate_limit_info") or {})
     if not result:
         raise CallError(f"claude -p produced no result: {(p.stderr or p.stdout)[-300:]}", raw=p.stdout[-20000:] or None)
     if result.get("is_error"):                                   # say why: the result text is often empty (None)

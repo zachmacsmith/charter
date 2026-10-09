@@ -81,7 +81,7 @@ def abandon(out: Path, ckpt_path: Path, r: int, tally: Tally, rounds: int, mode:
     return msg
 
 
-def budget(out: Path, r: int, rounds: int, why: str) -> str:
+def budget(out: Path, r: int, rounds: int, why: str, hint: str | None = None) -> str:
     """A budget stop before round r (life.max_population): nothing is cut (the checkpoint is the end of the previous round); write
     STOPPED.md, rebuild the reports; return the RunStopped message."""
     out = Path(out)
@@ -92,7 +92,7 @@ def budget(out: Path, r: int, rounds: int, why: str) -> str:
         f"- When: {time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"- Before round {r + 1} of {rounds}: {why}.",
         f"- The run is kept as of {kept} (its checkpoint); no model call of round {r + 1} was made.",
-        "- To go on, raise the guard and resume: run the same command with `--live life.max_population=<higher>` (or `null`).",
+        "- " + (hint or "To go on, raise the guard and resume: run the same command with `--live life.max_population=<higher>` (or `null`)."),
         ""]) + "\n")
     try:
         from charter import report

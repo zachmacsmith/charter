@@ -366,6 +366,12 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         """life.max_population (a model-cost guard): a round that would start with more living agents than allowed is not played;
         the run is kept as of the end of the previous round (its checkpoint) and stops. Births are never refused."""
         why = LF.budget_stop(k) if "life" in k.w else None
+        hint = None
+        if why is None:
+            from charter import llm as LLM
+            why = LLM.usage_stop(inst["spec"].get("llm"))
+            hint = ("Resume when the usage window resets (`python -m charter resume <dir>`), or set CHARTER_USAGE_STOP higher "
+                    "(or `null`) to continue now.")
         if why is None:
             return
         reason_f.close()
@@ -373,7 +379,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         policy.close()
         if obs:
             obs.f.flush()
-        msg = FS.budget(out, r, inst["rounds"], why)
+        msg = FS.budget(out, r, inst["rounds"], why, hint=hint)
         PV.end(out, "stopped", r - 1)
         raise RunStopped(msg)
 
