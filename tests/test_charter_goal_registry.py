@@ -24,7 +24,9 @@ def test_registry_covers_the_catalogue():
         assert GR.get(name) is g
 
 
-VERSIONS = {"Leaker": 2}                                              # P7.2: common text rendered from the sections
+VERSIONS = {"Leaker": 2,                                             # P7.2: common text rendered from the sections
+            "Lawmaker": 2,                                            # W9: only laws that took effect count
+            "Sovereign": 2, "Overthrow": 2}                           # W9: scored over the final window
 
 
 @pytest.mark.parametrize("name", list(GR.GOALS) + list(GR.FIXED))

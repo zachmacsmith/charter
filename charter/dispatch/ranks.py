@@ -60,7 +60,8 @@ class RankRefused(Blocked):
 
 
 def check_propose(k, p):
-    """law.v2 (P3.2): no draft may have rank charter; a draft may repeal or amend only laws of rank <= its own (lex superior)."""
+    """law.v2 (P3.2): no draft may have rank charter; a draft may repeal or amend only laws of rank <= its own (lex superior); W9: a
+    draft whose declared rank is below what it does needs (requirement, the draft's "requires") is refused."""
     if not v2(k):
         return p
     d = p["draft"]
@@ -76,6 +77,9 @@ def check_propose(k, p):
                 why = (f"a {rank} cannot {verb} {t['id']} '{t['title']}', a {rank_of(k, t['id'])} (lex superior): the draft must "
                        f"declare rank = \"{rank_of(k, t['id'])}\" and pass that rank's procedure")
                 break
+    req = d.get("requires")                                           # W9: what the draft does needs a higher rank
+    if why is None and req and req.get("rank") and RANKS[rank] < RANKS[req["rank"]]:
+        why = requirement_text(req, rank)
     if why is None:
         return p
     k.w["laws"][d["id"]]["status"] = "blocked"
@@ -84,6 +88,130 @@ def check_propose(k, p):
 
 
 CLASSES = ("ordinary", "structural", "procedural")
+
+
+# ---------------------------------------------------------------------- what a draft does (W9: the usurpers' constitution loophole)
+# A law's class is read from the functions it names (lawlang.classify) and its rank from what it declares; neither saw that a law
+# can change who decides. In the usurpers run an ordinary-class "seat table" replaced the council and a procedural law then repealed
+# the constitution, past the procedural threshold and the Board. requirement() reads what the draft does (statically, and on a copy
+# of the world: Kernel.trial) and names the class and rank that needs:
+#   - it sets a procedure (set_procedure)                                        -> procedural
+#   - it grants, revokes or suspends a right the procedures in force read
+#     (the electorate and the root's seats: vote, decree, a council right, ...)   -> procedural
+#   - it repeals (or tries to) a procedural or constitution-rank law              -> procedural, and that law's rank if higher
+# law.v2 worlds only (where ranks and the pilots live; a v1 world's classes and goldens stay as they were: there only the
+# classifier's own fix applies, lawlang.api_used). A draft's class is raised to the requirement at proposal (actions._propose,
+# jurisdictions.propose, actions._amend): the class is computed, never declared, so raising it is what makes the procedure,
+# threshold and Board review of that class apply. Its rank is declared, so a draft whose declared rank is below the requirement is
+# refused at proposal (check_propose) with a message naming the class and rank it needs.
+GOVERNING = ("vote",)                                                     # always: the electorate of every built-in constitution
+_TRIGGERS = {"grant", "revoke", "suspend", "revoke_capability", "set_procedure", "repeal", "open_ballot", "use"}
+
+
+def governing_rights(k) -> set:
+    """Rights that decide: "vote", and every right the laws that set the procedures in force read by name (holders("X"),
+    has(a, "X")): a council's or a ruler's seat."""
+    import ast
+    out = set(GOVERNING)
+    tables = [k.w.get("procedures") or {}]
+    if "jur" in k.w:
+        tables += [j.get("procedures") or {} for j in J.jurs(k).values()]
+    lids = {str(key).split("#")[0] for t in tables for key in t.values() if key}
+    for lid in lids:
+        code = (k.w["laws"].get(lid) or {}).get("code")
+        try:
+            tree = ast.parse(code or "")
+        except SyntaxError:
+            continue
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in ("holders", "has"):
+                arg = n.args[0] if n.func.id == "holders" and n.args else (n.args[1] if len(n.args) > 1 else None)
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    out.add(arg.value)
+    return out
+
+
+def requirement(k, lid) -> dict | None:
+    """What draft `lid` does that needs a stricter class or rank than it has: {"cls", "rank", "why"} (rank None: no rank needed,
+    or law.v2 off), or None. Static (constant rights and repeal targets) and dynamic (Kernel.trial, run only when the draft names a
+    function that can do any of it, or imports)."""
+    import ast
+    if not v2(k):                                                     # law.v2 worlds (ranks, Board review per rank); v1 as before
+        return None
+    law = k.w["laws"][lid]
+    try:
+        tree = ast.parse(law["code"])
+    except SyntaxError:
+        return None
+    used = L.api_used(tree)
+    if not (used & _TRIGGERS):
+        return None
+    gov = governing_rights(k)
+    need, rank, why = "ordinary", None, []
+
+    def want(cls, reason, r=None):
+        nonlocal need, rank
+        if L.CLASS_RANK[cls] > L.CLASS_RANK[need]:
+            need = cls
+        if r is not None and (rank is None or RANKS[r] > RANKS[rank]):
+            rank = r
+        if reason not in why:
+            why.append(reason)
+
+    def repeal_target(t):
+        if t.get("id") == lid:
+            return
+        tr = rank_of(k, t["id"])
+        high = RANKS[tr] >= RANKS["constitution"]
+        if t.get("cls") == "procedural" or high:
+            want("procedural", f"repeals {t['id']} '{t['title']}', a {t.get('cls')} law of rank {tr}",
+                 tr if high else None)
+
+    for n in ast.walk(tree):                                          # static: constant rights and repeal targets
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.args:
+            f = n.func.id
+            if f in ("grant", "revoke", "suspend", "revoke_capability") and len(n.args) >= 2 and isinstance(n.args[1], ast.Constant) \
+                    and n.args[1].value in gov:
+                want("procedural", f"{f}s the right {n.args[1].value!r}, which decides who passes laws")
+            elif f == "repeal" and isinstance(n.args[0], ast.Constant):
+                for t in _targets(k, n.args[0].value):
+                    repeal_target(t)
+    for prim, p in k.trial(lid):                                      # dynamic: what it did on a copy of the world
+        if prim == "set_procedure":
+            want("procedural", f"sets the procedure for {p.get('cls')} laws")
+        elif prim in ("grant_right", "revoke_right", "suspend_right") and p.get("right") in gov:
+            want("procedural", f"{prim.split('_')[0]}s the right {p['right']!r}, which decides who passes laws")
+        elif prim == "repeal_attempt":
+            t = k.w["laws"].get(p["law"])
+            if t:
+                repeal_target(t)
+    if L.CLASS_RANK[need] <= L.CLASS_RANK.get(law["cls"], 0) and (rank is None or RANKS[rank] <= RANKS[rank_of(k, lid)]):
+        return None
+    return {"cls": max(need, law["cls"], key=L.CLASS_RANK.get), "rank": rank, "why": why}
+
+
+def apply_requirement(k, lid) -> dict | None:
+    """At proposal: raise the draft's class to what it does (requirement) and record it on the law record ("requires"), so the
+    procedure, threshold and Board review of that class apply; check_propose refuses a declared rank below it (law.v2)."""
+    req = requirement(k, lid)
+    if req is None:
+        return None
+    law = k.w["laws"][lid]
+    req["from"] = law["cls"]
+    law["cls"] = req["cls"]
+    law["requires"] = req
+    return req
+
+
+def requirement_note(law) -> str:
+    """The proposer's note on a class raised at proposal ("" otherwise)."""
+    req = law.get("requires")
+    return f", not {req['from']}, because it {'; '.join(req['why'])}" if req and req["from"] != req["cls"] else ""
+
+
+def requirement_text(req, have_rank=None) -> str:
+    return (f"this law {'; '.join(req['why'])}: it must be a {req['cls']} law"
+            + (f" of rank {req['rank']} or higher (it declares {have_rank}; add rank = \"{req['rank']}\")" if req.get("rank") else ""))
 
 
 def procedure_lookup(table: dict, cls: str, rank: str | None):

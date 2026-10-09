@@ -259,11 +259,12 @@ def test_novelty_on_a_scripted_design_arm_run(tmp_path):
     res = NV.analyse(out)
     s = res["summary"]
     assert s["institutions"] >= 4 and s["institutions_from_templates"] == 0     # code only: none founded by template name
-    assert s["laws"] >= 4 and s["novel"] >= 1 and s["adaptations"] >= 3
+    assert s["laws"] >= 4 and s["novel"] + s["no_effect"] >= 1 and s["adaptations"] >= 3
     assert s["novel_institutions"] >= 1 and s["novel_institution_share"] < 1
     assert s["distinct_institution_designs"] >= 4
     own = next(r for r in res["laws"] if r["title"] == "Mutual Watch")
-    assert own["class"] == "novel"
+    assert own["similarity"] < NV.THRESHOLD                             # novel code; enacted late in 4 rounds, it may do nothing yet
+    assert own["class"] == ("novel" if own["effect"] else "no_effect")       # (W9: no_effect)
     assert {r["nearest"] for r in res["laws"] if r["class"] == "adaptation"} >= {"template:club", "template:cartel"}
     assert NV.cmd(type("a", (), {"runs": [str(out)], "threshold": 0.8, "json": None})()) == 0
     assert json.loads((out / "novelty.json").read_text())["summary"] == s

@@ -444,8 +444,8 @@ HOOKTABLE = _hooks(
          note="also in every dry-run preview; a contract's law when it comes into force (P4.3)"),
     Hook("on_repeal", "()", "ignored", ("dispatch/changes/legal.py:do_repeal", "contracts.py:_retire"), True,
          note="a law's repeal(target) runs it too; a contract's law when it is replaced or the contract dissolves (P4.3)"),
-    Hook("on_round_start", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run", "lawpreview.py:_window"), None),   # the round_start phase; the previewer
-    Hook("on_round_end", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run", "lawpreview.py:_window"), None),       # the round_end phase; the previewer
+    Hook("on_round_start", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run", "kernel.py:Kernel.trial", "lawpreview.py:_window"), None),   # the round_start phase; the previewer
+    Hook("on_round_end", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run", "kernel.py:Kernel.trial", "lawpreview.py:_window"), None),       # the round_end phase; the previewer
     Hook("on_harvest", "(agent, camp, x, y)", "deduct",
          ("dispatch/legacy.py:legacy_hooks", "kernel.py:Kernel.probe"), False, jur="agent:0",
          note="agents' harvests only (laws cannot harvest); Kernel.probe calls it in previews"),

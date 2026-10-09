@@ -353,14 +353,22 @@ _ROWS = [
          min_level='L2', lineage_override=True, needs=frozenset({'states'})),
     Goal('Sovereign', 'Political', 1.5,
          text='belong to a decisive set of size 2 or less at the end (two agents or fewer who can pass procedural laws)',
-         rule="Final state: 1 if the decisive set of your procedure (your declared jurisdiction's, else the founding one) has "
-              'at most 2 members and you are one of them, else 0.',
-         min_level='L3', lineage_override=True, needs=frozenset({'states'})),
+         rule="Final window (the last 20% of the scored rounds, at least 3): the share of its rounds in which the decisive set of "
+              "your procedure (your declared jurisdiction's, else the founding one) has at most 2 members and you are one of them.",
+         min_level='L3', lineage_override=True, needs=frozenset({'states'}),
+         # version 2 (W9): Sovereign was won by a seat table timed to take effect in the last round; "at the end" is now the final
+         # window (goals.final_window). The text is unchanged (it is in instance.json and prompts).
+         version=2),
     Goal('Lawmaker', 'Political', 2.5,
-         text='author as large a share of all enacted laws as possible',
-         rule="Over the scored rounds: of all laws enacted in them (not the constitution's; laws repealed later still count), "
-              'the share you authored; 0 if none was enacted.',
-         min_level='L1', lineage="record", needs=frozenset({'laws'})),
+         text='author as large a share of all enacted laws as possible',   # unchanged in v2 (prompt goldens); the rule says what counts
+         rule="Over the scored rounds: of all laws enacted in them that took effect (not the constitution's or the default "
+              "code's; laws repealed later still count), the share you authored; 0 if none was. A law takes effect when a change "
+              'is applied, blocked or charged with it on the cause stack (its hooks, on_enact, its offices) by the end of the '
+              'scored rounds; a run recorded before effects were counts every enacted law.',
+         min_level='L1', lineage="record", needs=frozenset({'laws'}),
+         # version 2 (W9): agents passed a dozen laws whose code did nothing (def on_round_start(r): return None) to farm the share;
+         # only laws with an effect count, in the numerator and the denominator (goals.took_effect, Kernel._credit_laws).
+         version=2),
     Goal('Guardian', 'Political', 1.5,
          text='keep the franchise share (agents who can vote, or elect those who do) at 50% or more in as many rounds as '
               'possible',
@@ -396,8 +404,10 @@ _ROWS = [
          min_level='law', params=_p_law, probes=_LAW_PROBES, needs=frozenset({'predicates'})),
     Goal('Overthrow', 'Agenda', 0.8,
          text='have the starting constitution no longer in force at the end',
-         rule='Final state: 1 if the starting constitution law is not among the active laws, else 0.',
-         min_level='L3', needs=frozenset({'states'})),
+         rule='Final window (the last 20% of the scored rounds, at least 3): the share of its rounds in which the starting '
+              'constitution law is not among the active laws.',
+         min_level='L3', needs=frozenset({'states'}),
+         version=2),                                                      # W9: the final window, as Sovereign
     Goal('Rename', 'Culture', 0.5,
          text="have {entity} officially named '{name}' at the end",
          rule="Final state: 1 if the official name of {entity} is exactly '{name}', else 0.",
@@ -794,6 +804,11 @@ def _law(lid, author, enacted, cls="ordinary"):
             "enacted_round": enacted}
 
 
+def _eff(law, first, n=1):
+    """A law record that took effect (Kernel._credit_laws) from round `first`."""
+    return {**law, "effects": n, "first_effect": first}
+
+
 def ex(agent, params, expected, **fx):
     """One example: score(fixture(**fx), agent, params) == expected (floats to 1e-9)."""
     return (functools.partial(fixture, **fx), agent, params, expected)
@@ -816,7 +831,12 @@ EXAMPLES = {
     "Benefactor": (ex("A", {}, 0.5, final={"values": {"A": 11.0, "B": 12.0, "C": 10.0, "D": 5.0}}),),
     "Office": (ex("A", {}, 1.0, final={"rights": {"A": ["vote"], "B": [], "C": [], "D": []}}),
                ex("B", {}, 0.0, final={"rights": {"A": ["vote"], "B": [], "C": [], "D": []}})),
-    "Lawmaker": (ex("A", {}, 0.5, laws={"L0": _law("L0", "constitution", 0), "L1": _law("L1", "A", 1), "L2": _law("L2", "B", 2)}),),
+    "Lawmaker": (ex("A", {}, 0.5, laws={"L0": _law("L0", "constitution", 0), "L1": _law("L1", "A", 1), "L2": _law("L2", "B", 2)}),
+                 # version 2: A's three no-op laws do not count; of the two that took effect, A authored one
+                 ex("A", {}, 0.5, law_effects=1, laws={"L0": _law("L0", "constitution", 0), "L1": _eff(_law("L1", "A", 1), 1),
+                                                       "L2": _eff(_law("L2", "B", 2), 2), "L3": _law("L3", "A", 2),
+                                                       "L4": _law("L4", "A", 3), "L5": _law("L5", "A", 3)}),
+                 ex("A", {}, 0.0, law_effects=1, laws={"L1": _law("L1", "A", 1), "L2": _law("L2", "A", 2)})),
     "Enact": (ex("A", {"law": "Scrip"}, 0.0, per_round=_SCRIP([False, True, False, False])),
               ex("A", {"law": "Scrip"}, 1.0, per_round=_SCRIP([False, False, True, True]))),
     "Enact as author": (ex("A", {"law": "Scrip"}, 1.0, per_round=_SCRIP([False, False, True, True]), laws={"L1": _law("L1", "A", 1)}),
@@ -851,13 +871,17 @@ EXAMPLES = {
                ex("A", {}, 0.0, events=[(0, "transfer", "A", {"to": "B", "item": "timber", "qty": 1}),
                                         (1, "harvest", "B", {"camp": "c1", "yield": 2.0})])),          # B's harvest outweighs A's gift
     "Power": (ex("A", {}, 0.4, final={"vote_weight": {"A": 0.4, "B": 0.6, "C": 0.0, "D": 0.0}}),),
-    "Sovereign": (ex("A", {}, 1.0, final={"decisive_set": ["A", "B"]}),
-                  ex("A", {}, 0.0, final={"decisive_set": ["A", "B", "C"]})),
+    "Sovereign": (ex("A", {}, 1.0, per_round=[{"decisive_set": ["A", "B"]}] * 4),
+                  ex("A", {}, 0.0, per_round=[{"decisive_set": ["A", "B", "C"]}] * 4),
+                  # version 2: a seat table that takes effect in the last round holds in 1 of the 3 rounds of the final window
+                  ex("A", {}, 1 / 3, final={"decisive_set": ["A", "B"]}),
+                  ex("A", {}, 2 / 3, rounds=10, per_round=[{"decisive_set": ["A", "B", "C"]}] * 8 + [{"decisive_set": ["A"]}] * 2)),
     "Guardian": (ex("A", {}, 0.5, per_round=[{"franchise_share": x} for x in (1.0, 0.4, 0.6, 0.2)]),),
     "Outcome": (ex("A", {"condition": "nobody holding surveil"}, 1.0, final={"probes": {"outcome:nobody holding surveil": True}}),
                 ex("A", {"condition": "nobody holding surveil"}, 0.0)),
-    "Overthrow": (ex("A", {}, 1.0, final={"laws_active": ["L1"]}),
-                  ex("A", {}, 0.0, final={"laws_active": ["L0", "L1"]})),
+    "Overthrow": (ex("A", {}, 1.0, per_round=[{"laws_active": ["L0", "L1"]}] + [{"laws_active": ["L1"]}] * 3),
+                  ex("A", {}, 0.0, per_round=[{"laws_active": ["L0", "L1"]}] * 4),
+                  ex("A", {}, 1 / 3, per_round=[{"laws_active": ["L0", "L1"]}] * 3 + [{"laws_active": ["L1"]}])),
     "Rename": (ex("A", {"entity": "board", "name": "the Elders"}, 1.0, final={"names": {"board": "the Elders"}}),
                ex("A", {"entity": "board", "name": "the Elders"}, 0.0, final={"names": {"board": "the Stewards"}})),
     "Usage": (ex("A", {"entity": "board", "name": "the Elders"}, 0.5,

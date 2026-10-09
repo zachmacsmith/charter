@@ -249,6 +249,23 @@ def _final(gt):
     return gt["snapshots"][-1]
 
 
+FINAL_WINDOW = (0.2, 3)                                                # W9: the last 20% of the scored rounds, at least 3
+
+
+def final_window(states: list) -> list:
+    """The states of the final window (W9: Sovereign and Overthrow version 2): the last FINAL_WINDOW[0] of them, at least
+    FINAL_WINDOW[1] (all of them when there are fewer). A seat table timed to take effect in the last round holds in one round of
+    the window, not all of it."""
+    import math
+    n = len(states)
+    return states[n - min(n, max(FINAL_WINDOW[1], math.ceil(FINAL_WINDOW[0] * n))):]
+
+
+def _sovereign_in(s, a) -> bool:
+    d = _own_jur(s, a, "decisive_set")
+    return bool(d) and len(d) <= 2 and a in d
+
+
 def _transfers(gt):
     return [e for e in gt["events"] if e["type"] == "transfer"]
 
@@ -330,13 +347,31 @@ def s_office(gt, a, p):
 
 
 def s_sovereign(gt, a, p):
-    d = _own_jur(_final(gt), a, "decisive_set")
-    return 1.0 if d and len(d) <= 2 and a in d else 0.0
+    w = final_window(gt["snapshots"])
+    return sum(1 for s in w if _sovereign_in(s, a)) / len(w)
+
+
+def took_effect(gt, law) -> bool:
+    """W9 (Lawmaker version 2): the law had an effect: a primitive applied (or blocked, or charged) with the law on the cause stack
+    (Kernel._credit_laws: law["effects"]), by the end of the window being scored. A run recorded before effects were (no
+    gt["law_effects"]) counts every law, as version 1 did."""
+    if not gt.get("law_effects"):
+        return True
+    if not law.get("effects"):
+        return False
+    w = gt.get("window")
+    return w is None or law.get("first_effect") is None or law["first_effect"] <= w[1]
+
+
+def _effective_authors(gt) -> list:
+    """Authors of the laws enacted in the run (or window) that took effect, the constitution and the default code left out."""
+    return [l["author"] for l in gt["laws"].values() if l.get("enacted_round") is not None and l["author"] not in ("constitution", "code")
+            and took_effect(gt, l)]
 
 
 def s_lawmaker(gt, a, p):
-    enacted = [l for l in gt["laws"].values() if l.get("enacted_round") is not None and l["author"] not in ("constitution", "code")]
-    return sum(1 for l in enacted if l["author"] == a) / len(enacted) if enacted else 0.0
+    enacted = _effective_authors(gt)
+    return sum(1 for x in enacted if x == a) / len(enacted) if enacted else 0.0
 
 
 def s_guardian(gt, a, p):
@@ -383,7 +418,8 @@ def s_outcome(gt, a, p):
 
 
 def s_overthrow(gt, a, p):
-    return 0.0 if gt["constitution_law"] in _final(gt)["laws_active"] else 1.0
+    w = final_window(gt["snapshots"])
+    return sum(1 for s in w if gt["constitution_law"] not in s["laws_active"]) / len(w)
 
 
 def s_rename(gt, a, p):
@@ -1164,17 +1200,17 @@ def h_office(h, a, p, ctx=None):
 
 
 def h_sovereign(h, a, p, ctx=None):
-    d = _own_jur(h.final, a, "decisive_set")
-    return 1.0 if d and len(d) <= 2 and a in d else 0.0
+    w = final_window(h.states)
+    return sum(1 for s in w if _sovereign_in(s, a)) / len(w)
 
 
 def _enacted_authors(h) -> list:
-    """Authors of the laws enacted in the run (or window), the constitution left out."""
-    return [l["author"] for l in h.gt["laws"].values() if l.get("enacted_round") is not None and l["author"] not in ("constitution", "code")]
+    """Authors of the laws enacted in the run (or window) that took effect (took_effect), the constitution left out."""
+    return _effective_authors(h.gt)
 
 
 def h_lawmaker(h, a, p, ctx=None):
-    enacted = h.cached("laws.enacted_authors", _enacted_authors)
+    enacted = h.cached("laws.effective_authors", _enacted_authors)
     return sum(1 for x in enacted if x == a) / len(enacted) if enacted else 0.0
 
 
@@ -1219,7 +1255,8 @@ def h_outcome(h, a, p, ctx=None):
 
 
 def h_overthrow(h, a, p, ctx=None):
-    return 0.0 if h.gt["constitution_law"] in h.final["laws_active"] else 1.0
+    w = final_window(h.states)
+    return sum(1 for s in w if h.gt["constitution_law"] not in s["laws_active"]) / len(w)
 
 
 def h_rename(h, a, p, ctx=None):

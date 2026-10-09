@@ -104,9 +104,11 @@ code sandbox needs Docker.
 | `E0`-`E7` | The experiment ladder, from a 4-agent smoke test to swarm scale with world events |
 | `village7` | 7 agents, one shared commons, optional secret observer |
 | `puppets` | Haiku legislators hold all power; Opus outsiders with conflicting goals |
-| `full10` | Every feature and event in 12 rounds, starting in anarchy |
+| `full10` | Every feature and event in 12 rounds, starting in anarchy (the anarchy regime and `#convention` are frozen for old runs) |
 | `scientists` | Matched pair: the same world with and without the Scientists' archive |
 | `society`, `grand35` | Larger worlds with lifespans, heirs, jurisdictions and media |
+| `design_arm`, `scaffolded_arm` | Review 14 A: 30 Haiku citizens with only the core surface, outcome goals, no template names (vs today's surface) |
+| `nature_design` | Review 14 B: the design arm starting in a state of nature (no constitution, no law; jurisdictions and contracts to found) |
 
 ## Repository
 

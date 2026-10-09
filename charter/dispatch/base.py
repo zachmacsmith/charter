@@ -170,6 +170,8 @@ V2_SEAMS = {
     "dispatch.ranks:rank_of": "an unrecorded rank falls back to the code's declared rank (off: statute)",
     "dispatch.ranks:law_rank": "the rank the kernel acts on is rank_of (off: every law is a statute)",
     "dispatch.ranks:check_propose": "lex superior and the reserved charter rank refuse a draft (off: no check)",
+    "dispatch.ranks:requirement": "W9: a draft's class is raised to what it does (procedure, electorate, repeals) and its declared "
+                                  "rank checked (off: no check; v1 worlds keep the classifier's class, as before)",
     "dispatch.ranks:check_procedure_rank": "set_procedure(rank=) is allowed (off: a LawError)",
     "dispatch.hooks:resolve_v2": "the polity's conflict rule applies (resolve_v2 runs only under law.v2)",
     "dispatch.notify:notify_on": "law.notify_parties defaults to on (off: no compelled events)",

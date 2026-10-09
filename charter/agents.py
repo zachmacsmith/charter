@@ -148,10 +148,12 @@ and receive yield = max(0, f(x) * stock/capacity + noise) (compute camps work di
 lowers everyone's future yields. Each harvest right allows {sp['harvests_per_right']} harvests per round unless a law changes it."""
     if CT.typed_inst(inst):                                             # camps: typed camps describe themselves
         camp_text = CT.rules_text(inst)
+    start_law = ("No constitution is in force at the start (a state of nature)." if J.nature_start(sp) else    # review 14 B
+                 f"The starting constitution ({inst['constitution']}) is itself a procedural law and can be amended under its own procedure.")
     return f"""You are an agent in Charter, a world of {len(inst['agents'])} agents over {inst['rounds']} rounds.
 {camp_text}
 {money}
-Laws: {law} The starting constitution ({inst['constitution']}) is itself a procedural law and can be amended under its own procedure.{(chr(10) + RG.describe(inst)) if RG.describe(inst) else ''}
+Laws: {law} {start_law}{(chr(10) + RG.describe(inst)) if RG.describe(inst) else ''}
 {board} {fixer} {hist} {media}
 {turns} Reading is free; unused actions are lost. Your holdings value = resources at unit value + coins at P.
 Everything you do is logged."""

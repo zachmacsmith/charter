@@ -120,8 +120,19 @@ def classify(tree: ast.AST, imported=()) -> str:
     return out
 
 
+def api_used(tree: ast.AST) -> set[str]:
+    """The law API functions a module can call: those it calls by name, and (W9, the usurpers' seat-table loophole) those it
+    names as a value (`g = grant`, `OPS = [grant, revoke]`, `{"f": revoke}`) unless the module defines that name itself. A
+    function stored under another name is called under that name, which calls() does not see."""
+    own = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    own |= {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del))}
+    own |= {a.arg for a in ast.walk(tree) if isinstance(a, ast.arg)}
+    named = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id in API} - own
+    return calls(tree) | named
+
+
 def _classify_one(tree: ast.AST) -> str:
-    c = calls(tree)
+    c = api_used(tree)
     hc = hooks_class(tree)                                             # law.v2 hooks (none in any law without law.v2: R5)
     if c & PROCEDURAL_CALLS or hc == "procedural":
         return "procedural"
@@ -194,7 +205,7 @@ def is_repeal(tree: ast.Module) -> str | None:
 
 
 def uses_define_action(tree: ast.AST) -> bool:
-    return bool(calls(tree) & L4_CALLS)
+    return bool(api_used(tree) & L4_CALLS)                            # W9: an aliased define_action too
 
 
 def header(code: str) -> tuple[str, str]:

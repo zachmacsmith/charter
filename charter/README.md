@@ -268,7 +268,9 @@ Runs the same scripted worlds on two code revisions and reports where they first
   proposal), plutocracy (above-median wealth votes, weighted by holdings), technocracy (Scientists vote), theocratic_council
   (three Guardians for life with just over a third of the weight under a two-thirds rule: a veto bloc), sortition (five by lot,
   redrawn every 10 rounds), anarchy (no procedure; more than half posting `#convention` within three rounds opens an all-agent
-  convention), one_party_state (Party votes, General Secretary gates), surveillance_state, free_market (crown and enforced loans,
+  convention; **frozen** (review 14 §2.2, D13): kept unchanged for old runs and the `full10`/`haiku100` draws, never selected by
+  a new preset; the state of nature for new worlds is the `nature_design` preset, and the convention lives on as consent in the
+  library's Assurance Founding contract template), one_party_state (Party votes, General Secretary gates), surveillance_state, free_market (crown and enforced loans,
   structural laws need two thirds), command_economy (planning council, quotas, levy, fees, dividend), federation (camps are
   cantons of equal weight; cantonal quota councils at L4). Statutes above the law level are dropped and offices with an empty
   pool are drawn from a fallback pool; both are recorded in `repairs`. Regime draws use their own RNG. The regime is recorded in

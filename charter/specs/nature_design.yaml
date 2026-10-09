@@ -1,0 +1,9 @@
+# Review 14 package B: the state of nature with the design arm. Today's state_of_nature regime (jurisdictions on, start: nature: no
+# J0, no constitution in force, no default code, conflict on) plus contracts, on the design arm (design_arm.yaml: no template names,
+# the library only on request, outcome goals only, the core action surface, citizens and the Fixer) with the S0 demography
+# (charter/specs/fragments/demography.yaml, through arms/base). The constitution named is the void "nature" placeholder, never the
+# frozen anarchy (review 14 §2.2, D13). Under actions.core_only a state-of-nature world keeps the jurisdiction actions (found,
+# invite, join, leave, declare, fund, set_charter: action_registry.NATURE_SURFACE), the one way to a polity there; contracts are the
+# other institution kind, and the library's Assurance Founding (read_library) is the convention re-expressed as consent.
+extends: [design_arm]
+regime: {base: state_of_nature, name: nature_design, constitution: nature}

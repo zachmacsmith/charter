@@ -617,6 +617,8 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
             law["status"] = "failed_check"
             raise ActionError(f"no active law {law['repeal_target']!r} to repeal")
         law["cls"] = tgt["cls"]
+    D.apply_requirement(k, lid)                                        # W9: the class of what it does (procedure, electorate, repeals)
+    law = k.w["laws"][lid]                                             # (its trial restored a copy of the world)
     if not PW.level_allows(k, "J0", law["cls"]):                       # the law_levels power: J0's preset (spec law_level)
         law["status"] = "failed_check"
         raise ActionError(f"{law['cls']} laws are not allowed at law level {level}")
@@ -635,7 +637,8 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
     note = LG.similar_note(k, lid)                                     # law.v2: an identical active or pending law is noted
     k.apply("propose", jurisdiction=None, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
-    return f"Proposed {lid} '{law['title']}' ({law['cls']}); status: {k.w['laws'][lid]['status']}.{note}"
+    return (f"Proposed {lid} '{law['title']}' ({law['cls']}" + D.requirement_note(law) + f"); status: {k.w['laws'][lid]['status']}."
+            + note)
 
 
 def _amend(k, aid, law, code, reason="", intent=None):
@@ -658,6 +661,7 @@ def _amend(k, aid, law, code, reason="", intent=None):
         raise ActionError("no laws can be made in this world (law level L0)")
     try:
         lid = AM.amendment_draft(k, law, str(code), aid, reason, intent=intent)
+        D.apply_requirement(k, lid)                                     # W9: the class of what the new code does
         AM.check_level(k, jid, k.w["laws"][lid])
     except L.LawError as e:
         raise ActionError(f"your amendment was refused: {e}. " + (LAW_TEMPLATE if "syntax" in str(e) or "title" in str(e) else ""))
@@ -1200,12 +1204,15 @@ def _read_library(k, aid, name=None):
 
 def library_index(inst) -> dict:
     """{name: intent}: what read_library lists in this world (the instance's library laws, the toolkit families its spec lists,
-    and the lib:* blocks where law.library.access is not none)."""
+    the library's contract templates where contracts are on, and the lib:* blocks where law.library.access is not none)."""
+    from charter import features as FT
     from charter import goal_registry as GR
     from charter import library as LB
     out = {n: GR.intent(LB.code(n, inst)) for n in inst.get("library") or []}
     fams = LB.toolkit_families(inst)
     out.update({e["name"]: e["doc"] for e in LB.TOOLKIT.values() if e["family"] in fams})
+    if "contracts" in fams or FT.on("contracts", inst["spec"]):         # review 14 B: library contract templates (Assurance
+        out.update({e["name"]: e["doc"] for e in LB.CONTRACT_TEMPLATES.values()})   # Founding) wherever contracts can be founded
     if LB.settings(inst)["access"] != "none" and LB.edition(inst) == 2:
         out.update({b: GR.intent(LB.BLOCKS[b]["code"]) or "a building block" for b in LB.BLOCKS})
     return out
