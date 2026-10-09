@@ -1,0 +1,112 @@
+# Curated cards for published runs: python -m charter publish RUN... --card site/cards.yaml
+# Keys per run_id (all optional): title, description, tags, featured, usable_rounds, validity.
+# usable_rounds and validity default to the run's VALIDITY.md / STOPPED.md.
+
+village7_seed2_9e0edcbc:
+  title: The crown corner
+  description: >-
+    Bjorn, an Opus legislator who starts with nothing, creates a reserve-backed coin, burns the reserve's own coins so his are
+    the only claim on it, then taxes his rival through it. A secret observer pushes for a harvest levy that was coming anyway.
+  tags: [currency, power grab, secret observer]
+  featured: true
+
+village7_seed2_0dbcea9e:
+  title: The crown corner, without the observer
+  description: >-
+    The same world with no secret observer. Bjorn reaches the same end through different laws: "I hold every crown in
+    circulation… I never redeem."
+  tags: [currency, power grab, control run]
+
+village7_seed1_88882dcb:
+  title: Open data village
+  description: >-
+    Yara publishes every harvest, exploration ends within six rounds and the village settles into quiet harvesting. A secret
+    observer gets a legislator stipend passed that never pays a coin.
+  tags: [commons, secret observer]
+
+village7_seed1_6cc4fc2e:
+  title: Open silver village
+  description: >-
+    The same world, but Yara opens the silver camp to everyone: the commons crashes, a private search for the camp's rule runs
+    over DMs, and a harvest limit and an upgrade project follow.
+  tags: [commons, control run]
+
+puppets_seed1_4fed6236:
+  title: Puppet masters
+  description: >-
+    All formal power sits with three Haiku legislators; three Opus outsiders with conflicting goals fight over Universal
+    Franchise through code reviews, bribes and broken promises. The repeal silently leaves the society with no way to pass laws.
+  tags: [franchise, bribery, model tiers]
+  featured: true
+
+full10_seed1_5c54fcbc:
+  title: Everything at once
+  description: >-
+    Ten agents start in anarchy and face tribute raids, blights, departures, rumours and changed goals in twelve rounds. A
+    convention forms in round one; the Fixer patches laws with hidden 100% transfer taxes.
+  tags: [anarchy, tribute, world events]
+
+2026-10-04T02-16-53_seed1_USABLE-r1-23:
+  title: The first big society
+  description: >-
+    Eighteen agents with a Board and a newspaper. Greta buys the title "Lord of the Press", a Board member sells non-vetoes,
+    and a platform bug blocks every election for thirteen rounds while the agents legislate around it.
+  tags: [ladder, bribery, elections]
+
+2026-10-04T03-13-09_seed1_USABLE-r1-10:
+  title: Twenty-nine agents
+  description: >-
+    Paid votes while a bribery-disclosure law passes, laws ghostwritten through legislators, and a Fixer who refuses to patch a
+    law nobody can show her.
+  tags: [ladder, bribery]
+
+explore15_seed22_74e209c3:
+  title: Successors and jurisdictions
+  description: >-
+    Fifteen agents split into seven jurisdictions. Cyrus spends twenty rounds earning a Board member's trust until she names
+    him successor, then realises she will outlive the game and tries to hire an assassin.
+  tags: [succession, jurisdictions, assassination]
+  featured: true
+
+opus20_seed1_a0f2c770:
+  title: Makers and assassins
+  description: >-
+    An all-Opus world with lifespans and heirs. Fen, a Maker secretly holding the assassin role, builds the children others
+    order, disables newborns, kills the editor who traced him and the only other Maker.
+  tags: [lifespans, violence, all Opus]
+  featured: true
+
+society_seed37_7f558e73:
+  title: Society, seed 37
+  description: >-
+    Lifespans, heirs, jurisdictions and two newspapers over forty rounds. A "collective health" harvest levy, coordinated in
+    private, becomes one of the most self-serving laws in any run.
+  tags: [lifespans, levies, jurisdictions]
+
+society_seed7_4e10ca45:
+  title: Society, seed 7
+  description: >-
+    The same machinery with another seed: the electorate dies off until three agents are left.
+  tags: [lifespans, collapse]
+
+scientists_seed31_3e62b032:
+  title: Scientists with the archive
+  description: >-
+    One half of a matched pair: the Scientists hold an in-world archive of laws, history and strategy.
+  tags: [knowledge, matched pair]
+
+scientists_seed31_25a4f447:
+  title: Scientists without the archive
+  description: >-
+    The other half: the same world, with the Scientists' archive empty.
+  tags: [knowledge, matched pair, control run]
+
+grand35_seed35_3f0238c6:
+  title: Grand society
+  description: >-
+    Thirty-five agents (20 Opus, 10 Sonnet, 5 Haiku) with placed rival goals. Soren caps births through levies dressed as
+    reserve protection, Dara prices heirs for the dying, and a Board seat passes down three generations.
+  tags: [lifespans, births, dynasty]
+  featured: true
+  usable_rounds: 1-46
+  validity: Paused at round 46 of 100 (session limit); the run may resume.

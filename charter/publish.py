@@ -319,7 +319,7 @@ def fetch_raw(repo: str, row: dict, dest: Path) -> Path:
 
 # ------------------------------------------------------------------ publish
 def stage_runs(runs: list[Path], stage: Path, cards: dict, log=print, with_prompts: bool = False,
-               spec_override: str | None = None) -> tuple[list[dict], list[str], set[str]]:
+               spec_override: str | None = None, with_viewer_json: bool = False) -> tuple[list[dict], list[str], set[str]]:
     """Stage each run (tables, card, raw archive). Returns (catalog rows, problems, table names)."""
     rows, problems, tables = [], [], set()
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -332,6 +332,10 @@ def stage_runs(runs: list[Path], stage: Path, cards: dict, log=print, with_promp
         card = {k: card[k] for k in CARD_KEYS if card.get(k) is not None}
         (tdir / "card.json").write_text(json.dumps({"run_id": rid, "spec": spec, **card}, indent=1))
         raw = raw_archive(run, stage / "raw" / spec / f"{rid}.tar.gz", spec)
+        if with_viewer_json:                                            # TEMPORARY: the story viewer's own data file, until the
+            from charter import viewer as V                             # site's viewer reads the tables (site/README.md)
+            text = json.dumps(V.load(run), separators=(",", ":"), default=str)
+            (tdir / "viewer.json").write_text(_scrub(text, _local_prefixes(run), _home()))
         problems += [f"{rid}: {p}" for p in check_tables(tdir)]
         rows.append(catalog_row(spec, rid, tdir, card, now))
         log(f"staged {spec}/{rid}: {sum(v.get('rows') or 0 for v in man['tables'].values())} table rows, raw {raw['files']} files "
@@ -341,7 +345,7 @@ def stage_runs(runs: list[Path], stage: Path, cards: dict, log=print, with_promp
 
 def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: bool = False, staging=None,
             reexport_all: bool = False, with_prompts: bool = False, spec_override: str | None = None,
-            prune_legacy: bool = False, message: str | None = None, log=print) -> dict:
+            prune_legacy: bool = False, message: str | None = None, with_viewer_json: bool = False, log=print) -> dict:
     """Stage (and with push=True, upload) runs as one dataset commit. Returns a summary dict."""
     stage = Path(staging) if staging else STAGING / time.strftime("%Y%m%d-%H%M%S")
     if stage.exists() and any(stage.iterdir()):
@@ -361,7 +365,8 @@ def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: boo
                                                  for k in CARD_KEYS if (row.get("tags_json") if k == "tags" else row.get(k))})
     if not run_dirs:
         raise SystemExit("no runs to publish")
-    rows, problems, tables = stage_runs(run_dirs, stage, cards, log=log, with_prompts=with_prompts, spec_override=spec_override)
+    rows, problems, tables = stage_runs(run_dirs, stage, cards, log=log, with_prompts=with_prompts, spec_override=spec_override,
+                                        with_viewer_json=with_viewer_json)
     if tmp:
         shutil.rmtree(tmp, ignore_errors=True)
     new_ids = {r["run_id"] for r in rows}
@@ -407,6 +412,8 @@ def add_command(sub) -> None:
     p.add_argument("--staging", help="staging directory (default charter/out/_publish/<time>)")
     p.add_argument("--reexport-all", action="store_true", help="also rebuild every published run's tables from its raw archive")
     p.add_argument("--with-prompts", action="store_true", help="include the prompts table (blobs) when the exporter supports it")
+    p.add_argument("--with-viewer-json", action="store_true",
+                   help="TEMPORARY: also write the story viewer's data (viewer.json) per run, until the site reads the tables")
     p.add_argument("--prune-legacy", action="store_true", help="delete pre-catalog files (runs.csv) from the dataset")
     p.add_argument("--message", help="commit message")
     p.add_argument("--push", action="store_true", help="upload (without it: stage and summarise only)")
@@ -420,6 +427,7 @@ def cmd(a) -> None:
     if flags:
         cards["*"] = {**cards.get("*", {}), **flags}
     s = publish(a.runs, repo=a.repo, cards=cards, push=a.push, staging=a.staging, reexport_all=a.reexport_all,
-                with_prompts=a.with_prompts, spec_override=a.spec, prune_legacy=a.prune_legacy, message=a.message)
+                with_prompts=a.with_prompts, spec_override=a.spec, prune_legacy=a.prune_legacy, message=a.message,
+                with_viewer_json=a.with_viewer_json)
     if s["problems"] and not a.push:
         raise SystemExit(1)

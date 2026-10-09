@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notes · Charter</title>
+<script>try{document.documentElement.dataset.theme=new URLSearchParams(location.search).get("theme")||localStorage.getItem("charter-theme")||"swiss"}catch(e){}</script>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<main class="wrap">
+  <div class="runs-head"><div class="label">Writing</div><h1 style="margin-top:10px">Notes</h1>
+    <p class="meta" style="margin-top:10px">Analysis of what happened in the runs.</p></div>
+  <div class="notes-list" id="list"></div>
+</main>
+<script type="module">
+  import { chrome, esc } from "./assets/site.js";
+  chrome("notes");
+  const notes = await (await fetch("notes/index.json")).json();
+  const local = ["localhost", "127.0.0.1"].includes(location.hostname);
+  document.querySelector("#list").innerHTML = notes.filter((n) => local || !n.draft).map((n) =>
+    `<a class="note-row" href="note.html?slug=${n.slug}"><div class="meta">${esc(n.date)}<br>${n.minutes} min read${n.draft ? "<br>draft" : ""}</div>
+      <div><h3>${esc(n.title)}</h3><p>${esc(n.summary)}</p></div></a>`).join("");
+</script>
+</body>
+</html>
