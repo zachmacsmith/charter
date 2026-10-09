@@ -27,6 +27,7 @@ Later reviews (design documents, 7-9 Oct):
 | [15](15_subsistence_reproduction.md) | Subsistence, hunger and two-parent reproduction |
 | [16](16_economy_audit.md) | Economy and population audit of the first Haiku runs |
 | [17](17_space.md) | Space: a weighted graph of places (presence, perception, custody, territory, staging) |
+| [18](18_institution_holdings.md) | What institutions should be able to hold (title, control, custody) |
 
 ## Verdict
 
