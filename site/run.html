@@ -4,101 +4,137 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Run · Charter</title>
-<script>try{document.documentElement.dataset.theme=new URLSearchParams(location.search).get("theme")||localStorage.getItem("charter-theme")||"swiss"}catch(e){}</script>
+<script>try{document.documentElement.dataset.theme=new URLSearchParams(location.search).get("theme")||localStorage.getItem("charter-theme")||"broadsheet"}catch(e){}</script>
 <link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/run/run.css">
 </head>
 <body>
-<main class="wrap" id="main">
-  <div class="loading">Loading the run…</div>
-</main>
+<main class="wrap run-page" id="main"><p class="loading">Loading the run…</p></main>
+<div id="hovercard" role="tooltip"></div>
 <script type="module">
-  import { chrome, dataset, esc, runFacts, parse, modelShort, DATASET_URL } from "./assets/site.js";
+  import { chrome, dataset, DATASET_URL } from "./assets/site.js";
+  import { prepare } from "./assets/run/model.js";
+  import { buildSprite } from "./assets/run/mascots.js";
+  import * as V from "./assets/run/views.js";
+  import { mountSquare } from "./assets/run/square.js";
   chrome("runs");
+
+  const SECTIONS = [["front", "Front page"], ["chronicle", "Chronicle"], ["people", "People"], ["correspondence", "Correspondence"], ["laws", "Laws"], ["square", "The square"], ["data", "Data"]];
+  const main = document.querySelector("#main");
   const id = new URLSearchParams(location.search).get("id");
   const ds = await dataset();
   const entry = (await ds.catalog()).find((r) => r.run_id === id);
-  const main = document.querySelector("#main");
-  if (!entry) { main.innerHTML = `<p class="loading">No run called ${esc(id)}. <a href="runs.html">All runs</a></p>`; throw new Error("no run"); }
+  if (!entry) { main.innerHTML = `<p class="loading">No run called ${V.esc(id)}. <a href="runs.html">All runs</a></p>`; throw new Error("no run"); }
   document.title = `${entry.title} · Charter`;
-  const run = ds.run(entry), fx = runFacts(entry);
-  const TABS = [["story", "Story"], ["conversations", "Conversations"], ["agents", "Agents"], ["laws", "Laws"], ["data", "Data"]];
+  const run = ds.run(entry);
+  const D = await (await fetch(`${ds.root}/${entry.path}/viewer.json`)).json();   // TEMPORARY source (site/README.md)
+  const S = prepare(D);
+  const dark = document.documentElement.dataset.theme === "night";
+  buildSprite(S, dark);
+  const st = { S, entry, root: ds.root, datasetUrl: DATASET_URL, dark, round: S.lastRound, section: "front", target: null, filter: "" };
+
   main.innerHTML = `
-    <div class="run-head"><div class="label"><a href="runs.html">Runs</a> / ${esc(entry.spec)}</div>
-      <h1>${esc(entry.title)}</h1><p>${esc(entry.description || "")}</p>
-      <div class="facts"><span><b>${entry.n_agents}</b> agents</span><span><b>${fx.rounds}</b> rounds</span>
-        <span>${esc(fx.models.join(" · "))}</span><span>seed ${entry.seed ?? "?"}</span>
-        ${fx.tags.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>
-      ${entry.validity ? `<div class="notice">${esc(entry.validity.replace(/\*\*/g, ""))}</div>` : ""}</div>
-    <nav class="tabs">${TABS.map(([k, t]) => `<a href="#${k}" data-k="${k}">${t}</a>`).join("")}</nav>
-    ${TABS.map(([k]) => `<div class="panel" id="p-${k}"><div class="loading">Loading…</div></div>`).join("")}`;
+    <header class="run-mast"><div class="label"><a href="runs.html">Runs</a> · ${V.esc(entry.spec)} · seed ${entry.seed ?? "?"}</div>
+      <h1>${V.esc(entry.title)}</h1>
+      ${entry.validity ? `<p class="notice">${V.esc(entry.validity.replace(/\*\*/g, ""))}</p>` : ""}</header>
+    <div class="run-bar">
+      <nav class="sections">${SECTIONS.map(([k, t]) => `<a data-k="${k}">${t}</a>`).join("")}</nav>
+      <div class="clock">
+        <button class="ck-prev" title="Previous round (←)">‹</button>
+        <div class="ck-label"></div>
+        <button class="ck-next" title="Next round (→)">›</button>
+        <button class="ck-play" title="Play the rounds (space)">▶</button>
+        <div class="strip"></div>
+      </div>
+    </div>
+    <div id="view"></div>`;
+  const view = document.querySelector("#view");
 
-  const loaded = new Set();
-  function show(k) {
-    if (!TABS.some(([t]) => t === k)) k = "story";
-    document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("on", a.dataset.k === k));
-    document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("on", p.id === `p-${k}`));
-    if (!loaded.has(k)) { loaded.add(k); RENDER[k](document.querySelector(`#p-${k}`)).catch((e) => {
-      document.querySelector(`#p-${k}`).innerHTML = `<p class="loading">Could not load: ${esc(e.message)}</p>`; }); }
+  // ---------------------------------------------------------------- the clock strip
+  const act = S.heads.map((h) => (h ? h.posts + h.dms : 0)), amax = Math.max(1, ...act);
+  const strip = main.querySelector(".strip");
+  strip.innerHTML = Array.from({ length: S.lastRound + 1 }, (_, r) => { const h = S.heads[r] || { items: [] };
+    const marks = (h.items || []).map((x) => x.k === "enacted" ? "law" : x.k === "left" ? "left" : x.k === "raid" || x.k === "vetoed" ? "alarm" : "").filter(Boolean);
+    return `<button data-r="${r}" title="Round ${r + 1}"><i style="height:${Math.round(4 + 22 * (act[r] || 0) / amax)}px"></i>${marks.length ? `<em class="${marks[0]}"></em>` : ""}</button>`; }).join("");
+  strip.onclick = (e) => { const b = e.target.closest("button[data-r]"); if (b) go({ round: +b.dataset.r }); };
+  main.querySelector(".ck-prev").onclick = () => go({ round: Math.max(0, st.round - 1) });
+  main.querySelector(".ck-next").onclick = () => go({ round: Math.min(S.lastRound, st.round + 1) });
+  let playT = null;
+  const playBtn = main.querySelector(".ck-play");
+  function togglePlay() {
+    if (st.section === "square" && square) return square.togglePlay();
+    if (playT) { clearInterval(playT); playT = null; playBtn.textContent = "▶"; return; }
+    if (st.round >= S.lastRound) go({ round: 0 });
+    playBtn.textContent = "❚❚";
+    playT = setInterval(() => { if (st.round >= S.lastRound) return togglePlay(); go({ round: st.round + 1 }); }, 2200);
   }
-  window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+  playBtn.onclick = togglePlay;
+  function paintClock() {
+    main.querySelector(".ck-label").innerHTML = `<b>Round ${st.round + 1}</b> <span class="meta">of ${S.rounds}</span>`;
+    strip.querySelectorAll("button").forEach((b) => { const r = +b.dataset.r; b.classList.toggle("on", r === st.round); b.classList.toggle("past", r < st.round); });
+    main.querySelectorAll(".sections a").forEach((a) => { a.classList.toggle("on", a.dataset.k === st.section); a.href = V.href(st, a.dataset.k); });
+  }
 
-  const RENDER = {
-    async story(el) {
-      const src = `${ds.root}/${entry.path}/viewer.json`;
-      el.innerHTML = `<iframe class="storyframe" src="viewer.html?src=${encodeURIComponent(src)}" title="Story viewer"></iframe>
-        <p class="meta">The full story viewer: the run as a group chat, each agent's inbox and diary, and the world as it stood.</p>`;
-    },
-    async conversations(el) {
-      const chans = await run.channels();
-      const groups = [["Public", (c) => ["public", "outlet", "gazette"].includes(c.channel_kind)],
-        ["Private messages", (c) => c.channel_kind === "dm"], ["Groups and channels", (c) => ["group", "channel"].includes(c.channel_kind)],
-        ["System", (c) => c.channel_kind === "system"]];
-      el.innerHTML = `<div class="convo"><div class="list">${groups.map(([title, test]) => {
-        const cs = chans.filter(test); if (!cs.length) return "";
-        return `<div class="label kind">${title} · ${cs.length}</div>` + cs.map((c) =>
-          `<div class="item" data-id="${esc(c.channel_id)}"><div>${esc(c.name)}</div><div class="meta">${c.n_messages} messages · rounds ${c.first_round + 1}–${c.last_round + 1}</div></div>`).join("");
-      }).join("")}</div><div class="thread" id="thread"><p class="meta" style="padding:0 22px">Pick a conversation.</p></div></div>`;
-      const open = async (cid) => {
-        el.querySelectorAll(".item").forEach((i) => i.classList.toggle("on", i.dataset.id === cid));
-        const msgs = await run.thread(cid);
-        const first = msgs[0]?.sender;
-        el.querySelector("#thread").innerHTML = msgs.map((m) => `<div class="msg${m.sender === first ? "" : " mine"}">
-          <div class="who">${esc(m.sender || "notice")}<span class="when">round ${m.round + 1} · ${esc(m.type)}${m.encrypted ? " · encrypted" : ""}</span></div>
-          ${m.title ? `<div><b>${esc(m.title)}</b></div>` : ""}<div class="txt">${esc(m.text || "")}</div></div>`).join("");
-      };
-      el.querySelectorAll(".item").forEach((i) => (i.onclick = () => open(i.dataset.id)));
-      const firstDm = chans.find((c) => c.channel_kind === "dm");
-      if (firstDm) open(firstDm.channel_id);
-    },
-    async agents(el) {
-      const agents = await run.agents();
-      el.innerHTML = `<table class="data"><thead><tr><th>Agent</th><th>Role</th><th>Model</th><th>Primary goal</th><th>Secondary</th>
-        <th>Start</th><th>End</th><th>Score</th></tr></thead><tbody>${agents.map((a) => `<tr><td><b>${esc(a.agent)}</b>${a.left_round != null ? ` <span class="meta">(left r${a.left_round + 1})</span>` : ""}</td>
-        <td>${esc(a.cls)}</td><td>${esc(modelShort(a.model))}</td><td>${esc(a.goal_primary || "")}</td><td>${esc(a.goal_secondary || "")}</td>
-        <td class="num">${a.start_value != null ? Math.round(a.start_value) : ""}</td><td class="num">${a.end_value != null ? Math.round(a.end_value) : ""}</td>
-        <td class="num">${a.final_score != null ? Math.round(a.final_score * 100) + "%" : ""}</td></tr>`).join("")}</tbody></table>`;
-    },
-    async laws(el) {
-      const laws = await run.laws();
-      laws.sort((a, b) => (a.proposed_round ?? 0) - (b.proposed_round ?? 0));
-      el.innerHTML = laws.length ? `<table class="data"><thead><tr><th>Law</th><th>Title</th><th>Author</th><th>Class</th><th>Status</th>
-        <th>Proposed</th><th>Enacted</th><th>Intent</th></tr></thead><tbody>${laws.map((l) => `<tr><td>${esc(l.law_id)}</td><td><b>${esc(l.title || "")}</b></td>
-        <td>${esc(l.author || "")}</td><td>${esc(l.cls || "")}</td><td>${esc(l.status || "")}</td>
-        <td class="num">${l.proposed_round != null ? "r" + (l.proposed_round + 1) : ""}</td><td class="num">${l.enacted_round != null ? "r" + (l.enacted_round + 1) : ""}</td>
-        <td class="meta">${esc((l.intent || "").slice(0, 160))}</td></tr>`).join("")}</tbody></table>` : '<p class="meta">No laws were proposed in this run.</p>';
-    },
-    async data(el) {
-      const m = await run.manifest();
-      const rows = Object.entries(m.tables || {});
-      const filesUrl = `${DATASET_URL}/tree/main/${entry.path}`;
-      el.innerHTML = `<p>This run's tables (export schema ${m.schema_version}). <a href="${filesUrl}">Files on Hugging Face</a> ·
-        <a href="${DATASET_URL}/resolve/main/${entry.raw}">raw archive</a></p>
-        <table class="data" style="max-width:520px"><thead><tr><th>Table</th><th>Rows</th></tr></thead><tbody>
-        ${rows.map(([t, v]) => `<tr><td><a href="${ds.root}/${entry.path}/${v.file}">${esc(t)}</a></td><td class="num">${v.rows}</td></tr>`).join("")}</tbody></table>
-        <div class="code" style="margin-top:22px">SELECT * FROM 'hf://datasets/zachmacsmith/charter-runs/${esc(entry.path)}/events.parquet' LIMIT 10;</div>`;
-    },
-  };
-  show(location.hash.slice(1) || "story");
+  // ---------------------------------------------------------------- routing: #section/target@round
+  function parseHash() {
+    const m = decodeURIComponent(location.hash.slice(1)).match(/^([a-z]+)?(?:\/([^@]*))?(?:@(\d+))?$/);
+    if (!m) return {};
+    const out = {};
+    if (m[1] && SECTIONS.some(([k]) => k === m[1])) out.section = m[1];
+    out.target = m[2] || null;
+    if (m[3]) out.round = Math.max(0, Math.min(S.lastRound, +m[3] - 1));
+    return out;
+  }
+  function go(patch, push = false) {
+    Object.assign(st, patch);
+    const h = V.href(st, st.section, st.target);
+    if (location.hash !== h) (push ? history.pushState : history.replaceState).call(history, null, "", h);
+    render();
+  }
+  let square = null, rendered = "";
+  async function render() {
+    paintClock();
+    const key = `${st.section}|${st.target}|${st.section === "square" ? "" : st.round}|${st.filter}`;
+    if (st.section === "square" && square && rendered.startsWith("square|")) { square.setRound(st.round); return; }
+    if (key === rendered) return;
+    rendered = key;
+    if (square) { square.stop(); square = null; }
+    const keepY = rendered.split("|")[0] === st.section;
+    if (st.section === "square") { square = mountSquare(view, st, (r) => { st.round = r; history.replaceState(null, "", V.href(st, "square")); paintClock(); }); return; }
+    const html = st.section === "data" ? await V.data(st, run) : V[st.section](st, st.target);
+    view.innerHTML = html;
+    const f = view.querySelector("#convfilter");
+    if (f) { f.oninput = (e) => { st.filter = e.target.value; const pos = e.target.selectionStart; render(); const g = view.querySelector("#convfilter"); g.focus(); g.setSelectionRange(pos, pos); }; }
+    if (st.section === "correspondence") { const t = view.querySelector(".thread"); if (t) t.scrollTop = t.scrollHeight; }
+  }
+  addEventListener("hashchange", () => { const p = parseHash(); Object.assign(st, { section: p.section || "front", target: p.target, ...(p.round != null ? { round: p.round } : {}) });
+    const old = rendered; render(); if (!old.startsWith(st.section + "|" + st.target)) scrollTo({ top: main.querySelector(".run-bar").offsetTop - 0 }); });
+  addEventListener("keydown", (e) => {
+    if (e.target.closest("input, textarea, select")) return;
+    if (e.key === "ArrowLeft") { go({ round: Math.max(0, st.round - 1) }); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { go({ round: Math.min(S.lastRound, st.round + 1) }); e.preventDefault(); }
+    else if (e.key === " ") { togglePlay(); e.preventDefault(); }
+  });
+
+  // ---------------------------------------------------------------- hover previews
+  const hc = document.querySelector("#hovercard"); let hcT = null;
+  document.addEventListener("mouseover", (e) => {
+    const t = e.target.closest("[data-agent], [data-law]");
+    if (!t || t.closest("#hovercard")) { if (!e.target.closest("#hovercard")) { clearTimeout(hcT); hcT = setTimeout(() => hc.classList.remove("show"), 150); } return; }
+    clearTimeout(hcT);
+    hcT = setTimeout(() => {
+      const html = t.dataset.law ? V.lawCard(st, t.dataset.law) : V.agentCard(st, t.dataset.agent);
+      if (!html) return;
+      hc.innerHTML = html; hc.classList.add("show");
+      const rc = t.getBoundingClientRect(), w = hc.offsetWidth, h = hc.offsetHeight;
+      hc.style.left = Math.min(Math.max(8, rc.left), innerWidth - w - 8) + "px";
+      hc.style.top = (rc.bottom + 8 + h > innerHeight ? Math.max(8, rc.top - h - 8) : rc.bottom + 8) + "px";
+    }, t.dataset.law ? 120 : 300);
+  });
+
+  const p = parseHash();
+  Object.assign(st, { section: p.section || "front", target: p.target, ...(p.round != null ? { round: p.round } : {}) });
+  go({});
 </script>
 </body>
 </html>

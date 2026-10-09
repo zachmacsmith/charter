@@ -2,8 +2,6 @@
 
     python site/build.py
 
-- site/viewer.html     the story viewer (charter/viewer/template.html) with one addition: ?src=URL loads a run's viewer.json
-                       from a URL. The template stays the single source; rebuild after it changes.
 - site/notes/index.json  the notes list, from the front matter of site/notes/*.md (title, date, summary, draft)
 - site/assets/mascots.svg  a sprite of the mascots used on the site (the README header's drawing code)
 
@@ -19,25 +17,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site"
-
-BOOT_OLD = 'if (embedded) { mount(embedded); if (location.hash === "#society") setView("society"); } else loader();'
-BOOT_NEW = '''const srcUrl = new URLSearchParams(location.search).get("src");
-if (embedded) { mount(embedded); if (location.hash === "#society") setView("society"); }
-else if (srcUrl) {                                                    // site: load a run's viewer.json from a URL
-  $("#app").innerHTML = '<div class="loader"><p>Loading the run…</p></div>';
-  fetch(srcUrl).then(r => { if (!r.ok) throw new Error(r.status + " " + srcUrl); return r.json(); })
-    .then(D => { mount(D); if (location.hash === "#society") setView("society"); })
-    .catch(e => { $("#app").innerHTML = `<div class="loader"><p style="color:var(--warn)">Could not load the run: ${e.message}</p></div>`; });
-}
-else loader();'''
-
-
-def build_viewer() -> None:
-    html = (ROOT / "charter" / "viewer" / "template.html").read_text()
-    if BOOT_OLD not in html:
-        raise SystemExit("viewer template changed: update BOOT_OLD in site/build.py")
-    (SITE / "viewer.html").write_text(html.replace(BOOT_OLD, BOOT_NEW, 1))
-
 
 def front_matter(text: str) -> tuple[dict, str]:
     m = re.match(r"---\n(.*?)\n---\n(.*)", text, re.S)
@@ -80,7 +59,6 @@ def build_mascots() -> None:
 
 
 if __name__ == "__main__":
-    build_viewer()
     build_notes()
     build_mascots()
-    print("built site/viewer.html, site/notes/index.json, site/assets/mascots.svg")
+    print("built site/notes/index.json, site/assets/mascots.svg")

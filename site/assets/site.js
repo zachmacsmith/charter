@@ -10,7 +10,7 @@ const THEMES = [["swiss", "Swiss"], ["broadsheet", "Broadsheet"], ["night", "Nig
 export function currentTheme() {
   const q = new URLSearchParams(location.search).get("theme");
   if (q) { try { localStorage.setItem("charter-theme", q); } catch (e) {} return q; }
-  try { return localStorage.getItem("charter-theme") || "swiss"; } catch (e) { return "swiss"; }
+  try { return localStorage.getItem("charter-theme") || "broadsheet"; } catch (e) { return "broadsheet"; }
 }
 function setTheme(t) {
   document.documentElement.dataset.theme = t;
@@ -41,7 +41,7 @@ export function chrome(active) {
     <a class="brand" href="index.html">Charter</a>
     <nav class="nav">${nav.map(([h, t, k]) => `<a href="${h}" class="${k === active ? "on" : ""}">${t}</a>`).join("")}
       <a href="${GITHUB}">GitHub</a><a href="${DATASET_URL}">Dataset</a></nav>
-    <div class="themes" title="Design">${THEMES.map(([k, t]) => `<button data-t="${k}">${t}</button>`).join("")}</div></div>`;
+    ${new URLSearchParams(location.search).has("themes") ? `<div class="themes" title="Design">${THEMES.map(([k, t]) => `<button data-t="${k}">${t}</button>`).join("")}</div>` : ""}</div>`;
   document.body.prepend(head);
   head.querySelectorAll(".themes button").forEach((b) => (b.onclick = () => setTheme(b.dataset.t)));
   setTheme(currentTheme());
