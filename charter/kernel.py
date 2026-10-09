@@ -995,10 +995,9 @@ class Kernel:
                     n[oid] = n.get(oid, 0) + 1
             for oid, c in n.items():                                   # how many, not who: subscriptions are private
                 out[f"compelled_subscribers {oid}"] = c
-        js = w.get("jurisdictions")
-        if js is not None and "jur" in w:
-            for jid, j in js.items():
-                if j["status"] != "declared":                          # hidden jurisdictions are secret; dissolved ones have no rules
+        if "jur" in w:
+            for jid, j in J.jurs(self).items():
+                if J.st(j) != "declared":                          # hidden jurisdictions are secret; dissolved ones have no rules
                     continue
                 if not j.get("legacy"):                                # J0's procedures, reserve and camps are in the view already
                     out[f"{jid} procedures"] = {c: key.split("#")[0] for c, key in j["procedures"].items()}
@@ -1012,8 +1011,8 @@ class Kernel:
         return out
 
     def _hidden_jur(self, jid) -> bool:
-        j = (self.w.get("jurisdictions") or {}).get(jid)
-        return bool(j and j["status"] == "hidden")
+        j = J.jurs_any(self).get(jid)
+        return bool(j and J.secret(j))
 
     @staticmethod
     def diff(a, b):

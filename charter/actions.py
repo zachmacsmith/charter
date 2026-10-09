@@ -640,7 +640,7 @@ def _amend(k, aid, law, code, reason="", intent=None):
     jid = J.law_jur(k, law)                                            # "J0" when jurisdictions are off
     if J.enabled(k):
         j = J.jurs(k).get(jid)
-        member = J.member_of(k, aid) == jid or bool(j and j["status"] == "hidden" and aid in j["hidden_members"])
+        member = J.member_of(k, aid) == jid or bool(j and J.st(j) == "hidden" and aid in j["hidden_members"])
         if law in k.w["laws"] and not member:
             raise ActionError(f"{law} is a law of {jid}; only its members can propose amendments to it")
     if PW.has_power(k, jid, "propose_right"):

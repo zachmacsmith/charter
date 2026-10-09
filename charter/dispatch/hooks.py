@@ -73,7 +73,7 @@ def bound_laws(k, P, payload, phase) -> list:
         for law in laws:
             jid = J.law_jur(k, law["id"])
             j = J.jurs(k).get(jid)
-            if not k.dry and (not j or j["status"] != "declared"):
+            if not k.dry and (not j or J.st(j) != "declared"):
                 continue
             hits = [_binds_value(k, law["id"], x, payload.get(x), inc) for x in keys]
             if jid in parents or any(h for h in hits) or all(h is None for h in hits):
@@ -90,7 +90,7 @@ def bound_laws(k, P, payload, phase) -> list:
 # W8b (review 12 N1): changes about a hidden jurisdiction that no other polity's law may see (its founding, invitations and charter):
 # they bind only the hidden jurisdiction's own laws (in force only once it is declared, so in practice none). Its declaration is
 # public: before_declare binds the laws binding its founder (the polity it leaves).
-SECRET = {"found": lambda k, p: p.get("kind") == "jurisdiction", "invite": lambda k, p: True, "set_charter": lambda k, p: True}
+SECRET = {"found": lambda k, p: J.I.found_kind(p.get("kind")) == "jurisdiction" if J.I.unified(k) else p.get("kind") == "jurisdiction", "invite": lambda k, p: True, "set_charter": lambda k, p: True}
 
 
 def _hook_fn(k, lid, hook):

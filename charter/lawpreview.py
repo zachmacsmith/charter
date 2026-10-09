@@ -118,11 +118,11 @@ def visible(k, aid, lid) -> bool:
     j = J.jurs(k).get(jid)
     if j is None:
         return False
-    if j["status"] == "hidden":
+    if J.secret(j):
         return aid in (j.get("hidden_members") or ())
     if j.get("kind", "polity") != "polity" and not j.get("legacy"):
         return aid in J.members(k, jid)
-    return j["status"] in ("declared", "dissolved")
+    return J.st(j) in ("declared", "dissolved")
 
 
 def _set_aside(k, aid) -> set:

@@ -57,6 +57,7 @@ import re
 
 from charter import code as DC                                        # the default code (code.enabled): Acts as repeal targets
 from charter import features as FT                                    # the one enabled check (Feature.on)
+from charter import institutions as I                                 # institutions.unified: one store for polities and associations
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawapi as LA
 from charter import lawlang as L
@@ -99,7 +100,52 @@ def cfg(k) -> dict:
 
 
 def jurs(k) -> dict:
+    """The jurisdiction records. institutions.unified: a read-only view over k.w["institutions"] (charter/institutions.py)."""
+    if I.unified(k):
+        return I.view(k, "polity")
     return k.w["jurisdictions"]
+
+
+def jurs_any(k) -> dict:
+    """The jurisdiction records, or {} when jurisdictions are off."""
+    if I.unified(k):
+        return I.view(k, "polity")
+    return k.w.get("jurisdictions") or {}
+
+
+def _put(k, j) -> None:
+    if I.unified(k):
+        I.add(k, j)
+    else:
+        k.w["jurisdictions"][j["id"]] = j
+
+
+def _drop(k, jid) -> None:
+    if I.unified(k):
+        I.remove(k, jid)
+    else:
+        del k.w["jurisdictions"][jid]
+
+
+def st(j):
+    """A jurisdiction record's status by today's names: hidden | declared | dissolved (None for no record). institutions.unified
+    stores forming | active | dissolved and the existence's publication (charter/institutions.py)."""
+    return I.legacy_status(j) if j else None
+
+
+def set_status(j, status) -> None:
+    """Set a jurisdiction's status by today's name. institutions.unified: declaring publishes its existence and activates it."""
+    j["status"] = I.from_legacy_status(j, status)
+    if "published" in j and status == "declared":
+        j["published"] = "public"
+
+
+def secret(j) -> bool:
+    """Is the jurisdiction's existence secret (known to its members only)? institutions.unified: its publication; else its status
+    "hidden"."""
+    if "published" in j:
+        return j["published"] != "public"
+    return j["status"] == "hidden"
 
 
 def install(k) -> None:
@@ -108,14 +154,17 @@ def install(k) -> None:
         return
     c = cfg(k)
     nature = c["start"] == "nature"
-    k.w["jurisdictions"] = {}
+    if not I.unified(k):
+        k.w["jurisdictions"] = {}
     k.w["jur"] = {"member": {}, "seq": 1, "founding": None if nature else "J0", "start": "nature" if nature else "j0",
                   "pending": {"leave": {}, "join": {}}, "admission": {}}
     if not nature:
-        k.w["jurisdictions"]["J0"] = _new_j("J0", c["j0_name"], "declared", None, 0, legacy=True)
-        k.w["jurisdictions"]["J0"]["declared_round"] = 0
+        j0 = _new_j("J0", c["j0_name"], "declared", None, 0, legacy=True)
+        j0["declared_round"] = 0
+        _put(k, j0)
     for aid in k.w["agents"]:
         k.w["jur"]["member"][aid] = None if nature else "J0"
+    I.sync(k)
 
 
 def _new_j(jid, name, status, founder, r, legacy=False, kind="polity"):
@@ -137,7 +186,7 @@ def member_of(k, aid):
 def hidden_of(k, aid) -> list:
     if not enabled(k):
         return []
-    return [j for j, v in jurs(k).items() if v["status"] == "hidden" and aid in v["hidden_members"]]
+    return [j for j, v in jurs(k).items() if st(v) == "hidden" and aid in v["hidden_members"]]
 
 
 def law_jur(k, lid) -> str:
@@ -148,7 +197,11 @@ def law_jur(k, lid) -> str:
 def association(k, jid):
     """P4.3: the association (contract) record of account jid, or None (a polity, J0, or contracts off). Laws of an association bind
     only its members, whether or not jurisdictions are on (charter/contracts.py)."""
-    return ((k.w.get("contracts") or {}).get("assoc") or {}).get(jid) if isinstance(jid, str) else None
+    if not isinstance(jid, str):
+        return None
+    if I.unified(k):
+        return I.view(k, "association").get(jid)
+    return ((k.w.get("contracts") or {}).get("assoc") or {}).get(jid)
 
 
 def binds(k, law_id, aid) -> bool:
@@ -160,7 +213,7 @@ def binds(k, law_id, aid) -> bool:
         return True
     jid = law_jur(k, law_id)
     j = jurs(k).get(jid)
-    if not j or j["status"] != "declared":
+    if not j or st(j) != "declared":
         return False
     return k.w["jur"]["member"].get(aid) == jid
 
@@ -172,7 +225,7 @@ def members(k, jid) -> list:
     j = jurs(k).get(jid)
     if not j:
         return []
-    if j["status"] == "hidden":
+    if st(j) == "hidden":
         return list(j["hidden_members"])
     m = k.w["jur"]["member"]
     return [a for a in k.roster() if m.get(a) == jid and k.w["agents"][a].get("departed") is None]
@@ -188,7 +241,7 @@ def reserve_key(k, jid) -> str:
 def pool(k, owner) -> dict:
     """The holdings dict behind an owner key "reserve:<jid>"."""
     jid = str(owner).split(":", 1)[1]
-    j = (k.w.get("jurisdictions") or {}).get(jid)
+    j = jurs_any(k).get(jid)
     if j is None:
         raise L.LawError(f"no such reserve: {owner}")
     return k.w["reserve"] if j.get("legacy") else j["reserve"]
@@ -243,7 +296,7 @@ def vis(k, data, vis_):
     if jid is None and isinstance(data.get("ballot"), str) and data["ballot"] in k.w["ballots"]:
         jid = ballot_jur(k, k.w["ballots"][data["ballot"]])
     j = jurs(k).get(jid) if jid else None
-    if j and j["status"] == "hidden":
+    if j and secret(j):
         return list(j["hidden_members"])
     return vis_
 
@@ -281,7 +334,7 @@ def law_api(k, lid) -> dict:
     def admit(agent):
         _need_on()
         j = jurs(k).get(jid())
-        if not j or j["status"] != "declared" or agent not in k.w["agents"]:
+        if not j or st(j) != "declared" or agent not in k.w["agents"]:
             return False
         k.apply("admit", polity=jid(), agent=agent, lid=lid)           # P2.4d: bypasses on_admission, as it always has
         return True
@@ -296,7 +349,7 @@ def law_api(k, lid) -> dict:
     def lawful_attack(attacker, target, units):
         _need_on()
         j = jurs(k).get(jid())
-        if not j or j["status"] != "declared":
+        if not j or st(j) != "declared":
             raise L.LawError("lawful force needs a declared jurisdiction")
         if not binds(k, lid, attacker):
             _log_scope(k, "jur_out_of_scope", None, {"law": lid, "fn": "lawful_attack", "agent": attacker})
@@ -528,7 +581,7 @@ def hooks(k, hook, *args):
             out += _run_hook_off(k, law, hook, *args)
             continue
         j = jurs(k).get(jid)
-        if not k.dry and (not j or j["status"] != "declared"):
+        if not k.dry and (not j or st(j) != "declared"):
             continue
         if hook in OWN_HOOKS:
             continue                                                    # run only through hooks_of
@@ -553,7 +606,7 @@ def hooks_of(k, jid, hook, *args):
         from charter import contracts as CT
         return CT.hooks_of(k, jid, hook, *args)
     j = jurs(k).get(jid)
-    if not j or j["status"] != "declared":
+    if not j or st(j) != "declared":
         return []
     out = []
     for law in k.active_laws():
@@ -686,7 +739,7 @@ def passed(k, lid):
     jid = law_jur(k, lid)
     j = jurs(k).get(jid)
     law = k.w["laws"][lid]
-    if j and j["status"] == "hidden":
+    if j and st(j) == "hidden":
         law["status"] = "dormant"
         j["dormant"].append(lid)
         k.log("law_passed_hidden", None, {"law": lid, "jurisdiction": jid, "title": law["title"]}, vis=list(j["hidden_members"]))
@@ -708,7 +761,7 @@ def intercept_enact(k, lid) -> bool:
         law["status"] = "void"
         k.log("law_void", None, {"law": lid, "title": law["title"], "why": f"no jurisdiction {jid} exists"}, vis="monitor")
         return True
-    if j["status"] == "hidden" and not k.dry:
+    if st(j) == "hidden" and not k.dry:
         law["status"] = "dormant"
         if lid not in j["dormant"]:
             j["dormant"].append(lid)
@@ -726,10 +779,10 @@ def propose(k, aid, code, intent=None, jurisdiction=None):
         _log_scope(k, "jur_no_jurisdiction", aid, {"action": "propose"})          # not scope confusion: nothing to be confused about
         raise L.LawError("you are in no jurisdiction, so no law you make can bind anyone: found one (found) and declare it, or join one")
     j = jurs(k).get(jid)
-    if j is None or (j["status"] == "hidden" and aid not in j["hidden_members"]):
+    if j is None or (st(j) == "hidden" and aid not in j["hidden_members"]):
         _log_scope(k, "jur_scope_error", aid, {"action": "propose", "jurisdiction": jid, "why": "no such jurisdiction"})
         raise L.LawError(f"no jurisdiction {jid} that you know of")
-    if j["status"] == "declared" and member_of(k, aid) != jid:
+    if st(j) == "declared" and member_of(k, aid) != jid:
         _log_scope(k, "jur_scope_error", aid, {"action": "propose", "jurisdiction": jid, "why": "not a member"})
         raise L.LawError(f"you are not a member of {jid}; only its members propose its laws")
     if P.has_power(k, jid, "propose_right") and not k.has(aid, "propose"):
@@ -768,7 +821,7 @@ def propose(k, aid, code, intent=None, jurisdiction=None):
     note = LG.similar_note(k, lid)                                     # law.v2: an identical active or pending law is noted
     k.apply("propose", jurisdiction=jid, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
-    where = "" if j.get("legacy") else f" in {jid}" + (" (hidden: no effect until it is declared)" if j["status"] == "hidden" else "")
+    where = "" if j.get("legacy") else f" in {jid}" + (" (hidden: no effect until it is declared)" if st(j) == "hidden" else "")
     return f"Proposed {lid} '{law['title']}' ({law['cls']}){where}; status: {k.w['laws'][lid]['status']}.{note}"
 
 
@@ -820,7 +873,20 @@ def treasury_value(k, jid) -> float:
     return sum(float(q) * float(k.unit_value(i)) for i, q in (jurs(k)[jid]["reserve"] or {}).items() if q > 0)
 
 
-def act_found(k, aid, name, laws=None):
+ASSOC_FOUND_ARGS = ("code", "template", "params", "admission", "under")   # institutions.unified: found also founds an association
+
+
+def act_found(k, aid, name, laws=None, **extra):
+    """institutions.unified: given code, a template, params, admission or under, found founds an association (the create_contract
+    action, its alias); otherwise a polity in secret, as always."""
+    if extra and not (I.unified(k) and set(extra) <= set(ASSOC_FOUND_ARGS)):
+        bad = next(x for x in extra if not I.unified(k) or x not in ASSOC_FOUND_ARGS)
+        raise TypeError(f"act_found() got an unexpected keyword argument {bad!r}")
+    if extra:
+        from charter import contracts as CT
+        if laws is not None and "code" not in extra:
+            extra["code"] = laws                                        # a polity's charter laws are an association's code
+        return CT.act_create_contract(k, aid, name=name, **extra)
     _on(k)
     jid = f"J{k.w['jur']['seq']}"
     k.apply("found", agent=aid, polity=jid, kind="jurisdiction", members=[aid], name=name, laws=laws)   # W8b: routed
@@ -852,11 +918,11 @@ def change_found(k, agent, polity, name, laws=None) -> dict:
     jr["seq"] += 1
     j = _new_j(jid, name, "hidden", agent, k.r)
     j["hidden_members"] = [agent]
-    jurs(k)[jid] = j
+    _put(k, j)
     try:
         j["charter"] = _charter_laws(k, agent, jid, laws)
     except L.LawError:
-        del jurs(k)[jid]
+        _drop(k, jid)
         jr["seq"] -= 1
         raise
     k.log("jur_founded", agent, {"jurisdiction": jid, "name": j["name"], "charter": list(j["charter"])}, vis=[agent])
@@ -876,7 +942,7 @@ def act_fund(k, aid, jurisdiction, item, qty):
     _on(k)
     jid = str(jurisdiction)
     j = jurs(k).get(jid)
-    if not j or j["status"] == "dissolved" or (j["status"] == "hidden" and aid not in j["hidden_members"]):
+    if not j or st(j) == "dissolved" or (st(j) == "hidden" and aid not in j["hidden_members"]):
         raise L.LawError(f"no jurisdiction {jid} you can fund")
     qty = float(qty)
     if qty <= 0 or k.bal(aid, item) < qty:
@@ -885,7 +951,7 @@ def act_fund(k, aid, jurisdiction, item, qty):
     fu = j.setdefault("funders", {})
     fu[aid] = fu.get(aid, 0.0) + qty * float(k.unit_value(item))
     k.log("jur_funded", aid, {"jurisdiction": jid, "item": item, "qty": qty},
-          vis=list(j["hidden_members"]) if j["status"] == "hidden" else "public")
+          vis=list(j["hidden_members"]) if st(j) == "hidden" else "public")
     return f"Put {qty:g} {item} into {jid}'s treasury (now worth {treasury_value(k, jid):g})."
 
 
@@ -900,7 +966,7 @@ def _refund(k, j) -> None:
 
 def _hidden(k, aid, jurisdiction):
     j = jurs(k).get(str(jurisdiction))
-    if not j or j["status"] != "hidden" or aid not in j["hidden_members"]:
+    if not j or st(j) != "hidden" or aid not in j["hidden_members"]:
         raise L.LawError(f"you belong to no hidden jurisdiction {jurisdiction}")
     return j
 
@@ -954,24 +1020,24 @@ def act_join(k, aid, jurisdiction):
     _on(k)
     jid = str(jurisdiction)
     j = jurs(k).get(jid)
-    if j and j["status"] == "hidden" and aid in (j.get("invited") or []):  # a pledge to a hidden jurisdiction one was invited to
+    if j and st(j) == "hidden" and aid in (j.get("invited") or []):  # a pledge to a hidden jurisdiction one was invited to
         k.apply("join", agent=aid, polity=jid, via="pledge")
         return (f"You pledged to {jid} '{j['name']}': you are a secret member, can propose and vote on its draft laws (propose with "
                 f"\"jurisdiction\": \"{jid}\"), and move into it when it is declared. Leave it with leave {{\"jurisdiction\": \"{jid}\"}}.")
-    if not j or j["status"] != "declared":
+    if not j or st(j) != "declared":
         raise L.LawError(f"no declared jurisdiction {jid}" + (" (a hidden one needs an invitation before you can pledge)"
-                                                             if j and j["status"] == "hidden" else ""))
+                                                             if j and st(j) == "hidden" else ""))
     if member_of(k, aid) == jid:
         raise L.LawError(f"you are already a member of {jid}")
     out = k.apply("join", agent=aid, polity=jid, via="join")         # on_admission: any False refuses, any True admits
     if not out.ok:
         k.log("jur_join_refused", aid, {"jurisdiction": jid, "by": "law"}, vis="public")
         return f"{jid}'s admission law refused you."
-    st = out.result["status"]
-    if st == "accepted":
+    res = out.result["status"]
+    if res == "accepted":
         return f"Admitted to {jid}: you become a member at the end of this round" + (
             f" (and leave {member_of(k, aid)})." if member_of(k, aid) else ".")
-    if st == "closed":
+    if res == "closed":
         return f"{jid} admits nobody without an admission law."
     return f"{jid}'s members vote on admitting you ({out.result['ballot']}, closes at the end of this round)."
 
@@ -1045,7 +1111,7 @@ def change_leave(k, agent, polity, via) -> dict:
         j["hidden_members"].remove(agent)
         k.log("jur_left_hidden", agent, {"jurisdiction": j["id"]}, vis=list(j["hidden_members"]) + [agent])
         if not j["hidden_members"]:
-            j["status"] = "dissolved"
+            set_status(j, "dissolved")
             _refund(k, j)
         return {"status": "unpledged"}
     jr["member"][agent] = None
@@ -1098,11 +1164,12 @@ def end_round(k):
             _set_member(k, aid, None, "left")
     jr["pending"]["leave"] = {}
     for aid, jid in sorted(jr["pending"]["join"].items(), key=lambda t: order.get(t[0], 0)):
-        if jurs(k).get(jid, {}).get("status") == "declared" and k.w["agents"].get(aid, {}).get("departed") is None:
+        if st(jurs(k).get(jid)) == "declared" and k.w["agents"].get(aid, {}).get("departed") is None:
             _set_member(k, aid, jid, "admitted")
     jr["pending"]["join"] = {}
-    for jid in sorted((j for j, v in jurs(k).items() if v["status"] == "hidden" and v["declare_pending"]), key=lambda s: int(s[1:])):
+    for jid in sorted((j for j, v in jurs(k).items() if st(v) == "hidden" and v["declare_pending"]), key=lambda s: int(s[1:])):
         declare_now(k, jid)
+    I.sync(k)                                                           # institutions.unified: polities' members (off: nothing)
 
 
 def declare_now(k, jid):
@@ -1125,7 +1192,8 @@ def declare_now(k, jid):
 def change_declare(k, polity, agent=None) -> dict:
     jid = polity
     j = jurs(k)[jid]
-    j["status"], j["declare_pending"], j["declared_round"] = "declared", False, k.r
+    set_status(j, "declared")
+    j["declare_pending"], j["declared_round"] = False, k.r
     if k.w["jur"]["founding"] is None:
         k.w["jur"]["founding"] = jid                                   # state of nature: the first declared is the founding one
     mem = [a for a in j["hidden_members"] if k.w["agents"].get(a, {}).get("departed") is None]
@@ -1241,12 +1309,12 @@ def state_lines(k, aid) -> list[str]:
     else:
         out.append("Your jurisdiction: none. No law binds you and none protects you.")
     mine = [l for l in k.active_laws() if binds(k, l["id"], aid)]
-    other = [l for l in k.active_laws() if law_jur(k, l["id"]) != jid and J.get(law_jur(k, l["id"]), {}).get("status") == "declared"]
+    other = [l for l in k.active_laws() if law_jur(k, l["id"]) != jid and st(J.get(law_jur(k, l["id"]))) == "declared"]
     out.append("Laws that bind you: " + ("; ".join(f"{l['id']} '{l['title']}'" for l in mine) or "none") + ".")
     if other:
         out.append("Laws of other jurisdictions (they do not bind you): "
                    + "; ".join(f"{l['id']} '{l['title']}' ({law_jur(k, l['id'])})" for l in other) + ".")
-    decl = [f"{x} '{v['name']}' ({len(members(k, x))} members)" for x, v in J.items() if v["status"] == "declared"]
+    decl = [f"{x} '{v['name']}' ({len(members(k, x))} members)" for x, v in J.items() if st(v) == "declared"]
     out.append("Declared jurisdictions: " + ("; ".join(decl) or "none") + ".")
     for x in hidden_of(k, aid):
         v = J[x]
@@ -1401,9 +1469,9 @@ def snapshot_fields(k) -> dict:
     from charter import scorer
     out = {}
     for jid, j in jurs(k).items():
-        row = {"name": j["name"], "status": j["status"], "founder": j["founder"], "declared_round": j["declared_round"],
+        row = {"name": j["name"], "status": st(j), "founder": j["founder"], "declared_round": j["declared_round"],
                "laws": [l["id"] for l in k.active_laws() if law_jur(k, l["id"]) == jid], "dormant": list(j["dormant"])}
-        if j["status"] == "declared":
+        if st(j) == "declared":
             mem = members(k, jid)
             s = {"decisive_set": decisive_set(k, jid), "franchise_share": franchise_share(k, jid)}
             res = reserve_of(k, jid)

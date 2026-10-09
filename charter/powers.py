@@ -124,18 +124,19 @@ POWERS = _with_lawfns(POWERS)
 
 # ---------------------------------------------------------------------- lookups
 def _on(k) -> bool:
-    return "jurisdictions" in k.w                                        # jurisdictions.install ran (the kernel's `"jur" in k.w`)
+    return "jur" in k.w                                                  # jurisdictions.install ran (it adds "jurisdictions" and "jur")
 
 
 def _record(k, account):
     """The account's record: an association's (k.w["contracts"]["assoc"], P4.3); else its polity record: jurisdictions off -> J0
     is the world itself (a virtual legacy record); on -> its record or None."""
-    assoc = ((k.w.get("contracts") or {}).get("assoc") or {}).get(account) if isinstance(account, str) else None
+    from charter import jurisdictions as J
+    assoc = J.association(k, account)
     if assoc is not None:
         return assoc
     if not _on(k):
         return {"id": "J0", "kind": "polity", "legacy": True} if account == "J0" else None
-    return k.w["jurisdictions"].get(account)
+    return J.jurs(k).get(account)
 
 
 def _resolve(k, account, rec, value):

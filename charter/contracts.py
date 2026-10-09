@@ -103,6 +103,7 @@ from charter import dispatch as D
 from charter import eventtypes as ET
 from charter import features as FT
 from charter import incorporation as INC                               # W8e: incorporation and company rules (D-27, D-28)
+from charter import institutions as INS                               # institutions.unified: one store (P4.6)
 from charter import jurisdictions as J
 from charter import lawapi as LA
 from charter import lawlang as L
@@ -214,7 +215,7 @@ def install(k) -> None:
         hit = difflib.get_close_matches(str(cfg(k)["enforcement"]), ENFORCEMENT, 1, 0.6)
         raise ValueError(f"contracts.enforcement must be one of {', '.join(ENFORCEMENT)}"
                          + (f" (did you mean {hit[0]!r}?)" if hit else ""))
-    k.w["contracts"] = {"seq": 0, "assoc": {}}
+    k.w["contracts"] = {"seq": 0} if INS.unified(k) else {"seq": 0, "assoc": {}}   # unified: records in k.w["institutions"]
 
 
 def _need_on(k):
@@ -1454,7 +1455,11 @@ def change_create(k, agent, contract, name, template, code, params, admission, u
     st["seq"] += 1
     assert contract == f"A{st['seq']}", contract
     t = TEMPLATES.get(template or "") or {}
-    rec = recs(k)[contract] = _new(contract, name, agent, k.r, template, params, admission or "open", t.get("procedure", "members"))
+    rec = _new(contract, name, agent, k.r, template, params, admission or "open", t.get("procedure", "members"))
+    if INS.unified(k):
+        INS.add(k, rec)                                                 # institutions.unified: the one store
+    else:
+        recs(k)[contract] = rec
     if under is not None:
         rec["parent"] = under
     installed = []
@@ -1468,7 +1473,10 @@ def change_create(k, agent, contract, name, template, code, params, admission, u
             k.w["laws"][lid]["status"] = "failed_check"
             if lid in k.w["law_order"]:
                 k.w["law_order"].remove(lid)
-        del recs(k)[contract]
+        if INS.unified(k):
+            INS.remove(k, contract)
+        else:
+            del recs(k)[contract]
         st["seq"] -= 1
         raise
     inc = {}
@@ -1596,6 +1604,14 @@ def _dissolve(k, rec, heirs=()) -> None:
                                           **({"shareholders": holders} if holders else {}),
                                           **({"parent": rec["parent"], "escheat": escheat} if escheat else {})}, vis="public")
     k.log("contract_dissolved", None, {"contract": cid, "treasury": before, "left": dict(rec["reserve"])}, vis="public")
+
+
+def change_dissolve(k, contract, heirs=()) -> dict:
+    """institutions.unified: the dissolve primitive's change for an association (kind "association"): _dissolve, routed."""
+    rec = recs(k)[contract]
+    if rec["status"] != "dissolved":
+        _dissolve(k, rec, heirs)
+    return {"contract": contract, "status": rec["status"]}
 
 
 def _pay_heirs(k, rec, heirs) -> dict:
@@ -2000,7 +2016,10 @@ def end_round(k) -> None:
                 change_leave(k, aid, cid, why)
             batch.append(aid)
         if batch and not rec["members"] and rec["status"] != "dissolved":
-            _dissolve(k, rec, batch)                                    # P4.4: wound up among the last members
+            if INS.unified(k):                                          # institutions.unified: routed (the dissolve primitive)
+                INS.dissolve(k, cid, batch)
+            else:
+                _dissolve(k, rec, batch)                                # P4.4: wound up among the last members
     _close_funds(k)                                                     # P4.4: funds whose law is out of force
 
 

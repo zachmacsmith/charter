@@ -598,6 +598,26 @@ J0 storage moved into its record; `LEGACY_ONLY` as a founding-polity power; chec
 on every preset, including jurisdictions-on with hidden jurisdictions and a state-of-nature start. One golden re-record, for the new
 state keys.
 
+Wave 9 WP-D (review 14 §3.1, §6.1 row D; `charter/institutions.py`), behind spec `institutions.unified` (default false; off, every
+world is byte-identical, checked by the goldens and `difftest` against the base):
+- One store, `k.w["institutions"][iid]`, for jurisdictions (kind `polity`, J0 included) and contract associations (kind
+  `association`), one record kind: id, kind, name, founder, founded_round, treasury, reserve, `status` (forming | active |
+  dissolved), `published` (members | public), `members`, `parent`; a kind's own fields stay on the record as its template's state.
+  Laws and offices are indexes (`institutions.laws`, `offices`), not copies. `k.w["jurisdictions"]` and `k.w["contracts"]["assoc"]`
+  are not stored: `jurisdictions.jurs(k)` and `accounts.assocs(k)` are read-only views. Snapshots keep their shape (no new snapshot
+  key), so History, the scorer, goals, context and export read what they did; `institutions.legacy_stores(k)` rebuilds the old
+  stores. Checkpoints hold the new key (no migration of old checkpoints into the flag: a run keeps the flag it started with).
+- Hidden is publication, not a status: a secret founding is `forming` with its existence published to its members; declaring
+  publishes it and activates it. Secrecy checks read `jurisdictions.secret`, lifecycle checks `jurisdictions.st` (today's names).
+- One path: the `found` action also founds an association when given code or a template (`create_contract` stays as its alias, and
+  its primitive, which laws hook as `before_create_contract`); the `found` primitive takes kind None for a new institution; join,
+  leave, admit and expel go through `institutions.change` (the kind's handler, then the polities' members); a contract's dissolution
+  is routed (the `dissolve` primitive, kind `association`, call option `heirs`; a block cannot keep a memberless contract alive).
+- With the flag on, scripted runs equal the flag-off runs except the dissolution's cause frame (tests/test_institutions_unified.py).
+- Helpers for channels (WP-C) and grants (WP-E), in either representation: `institutions.get`, `kind_of`, `is_member`, `members`,
+  `status`, `published`, `all_`. Not done here: grants (WP-E), dormancy and succession (WP-F), recognition and institutions as
+  members (WP-G).
+
 ---
 
 ## 8. Run store, provenance, History, interventions and forks

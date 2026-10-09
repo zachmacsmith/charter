@@ -211,7 +211,7 @@ def polity(k, agent, data) -> str:
     from charter import evidence as EVD
     from charter import jurisdictions as J
     a = EVD.about(k, data)
-    if isinstance(a, str) and (a in (k.w.get("jurisdictions") or {}) or J.association(k, a) is not None or a == "J0"):
+    if isinstance(a, str) and (a in J.jurs_any(k) or J.association(k, a) is not None or a == "J0"):
         return a
     if "jur" in k.w and agent in k.w["agents"]:
         m = J.member_of(k, agent)

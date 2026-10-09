@@ -414,6 +414,7 @@ def _ann():
         "law.library.visibility": dict(types=("str",), enum=("prompt", "on_request", "none")),
         "goals.outcome_only": dict(types=("bool",)),
         "actions.core_only": dict(types=("bool",)),
+        "institutions.unified": dict(types=("bool",)),                  # review 14 WP-D (P4.6): one institution store
         "contracts.scripted": dict(types=("bool",)),
         "contracts.enforcement": dict(types=("str",), enum=("escrow", "escrow_court", "word")),     # P4.4: the enforcement dial
         "contracts.breach_cases": dict(types=("bool",)),                 # W7e (review 11 §4.1): breaches open court cases
@@ -490,6 +491,7 @@ EXTRA = {
     "law.library.visibility": "prompt",
     "goals.outcome_only": False,
     "actions.core_only": False,
+    "institutions.unified": False,                                     # review 14 WP-D: off = the two stores, byte-identical
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
@@ -513,6 +515,10 @@ DOCS = {
                           "goal_registry.GOAL_CLASS): never a goal naming an institution or an action recipe, no institution or "
                           "counter goals",
     "actions": "review 14 A: the action surface",
+    "institutions": "review 14 WP-D (P4.6): institutions (charter/institutions.py)",
+    "institutions.unified": "one store k.w[\"institutions\"] for jurisdictions and contract associations (one record kind; "
+                            "jurisdictions and contracts' associations become views; one found, one membership path, routed "
+                            "contract dissolution; a secret founding is a publication, not a status). Off: today, byte-identical",
     "actions.core_only": "review 14 A: only the core surface (action_registry.CORE_SURFACE, ~30 actions) exists; every other action "
                          "is unknown",
     "endowment_gini": "target Gini of starting holdings (lognormal values tuned to it)",

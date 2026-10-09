@@ -114,7 +114,7 @@ READERS = {"on_transfer": _read_transfer, "on_harvest": _read_harvest, ("on_harv
 
 # A directive value a verdict may set, checked when it is resolved (not valid: the verdict is ignored, as today).
 DIRECTIVE_OK = {"admit": lambda k, v: True,
-                "jurisdiction": lambda k, v: v is None or J.jurs(k).get(v, {}).get("status") == "declared"}
+                "jurisdiction": lambda k, v: v is None or J.st(J.jurs(k).get(v)) == "declared"}
 
 
 def resolve(k, P: PR.Primitive, payload: dict, verdicts: list) -> Decision:

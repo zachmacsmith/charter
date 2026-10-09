@@ -68,9 +68,9 @@ def _account_members(k, acct) -> set | None:
     if not j:
         return None
     out = set(j.get("hidden_members") or ())
-    if j["status"] != "hidden" and not out:
+    if not J.secret(j) and not out:
         return None                                                    # a declared polity: its record is the public one
-    if j["status"] != "hidden":
+    if not J.secret(j):
         out |= set(J.members(k, acct))
     return out or None
 

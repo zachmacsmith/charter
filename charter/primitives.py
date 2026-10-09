@@ -464,10 +464,11 @@ _ROWS = [
     P("dissolve", "core", "destroy", ("polity", "kind", "agent"), "dispatch.changes.membership:do_dissolve", routed=True,
       subject="agent", parties=("agent",), agent_params=("agent",), event="channel_closed", causes=("agent", "world"),
       sites=("dispatch.changes.membership:do_dissolve", "actions:change_channel_closed", "actions:_close_channel",
-             "media:change_dissolve_outlet", "media:refresh_outlets"),
+             "media:change_dissolve_outlet", "media:refresh_outlets", "contracts:change_dissolve", "institutions:dissolve"),
       why={"compel": "P4: a contract's dissolution", "gate": _V2GATE},
       notes="kind: channel (closed by its owner, agent), outlet (closed by the kernel: its editor, agent, holds neither the Media "
-            "role nor press). A contract's dissolution (contracts) is not routed yet"),
+            "role nor press), association (institutions.unified: a contract whose last members left, wound up among them, call option "
+            "heirs; a block cannot keep it alive). Without institutions.unified a contract's dissolution is not routed"),
     # ------------------------------------------------------------------ rules of things
     P("set_camp_rule", "core", "rule", ("camp", "key", "value"), "dispatch.changes.world:do_set_camp_rule", routed=True, causes=("law",),
       preview=("camps", "rules.camp_rules"), compel_vis="monitor",

@@ -64,7 +64,7 @@ OPTIONS = {
     # message, never shown to hooks); commission: ordered (the full order) and payment; set_money_rule: why (a suspension's reason);
     # start_project: record (the drawn project); create_clause: name, text, key (its penalty's fnreg key).
     "found": frozenset({"open", "name", "laws"}), "invite": frozenset({"actor"}), "declare": frozenset(),
-    "set_charter": frozenset({"actor"}), "dissolve": frozenset(), "invoke": frozenset(),
+    "set_charter": frozenset({"actor"}), "dissolve": frozenset({"heirs"}), "invoke": frozenset(),
     "commission": frozenset({"ordered", "payment"}), "set_will": frozenset(), "name_successor": frozenset(),
     "licence": frozenset({"actor", "fee", "via"}), "set_price": frozenset({"outlet"}),
     "library_doc": frozenset({"scholar", "title", "text"}), "library_permit": frozenset({"actor"}),

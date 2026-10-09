@@ -84,7 +84,7 @@ def _reserve(k, key):
         return Account(key, "polity", "J0", k.w["reserve"])
     jid = key.split(":", 1)[1]
     pool = J.pool(k, key)                                          # raises LawError("no such reserve: ...") as before
-    rec = (k.w.get("jurisdictions") or {}).get(jid) or {}
+    rec = J.jurs_any(k).get(jid) or {}
     return Account(key, rec.get("kind", "polity"), jid, pool)
 
 
@@ -99,6 +99,8 @@ def _estate(k, key):
 def assocs(k) -> dict:
     """The association records (P4.3, charter/contracts.py): {} when contracts are off."""
     c = k.w.get("contracts")
+    if c and J.I.unified(k):                                           # institutions.unified: a view over k.w["institutions"]
+        return J.I.view(k, "association")
     return c["assoc"] if c else {}
 
 
@@ -220,7 +222,7 @@ def kind(k, account) -> str:
         return "agent"
     if account in assocs(k):
         return "association"
-    rec = (k.w.get("jurisdictions") or {}).get(account)
+    rec = J.jurs_any(k).get(account)
     return (rec or {}).get("kind", "polity")
 
 
@@ -240,7 +242,7 @@ def binds(k, account, aid) -> bool:
     if not J.enabled(k):
         return True
     j = J.jurs(k).get(account)
-    return bool(j) and j["status"] == "declared" and k.w["jur"]["member"].get(aid) == account
+    return bool(j) and J.st(j) == "declared" and k.w["jur"]["member"].get(aid) == account
 
 
 def charge_destination(k, lid, payer) -> str:
@@ -281,7 +283,7 @@ def keys(k) -> list:
     """Every registered owner key now: agents, J0's reserve, other treasuries, open or past estates, associations' treasuries
     and escrows, per-law funds."""
     out = list(k.w["agents"]) + [J0_KEY]
-    for jid, j in (k.w.get("jurisdictions") or {}).items():
+    for jid, j in J.jurs_any(k).items():
         if not j.get("legacy"):
             out.append(f"reserve:{jid}")
     for aid in sorted(((k.w.get("mortality") or {}).get("estates") or {})):

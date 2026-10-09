@@ -144,8 +144,8 @@ def check_under(k, under) -> str:
             raise L.LawError("contracts are incorporated under a polity: in this world the only one is J0")
         return u
     j = J.jurs(k).get(u)
-    if j is None or j.get("status") != "declared":
-        known = [x for x, v in J.jurs(k).items() if v.get("status") == "declared"]
+    if j is None or J.st(j) != "declared":
+        known = [x for x, v in J.jurs(k).items() if J.st(v) == "declared"]
         raise L.LawError(f"no declared polity {u} to incorporate under" + (f" (declared: {', '.join(known)})" if known else ""))
     return u
 

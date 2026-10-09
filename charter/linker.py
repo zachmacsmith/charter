@@ -87,7 +87,7 @@ def _visible(k, reader: str | None, target: str) -> bool:
     from charter import jurisdictions as J
     tj = J.law_jur(k, target)
     j = J.jurs(k).get(tj)
-    return not (j and j["status"] == "hidden" and J.law_jur(k, reader) != tj)
+    return not (j and J.secret(j) and J.law_jur(k, reader) != tj)
 
 
 def _decl_law(declarer: str | None) -> str | None:
