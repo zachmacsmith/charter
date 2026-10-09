@@ -916,7 +916,8 @@ def scope_api(k, lid, api: dict) -> dict:
     """The law API as an association's law sees it (jurisdictions.scope_api): the `contract` column (lawapi.CONTRACT_COLUMN) and the
     power table decide each function; the escrow-limited and membership functions are this contract's."""
     cid = J.law_jur(k, lid)
-    rec = recs(k)[cid]
+    def live():                                                         # the record as it is now: a dry run (Kernel._restore)
+        return recs(k)[cid]                                             # deep-copies k.w, so one captured here goes stale
     tk = treasury_key(cid)
     out = {}
     for name, fn in api.items():
@@ -931,15 +932,17 @@ def scope_api(k, lid, api: dict) -> dict:
         k.log("contract_out_of_scope", None, {"law": lid, "contract": cid, "fn": fn, "what": what}, vis="monitor")
         return False
 
-    word = enforcement(k, cid) == "word"
     esc = f"{AC.ESCROW}{cid}:"
+
+    def word():
+        return enforcement(k, cid) == "word"
 
     def src_key(x):
         """An owner this contract may take from: its treasury ("treasury", "reserve" or its key), a member's escrow with it (not
         under enforcement "word") or this law's own funds (P4.4)."""
         if x in ("treasury", "reserve", tk):
             return tk
-        if isinstance(x, str) and ((x.startswith(esc) and not word) or x.startswith(f"{AC.FUND}{lid}:")):
+        if isinstance(x, str) and ((x.startswith(esc) and not word()) or x.startswith(f"{AC.FUND}{lid}:")):
             return x
         return None
 
@@ -948,7 +951,7 @@ def scope_api(k, lid, api: dict) -> dict:
         not: pay_outsiders)."""
         if x in ("treasury", "reserve", tk):
             return tk
-        if isinstance(x, str) and ((x.startswith(esc) and not word) or x.startswith(f"{AC.FUND}{lid}:") or x in k.w["agents"]
+        if isinstance(x, str) and ((x.startswith(esc) and not word()) or x.startswith(f"{AC.FUND}{lid}:") or x in k.w["agents"]
                                    or _other_treasury(k, x)):            # P4.5 (review 10 #13): another association holds goods
             return x
         return None
@@ -968,25 +971,25 @@ def scope_api(k, lid, api: dict) -> dict:
     out["fine"] = fine
 
     def members():
-        return list(rec["members"])
+        return list(live()["members"])
     out["members"] = members
 
     def admit(agent):
-        if agent not in rec["applicants"]:
+        if agent not in live()["applicants"]:
             return False
         k.apply("admit", polity=cid, agent=agent, lid=lid)
         return True
     out["admit"] = admit
 
     def expel(agent):
-        if agent not in rec["members"]:
+        if agent not in live()["members"]:
             return False
         k.apply("expel", polity=cid, agent=agent, lid=lid)
         return True
     out["expel"] = expel
 
     def open_ballot(question, electorate, options, rule="majority", closes_in=1, on_result=None, weights=None):
-        el = [a for a in list(electorate) if a in rec["members"]]
+        el = [a for a in list(electorate) if a in live()["members"]]
         bid = api["open_ballot"](question, el, options, rule, closes_in, on_result, weights)
         k.w["ballots"][bid]["jurisdiction"] = cid
         return bid
@@ -999,19 +1002,19 @@ def scope_api(k, lid, api: dict) -> dict:
         name = fn if isinstance(fn, str) and fn in PROCEDURES else None
         if isinstance(fn, str) and name is None:
             raise L.LawError(f"set_procedure: a built-in procedure is one of {', '.join(PROCEDURES)} (or pass a function)")
-        allowed = INC.allowed_forms(k, rec)
+        allowed = INC.allowed_forms(k, live())
         if allowed is not None and (name or "custom") not in allowed:
             raise L.LawError(f"{cid}'s polity of incorporation allows companies governed by {', '.join(allowed)} only")
-        rec["procedure"] = name if name is not None else k._reg(lid, fn)
+        live()["procedure"] = name if name is not None else k._reg(lid, fn)
         return True
     out["set_procedure"] = set_procedure
 
     def gazette(text):
-        k.log("contract_notice", f"law:{lid}", {"contract": cid, "law": lid, "text": str(text)[:2000]}, vis=_vis(rec))
+        k.log("contract_notice", f"law:{lid}", {"contract": cid, "law": lid, "text": str(text)[:2000]}, vis=_vis(live()))
     out["gazette"] = gazette
 
     def notify(a, t):
-        if a not in rec["members"]:
+        if a not in live()["members"]:
             return refuse("notify", a)
         k.notify(a, t, by=f"law:{lid}")
         return True
@@ -1019,9 +1022,9 @@ def scope_api(k, lid, api: dict) -> dict:
 
     def repeal(target):
         t = str(target)
-        hit = [x for x in rec["laws"] if x == t or k.w["laws"][x]["title"].lower() == t.lower()]
+        hit = [x for x in live()["laws"] if x == t or k.w["laws"][x]["title"].lower() == t.lower()]
         for x in hit:
-            _retire(k, rec, x)
+            _retire(k, live(), x)
         return bool(hit)
     out["repeal"] = repeal
 
@@ -1043,8 +1046,8 @@ def scope_api(k, lid, api: dict) -> dict:
             if k.w["currencies"][full].get("reserve") != tk:
                 raise L.LawError(f"{full} already exists")
             return full
-        if sum(1 for c in k.w["currencies"].values() if c.get("reserve") == tk) >= max_own(k, rec):
-            raise L.LawError(f"a contract may issue at most {max_own(k, rec)} currencies")
+        if sum(1 for c in k.w["currencies"].values() if c.get("reserve") == tk) >= max_own(k, live()):
+            raise L.LawError(f"a contract may issue at most {max_own(k, live())} currencies")
         return k.apply("create_currency", name=full, backed=bool(backed), reserve=tk, lid=lid).result["currency"]
     out["create_currency"] = create_currency
 
@@ -1072,15 +1075,15 @@ def scope_api(k, lid, api: dict) -> dict:
     def create_right(name):
         full = own_name(cid, name)
         if full not in k.w["rights"]:
-            if sum(1 for r in k.w["rights"] if r.startswith(cid + SEP)) >= max_own(k, rec):
-                raise L.LawError(f"a contract may create at most {max_own(k, rec)} rights")
+            if sum(1 for r in k.w["rights"] if r.startswith(cid + SEP)) >= max_own(k, live()):
+                raise L.LawError(f"a contract may create at most {max_own(k, live())} rights")
             k.apply("create_right", right=full)
         return full
     out["create_right"] = create_right
 
     def grant(aid, right):
         r = own(right, "right")
-        if aid not in rec["members"]:
+        if aid not in live()["members"]:
             return refuse("grant", aid)                                 # its rights go to its members only
         return bool(api["grant"](aid, r)) if "grant" in api else False
     out["grant"] = grant
@@ -1094,15 +1097,15 @@ def scope_api(k, lid, api: dict) -> dict:
         """An office of this contract: action "<cid>.<name>", usable by members holding its right (no law level: P4.5)."""
         r, act = own(right, "right"), own_name(cid, name)
         mine = [n for n, v in k.w["actions"].items() if isinstance(v, dict) and n.startswith(cid + SEP) and n != act]
-        if len(mine) >= max_own(k, rec):
-            raise L.LawError(f"a contract may define at most {max_own(k, rec)} offices")
+        if len(mine) >= max_own(k, live()):
+            raise L.LawError(f"a contract may define at most {max_own(k, live())} offices")
         k.apply("define_action", law=lid, action=act, right=r, key=k._reg(lid, fn))
         return act
     out["define_action"] = define_action
 
     out["laws"] = lambda: [{"id": x, "title": k.w["laws"][x]["title"], "class": k.w["laws"][x]["cls"],
-                            "author": k.w["laws"][x]["author"]} for x in rec["laws"] if k.w["laws"][x]["status"] == "active"]
-    out["reserve"] = lambda: dict(rec["reserve"])
+                            "author": k.w["laws"][x]["author"]} for x in live()["laws"] if k.w["laws"][x]["status"] == "active"]
+    out["reserve"] = lambda: dict(live()["reserve"])
     out["balance"] = lambda o, item: k.bal(tk if o in ("treasury", "reserve") else o, item)
     return out
 

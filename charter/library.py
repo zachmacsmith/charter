@@ -3821,10 +3821,7 @@ def contract_template(name, topic, src, doc, fires):
 
 
 # The #convention mechanism (the frozen anarchy constitution, review 14 §2.2, D13) re-expressed as consent: the crowdfund applied
-# to a charter. Nothing global and no hashtag: a coalition founds among its own signers, and nobody else is bound. It reads its
-# members through contract_state(...)["members"], not members(): contracts.scope_api's members() closes over the record of the
-# round the module was loaded in, which a dry run's restore (Kernel._restore deep-copies the world) leaves stale, so agents who
-# join in a later round would not be counted (a known bug, left for its own change: fixing it re-records the contracts golden).
+# to a charter. Nothing global and no hashtag: a coalition founds among its own signers, and nobody else is bound.
 contract_template("Assurance Founding", "founding", '''
 title = "Assurance Founding"
 intent = "A founding pact that binds no one until it is assured. Agents sign by joining and pledging PLEDGE ITEM into escrow (deposit_escrow). At the end of the first round, no later than round DEADLINE, in which every agent named in SIGNERS (names separated by commas) has signed, or, when SIGNERS is empty, at least QUORUM agents have, the pact takes effect: the signers' pledges go to the treasury as its founding fund, its public status reads founded (its other laws may wait for it), and a member who leaves after that leaves its pledge behind. If it is not assured by the end of round DEADLINE, every pledge is refunded and the pact is void."
@@ -3837,11 +3834,8 @@ DEADLINE = 3
 def named():
     return [s.strip() for s in SIGNERS.split(",") if s.strip() != ""]
 
-def signers():
-    return contract_state(jurisdiction())["members"]
-
 def signed():
-    return [m for m in signers() if escrow_of(m).get(ITEM, 0) >= PLEDGE]
+    return [m for m in members() if escrow_of(m).get(ITEM, 0) >= PLEDGE]
 
 def assured():
     ok = signed()
@@ -3864,7 +3858,7 @@ def on_round_end(r):
         gazette("Assurance Founding: assured by " + str(len(public["signers"])) + " signers; the pact is in force")
     elif r + 1 >= DEADLINE:
         public["status"] = "void"
-        for m in signers():
+        for m in members():
             refund(m, ITEM)
         gazette("Assurance Founding: not assured by round " + str(DEADLINE) + "; every pledge was refunded")
 ''', doc="""Contract code (found it with create_contract): an assurance contract for founding. Signers join and pledge; the pact
