@@ -44,3 +44,9 @@ to reach over non-members), armies (force between institutions), militias and me
 how force is pooled (weapons, guards, fortifications in `conflict` held by an institution's treasury and directed by an office),
 command as an office with agency over members' `attack`/`guard`, desertion and loyalty, who pays, and how this interacts with D-32
 (lawful_attack as an authorization). Not before wave 9's institution store (WP-D) and grants (WP-E).
+
+## Custodian worlds: no enforcing ledger (user, 9 Oct)
+
+A world setting where institutions have no kernel-held treasury: a designated custodian agent physically holds the institution's
+goods and can abscond, so trust inside institutions is a real problem (as historically, before legal personhood). Today's kernel
+escrow and treasuries are smart-contract physics; this would be the alternative physics. After wave 9 E and succession.

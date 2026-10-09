@@ -422,6 +422,22 @@ agents still found nothing new, that changes the priority of D through G.
 - **D3, D4, D5, D6, D7, D9, D10, D12, D13:** as recommended. **D8** (institutions as members) postponed: largest package, nothing
   in the runs needs it yet.
 
+
+### 7.2 Continuity and succession (user, 9 Oct; replaces WP-F dormancy)
+
+- Institutions do not die with their founder. A death, exit or term end creates a **vacancy** event the institution's code can
+  hook; offices declare a **succession rule** in the institution's code (designation, hereditary, election by members, co-optation,
+  seniority, lot, none; library clauses, asked at founding and shown in the listing). Terms and removal (recall, impeachment) use
+  the same vacancy path. The Board's `name_successor` becomes a seeded designation rule (byte-identical).
+- Contracts end when no party is left. Contract code may declare what a party's death does (end, pass to estate, pass to heirs).
+- When the institution's code is silent, the **enclosing polity's law** decides (nearest ancestor first): default-code Acts
+  (Succession Act for vacancies; Dissolution and Escheat Act for assets, variants escheat / family / members). Each polity law
+  declares itself **mandatory** (applies regardless) or **overridable** (applies only where the institution declared nothing).
+- With no governing polity (state of nature): vacancies stay vacant (a succession crisis is a legitimate outcome). Assets of an
+  institution whose code can no longer act: **locked** in spaceless worlds (smart-contract physics: lost keys); in worlds with space
+  (review 17) they become abandoned goods at their location, claimable under the conflict rules. Passing to estates exists only as
+  a polity law, never as a kernel default.
+
 ---
 
 ## 8. Honest limits
