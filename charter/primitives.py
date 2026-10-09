@@ -806,6 +806,17 @@ _ROWS = [
       sites=("subsistence:change_spoil", "subsistence:_spoil"),
       why={"gate": _PHYS, "event": "aggregated in the monitor-only subsistence_round record"},
       notes="every account holding food loses subsistence.spoil of it each round (a store: store_spoil)"),
+    # review 15 S2: fields. Physics records the sower; who may sow which plot and reap which crop is law (the residual: liberty).
+    P("sow", "subsistence", "destroy", ("agent", "camp", "plot", "qty"), "camptypes.fields:change_sow", routed=True, subject="agent",
+      parties=("agent",), agent_params=("agent",), event="sow", causes=("agent",), reads=("plots", "food_of"),
+      sites=("camptypes.fields:change_sow", "camptypes.fields:act"),
+      why={"compel": _LNA, "gate": "law.v2: before_sow gates it (who may sow which plot: land law, review 15 U1)"},
+      notes="the seed (qty food, 1..seed_max) leaves the sower for good; the plot grows a crop recorded as the sower's"),
+    P("reap", "subsistence", "create", ("agent", "camp", "plot", "qty"), "camptypes.fields:change_reap", routed=True, subject="agent",
+      parties=("agent",), agent_params=("agent",), event="reap", causes=("agent",), reads=("plots",),
+      sites=("camptypes.fields:change_reap", "camptypes.fields:act"),
+      why={"compel": _LNA, "gate": "law.v2: before_reap gates it (a Tillers' Right refuses a non-sower: review 15 U1, S6)"},
+      notes="the crop becomes the reaper's food; the sower learns who reaped it (natural perception, E)"),
 ]
 
 # ---------------------------------------------------------------------- actions -> primitives
@@ -879,11 +890,13 @@ ACTION_PRIMITIVES = {
     # directories
     "dir_list": LOOKUP, "dir_read": LOOKUP, "dir_search": LOOKUP, "dir_write": ("dir_write",), "dir_edit": ("dir_write",),
     "dir_move": ("dir_write",), "dir_delete": ("dir_write",), "dir_grant": ("dir_grant",),
+    # subsistence (review 15): farm sows or reaps (its first primitive depends on its arguments: ANY_FIRST)
+    "farm": ("sow", "reap"),
 }
 
 # Actions whose first primitive depends on their arguments (any primitive they list may be the one the action is "for": a block of
 # it refuses the action, dispatch.routing._refusable).
-ANY_FIRST = frozenset({"send"})
+ANY_FIRST = frozenset({"send", "farm"})
 
 # Law functions that write but cause no primitive (outputs), with why. Every other writing LawFn names its primitive.
 LAW_OUTPUTS = {
@@ -930,7 +943,8 @@ TIER_OF = {
           "set_succession_rule", "set_project_rule", "set_power_rule", "loan_terms", "loan_assign", "create_clause",
           "start_project",
           "dir_write", "dir_grant",                                    # directories
-          "set_channel"),                                              # wave 9 C (channels.v2)
+          "set_channel",                                               # wave 9 C (channels.v2)
+          "sow", "reap"),                                              # review 15 S2: who may sow or reap a plot is law (U1)
     "L-route": (),
 }
 

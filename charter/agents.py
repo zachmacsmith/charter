@@ -374,6 +374,7 @@ def legacy_actions(inst: dict, a: dict) -> list:
     if not FT.on("contracts", inst):                                    # contracts (P4.3): their actions only when on
         absent |= {n for n, x in AR.REG.items() if x.module == "contracts"}
     absent |= {n for n, x in AR.REG.items() if x.module == "directories"}   # directories: core-prompt worlds only (context on)
+    absent |= {n for n, x in AR.REG.items() if x.module == "subsistence"}   # review 15: the legacy prompt never sees subsistence (D-4)
     absent |= AR.hidden(sp)                                             # review 14 A: the design arm's flags (read_library unless asked)
     absent |= AR.channel_hidden(sp)                                     # wave 9 C: channels.v2's verbs only where it is on
     out = [k for k in ACTION_DOC if k not in absent] + {

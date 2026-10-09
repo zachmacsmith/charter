@@ -584,6 +584,8 @@ def resolve(spec: dict) -> dict:
             out["contracts"] = True
         if (spec.get("channels") or {}).get("v2"):                      # wave 9 C: set_channel is listed only where it exists
             out["channels"] = True
+        if (spec.get("subsistence") or {}).get("enabled"):              # review 15: eat, hunger, spoil, sow, reap, build only there
+            out["subsistence"] = True
     return out
 
 
@@ -607,7 +609,7 @@ def v2_doc(spec: dict, original: str) -> str:
     return original + ("\n" + V2_PROMPT if (spec.get("law") or {}).get("v2") else "")
 
 
-def v2_article(contracts: bool = False, channels: bool = False) -> dict:
+def v2_article(contracts: bool = False, channels: bool = False, subsistence: bool = False) -> dict:
     """codex/law/v2-hooks: every hookable change (the routed primitives), its payload, and what a before-verdict can do to it."""
     from charter import dispatch as D, primitives as PR
     lines = ["# Hooks on any change (law.v2)", "", V2_PROMPT, "", V2_LIMITS, "",
@@ -623,6 +625,8 @@ def v2_article(contracts: bool = False, channels: bool = False) -> dict:
         if P.feature == "directories":                                  # hookable, but listed in the directories' manual entry
             continue
         if n == "set_channel" and not channels:                         # wave 9 C: only where channels.v2 is on
+            continue
+        if P.feature == "subsistence" and not subsistence:              # review 15: only where subsistence is on
             continue
         hooks = [h for h in P.hooks]
         if not hooks:
@@ -681,5 +685,6 @@ def articles(resolved: dict) -> dict:
             body += ["", "These work in any law, whether or not the rules you were given mention them."]
             out[aid] = {"tier": tier, "title": title, "text": "\n".join(body) + "\n", "documents": names}
     if resolved.get("v2"):
-        out["codex/law/v2-hooks"] = v2_article(resolved.get("contracts", False), resolved.get("channels", False))
+        out["codex/law/v2-hooks"] = v2_article(resolved.get("contracts", False), resolved.get("channels", False),
+                                               resolved.get("subsistence", False))
     return out

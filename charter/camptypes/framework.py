@@ -271,6 +271,8 @@ def can_take_part(k, aid, cid) -> bool:
         v = k.w["agents"][aid]
         if v["cls"] in NO_CAMPS or v.get("departed") is not None:
             return False
+        if c.get("role") == "subsistence":                              # review 15 §2.8: food camps ignore typed.open_classes
+            return True
         oc = open_classes(k.spec)
         return oc is None or bool(({v["cls"]} | set(v.get("also") or ())) & set(oc))
     return k.has(aid, f"harvest:{cid}")
@@ -303,6 +305,8 @@ def harvest_action(k, aid, cid, x, extra=None) -> str:
     c = k.w["camps"][cid]
     T = get(c["type"])
     extra = dict(extra or {})
+    if hasattr(T, "act"):                                                                 # review 15: subsistence camps (forest:
+        return view(k, cid).act(k, aid, x, extra)                                         # forage or fell; fields: farm instead)
     bad = sorted(set(extra) - set(getattr(T, "extra_args", ())))                       # camps-b: non-dial args
     if bad:
         ok = ", ".join(("x",) * bool(c["dials"]) + tuple(getattr(T, "extra_args", ())))
@@ -656,6 +660,8 @@ def scripted_actions(k, aid) -> list:
             out.append({"action": "accept_lease", "args_json": json.dumps({"lease": x["id"]})})
             break
     for cid in open_camps(k, aid):
+        if k.w["camps"][cid].get("role") == "subsistence":              # review 15: the food bot plays these (subsistence.py)
+            continue
         if r.random() < 0.6:
             c = k.w["camps"][cid]
             T = get(c["type"])

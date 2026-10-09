@@ -193,7 +193,7 @@ def ledger_run(preset, seed=1, rounds=3, sets=()):
     return t0, AC.totals(k, held=True), flows
 
 
-@pytest.mark.parametrize("preset", ["society", "jurisdictions_pilot", "life_pilot", "E4"])
+@pytest.mark.parametrize("preset", ["society", "jurisdictions_pilot", "life_pilot", "E4", "nature_subsistence"])   # review 15: food
 def test_totals_are_conserved_except_at_sources_and_sinks(preset):
     t0, t1, flows = ledger_run(preset)
     explicit = SS | {"events.arrival", "escrow.destroyed", "projects.spent"}

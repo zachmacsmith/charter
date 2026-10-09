@@ -57,7 +57,8 @@ FUND = "fund:"                                                    # P4.4: a per-
 SOURCES_SINKS = {
     "mint": ("economy.do_mint", "jurisdictions.mint", "interventions._mint",
              "conflict.install", "conflict.start_round", "conflict.resolve_attacks"),   # coins; starting arms; forts back to stone
-    "harvest": ("economy.do_harvest", "framework.pay_yield"),                           # yields (camp stock is not an account)
+    "harvest": ("economy.do_harvest", "framework.pay_yield",                            # yields (camp stock is not an account)
+                "fields.change_reap"),                                                    # review 15 S2: a reaped crop
     "burn": ("economy.do_burn", "interventions._burn"),
     "destroy": ("economy.do_destroy", "actions._harvest", "framework.harvest_action", "resources.pay",
                 "resources.upkeep_start_round", "conflict._take", "conflict._spoils", "conflict.act_forge",
@@ -66,6 +67,7 @@ SOURCES_SINKS = {
                 "conflict._release_pledge"),        # P2.4a: stone into and out of forts, forging, weapons committed/pledged/returned
     "eat": ("subsistence.change_eat",),                                 # review 15 S1: the ration (food eaten)
     "spoil": ("subsistence.change_spoil",),                             # review 15 S1: food spoiling in every account
+    "sow": ("fields.change_sow",),                                      # review 15 S2: seed sown (the crop is a claim, not goods)
 }
 
 

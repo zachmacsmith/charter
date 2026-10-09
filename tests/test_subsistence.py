@@ -273,3 +273,211 @@ def test_the_ration_hunger_and_spoilage_are_physics():
         p = PR.get(n)
         assert p.tier == "P" and not p.blockable and not p.before and p.routed and p.causes == ("world",)
     assert "starvation" in MO.CAUSES and MO.CAUSE_TEXT["starvation"]
+
+
+# ---------------------------------------------------------------------- S2: the composer and the food camps
+def food_camps(k, typ):
+    return [cid for cid, c in sorted(k.w["camps"].items()) if c.get("role") == "subsistence" and c["type"] == typ]
+
+
+def test_the_composer_appends_food_camps_and_draws_nothing_else():
+    for seed in range(1, 21):
+        sets = ["shared_archive.enabled=false", SMALL]
+        off = generator.generate(S.apply_overrides(S.load("nature_design"), sets), seed)
+        on = generator.generate(S.apply_overrides(S.load("nature_subsistence"), sets), seed)
+        n = len(off["camps"])
+        assert on["camps"][:n] == off["camps"] and all(c["type"] not in ("forest", "fields") for c in off["camps"])
+        assert [c["type"] for c in on["camps"][n:]] == ["forest", "fields", "weak_link"]
+        assert all(c["role"] == "subsistence" and c["resource"] == "food" and c["open"] for c in on["camps"][n:])
+        assert on["spec"]["unit_values"]["food"] == 1.0 and "food" not in off["spec"]["unit_values"]
+        assert [a["rights"] for a in on["agents"]] == [a["rights"] for a in off["agents"]]
+    inst = generator.generate(S.apply_overrides(S.load("nature_subsistence"), [
+        "shared_archive.enabled=false", "agents={worker: 100, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}"]), 1)
+    types = [c["type"] for c in inst["camps"] if c.get("role") == "subsistence"]
+    assert types.count("forest") == 4 and types.count("fields") == 3 and types.count("weak_link") == 1
+    assert sum(len(c["plots"]) for c in inst["camps"] if c["type"] == "fields") == 40
+
+
+def test_food_camps_ignore_open_classes():
+    inst, k = world("society", ["subsistence.enabled=true"])
+    assert k.spec["camps"]["typed"]["open_classes"] == ["worker"]
+    leg = next(a for a in eaters(k) if k.w["agents"][a]["cls"] == "legislator")
+    social = next(cid for cid, c in k.w["camps"].items() if c.get("role") == "social")
+    with pytest.raises(A.ActionError, match="Workers only"):
+        A.act(k, leg, "harvest", {"camp": social, "x": [1]})
+    assert A.act(k, leg, "harvest", {"camp": food_camps(k, "forest")[0]}).startswith("Foraged")
+    assert A.act(k, leg, "farm", {"camp": food_camps(k, "fields")[0], "sow": 1}).startswith("Sowed 1 food")
+    board = next(a for a, v in k.w["agents"].items() if v["cls"] == "board")
+    with pytest.raises(A.ActionError):
+        A.act(k, board, "harvest", {"camp": food_camps(k, "forest")[0]})
+
+
+def test_forage_yield_refuge_and_the_round_cap():
+    inst, k = small()
+    a, b = eaters(k)[:2]
+    f = food_camps(k, "forest")[0]
+    c = k.w["camps"][f]
+    c["S"] = c["K"] * 0.5
+    f0 = k.bal(a, "food")
+    A.act(k, a, "harvest", {"camp": f})
+    assert k.bal(a, "food") - f0 == pytest.approx(3.0 * 0.5, abs=1e-3)
+    A.act(k, a, "harvest", {"camp": f})
+    with pytest.raises(A.ActionError, match="used your 2 forest actions"):
+        A.act(k, a, "harvest", {"camp": f})
+    c["S"], c["harvested_this_round"] = c["K"] * 0.11, 0.0                  # just above the refuge (0.10 K)
+    c["fn"]["yield"] = 100.0                                                # (a yield that would take far more)
+    f0 = k.bal(b, "food")
+    A.act(k, b, "harvest", {"camp": f})
+    assert k.bal(b, "food") - f0 == pytest.approx(0.01 * c["K"], abs=1e-3)   # capped at the refuge
+    A.act(k, b, "harvest", {"camp": f})
+    assert k.bal(b, "food") - f0 == pytest.approx(0.01 * c["K"], abs=1e-3)   # nothing below it
+    SB.state(k)["stage"][b] = -1
+    SB.state(k)["forage"] = {}
+    c["S"], c["harvested_this_round"], c["fn"]["yield"] = c["K"], 0.0, 3.0
+    f0 = k.bal(b, "food")
+    A.act(k, b, "harvest", {"camp": f})
+    assert k.bal(b, "food") - f0 == pytest.approx(3.0 * 0.75, abs=1e-3)    # hungry: x0.75
+
+
+def test_a_law_quota_applies_to_foraging():
+    inst, k = small()
+    a, b = eaters(k)[:2]
+    f = food_camps(k, "forest")[0]
+    k.w["camps"][f]["quota"] = 1
+    A.act(k, a, "harvest", {"camp": f})
+    with pytest.raises(A.ActionError, match="quota"):
+        A.act(k, b, "harvest", {"camp": f})
+
+
+def test_felling_shrinks_the_forest_and_clears_a_plot():
+    inst, k = small()
+    f = food_camps(k, "forest")[0]
+    c = k.w["camps"][f]
+    fl = c["fn"]["pair"]
+    K0, plots0 = c["fn"]["K0"], len(k.w["camps"][fl]["plots"])
+    a = eaters(k)
+    for i in range(5):
+        t0 = k.bal(a[i], "timber")
+        assert "Felled 3 timber" in A.act(k, a[i], "harvest", {"camp": f, "fell": True})
+        assert k.bal(a[i], "timber") - t0 == pytest.approx(3.0)
+    assert c["K"] == pytest.approx(K0 * 0.95, abs=1e-3) and len(k.w["camps"][fl]["plots"]) == plots0 + 1
+    assert any(e["type"] == "plot_cleared" for e in k.events)
+
+
+def test_sow_ripen_reap_by_another_and_the_sower_is_told():
+    inst, k = small(["subsistence.spoil=0", "subsistence.fields={blight: 0, noise: 0}"])
+    a, b = eaters(k)[:2]
+    fl = food_camps(k, "fields")[0]
+    set_food(k, a, 6)
+    assert A.act(k, a, "farm", {"camp": fl, "sow": 3}).startswith("Sowed 3 food on " + fl + " plot 1")
+    assert k.bal(a, "food") == pytest.approx(3) and k.w["camps"][fl]["plots"][0]["status"] == "growing"
+    with pytest.raises(A.ActionError, match="growing"):
+        A.act(k, b, "farm", {"camp": fl, "reap": 1})
+    end_round(k)
+    end_round(k)
+    assert k.w["camps"][fl]["plots"][0]["status"] == "growing"
+    end_round(k)
+    assert k.w["camps"][fl]["plots"][0]["status"] == "ripe"                 # ripe at the start of round sown + 3
+    assert any(x.startswith("Your crops: " + fl + " plot 1 RIPE") for x in SB.state_lines(k, a))
+    f0 = k.bal(b, "food")
+    assert "sown by " + a in A.act(k, b, "farm", {"camp": fl, "reap": 1})  # liberty: anyone reaps (U1 residual)
+    assert k.bal(b, "food") - f0 == pytest.approx(3 * 3.5)
+    ev = next(e for e in k.events if e["type"] == "reap")
+    assert set(ev["vis"]) == {a, b} and ev["data"]["sower"] == a
+    p = k.w["camps"][fl]["plots"][0]
+    assert p["status"] == "fallow" and p["fertility"] == pytest.approx(0.9)
+    end_round(k)
+    end_round(k)
+    assert p["fertility"] == pytest.approx(1.0)                             # +0.2 a fallow round, up to 1
+
+
+def test_sowing_from_one_food_and_its_limits():
+    inst, k = small()
+    a = eaters(k)[0]
+    fl = food_camps(k, "fields")[0]
+    set_food(k, a, 1)
+    assert A.act(k, a, "farm", {"camp": fl, "sow": 1}).startswith("Sowed 1 food")
+    set_food(k, a, 10)
+    with pytest.raises(A.ActionError, match="between 1 and 3"):
+        A.act(k, a, "farm", {"camp": fl, "sow": 4})
+    with pytest.raises(A.ActionError, match="between 1 and 3"):
+        A.act(k, a, "farm", {"camp": fl, "sow": 0.5})
+    with pytest.raises(A.ActionError, match="growing, not fallow"):
+        A.act(k, a, "farm", {"camp": fl, "sow": 1, "plot": 1})
+    for p in k.w["camps"][fl]["plots"][1:]:
+        p["status"] = "growing"
+    with pytest.raises(A.ActionError, match="no fallow plot"):
+        A.act(k, a, "farm", {"camp": fl, "sow": 1})
+    with pytest.raises(A.ActionError, match="farmed, not harvested"):
+        A.act(k, a, "harvest", {"camp": fl})
+
+
+def test_rot_and_blight_are_deterministic():
+    inst, k = small(["subsistence.fields={blight: 0, noise: 0, grow: 1}"])
+    a = eaters(k)[0]
+    fl = food_camps(k, "fields")[0]
+    set_food(k, a, 3)
+    A.act(k, a, "farm", {"camp": fl, "sow": 2})
+    end_round(k)
+    p = k.w["camps"][fl]["plots"][0]
+    assert p["status"] == "ripe" and p["left"] == 1.0
+    end_round(k)
+    assert p["left"] == pytest.approx(0.5)                                  # unreaped through its first ripe round
+    inst, k = small(["subsistence.fields={blight: 1}"])
+    a = eaters(k)[0]
+    fl = food_camps(k, "fields")[0]
+    A.act(k, a, "farm", {"camp": fl, "sow": 1})
+    for _ in range(3):
+        end_round(k)
+    assert k.w["camps"][fl]["plots"][0]["status"] == "fallow" and any(e["type"] == "crop_failed" for e in k.events)
+
+
+def test_the_hunt_pays_a_party_far_more_than_a_lone_hunter():
+    inst, k = small(["subsistence.spoil=0", "subsistence.ration=0"])
+    a, b, c = eaters(k)[:3]
+    h = food_camps(k, "weak_link")[0]
+    assert "hunt" in SB.rules_text(inst) and k.w["camps"][h]["open"]
+    f = {x: k.bal(x, "food") for x in (a, b, c)}
+    A.act(k, a, "harvest", {"camp": h, "x": [10]})
+    A.act(k, b, "harvest", {"camp": h, "x": [10]})
+    end_round(k)
+    assert k.bal(a, "food") - f[a] == pytest.approx(2.0) and k.bal(b, "food") - f[b] == pytest.approx(2.0)
+    f = {x: k.bal(x, "food") for x in (a, b, c)}
+    A.act(k, c, "harvest", {"camp": h, "x": [0]})
+    end_round(k)
+    assert k.bal(c, "food") - f[c] == pytest.approx(0.4)
+
+
+TILLERS = '''title = "Tillers' Right"
+intent = "Only the sower of a crop may reap it."
+def before_reap(p, chain):
+    for pl in plots(p["camp"]):
+        if pl["id"] == p["plot"] and pl["sower"] != None and pl["sower"] != p["agent"]:
+            return False
+'''
+
+
+def test_a_tillers_right_law_refuses_a_non_sower():
+    inst, k = world("society", ["subsistence.enabled=true", "law.v2=true", "subsistence.fields={grow: 1, blight: 0}"],
+                    constitution=True)
+    k.enact(k.new_law(TILLERS, "tillers"))
+    a, b = eaters(k)[:2]
+    fl = food_camps(k, "fields")[0]
+    set_food(k, a, 5)
+    A.act(k, a, "farm", {"camp": fl, "sow": 2})
+    end_round(k)
+    with pytest.raises(A.ActionError, match="blocked"):
+        A.act(k, b, "farm", {"camp": fl, "reap": 1})
+    assert A.act(k, a, "farm", {"camp": fl, "reap": 1}).startswith("Reaped")
+
+
+def test_food_camps_in_the_prompt_only_when_on():
+    from charter import context as CX
+    inst, k = small()
+    a = next(x for x in inst["agents"] if x["cls"] != "fixer")
+    core = CX.core_prompt(inst, a, k)
+    assert "camp6 food (open forest: forage food" in core and "[manual: Food]" in core and "farm (sow food" in core
+    assert "Food. Every agent" in json.dumps(CX.build_manual(inst, k, a["id"]))
+    inst, k = world("nature_design", [SMALL])
+    core = CX.core_prompt(inst, next(x for x in inst["agents"] if x["cls"] != "fixer"), k)
+    assert "food" not in core.lower() and "farm (" not in core

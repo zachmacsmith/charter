@@ -505,7 +505,86 @@ def fields_camps(k) -> list:
 
 
 def crop_line(k, aid) -> str:
-    return ""
+    """The agent's own crops (S2): where, how fertile, when ripe."""
+    mine = []
+    for cid in fields_camps(k):
+        for p in k.w["camps"][cid].get("plots") or []:
+            if p.get("sower") == aid and p["status"] in ("growing", "ripe"):
+                mine.append(f"{cid} plot {p['id']} " + (f"RIPE (reap it: it rots if left)" if p["status"] == "ripe"
+                                                        else f"ripe in round {p['ripe'] + 1}") + f", fertility {p['fertility']:.2f}")
+    return ("Your crops: " + "; ".join(mine) + ".") if mine else ""
+
+
+# ---------------------------------------------------------------------- the composer (S2: generator, after the standard camps)
+def compose_camps(sp, seed, agents, start: int) -> list:
+    """The food camps appended after the standard set (own stream "{seed}|subsistence|camps"): ceil(N/30) forests, ceil(N/40)
+    fields with plots_per_agent x N plots between them, and one hunt (weak_link with food, open, one shift). N: the agents who eat.
+    Sets food's unit value. Returns the camp dicts (ids camp<start+1>, ...); nothing when off."""
+    if not enabled(sp):
+        return []
+    from charter.camptypes import framework as CT, get, modifiers as M
+    c = cfg(sp)
+    rng = random.Random(f"{seed}|subsistence|camps")
+    sp["unit_values"] = {**sp["unit_values"], FOOD: float(sp["unit_values"].get(FOOD, 1.0))}
+    n = max(1, sum(1 for a in agents if a["cls"] not in c["exempt"]))
+    fo, fi = c["forest"], c["fields"]
+    nf = max(1, math.ceil(n / float(fo["per_agent"])))
+    nl = max(1, math.ceil(n / float(fi["per_agent"])))
+    ids = iter(f"camp{start + i + 1}" for i in range(nf + nl + 1))
+    forests = [next(ids) for _ in range(nf)]
+    fields = [next(ids) for _ in range(nl)]
+    total = max(1, round(float(fi["plots_per_agent"]) * n))
+    out = []
+
+    def base(cid, typ, K, S, r):
+        camp = {"id": cid, "type": typ, "role": "subsistence", "tier": 0, "resource": FOOD, "fn": {"family": typ}, "dials": 0,
+                "max": 0, "K": round(float(K), 4), "S": round(float(S), 4), "r": round(float(r), 4), "sigma": 0.0,
+                "max_yield": 0.0, "y_ref": 0.0, "history": [], "harvested_this_round": 0.0, "quota": None, "harvest_limit": None,
+                "fee": None, "consumes": {}, "norm": 1.0, "open": True, "pending": {}, "round_log": [],
+                "stats": {"yield": 0.0, "value": 0.0, "actions": 0, "rounds": 0}}
+        camp["mods"] = M.build({"visibility": "sealed", "disclosure": "totals"}, camp, rng, False)
+        return camp
+
+    for i, cid in enumerate(forests):
+        K = float(fo["capacity_per_agent"]) * n / nf
+        camp = base(cid, "forest", K, float(fo["start_stock"]) * K, fo["regrowth"])
+        camp["max_yield"] = float(fo["yield"])
+        camp["fn"].update({"K0": round(K, 4), "yield": float(fo["yield"]), "refuge": float(fo["refuge"]),
+                           "per_round": int(fo["forage_per_round"]), "fell_timber": float(fo["fell_timber"]),
+                           "fell_cost_k": float(fo["fell_cost_k"]), "fell_floor": float(fo["fell_floor"]),
+                           "clearing": int(fo["clearing"]), "pair": fields[i % nl], "fells": 0, "cleared": 0})
+        out.append(camp)
+    from charter.camptypes import fields as FL
+    for j, cid in enumerate(fields):
+        camp = base(cid, "fields", 1.0, 1.0, 0.0)
+        camp["fn"].update({x: fi[x] for x in ("seed_max", "grow", "mult", "noise", "fertility_loss", "fertility_gain",
+                                              "fertility_floor", "blight", "rot")})
+        camp["fn"]["plots_max"] = max(total, round(float(fi["plots_max_per_agent"]) * n))
+        camp["plots"] = [FL.new_plot(p + 1) for p in range(total // nl + (1 if j < total % nl else 0))]
+        out.append(camp)
+    if c["hunt"].get("enabled", True):
+        hid = next(ids)
+        tcfg = CT.config(sp)
+        tcfg = {**tcfg, "types": {**tcfg["types"], "weak_link": {**(tcfg["types"].get("weak_link") or {}), "shifts": 1}}}
+        camp = CT._build(sp, tcfg, {"id": hid, "type": "weak_link", "role": "subsistence", "resource": FOOD, "holders": 0}, rng, n)
+        T = get("weak_link")
+        camp["y_ref"] = round(float(c["hunt"]["party_food"]) / (0.25 * 10) * T.value_target, 6)   # PER_LEVEL x full effort -> party_food
+        camp["open"], camp["fn"]["hunt"] = True, True
+        out.append(camp)
+    return out
+
+
+def camp_short(c) -> str:
+    """The core prompt's few words on a food camp (context.overview)."""
+    return {"forest": "open forest: forage food (no x), or fell for timber",
+            "fields": "open plots: farm to sow food and reap it rounds later",
+            "weak_link": "the hunt: open; sealed effort, a party catches far more"}.get(c.get("type"), "")
+
+
+def act_farm(k, aid, camp, sow=None, reap=None, plot=None):
+    """The farm action (S2): sow or reap at a fields camp (charter/camptypes/fields.py)."""
+    from charter.camptypes import fields as FL
+    return FL.act(k, aid, camp, sow=sow, reap=reap, plot=plot)
 
 
 def stores_of(k, aid) -> list:
@@ -518,10 +597,57 @@ def store_line(k, aid) -> str:
 
 # ---------------------------------------------------------------------- the scripted bot (dry runs; own stream)
 def scripted_actions(k, aid, n) -> list:
-    """Eating is automatic; the `eat` bot does nothing else."""
+    """The scripted food bot (dry runs, own stream "{seed}|subsistence-bot|<aid>|<round>"). Eating is automatic; bot `eat` does
+    nothing else. Bot `basic`: reap its own ripe crops, sow a fallow plot when it holds food to spare, forage when short, join
+    the hunt, share a meal with a starving or hungry agent when it has plenty, and (stores) build one when it holds the materials,
+    keep its surplus there and take food out before a missed meal. Not a model of behaviour; S7 adds the calibration policies."""
     if not on(k) or exempt(k, aid):
         return []
-    return []
+    c = cfg(k.spec)
+    if c["bot"] != "basic":
+        return []
+    r = random.Random(f"{k.inst['seed']}|subsistence-bot|{aid}|{k.r}")
+    act = lambda name, **a: {"action": name, "args_json": json.dumps(a)}
+    out = []
+    f = food(k, aid)
+    fi = c["fields"]
+    for cid in fields_camps(k):                                          # reap own ripe crops first
+        for p in k.w["camps"][cid].get("plots") or []:
+            if p["status"] == "ripe" and p.get("sower") == aid:
+                out.append(act("farm", camp=cid, reap=p["id"]))
+    mine = stores_of(k, aid)
+    if f < float(c["ration"]) and mine and float(mine[0]["holdings"].get(FOOD, 0)) >= 1:
+        out.append(act("withdraw", store=mine[0]["id"], qty=round(min(3.0, float(mine[0]["holdings"][FOOD])), 3)))
+    growing = sum(1 for cid in fields_camps(k) for p in k.w["camps"][cid].get("plots") or [] if p.get("sower") == aid)
+    fallow = [(cid, p["id"]) for cid in fields_camps(k) for p in k.w["camps"][cid].get("plots") or [] if p["status"] == "fallow"]
+    if fallow and growing < 2 and f >= 3 and r.random() < 0.8:
+        cid = fallow[r.randrange(len(fallow))][0]                        # (no plot named: the lowest fallow one when it runs)
+        out.append(act("farm", camp=cid, sow=round(min(float(fi["seed_max"]), f - 2), 1)))
+    forests = sorted(forest_camps(k), key=lambda x: -k.w["camps"][x]["S"] / k.w["camps"][x]["K"])
+    if forests and (f < 4 or stage(k, aid) < 0):
+        out += [act("harvest", camp=forests[0])] * (2 if f < 2 else 1)
+    elif forests and r.random() < 0.15 and not mine and k.bal(aid, "timber") < float(c["store"]["cost"].get("timber", 0)):
+        out.append(act("harvest", camp=forests[0], fell=True))
+    hunts = [cid for cid, x in sorted(k.w["camps"].items()) if x.get("role") == "subsistence" and x.get("type") == "weak_link"]
+    if hunts and r.random() < 0.5:
+        out.append(act("harvest", camp=hunts[0], x=[10], shift=1))
+    if f > 8:
+        needy = [a for a in eaters(k) if a != aid and food(k, a) < 1 and stage(k, a) < 0]
+        if needy:
+            out.append(act("transfer", to=r.choice(needy), item=FOOD, qty=1))
+    if _exists("build") and not mine and stage(k, aid) == 0 and all(
+            k.bal(aid, i) + 1e-9 >= float(q) for i, q in c["store"]["cost"].items()):
+        out.append(act("build", kind="store"))
+    elif mine and f > 7:
+        room = float(mine[0]["capacity"]) - float(mine[0]["holdings"].get(FOOD, 0))
+        if room > 1:
+            out.append(act("transfer", to=f"{STORE}{mine[0]['id']}", item=FOOD, qty=round(min(room, f - 5), 3)))
+    return out[:max(1, int(n))]
+
+
+def _exists(name) -> bool:
+    from charter import action_registry as AR
+    return name in AR.REG
 
 
 # ---------------------------------------------------------------------- the manual

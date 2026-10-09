@@ -898,7 +898,11 @@ def overview(inst) -> str:
     from charter import facts as _FX
     has = lambda cls: any(x["cls"] == cls for x in inst["agents"])
     _short = {t: v.replace("open to all but the Board and Fixer", _CTF.open_text(inst["spec"])) for t, v in CAMP_SHORT.items()}
-    camps = "; ".join(f"{c['id']} {c['resource']}" + (f" ({_short.get(c.get('type'), 'dials and a hidden rule')}; {harvest_args(c)})"
+    def _food(c):                                                      # review 15: the food camps (subsistence on only)
+        from charter import subsistence as _SB
+        return f"{c['id']} {c['resource']} ({_SB.camp_short(c)})"
+    camps = "; ".join(_food(c) if c.get("role") == "subsistence" else
+                      f"{c['id']} {c['resource']}" + (f" ({_short.get(c.get('type'), 'dials and a hidden rule')}; {harvest_args(c)})"
                                                       if c.get("type") else f" (tier {c.get('tier')}: dials and a hidden rule)")
                       for c in inst["camps"])
     lines = [f"Charter: {len(inst['agents'])} agents, {inst['rounds']} rounds. Your score is your goal (below), measured after the game "
@@ -913,6 +917,9 @@ def overview(inst) -> str:
              ("Turns: everyone decides at once, then actions run in a shown order. " if sp.get("turns") == "simultaneous" else
               "Turns: agents act one at a time in a shown order. ")
              + "Talk: post (public), dm (private, a few per round, delivered first and answerable within the round). [manual: Private messages]"]
+    if on("subsistence"):                                               # review 15 (off: no word), after the camps: never clipped first
+        from charter import subsistence as _SB
+        lines.insert(2, "Food: " + _SB.overview_line(inst) + ".")
     mods = []
     if on("conflict"):
         mods.append("agents can disable each other (attack with weapons forged from copper; forts of stone; guards): irreversible and "
@@ -935,9 +942,6 @@ def overview(inst) -> str:
         mods.append("projects are funded together and pay only if they reach their threshold [manual: Projects and tribute]")
     if on("outside_power"):
         mods.append("an outside power demands tribute and raids if unpaid [manual: Projects and tribute]")
-    if on("subsistence"):                                               # review 15 (off: no word)
-        from charter import subsistence as _SB
-        mods.append(_SB.overview_line(inst))
     if mods:
         lines.append("Also: " + "; ".join(mods) + ".")
     return "\n".join(lines)

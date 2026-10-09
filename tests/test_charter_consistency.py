@@ -83,6 +83,7 @@ def test_unknown_action_error_lists_actions_in_the_old_order():
     hidden = set(A.CONTEXT_ACTIONS) | set(A.MEDIA_ACTIONS) | set(A.LAW_V2_ACTIONS) | set(A.CONTRACT_ACTIONS) | set(DR.ACTIONS)   # E6: context, media2, law.v2, contracts, directories off
     hidden |= AR.hidden(k.spec)                                         # review 14 A: read_library exists only on request
     hidden |= AR.channel_hidden(k.spec)                                 # wave 9 C: channels.v2's verbs exist only where it is on
+    hidden |= set(A.SUBSISTENCE_ACTIONS)                                # review 15: farm, build, withdraw only with subsistence on
     assert str(e.value) == "unknown action 'no_such_action'. Actions: " + ", ".join(x for x in A.ACTIONS if x not in hidden)
 
 

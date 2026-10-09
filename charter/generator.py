@@ -474,6 +474,12 @@ def generate(spec: dict, seed: int, check: bool = True) -> dict:
         inst["code"] = code_rec
     from charter import events as _events                                  # hidden world-event schedule (no-op unless events.enabled)
     inst = _events.attach_schedule(validate(inst, rng))
+    from charter import subsistence as _SB                            # review 15: the food camps, appended last (own stream; so every
+    food_camps = _SB.compose_camps(sp, seed, agents, len(inst["camps"]))   # other draw is the subsistence-off world's; off: none)
+    if food_camps:
+        inst["camps"] = inst["camps"] + food_camps
+        inst["camptypes"]["composition"] += [{"id": c["id"], "type": c["type"], "role": c["role"], "resource": c["resource"]}
+                                             for c in food_camps]
     inst["spec_source"] = source                                     # resume regenerates from this (inst["spec"] would draw differently)
     return inst
 

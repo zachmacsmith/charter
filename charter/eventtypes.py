@@ -506,6 +506,11 @@ E("hunger", "subsistence", "summary", "public|parties", "event", "subsistence", 
   note="a hunger stage change: public (coarse) by default (review 15 U2 b), to the agent only with subsistence.visibility private")
 E("subsistence_round", "subsistence", "record", "monitor", "silent", None, primitive="eat",
   note="the round's ration: meals eaten and missed, starvation deaths, food spoiled and held, agents by stage")
+E("sow", "subsistence", "primitive", "parties", "event", "subsistence", act="farm", primitive="sow")
+E("reap", "subsistence", "primitive", "parties", "event", "subsistence", act="farm", primitive="reap",
+  note="to the reaper and the crop's sower (the sower learns who reaped it: natural perception)")
+E("crop_failed", "subsistence", "summary", "parties", "event", "subsistence", note="blight or rot, told to the sower")
+E("plot_cleared", "subsistence", "summary", "public", "event", "subsistence", note="felling cleared a new plot on a fields camp")
 E("store_owner", "subsistence", "summary", "public", "event", "subsistence",
   note="a dead agent's store passes to its heir (living children, a co-parent, else its polity)")
 

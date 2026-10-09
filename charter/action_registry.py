@@ -430,6 +430,11 @@ R("harvest", "produce resources at a camp", "PRODUCE", core=True, needs=("notcls
   edge=("harvest:*",),
   handler="actions:_harvest", module="core", category="productive", emits=("harvest", "factored", "camp_submit", "camp_input"), aliases={"values": "x", "settings": "x"},
   doc='harvest {"camp": "camp1", "x": [dial values]}: query a camp you hold harvest:<camp> for; you receive the yield')
+R("farm", "sow food on open fields, reap it rounds later", "PRODUCE", core=True, needs=("mod:subsistence", "notcls:board", "notcls:fixer"),
+  handler="subsistence:act_farm", module="subsistence", category="productive", emits=("sow", "reap"),
+  aliases={"field": "camp", "fields": "camp", "seed": "sow", "qty": "sow", "amount": "sow", "harvest": "reap"},
+  doc='farm {"camp": "camp8", "sow": 2, "plot": null}: sow that much of your food (1 or more) on a fallow plot of an open fields '
+      'camp (the seed is used up); farm {"camp": "camp8", "reap": 4}: reap a ripe crop (about 3.5x its seed, less on tired soil)')
 # right:maker agrees with life.is_maker (the role): the right is carried by the role and no law can grant, revoke or suspend it
 R("create_agent", "make a new agent (Makers): to order, or your own", "PRODUCE", core=True, needs=("mod:life", "right:maker"),
   handler="life:create_agent", module="life", category="productive", emits=("maker_created",),
@@ -847,7 +852,7 @@ CORE_SURFACE = (
     "dm", "reply", "post", "transfer",                                  # talk and trade
     "manual", "manual_search", "recent", "read_law", "preview_law", "legal_position", "read_library", "read_file",   # look-ups
     "write_scratchpad", "write_file",                                   # memory
-    "harvest",                                                          # produce
+    "harvest", "farm",                                                  # produce (farm: where subsistence is on)
     "propose", "amend", "vote", "invoke",                               # law; invoke: offices a law or contract defines
     "create_contract", "join_contract", "leave_contract", "propose_contract_change", "deposit_escrow", "set_allowance",   # institutions
     "attack", "forge", "fortify",                                       # force (where conflict is on)
@@ -924,7 +929,8 @@ ACTIONS_ORDER = (
     "authorize", "revoke_authorization", "act_for", "standing_order",    # P4.5
     "dir_list", "dir_read", "dir_search", "dir_write", "dir_edit", "dir_move", "dir_delete", "dir_grant",   # directories
     "read_library",                                                     # review 14 A
-    "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")   # wave 9 C (channels.v2)
+    "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel",   # wave 9 C (channels.v2)
+    "farm")                                                             # review 15 (subsistence)
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -942,7 +948,8 @@ DOC_ORDER = (
     "authorize", "revoke_authorization", "act_for", "standing_order",    # P4.5
     "dir_list", "dir_read", "dir_search", "dir_write", "dir_edit", "dir_move", "dir_delete", "dir_grant",   # directories
     "read_library",                                                     # review 14 A
-    "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")   # wave 9 C (channels.v2)
+    "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel",   # wave 9 C (channels.v2)
+    "farm")                                                             # review 15 (subsistence)
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 
