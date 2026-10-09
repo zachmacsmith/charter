@@ -71,8 +71,8 @@ def _by(rows, run_id):
 # ------------------------------------------------------------------ schema
 def test_every_table_has_the_documented_columns_and_types(ds):
     out, man, data = ds
-    assert set(man["tables"]) == set(X.SCHEMA) == set(data)
-    for t, cols in X.SCHEMA.items():
+    assert set(man["tables"]) == set(X.SCHEMA) - set(X.OPTIONAL) == set(data)
+    for t, cols in ((t, c) for t, c in X.SCHEMA.items() if t not in X.OPTIONAL):
         names = [c.name for c in cols]
         assert len(set(names)) == len(names) and all(c.type in X.TYPES for c in cols), t
         assert man["tables"][t]["columns"] == [[c.name, c.type] for c in cols]
@@ -233,7 +233,7 @@ def test_two_runs_concatenate(runs, tmp_path, ds):
     for k, d in runs.items():
         X.export([d], tmp_path / k, fmt="csv")
         single[k] = X.load(tmp_path / k)
-    for t in X.SCHEMA:
+    for t in both:
         assert both[t] == single["soc"][t] + single["e0"][t] + single["fork"][t], t
 
 
@@ -258,7 +258,7 @@ def test_works_without_pyarrow(runs, tmp_path, monkeypatch):
     monkeypatch.setattr(M, "load_env", lambda: None)
     M.main(["export", str(runs["e0"]), "--out", str(tmp_path / "x")])     # the CLI, default format
     man = json.loads((tmp_path / "x" / "manifest.json").read_text())
-    assert man["format"] == "csv" and all((tmp_path / "x" / f"{t}.csv").exists() for t in X.SCHEMA)
+    assert man["format"] == "csv" and all((tmp_path / "x" / f"{t}.csv").exists() for t in X.SCHEMA if t not in X.OPTIONAL)
     with pytest.raises(RuntimeError):
         X.export([runs["e0"]], tmp_path / "y", fmt="parquet")
 

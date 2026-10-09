@@ -2,30 +2,36 @@
 
 `charter/export.py` (ARCHITECTURE P5.5; docs/review/04 §4.7; charter/docs/architecture_review.md §3.4) turns run directories
 into a tidy, versioned, cross-run dataset: long-format tables, one row per run / agent / agent-round / event / model call / law /
-law version / intervention / score, every row stamped with `run_id`.
+law version / intervention / score / message / channel / turn / snapshot leaf / directory file / event type, every row stamped
+with `run_id`. `docs/data_format.md` is the published contract (what the site reader codes against); this page holds the
+generated column tables and wins where the two differ.
 
 ```
-python -m charter export RUN [RUN...] --out DIR [--format parquet|csv] [--running-scores]
+python -m charter export RUN [RUN...] --out DIR [--format parquet|csv] [--running-scores] [--root DIR] [--with-prompts]
 ```
 
 - `RUN` is a run directory, or a directory holding run directories (a fork's `rep1..repK`, `charter/out/<spec>/`), searched for
   them. Several runs are concatenated; a `run_id` that occurs twice (two forks' `rep1`) gets a `~<hash of its path>` suffix.
 - Format: parquet when `pyarrow` is importable, else CSV (pyarrow is not a dependency). `--format parquet` without pyarrow is an
   error.
-- `DIR/manifest.json`: `schema_version`, `format`, the runs exported (`run_id`, `run_dir`), the exporting code (its commit sha and
-  a sha of export.py), and per table its file, row count and `[column, type]` list. Parquet files also carry `schema_version` and
-  `table` in their file metadata.
+- `DIR/manifest.json`: `schema_version`, `schema_minor`, `format`, the runs exported (`run_id`, `run_dir`), the exporting code (its
+  commit sha and a sha of export.py), and per table its file, row count and `[column, type]` list. Parquet files also carry
+  `schema_version`, `schema_minor` and `table` in their file metadata. A table with no rows is still written.
 - Reading back: `charter.export.load(DIR)` gives `{table: [row dicts]}` with each column of its type in either format;
   `charter.export.frames(DIR)` gives pandas DataFrames with nullable dtypes (pandas required).
-- CSV cells: empty = null, booleans `true`/`false`, `json` columns hold compact JSON text (sorted keys) in both formats.
+- CSV cells: empty = null (an empty string is exported as null in both formats), booleans `true`/`false`, `json` columns hold
+  compact JSON text (sorted keys) in both formats.
 - Exporting only reads the run directory. Scores come from `score.json` when present; otherwise `scorer.goal_scores` is run in
   memory (no lineage override, no files written) and `score_source` says `computed`.
+- Python: `export.export(runs, out, fmt=None, running_scores=False, log=None, *, root=None, with_prompts=False)`.
 
 Conventions:
 
 - **Rounds are 0-based** everywhere (as in events.jsonl and snapshots.json; score.json segments, which are 1-based, are converted).
 - **`inherited`**: rows of a fork or rewind that belong to the prefix copied or replayed from the parent (round < `fork_round`),
   so cross-run aggregates over a parent and its branches do not count them twice.
+- **No absolute paths**: `run_dir` and `parent_run` (and the paths inside `segments_json`, `lineage_json`, `spec_json`,
+  `summary_json`) are relative to `--root` / `root=` when the path lies under it, else the path's last two parts (`<spec>/<run>`).
 - **Cause columns** (`events`): `cause_json` is the event's chain exactly as logged (outermost frame first; it round-trips to
   `events.jsonl`); the rest flatten it: the root frame (the first frame after round/phase: turn, world, kernel, intervention,
   action or law; `phase` when the chain holds nothing else), the innermost frame, and the innermost frame of each kind (turn agent
@@ -34,13 +40,37 @@ Conventions:
 - **Running scores** (`--running-scores`, off by default because it rescores the run once per round): the agent's final goal scored
   on `History.window(first round, r)`; null for agents whose scoring is split into segments.
 - Each table's schema is `export.SCHEMA` (the single source; the section below is generated from it by `export.schema_markdown()`
-  and a test checks it is current). Bump `SCHEMA_VERSION` when a column is added, removed, or changes meaning or type.
+  and a test checks it is current). Bump `SCHEMA_VERSION` when a column is removed or renamed or changes meaning or type, and
+  `SCHEMA_MINOR` when a column or table is added (reset it to 0 with a major bump).
+- **Raw log format**: `run.json` `log_format` (provenance.LOG_FORMAT; absent = 0). The exporter reads every format ever written;
+  `tests/fixtures/export_runs/log_format_<n>` holds a frozen run of each and `tests/test_export_v2.py` exports them. Bump
+  LOG_FORMAT when the runner's files change shape, and add a frozen fixture of the new format.
+
+Schema 2 (this version) = schema 1 + `runs.schema_minor`, `runs.log_format`, portable `run_dir` / `parent_run` (the meaning change
+that bumps the major), and the tables below `scores`:
+
+- **`messages`**: the events of every type the registry (charter/eventtypes.py) gives kind `communication` or flags `messages`,
+  one row each, sorted by `channel_id, seq` within a run. `channel_id` grammar: `dm:<a>|<b>` (a message two agents saw),
+  `group:<a>|<b>|...` (3+), `ch:<id>` (a kernel channel, vis `channel:<id>`), `public`, `outlet:<outlet id>` (editions, placement
+  offers, polls, subscribers-only annotations), `submissions:<outlet>` (leaks and poll answers to an outlet's editor; media2
+  submissions, which go to every editor, use `submissions:press`), `gazette:<jurisdiction>` (`main` when none or "all"),
+  `system:<type>` (notices: notify, world_event, contract_notice, channel_created, post_hidden, ...). The few types whose channel
+  kind and visibility do not decide are listed in `export.CHANNEL_OF`.
+- **`channels`** / **`channel_members`**: one row per channel_id, and membership spells of kernel channels (from
+  channel_created / channel_member / channel_closed; a name reused after a close keeps its channel_id) and of dm/group channels.
+- **`turns`**: reasoning.jsonl rows (every phase: decide, dm_reply_<n>, editorial, the observer's steps), else turns.jsonl (phase
+  `decide`, positions from the `turn` events). `blobs` (with `--with-prompts`) holds each distinct prompt once.
+- **`state`**: every snapshots.json round flattened to leaves; a new snapshot key becomes new `key` values, never columns.
+- **`documents`**: directory stores (charter/directories.py): `base` from directories/base.json, `file` from state.json's last
+  write-back, `record` from records-<store>.md. Run-scoped stores are not on disk and are not exported.
+- **`event_types`**: the registry as the exporting code has it, with each type's count in the run (unregistered types seen in
+  the log get a row with only `n_events`).
 
 Not yet exported: `state_deltas` (per-round snapshot diffs) and `observer_assessments` from review 04 / §3.4.
 
 ## Tables
 
-Dataset schema version **1**. Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
+Dataset schema version **2.0** (`schema_version` 2, `schema_minor` 0). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
 
 ### `runs`
 
@@ -48,7 +78,9 @@ Dataset schema version **1**. Types: `str`, `int`, `float`, `bool`, `json` (JSON
 |---|---|---|
 | `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
 | `schema_version` | int | dataset schema version (SCHEMA_VERSION of charter/export.py) |
-| `run_dir` | str | the run directory as exported (absolute path) |
+| `schema_minor` | int | additive schema changes since the major version (SCHEMA_MINOR) |
+| `log_format` | int | raw log format of the run directory (run.json log_format; absent = 0) |
+| `run_dir` | str | the run directory, portable: relative to export(root=) when given, else its last two parts (<spec>/<run>) |
 | `spec_sha` | str | sha of the resolved spec (run.json) |
 | `instance_sha` | str | sha of instance.json (run.json) |
 | `seed` | int | the world seed |
@@ -73,10 +105,10 @@ Dataset schema version **1**. Types: `str`, `int`, `float`, `bool`, `json` (JSON
 | `n_segments` | int | segments in run.json (start, resume, rewind, fork) |
 | `segment_kinds` | str | the segments' kinds joined by '>' (e.g. start>fork>resume) |
 | `code_changed` | bool | some segment ran under code whose module hashes differ from the previous segment's |
-| `segments_json` | json | run.json segments without the per-module hashes (kind, first_round, git, code versions, changed_modules, status) |
+| `segments_json` | json | run.json segments without argv (kind, first_round, git, code versions, changed_modules, status); paths made portable |
 | `kind` | str | how the run began: run, fork or rewind |
 | `parent_run_id` | str | run_id of the parent of a fork or rewind |
-| `parent_run` | str | the parent's directory as recorded |
+| `parent_run` | str | the parent's directory, made portable like run_dir |
 | `fork_round` | int | first round played anew by a fork or rewind (rounds before it are inherited) |
 | `checkpoint_round` | int | the parent checkpoint the branch was restored from |
 | `branch` | str | branch name (the fork directory's name) |
@@ -85,7 +117,7 @@ Dataset schema version **1**. Types: `str`, `int`, `float`, `bool`, `json` (JSON
 | `replay_mode` | str | how the parent's calls before the fork point were replayed (strict, prompt-match, none) |
 | `intervention_set_sha` | str | sha of the fork's intervention schedule |
 | `intervention_ids_json` | json | ids of the interventions applied in this run (interventions.jsonl) |
-| `lineage_json` | json | ancestors' parent records, oldest first (run.json lineage + parent) |
+| `lineage_json` | json | ancestors' parent records, oldest first (run.json lineage + parent); paths made portable |
 | `lineage_depth` | int | number of ancestors |
 | `n_agents` | int | agents ever in play (founders, arrivals, births) |
 | `constitution` | str | the constitution drawn |
@@ -320,3 +352,138 @@ Dataset schema version **1**. Types: `str`, `int`, `float`, `bool`, `json` (JSON
 | `lineage_score` | float | total rows: lineage score (life) |
 | `params_json` | json | goal parameters |
 | `score_source` | str | score.json or computed |
+
+### `messages`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `msg_id` | str | the event id (joins events.event_id, which holds the cause chain) |
+| `seq` | int | position in the event log (total order within the run) |
+| `round` | int | round (0-based) |
+| `inherited` | bool | the row belongs to the prefix a fork or rewind copied from its parent (round < fork_round) |
+| `type` | str | event type (dm, post, channel_post, edition, gazette, notify, ...) |
+| `channel_id` | str | the conversation it belongs to: dm:<a>/<b>, group:<a>/<b>/..., ch:<id>, public, outlet:<outlet>, submissions:<outlet>, gazette:<jurisdiction>, system:<type> |
+| `channel_kind` | str | dm, group, channel, public, outlet, submissions, gazette, system |
+| `sender` | str | the agent who wrote it (the true author, also of anonymous posts); null for system notices |
+| `anonymous` | bool | published without the author's name (anon_post, an anonymous submission) |
+| `audience` | str | the event's visibility class: public, parties, channel, monitor |
+| `recipients_json` | json | the agents who could see it (sorted list; a closed kernel channel's members at the time); null when public or an open channel |
+| `n_recipients` | int | length of recipients_json; null when it is null |
+| `title` | str | title, when the type has one (a story's headline, a poll's question) |
+| `text` | str | the message text (data.text; a leak's shown text, a poll answer's choice) |
+| `encrypted` | bool | DM sent encrypted |
+| `reply_to` | str | msg_id it replies to, when given |
+| `data_json` | json | the full event payload |
+
+### `channels`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `channel_id` | str | as in messages |
+| `channel_kind` | str | as in messages |
+| `channel_source` | str | kernel (created in the world by an agent or a law) or derived (a grouping by the exporter) |
+| `name` | str | display name: the kernel channel's id, the outlet's name, the participants (dm/group), the jurisdiction, the notice type |
+| `owner` | str | owning agent, when the world records one (kernel channels: the creator) |
+| `open` | bool | anyone may post and read (kernel channels) |
+| `created_round` | int | kernel: round created; derived: round of the first message |
+| `closed_round` | int | kernel: round closed (null if open at the end of the run) |
+| `first_round` | int | round of the first message |
+| `last_round` | int | round of the last message |
+| `n_messages` | int | messages in the channel |
+| `n_senders` | int | distinct senders |
+| `members_json` | json | members at the end of the run (kernel: [] once closed; dm/group: the participants); null for public, outlet, submissions, gazette and system channels |
+
+### `channel_members`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `channel_id` | str | kernel or dm/group channel |
+| `agent` | str | agent id |
+| `role` | str | owner or member |
+| `from_round` | int | round the spell began (kernel: creation or admission; dm/group: first message) |
+| `to_round` | int | last round of the spell (removal or close); null = to the end of the run |
+| `source` | str | kernel or derived |
+
+### `turns`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `round` | int | round (0-based) |
+| `agent` | str | agent id (or observer) |
+| `inherited` | bool | the row belongs to the prefix a fork or rewind copied from its parent (round < fork_round) |
+| `position` | int | the agent's position in the round's turn order |
+| `phase` | str | the phase the turn ran in (decide, dm_reply_<n>, editorial, step, ...) |
+| `mode` | str | the policy mode (sequential, simultaneous, ...) |
+| `model` | str | model id |
+| `reasoning` | str | the model's private reasoning, when the backend returns it |
+| `stated_reasoning` | str | the reasoning the agent wrote in its reply |
+| `notes` | str | notes the agent kept for itself |
+| `actions_json` | json | actions requested |
+| `results_json` | json | results returned |
+| `n_actions` | int | actions requested |
+| `n_failed` | int | results that are errors ('<action>: ERROR ...') |
+| `prompt_sha` | str | sha of the turn's prompt (16 hex digits; joins blobs.blob_sha) |
+| `prompt_chars` | int | prompt length (system + user) as recorded |
+| `tokens_in` | int | input tokens (usage.input) |
+| `tokens_out` | int | output tokens (usage.output) |
+| `error` | str | turn-level error, if any |
+
+### `blobs`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `blob_sha` | str | sha of the text (16 hex digits) |
+| `kind` | str | prompt |
+| `chars` | int | length of the text |
+| `text` | str | the text |
+
+### `state`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `round` | int | round (0-based) |
+| `inherited` | bool | the row belongs to the prefix a fork or rewind copied from its parent (round < fork_round) |
+| `key` | str | top-level snapshot key (values, holdings, stocks, prices, contracts, franchise_share, ...) |
+| `entity` | str | the first-level id under the key when it is a dict keyed by ids; null for world-level values |
+| `entity_kind` | str | agent, camp, contract, currency, law, polity, channel, loan, project, lease, store, or null |
+| `path` | str | dotted path below the entity (or below the key when entity is null); null when the value is itself the leaf |
+| `value` | float | numeric leaf (bools as 0/1) |
+| `value_json` | json | non-numeric leaf (strings, lists) |
+
+### `documents`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `namespace` | str | the directory namespace |
+| `store` | str | the store (directory) within it |
+| `path` | str | path within the store |
+| `kind` | str | base (the store at run start), record (the run's digest, _records/<run_id>.md), file (the store at the run's last write-back) |
+| `author` | str | the agent whose action last wrote it in this run (from the turns' results), or runner for records |
+| `round` | int | round of that write |
+| `chars` | int | length of the text |
+| `sha` | str | blob sha (sha256 of the text) |
+| `text` | str | the text |
+
+### `event_types`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `type` | str | event type (charter/eventtypes.py; types in the log the registry does not know have only n_events) |
+| `module` | str | the module that logs it |
+| `kind` | str | communication, primitive, legal_act, output, summary, truth, record |
+| `vis_json` | json | the visibility classes call sites may use |
+| `natural` | str | natural audience (publication layer) |
+| `feed` | str | feed priority class |
+| `act` | str | the agent action that logs it |
+| `primitive` | str | the primitive whose change logs it |
+| `is_message` | bool | included in messages |
+| `aliases_json` | json | older names |
+| `n_events` | int | events of this type in the run (old names counted under today's) |

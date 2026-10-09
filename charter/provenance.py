@@ -1,8 +1,8 @@
 """Run provenance: what code, interpreter, backend and inputs produced a run directory, and every model call made in it.
 
 Writes to the run directory:
-  run.json            provenance at the start of the run (git sha, dirty flag + sha of `git diff HEAD`, python, policy/backend/models,
-                      llm config without secrets, dry flag, spec and instance sha, seed, a `code` block with a sha per charter module
+  run.json            provenance at the start of the run (`log_format`: the raw format version, LOG_FORMAT; git sha, dirty
+                      flag + sha of `git diff HEAD`, python, policy/backend/models, llm config without secrets, dry flag, spec and instance sha, seed, a `code` block with a sha per charter module
                       and the explicit state-schema / law-API / scoring versions) and `segments`: one record per start or resume
                       (rewind and fork: replay.py) with its first round, the code it ran under and the modules whose hash changed since the
                       previous segment. A resume under different code is recorded here, never hidden.
@@ -44,6 +44,9 @@ APPEND_ONLY = ("events.jsonl", "reasoning.jsonl", "observer.jsonl", "calls.jsonl
                "archive_overlay.jsonl", "sandbox.jsonl")                # P5.4: this run's shared-archive writes; sandbox calls
 KEEP_CUT = {"calls.jsonl": "abandoned_calls.jsonl"}                     # cut bytes of these files are moved, not deleted
 SECRET = re.compile(r"key|token|secret|password|credential|auth", re.I)
+# The raw log format (run.json `log_format`): bump it when what the runner writes into a run directory changes shape, and keep
+# charter/export.py able to read every format ever written (docs/data_format.md). 0: before the field existed; 1: export schema 2.
+LOG_FORMAT = 1
 
 
 def sha(text) -> str:
@@ -238,7 +241,8 @@ def begin(out, inst: dict, policy, kind: str, first_round: int, dry: bool | None
         seg["instance"] = instance_source
     if prev is None:
         spec = inst.get("spec") or {}
-        data = {"run_id": inst.get("run_id") or out.name, "created": seg["started"], "seed": inst.get("seed"),
+        data = {"run_id": inst.get("run_id") or out.name, "created": seg["started"], "log_format": LOG_FORMAT,
+                "seed": inst.get("seed"),
                 "spec_sha": sha(json.dumps(spec, sort_keys=True, default=str)),
                 "instance_sha": sha(json.dumps(inst, sort_keys=True, default=str)),
                 **pol, "git": git, **env, "code": code, "parent": None, "replicate": None, "segments": []}

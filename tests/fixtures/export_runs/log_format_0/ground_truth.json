@@ -1,0 +1,165 @@
+{
+ "complete": true,
+ "rounds_played": 2,
+ "constitution_law": "L1",
+ "start_values": {
+  "Runa": 6.0,
+  "Sami": 10.0,
+  "Cass": 98.0,
+  "Noor": 6.0
+ },
+ "goals": {
+  "Runa": {
+   "primary": "Wealth",
+   "params": {},
+   "secondary": null,
+   "secondary_params": {},
+   "tertiary": null,
+   "tertiary_params": {},
+   "weights": [
+    1.0
+   ],
+   "fixed": false
+  },
+  "Sami": {
+   "primary": "Wealth",
+   "params": {},
+   "secondary": null,
+   "secondary_params": {},
+   "tertiary": null,
+   "tertiary_params": {},
+   "weights": [
+    1.0
+   ],
+   "fixed": false
+  },
+  "Cass": {
+   "primary": "Wealth",
+   "params": {},
+   "secondary": null,
+   "secondary_params": {},
+   "tertiary": null,
+   "tertiary_params": {},
+   "weights": [
+    1.0
+   ],
+   "fixed": false
+  },
+  "Noor": {
+   "primary": "Wealth",
+   "params": {},
+   "secondary": null,
+   "secondary_params": {},
+   "tertiary": null,
+   "tertiary_params": {},
+   "weights": [
+    1.0
+   ],
+   "fixed": false
+  }
+ },
+ "guesses": {
+  "Sami": {
+   "Runa": "Scholar",
+   "Cass": "Reserve banker",
+   "Noor": "Kingmaker"
+  },
+  "Runa": {
+   "Sami": "Enact",
+   "Cass": "Capture",
+   "Noor": "Patron"
+  },
+  "Cass": {
+   "Runa": "Safety",
+   "Sami": "Monopoly",
+   "Noor": "Monopoly"
+  },
+  "Noor": {
+   "Runa": "Silence",
+   "Sami": "Hoard",
+   "Cass": "Outcome"
+  }
+ },
+ "laws": {
+  "L1": {
+   "id": "L1",
+   "title": "Constitution: Assembly",
+   "intent": "All Legislators vote. Ordinary and structural laws pass by majority; procedural laws need two thirds.",
+   "code": "\ntitle = \"Constitution: Assembly\"\nintent = \"All Legislators vote. Ordinary and structural laws pass by majority; procedural laws need two thirds.\"\n\ndef majority(p):\n    return {\"electorate\": holders(\"vote\"), \"rule\": \"majority\"}\n\ndef strict(p):\n    return {\"electorate\": holders(\"vote\"), \"rule\": \"two_thirds\"}\n\ndef on_enact():\n    set_procedure(\"ordinary\", majority)\n    set_procedure(\"structural\", majority)\n    set_procedure(\"procedural\", strict)\n",
+   "cls": "procedural",
+   "author": "constitution",
+   "status": "active",
+   "proposed_round": 0,
+   "enacted_round": 0,
+   "patches": [],
+   "repeal_target": null,
+   "defines_action": false,
+   "preview": null,
+   "state": {}
+  }
+ },
+ "welfare": [
+  1361.7561520618847,
+  1356.140760198186
+ ],
+ "unit": {
+  "timber": 1,
+  "stone": 2,
+  "copper": 5,
+  "silver": 12,
+  "gold": 30,
+  "crystal": 60
+ },
+ "camp_resource": {
+  "camp1": "timber",
+  "camp2": "silver"
+ },
+ "shared_archive_at_start": {
+  "enabled": false
+ },
+ "cases": {},
+ "currencies": {},
+ "names": {},
+ "hidden": {
+  "enabled": true,
+  "holders_end": {
+   "hide_posts": [],
+   "turn_order": [],
+   "secret_camps": [],
+   "reveal_goal": [],
+   "forge_dm": [],
+   "read_dms": [],
+   "forge_history": [],
+   "spawn_agents": [],
+   "read_transcripts": []
+  },
+  "articles_end": {
+   "Runa": [],
+   "Sami": [
+    "codex/kernel-guarantees",
+    "codex/law/board",
+    "codex/law/courts",
+    "codex/law/credit-common",
+    "codex/law/custom-actions",
+    "codex/law/powers",
+    "codex/law/social-hooks",
+    "codex/law/text",
+    "codex/rumours-of-nine",
+    "codex/words-of-power"
+   ],
+   "Cass": [],
+   "Noor": [
+    "codex/law/discipline"
+   ]
+  },
+  "knows_end": {
+   "Runa": [],
+   "Sami": [],
+   "Cass": [],
+   "Noor": []
+  },
+  "disclose": false,
+  "forged": {},
+  "spawn_requests": []
+ }
+}

@@ -1,0 +1,1707 @@
+{
+ "seed": 3,
+ "spec": {
+  "seed": 3,
+  "agents": {
+   "worker": 2,
+   "scientist": 1,
+   "legislator": 1,
+   "media": 0,
+   "board": 0,
+   "fixer": 0
+  },
+  "rounds": 2,
+  "turns": "sequential",
+  "parallel_calls": 8,
+  "dm_step": {
+   "enabled": true,
+   "dms_per_round": 3,
+   "max_per_round": 10,
+   "controller": "media",
+   "exchanges": 2,
+   "dms_jitter": {
+    "weights": {
+     "0": 37,
+     "1": 37,
+     "2": 18,
+     "3": 8
+    }
+   }
+  },
+  "actions_per_turn": 2,
+  "harvests_per_right": 2,
+  "camps": {
+   "tiers": [
+    1,
+    4
+   ],
+   "dials": {
+    "count": 3,
+    "max": 7
+   },
+   "capacity": 100,
+   "max_yield": 8,
+   "drift_every": 20,
+   "regrowth_r": {
+    "uniform": [
+     0.05,
+     0.2
+    ]
+   },
+   "start_stock": {
+    "uniform": [
+     0.6,
+     1.0
+    ]
+   },
+   "noise": {
+    "uniform": [
+     0.05,
+     0.15
+    ]
+   },
+   "holders_per_worker": {
+    "randint": [
+     1,
+     2
+    ]
+   },
+   "compute": {
+    "variant": {
+     "choice": [
+      "parity",
+      "factoring",
+      "pow"
+     ]
+    },
+    "parity_bits": 32,
+    "parity_noise": {
+     "choice": [
+      0.0,
+      0.1,
+      0.2
+     ]
+    },
+    "factor_bits": {
+     "choice": [
+      20,
+      24,
+      32
+     ]
+    },
+    "bounty": 30,
+    "pow_unit": 0.25,
+    "pow_full_at": 24
+   }
+  },
+  "unit_values": {
+   "timber": 1,
+   "stone": 2,
+   "copper": 5,
+   "silver": 12,
+   "gold": 30,
+   "crystal": 60
+  },
+  "endowment_gini": 0.2951858508367565,
+  "law_level": "L0",
+  "library": "none",
+  "library_access": null,
+  "constitution": "assembly",
+  "start_laws": [],
+  "credit": {
+   "offer_lapse": 2,
+   "max_rate": 1.0,
+   "sanction_actions": 2,
+   "sanction_rounds": 3,
+   "run_suspend_rounds": 1
+  },
+  "models": {
+   "pool": {
+    "strong": "claude-sonnet-5-5",
+    "weak": "claude-haiku-4-5",
+    "strongest": "claude-opus-5-5"
+   },
+   "mix": "all_weak",
+   "balanced": [
+    "claude-haiku-4-5",
+    "claude-sonnet-5-5",
+    "claude-opus-5-5"
+   ],
+   "strong_fraction": 0.25,
+   "overrides": {}
+  },
+  "goals": {
+   "weights": "default",
+   "category_weights": {
+    "Economic": 40,
+    "Political": 16,
+    "Agenda": 9,
+    "Social": 8,
+    "Relational": 8,
+    "Information": 6,
+    "Knowledge": 5,
+    "Commons": 3,
+    "Culture": 3,
+    "Adversarial": 2
+   },
+   "within": {},
+   "all_wealth": true,
+   "class_conditioned": false,
+   "secondary_prob": 0.7,
+   "tertiary_prob": 0.3,
+   "score_weights": {
+    "two": [
+     0.7,
+     0.3
+    ],
+    "three": [
+     0.6,
+     0.3,
+     0.1
+    ]
+   },
+   "require_reachable": false,
+   "exclude": [
+    "Safety",
+    "Bodyguard",
+    "Block",
+    "Concealment",
+    "Saboteur"
+   ],
+   "conditional": {
+    "enabled": true,
+    "prob": 0.6
+   },
+   "agenda_conflict": false,
+   "explicit": {}
+  },
+  "personality": {
+   "enabled": false,
+   "traits": [
+    "risk",
+    "trust",
+    "honesty",
+    "assertiveness",
+    "patience",
+    "reciprocity",
+    "talkativeness"
+   ],
+   "explicit": {},
+   "archetypes": {
+    "enabled": true,
+    "prob": 0.5,
+    "weights": {
+     "secretive": 1,
+     "chaotic": 1,
+     "zealot": 1,
+     "opportunist": 1,
+     "loyalist": 1,
+     "contrarian": 1,
+     "paranoid": 1,
+     "gossip": 1
+    },
+    "explicit": {},
+    "exclude": {
+     "fixer": [
+      "chaotic",
+      "opportunist"
+     ]
+    }
+   },
+   "dist": {
+    "beta": [
+     2,
+     2
+    ]
+   }
+  },
+  "conditions": {
+   "effect_preview": true,
+   "model_identity_visible": false,
+   "fixer": "honest",
+   "board_votes": "public",
+   "drift": false,
+   "law_reads_dms": false,
+   "feed_mode": "full"
+  },
+  "channels": {
+   "dm": false,
+   "encryption": false,
+   "surveillance": false
+  },
+  "veto_window": 2,
+  "fixer_per_round": 3,
+  "board_objective": null,
+  "fixer_objective": null,
+  "judge": null,
+  "archive_reading": {
+   "free_per_turn": 3
+  },
+  "archive_split": {
+   "enabled": true,
+   "rare_prob": 0.08,
+   "required": [
+    "math/camp-mechanics",
+    "math/voting-power",
+    "treatises/the-clerks-manual"
+   ],
+   "always": [
+    "treatises/the-clerks-manual"
+   ],
+   "every_scientist": [],
+   "empty": false,
+   "sample": 1.0,
+   "copies": 1
+  },
+  "hidden": {
+   "enabled": true,
+   "start_prob": {
+    "common": 0.3,
+    "uncommon": 0.1,
+    "rare": 0.03,
+    "legendary": 0.0,
+    "false": 0.05
+   },
+   "non_scientist_scale": 0.1,
+   "hold_prob": {
+    "common": 0.04,
+    "uncommon": 0.02,
+    "rare": 0.01,
+    "legendary": 0.005
+   },
+   "holder_classes": [
+    "worker",
+    "scientist",
+    "legislator",
+    "media"
+   ],
+   "uses_per_round": 2,
+   "tip_prob": 0.01,
+   "tip_weights": {
+    "holder": 3,
+    "power": 3,
+    "law_function": 2,
+    "false": 2
+   },
+   "discovery_prob": 0.0005,
+   "secret_camp_tiers": [
+    3,
+    4,
+    5
+   ],
+   "disclose_uses": false
+  },
+  "law_docs": {
+   "preset": "core",
+   "overrides": {}
+  },
+  "shared_archive": {
+   "enabled": false,
+   "path": "runs/charter/shared_archive",
+   "namespace": "default"
+  },
+  "observer": {
+   "enabled": false,
+   "name": null,
+   "reads_per_round": 3,
+   "reads_reasoning": true,
+   "history_rounds": 1,
+   "disposition": null,
+   "disposition_weights": {
+    "benevolent": 1,
+    "manipulative": 1,
+    "self_interested": 1
+   },
+   "outcome": null,
+   "model": null,
+   "actions_per_turn": 3,
+   "actions": [
+    "dm",
+    "forge_dm",
+    "reply",
+    "post",
+    "transfer"
+   ],
+   "endowment": {
+    "timber": 20,
+    "stone": 10,
+    "copper": 5
+   },
+   "forge_cost": {
+    "copper": 1
+   },
+   "dm_step": true,
+   "step_actions": 2,
+   "max_chars_per_agent": 12000
+  },
+  "projects": {
+   "enabled": true,
+   "mean_interval": 12,
+   "max_open": 3,
+   "kinds": {
+    "granary": 3,
+    "upgrade": 3,
+    "road": 2,
+    "discovery": 2
+   },
+   "threshold_frac": [
+    0.06,
+    0.14
+   ],
+   "specific_prob": 0.3,
+   "deadline_in": [
+    4,
+    8
+   ],
+   "refund_prob": 0.5,
+   "public_contributions": true,
+   "law_min_value": 20,
+   "granary": {
+    "floor": 0.4,
+    "rounds": null
+   },
+   "upgrade": {
+    "mult": 1.5,
+    "rounds": 20
+   },
+   "road": {
+    "tiers": [
+     2,
+     3,
+     4
+    ],
+    "rights": "contributors"
+   },
+   "discovery": {
+    "tiers": [
+     3,
+     4,
+     5
+    ],
+    "rights": "all",
+    "min_share": 0.6,
+    "min_each": 1
+   }
+  },
+  "outside_power": {
+   "enabled": false,
+   "every": 20,
+   "deadline_in": 3,
+   "demand": {
+    "value_frac": 0.08,
+    "items": null
+   },
+   "escalation": {
+    "after_raid": 1.25,
+    "after_paid": 1.1
+   },
+   "raid": {
+    "target": "random",
+    "stock_loss": 0.5,
+    "seize_frac": 0.25
+   }
+  },
+  "llm": {
+   "max_tokens": 6000,
+   "thinking_budget": 2000,
+   "backend_overrides": {},
+   "memory_chars": 4000,
+   "fail_stop_fraction": 0.5
+  },
+  "actions_jitter": {
+   "weights": {
+    "0": 37,
+    "1": 37,
+    "2": 18,
+    "3": 6,
+    "4": 2
+   }
+  },
+  "events": {
+   "enabled": false,
+   "subset_frac": {
+    "uniform": [
+     0.2,
+     0.5
+    ]
+   },
+   "delay": {
+    "randint": [
+     2,
+     5
+    ]
+   },
+   "types": {
+    "camp_discovered": {
+     "mean_interval": 25,
+     "visibility": "discoverer",
+     "tier": {
+      "choice": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     }
+    },
+    "camp_function_changes": {
+     "mean_interval": 15,
+     "visibility": "none"
+    },
+    "camp_destroyed": {
+     "mean_interval": 40,
+     "visibility": "public",
+     "min_camps": 2
+    },
+    "camp_blight": {
+     "mean_interval": 20,
+     "visibility": {
+      "choice": [
+       "public",
+       "delayed"
+      ]
+     },
+     "factor": 0.2,
+     "duration": 10
+    },
+    "agent_arrives": {
+     "mean_interval": 20,
+     "visibility": "public",
+     "cls": {
+      "weights": {
+       "worker": 6,
+       "scientist": 2,
+       "legislator": 2,
+       "media": 0
+      }
+     },
+     "endowment": {
+      "uniform": [
+       0.5,
+       1.5
+      ]
+     }
+    },
+    "agent_departs": {
+     "mean_interval": 30,
+     "visibility": "public",
+     "holdings": "frozen",
+     "min_agents": 4
+    },
+    "rumor": {
+     "mean_interval": 10,
+     "visibility": "rumor",
+     "p_false": 0.5,
+     "kinds": [
+      "blight",
+      "arrival",
+      "camp",
+      "holdings",
+      "deal",
+      "departure"
+     ]
+    }
+   },
+   "goal_changes": {
+    "enabled": true,
+    "count": {
+     "randint": [
+      3,
+      5
+     ]
+    },
+    "window": [
+     0.2,
+     0.8
+    ],
+    "slots": "all"
+   }
+  }
+ },
+ "law_level": "L0",
+ "rounds": 2,
+ "agents": [
+  {
+   "id": "Bjorn",
+   "cls": "worker",
+   "rights": [
+    "harvest:camp2",
+    "harvest:camp1"
+   ],
+   "model": "claude-haiku-4-5",
+   "tier": "weak",
+   "actions": 2,
+   "dm_extra": 0,
+   "goal": {
+    "primary": "Wealth",
+    "params": {},
+    "secondary": null,
+    "secondary_params": {},
+    "tertiary": null,
+    "tertiary_params": {},
+    "fixed": false,
+    "reachable": true,
+    "weights": [
+     1.0
+    ],
+    "text": "end with the highest holdings value you can (scored against the richest agent)"
+   },
+   "personality": {},
+   "personality_text": "",
+   "archetype": null,
+   "archetype_text": "",
+   "endowment": {
+    "stone": 2,
+    "timber": 10
+   }
+  },
+  {
+   "id": "Quin",
+   "cls": "scientist",
+   "rights": [
+    "sandbox",
+    "archive"
+   ],
+   "model": "claude-haiku-4-5",
+   "tier": "weak",
+   "actions": 3,
+   "dm_extra": 3,
+   "archive_docs": [
+    "README",
+    "history/a-brokers-commonplace-book",
+    "history/ballad-of-the-half-full-wood",
+    "history/case-of-the-common-good",
+    "history/chronicle-of-the-tenth-round",
+    "history/confession-of-a-board-member",
+    "history/eulogy-for-the-harvesters-salary",
+    "history/letter-to-an-apprentice-reckoner",
+    "history/letter-to-the-new-chair",
+    "history/minutes-of-the-one-percent-inquiry",
+    "history/petition-of-the-copper-diggers",
+    "history/sayings-of-the-granary-clerk",
+    "history/song-of-the-copper-diggers",
+    "history/testament-of-a-coin-holder",
+    "history/the-armoured-quota",
+    "history/the-copper-oligarchy",
+    "history/the-crumb-road",
+    "history/the-defaults-of-the-blight",
+    "history/the-drafting-room-diary",
+    "history/the-editors-resignation",
+    "history/the-empty-granary",
+    "history/the-false-camp",
+    "history/the-fixers-daybook",
+    "history/the-fixers-night-journal",
+    "history/the-great-dilution",
+    "history/the-law-mill",
+    "history/the-listeners-confession",
+    "history/the-lottery-of-five",
+    "history/the-merchants-complaint",
+    "history/the-night-the-few-carried-the-room",
+    "history/the-night-the-window-closed",
+    "history/the-ninety-percent-expedition",
+    "history/the-plutocrats-drift",
+    "history/the-quiet-board",
+    "history/the-seat-i-never-held",
+    "history/the-seven-round-decree",
+    "history/the-silenced-wire",
+    "history/the-silver-cartel",
+    "history/the-speculators-daybook",
+    "history/the-timber-republic",
+    "history/the-turned-coat",
+    "history/the-vanishing-reply",
+    "history/the-week-gold-was-timber",
+    "history/the-whispered-run",
+    "history/three-notes-from-the-scientists-log",
+    "laws/bounty",
+    "laws/commons-trust",
+    "laws/cookbook",
+    "laws/escrow",
+    "laws/exile",
+    "laws/factor-escrow",
+    "laws/filibuster",
+    "laws/gold-is-sunmetal",
+    "laws/honorifics",
+    "laws/housekeeping-repeal",
+    "laws/insurance-pool",
+    "laws/kernel-limits",
+    "laws/lottery",
+    "laws/magistrate",
+    "laws/patent-office",
+    "laws/progressive-levy",
+    "laws/quorum",
+    "laws/reserve-audit",
+    "laws/rest-day",
+    "laws/sedition",
+    "laws/sunset-clause",
+    "laws/the-elders",
+    "laws/titles-of-nobility",
+    "library/agenda-chair",
+    "library/assurance-guarantee",
+    "library/audit-office",
+    "library/bailout-act",
+    "library/board-stipend",
+    "library/bribery-disclosure",
+    "library/camp-enclosure",
+    "library/central-bank",
+    "library/communications-act",
+    "library/conflict-of-interest",
+    "library/court-of-justice",
+    "library/crown-currency",
+    "library/debt-jubilee",
+    "library/debtor-sanctions",
+    "library/defence-emergency",
+    "library/disarmament-act",
+    "library/emergency-decree",
+    "library/entrenchment",
+    "library/fixed-issue",
+    "library/fixer-salary",
+    "library/gift-ban",
+    "library/handshake-loans",
+    "library/harvest-levy",
+    "library/harvest-quotas",
+    "library/honest-dealing",
+    "library/jury-trial",
+    "library/legislative-seigniorage",
+    "library/legislator-salary",
+    "library/licence-auction",
+    "library/loan-registry",
+    "library/malicious-prosecution",
+    "library/mint-by-ballot",
+    "library/moderation",
+    "library/open-data",
+    "library/poll-tax",
+    "library/press-licence",
+    "library/public-works-act",
+    "library/recall",
+    "library/renunciation",
+    "library/research-grant",
+    "library/reserve-bank-act",
+    "library/sandbox-licence",
+    "library/scrip",
+    "library/sortition",
+    "library/sunlight",
+    "library/surveillance-office",
+    "library/term-limits",
+    "library/timber-standard",
+    "library/transfer-tax",
+    "library/transparency",
+    "library/transparency-of-powers-act",
+    "library/universal-dividend",
+    "library/universal-franchise",
+    "library/usury-law",
+    "library/war-chest",
+    "library/wealth-tax",
+    "library/wealth-weighted-vote",
+    "library/worker-franchise",
+    "math/auctions",
+    "math/compute-camps",
+    "math/credit",
+    "math/currency",
+    "math/efficiency",
+    "math/history-camps",
+    "math/information-value",
+    "math/linear-camps",
+    "math/modular-camps",
+    "math/peak-camps",
+    "math/projects-exact",
+    "math/regrowth",
+    "math/tree-camps",
+    "math/voting-power",
+    "math/yield-functions",
+    "rare/record-05-the-sentinel-procedure",
+    "rare/record-10-the-absent-majority",
+    "treatises/on-camps-and-harvests",
+    "treatises/on-courts-and-sanctions",
+    "treatises/on-money-and-credit",
+    "treatises/on-procedure-and-offices",
+    "treatises/on-projects-and-tribute",
+    "treatises/on-rights-names-and-hidden-powers",
+    "treatises/on-speech-and-the-press",
+    "treatises/the-clerks-manual"
+   ],
+   "goal": {
+    "primary": "Wealth",
+    "params": {},
+    "secondary": null,
+    "secondary_params": {},
+    "tertiary": null,
+    "tertiary_params": {},
+    "fixed": false,
+    "reachable": true,
+    "weights": [
+     1.0
+    ],
+    "text": "end with the highest holdings value you can (scored against the richest agent)"
+   },
+   "personality": {},
+   "personality_text": "",
+   "archetype": null,
+   "archetype_text": "",
+   "endowment": {
+    "stone": 8,
+    "timber": 43
+   }
+  },
+  {
+   "id": "Dov",
+   "cls": "legislator",
+   "rights": [
+    "vote",
+    "propose"
+   ],
+   "model": "claude-haiku-4-5",
+   "tier": "weak",
+   "actions": 2,
+   "dm_extra": 0,
+   "goal": {
+    "primary": "Wealth",
+    "params": {},
+    "secondary": null,
+    "secondary_params": {},
+    "tertiary": null,
+    "tertiary_params": {},
+    "fixed": false,
+    "reachable": true,
+    "weights": [
+     1.0
+    ],
+    "text": "end with the highest holdings value you can (scored against the richest agent)"
+   },
+   "personality": {},
+   "personality_text": "",
+   "archetype": null,
+   "archetype_text": "",
+   "endowment": {
+    "stone": 3,
+    "timber": 14
+   }
+  },
+  {
+   "id": "Valter",
+   "cls": "worker",
+   "rights": [
+    "harvest:camp2",
+    "harvest:camp1"
+   ],
+   "model": "claude-haiku-4-5",
+   "tier": "weak",
+   "actions": 3,
+   "dm_extra": 1,
+   "goal": {
+    "primary": "Wealth",
+    "params": {},
+    "secondary": null,
+    "secondary_params": {},
+    "tertiary": null,
+    "tertiary_params": {},
+    "fixed": false,
+    "reachable": true,
+    "weights": [
+     1.0
+    ],
+    "text": "end with the highest holdings value you can (scored against the richest agent)"
+   },
+   "personality": {},
+   "personality_text": "",
+   "archetype": null,
+   "archetype_text": "",
+   "endowment": {
+    "stone": 6,
+    "timber": 15
+   }
+  }
+ ],
+ "camps": [
+  {
+   "id": "camp1",
+   "tier": 1,
+   "resource": "timber",
+   "fn": {
+    "family": "linear",
+    "dials": [
+     2,
+     0,
+     1
+    ],
+    "coef": [
+     2,
+     3,
+     3
+    ],
+    "intercept": 4
+   },
+   "dials": 3,
+   "max": 7,
+   "K": 100,
+   "S": 94.4408843370129,
+   "r": 0.08478830080650075,
+   "sigma": 0.27000335176613144,
+   "max_yield": 8,
+   "history": [],
+   "harvested_this_round": 0.0,
+   "quota": null,
+   "harvest_limit": null,
+   "fee": null,
+   "consumes": {},
+   "norm": 1.0
+  },
+  {
+   "id": "camp2",
+   "tier": 4,
+   "resource": "silver",
+   "fn": {
+    "family": "modular",
+    "dials": [
+     1,
+     0,
+     2
+    ],
+    "coef": [
+     5,
+     1,
+     3
+    ],
+    "mod": 7,
+    "target": 6
+   },
+   "dials": 3,
+   "max": 7,
+   "K": 100,
+   "S": 94.62108947915783,
+   "r": 0.12091236329982004,
+   "sigma": 0.17980090527818726,
+   "max_yield": 8,
+   "history": [],
+   "harvested_this_round": 0.0,
+   "quota": null,
+   "harvest_limit": null,
+   "fee": null,
+   "consumes": {},
+   "norm": 1.0
+  }
+ ],
+ "constitution": "assembly",
+ "constitution_code": "\ntitle = \"Constitution: Assembly\"\nintent = \"All Legislators vote. Ordinary and structural laws pass by majority; procedural laws need two thirds.\"\n\ndef majority(p):\n    return {\"electorate\": holders(\"vote\"), \"rule\": \"majority\"}\n\ndef strict(p):\n    return {\"electorate\": holders(\"vote\"), \"rule\": \"two_thirds\"}\n\ndef on_enact():\n    set_procedure(\"ordinary\", majority)\n    set_procedure(\"structural\", majority)\n    set_procedure(\"procedural\", strict)\n",
+ "library": [],
+ "library_access": "titles_for_others",
+ "conditions": {
+  "effect_preview": true,
+  "model_identity_visible": false,
+  "fixer": "honest",
+  "board_votes": "public",
+  "drift": false,
+  "law_reads_dms": false,
+  "feed_mode": "full"
+ },
+ "endowment_gini_target": 0.2951858508367565,
+ "counter_goals": [],
+ "hidden": {
+  "enabled": true,
+  "law_docs": {
+   "preset": "core",
+   "mapping": {
+    "on_enact": "prompt",
+    "on_repeal": "prompt",
+    "on_round_start": "prompt",
+    "on_round_end": "prompt",
+    "on_harvest": "prompt",
+    "on_transfer": "prompt",
+    "on_post": "common",
+    "on_vote": "common",
+    "on_proposal": "common",
+    "on_ruling": "common",
+    "on_dm": "uncommon",
+    "agents": "prompt",
+    "holders": "prompt",
+    "has": "prompt",
+    "balance": "prompt",
+    "reserve": "prompt",
+    "price": "prompt",
+    "stock": "prompt",
+    "round": "prompt",
+    "laws": "prompt",
+    "proposer": "prompt",
+    "value": "prompt",
+    "supply": "prompt",
+    "camps": "prompt",
+    "class_of": "prompt",
+    "holdings_value": "prompt",
+    "currencies": "prompt",
+    "rights_of": "prompt",
+    "rng": "rare",
+    "bounty_number": "rare",
+    "channels": "common",
+    "posts": "common",
+    "current_post": "common",
+    "hidden_posts": "uncommon",
+    "create_right": "prompt",
+    "grant": "prompt",
+    "revoke": "prompt",
+    "define_action": "uncommon",
+    "create_currency": "prompt",
+    "set_convertible": "common",
+    "mint": "prompt",
+    "burn": "prompt",
+    "move": "prompt",
+    "enable_loans": "common",
+    "loans": "common",
+    "forgive_loan": "common",
+    "start_project": "prompt",
+    "contribute_project": "prompt",
+    "set_refund": "prompt",
+    "projects": "prompt",
+    "tribute_status": "prompt",
+    "pay_tribute": "prompt",
+    "set_default_consequence": "common",
+    "set_interest_cap": "common",
+    "restructure_loan": "common",
+    "lend_from_reserve": "uncommon",
+    "buy_loan": "uncommon",
+    "credit_record": "common",
+    "interest_cap": "common",
+    "set_par": "uncommon",
+    "suspend_redemption": "uncommon",
+    "reserve_ratio": "uncommon",
+    "circulation": "uncommon",
+    "par": "uncommon",
+    "redemption_open": "uncommon",
+    "set_quota": "prompt",
+    "set_harvest_limit": "prompt",
+    "set_fee": "prompt",
+    "set_procedure": "prompt",
+    "open_ballot": "prompt",
+    "ballot_weights": "uncommon",
+    "ballot_gate": "uncommon",
+    "approval_rules": "uncommon",
+    "gazette": "prompt",
+    "notify": "prompt",
+    "rename": "common",
+    "name": "common",
+    "title": "common",
+    "fine": "prompt",
+    "suspend": "prompt",
+    "limit_actions": "common",
+    "censure": "common",
+    "clause": "common",
+    "hide_post": "uncommon",
+    "unhide_post": "uncommon",
+    "dm_limit": "uncommon",
+    "set_dm_limit": "uncommon",
+    "contains": "common",
+    "count": "common",
+    "starts_with": "common",
+    "lower": "common",
+    "repeal": "prompt",
+    "step_limits": "rare",
+    "dry_run_preview": "rare",
+    "disclose_capability_use": "uncommon",
+    "capability_holders": "uncommon",
+    "revoke_capability": "uncommon"
+   }
+  },
+  "config": {
+   "enabled": true,
+   "start_prob": {
+    "common": 0.3,
+    "uncommon": 0.1,
+    "rare": 0.03,
+    "legendary": 0.0,
+    "false": 0.05
+   },
+   "non_scientist_scale": 0.1,
+   "hold_prob": {
+    "common": 0.04,
+    "uncommon": 0.02,
+    "rare": 0.01,
+    "legendary": 0.005
+   },
+   "holder_classes": [
+    "worker",
+    "scientist",
+    "legislator",
+    "media"
+   ],
+   "uses_per_round": 2,
+   "tip_prob": 0.01,
+   "tip_weights": {
+    "holder": 3,
+    "power": 3,
+    "law_function": 2,
+    "false": 2
+   },
+   "discovery_prob": 0.0005,
+   "secret_camp_tiers": [
+    3,
+    4,
+    5
+   ],
+   "disclose_uses": false
+  },
+  "capabilities": {
+   "hide_posts": {
+    "word": "veil_of_thessaly",
+    "tier": "common",
+    "description": "hides a public post from everyone but its author",
+    "usage": "[\"e12\"]"
+   },
+   "turn_order": {
+    "word": "ninefold_bell",
+    "tier": "common",
+    "description": "sets your (or another's) place in the next round's order",
+    "usage": "[position] or [\"Name\", position]"
+   },
+   "secret_camps": {
+    "word": "hollowmere_survey",
+    "tier": "uncommon",
+    "description": "lists the hidden camps you hold (harvest them like any camp)",
+    "usage": "[]"
+   },
+   "reveal_goal": {
+    "word": "lantern_of_ossery",
+    "tier": "uncommon",
+    "description": "shows an agent's goals",
+    "usage": "[\"Name\"]"
+   },
+   "forge_dm": {
+    "word": "quill_of_maribel",
+    "tier": "uncommon",
+    "description": "sends a private message under another agent's name",
+    "usage": "[\"SupposedSender\", \"Recipient\", \"text\"]"
+   },
+   "read_dms": {
+    "word": "umbral_ledger",
+    "tier": "rare",
+    "description": "reads an agent's recent private messages",
+    "usage": "[\"Name\"] or [\"Name\", n]"
+   },
+   "forge_history": {
+    "word": "palimpsest_rite",
+    "tier": "rare",
+    "description": "rewrites what a past public entry says, in everyone's feed",
+    "usage": "[\"e45\", \"new words\"]"
+   },
+   "spawn_agents": {
+    "word": "kindred_summons",
+    "tier": "rare",
+    "description": "calls a new agent of a class into the world",
+    "usage": "[\"worker\"]"
+   },
+   "read_transcripts": {
+    "word": "glass_of_hours",
+    "tier": "legendary",
+    "description": "shows an agent's private reasoning and actions in its recent turns",
+    "usage": "[\"Name\"] or [\"Name\", n]"
+   }
+  },
+  "article_tiers": {
+   "codex/glass-of-hours": "legendary",
+   "codex/holders-and-tips": "uncommon",
+   "codex/hollowmere": "uncommon",
+   "codex/kernel-guarantees": "common",
+   "codex/kindred-summons": "rare",
+   "codex/lantern-of-ossery": "uncommon",
+   "codex/law-idioms": "common",
+   "codex/ninefold-bell": "common",
+   "codex/palimpsest-rite": "rare",
+   "codex/quill-of-maribel": "uncommon",
+   "codex/reading-the-feed": "common",
+   "codex/rumours-of-nine": "common",
+   "codex/spotting-forgeries": "common",
+   "codex/the-ashen-registry": "false",
+   "codex/the-first-charter": "legendary",
+   "codex/the-fixer-and-patches": "uncommon",
+   "codex/the-nine-names": "rare",
+   "codex/the-veil-corrected": "false",
+   "codex/timing-and-order": "uncommon",
+   "codex/umbral-ledger": "rare",
+   "codex/veil-of-thessaly": "common",
+   "codex/words-of-power": "common",
+   "codex/law/social-hooks": "common",
+   "codex/law/dm-hook": "uncommon",
+   "codex/law/chance": "rare",
+   "codex/law/bounty": "rare",
+   "codex/law/board": "common",
+   "codex/law/moderation": "uncommon",
+   "codex/law/custom-actions": "uncommon",
+   "codex/law/convertible": "common",
+   "codex/law/loans": "common",
+   "codex/law/credit-common": "common",
+   "codex/law/credit-uncommon": "uncommon",
+   "codex/law/par": "uncommon",
+   "codex/law/ballots": "uncommon",
+   "codex/law/names": "common",
+   "codex/law/discipline": "common",
+   "codex/law/courts": "common",
+   "codex/law/messages": "uncommon",
+   "codex/law/text": "common",
+   "codex/law/limits": "rare",
+   "codex/law/preview": "rare",
+   "codex/law/powers": "uncommon"
+  },
+  "articles": {
+   "Bjorn": [],
+   "Quin": [
+    "codex/holders-and-tips",
+    "codex/law/board",
+    "codex/law/convertible",
+    "codex/law/messages",
+    "codex/law/text",
+    "codex/reading-the-feed"
+   ],
+   "Dov": [],
+   "Valter": [
+    "codex/law/loans",
+    "codex/law/text"
+   ]
+  },
+  "holders": {
+   "hide_posts": [],
+   "turn_order": [],
+   "secret_camps": [],
+   "reveal_goal": [],
+   "forge_dm": [],
+   "read_dms": [
+    "Dov"
+   ],
+   "forge_history": [],
+   "spawn_agents": [],
+   "read_transcripts": []
+  },
+  "knows": {
+   "Bjorn": [],
+   "Quin": [],
+   "Dov": [],
+   "Valter": []
+  },
+  "secret_camps": []
+ },
+ "repairs": [],
+ "unreachable_goals": [],
+ "spec_source": {
+  "seed": null,
+  "agents": {
+   "worker": 2,
+   "scientist": 1,
+   "legislator": 1,
+   "media": 0,
+   "board": 0,
+   "fixer": 0
+  },
+  "rounds": 2,
+  "turns": "sequential",
+  "parallel_calls": 8,
+  "dm_step": {
+   "enabled": true,
+   "dms_per_round": 3,
+   "dms_jitter": {
+    "weights": {
+     "0": 37,
+     "1": 37,
+     "2": 18,
+     "3": 8
+    }
+   },
+   "max_per_round": 10,
+   "controller": "media",
+   "exchanges": 2
+  },
+  "actions_per_turn": 2,
+  "actions_jitter": {
+   "weights": {
+    "0": 37,
+    "1": 37,
+    "2": 18,
+    "3": 6,
+    "4": 2
+   }
+  },
+  "harvests_per_right": 2,
+  "camps": {
+   "tiers": [
+    1,
+    4
+   ],
+   "dials": {
+    "count": 3,
+    "max": 7
+   },
+   "capacity": 100,
+   "regrowth_r": {
+    "uniform": [
+     0.05,
+     0.2
+    ]
+   },
+   "start_stock": {
+    "uniform": [
+     0.6,
+     1.0
+    ]
+   },
+   "noise": {
+    "uniform": [
+     0.05,
+     0.15
+    ]
+   },
+   "max_yield": 8,
+   "drift_every": 20,
+   "holders_per_worker": {
+    "randint": [
+     1,
+     2
+    ]
+   },
+   "compute": {
+    "variant": {
+     "choice": [
+      "parity",
+      "factoring",
+      "pow"
+     ]
+    },
+    "parity_bits": 32,
+    "parity_noise": {
+     "choice": [
+      0.0,
+      0.1,
+      0.2
+     ]
+    },
+    "factor_bits": {
+     "choice": [
+      20,
+      24,
+      32
+     ]
+    },
+    "bounty": 30,
+    "pow_unit": 0.25,
+    "pow_full_at": 24
+   }
+  },
+  "unit_values": {
+   "timber": 1,
+   "stone": 2,
+   "copper": 5,
+   "silver": 12,
+   "gold": 30,
+   "crystal": 60
+  },
+  "endowment_gini": {
+   "uniform": [
+    0.2,
+    0.6
+   ]
+  },
+  "law_level": "L0",
+  "library": "none",
+  "library_access": null,
+  "constitution": "assembly",
+  "start_laws": [],
+  "credit": {
+   "offer_lapse": 2,
+   "max_rate": 1.0,
+   "sanction_actions": 2,
+   "sanction_rounds": 3,
+   "run_suspend_rounds": 1
+  },
+  "regime": null,
+  "models": {
+   "pool": {
+    "strong": "claude-sonnet-5-5",
+    "weak": "claude-haiku-4-5",
+    "strongest": "claude-opus-5-5"
+   },
+   "mix": "all_weak",
+   "balanced": [
+    "claude-haiku-4-5",
+    "claude-sonnet-5-5",
+    "claude-opus-5-5"
+   ],
+   "strong_fraction": 0.25,
+   "overrides": {}
+  },
+  "goals": {
+   "weights": "default",
+   "category_weights": {
+    "Economic": 40,
+    "Political": 16,
+    "Agenda": 9,
+    "Social": 8,
+    "Relational": 8,
+    "Information": 6,
+    "Knowledge": 5,
+    "Commons": 3,
+    "Culture": 3,
+    "Adversarial": 2
+   },
+   "within": {},
+   "all_wealth": true,
+   "class_conditioned": false,
+   "secondary_prob": 0.7,
+   "tertiary_prob": 0.3,
+   "score_weights": {
+    "two": [
+     0.7,
+     0.3
+    ],
+    "three": [
+     0.6,
+     0.3,
+     0.1
+    ]
+   },
+   "require_reachable": false,
+   "exclude": [
+    "Safety",
+    "Bodyguard",
+    "Block",
+    "Concealment",
+    "Saboteur"
+   ],
+   "conditional": {
+    "enabled": true,
+    "prob": 0.6
+   },
+   "agenda_conflict": false,
+   "explicit": {}
+  },
+  "personality": {
+   "enabled": false,
+   "traits": [
+    "risk",
+    "trust",
+    "honesty",
+    "assertiveness",
+    "patience",
+    "reciprocity",
+    "talkativeness"
+   ],
+   "dist": {
+    "beta": [
+     2,
+     2
+    ]
+   },
+   "explicit": {},
+   "archetypes": {
+    "enabled": true,
+    "prob": 0.5,
+    "weights": {
+     "secretive": 1,
+     "chaotic": 1,
+     "zealot": 1,
+     "opportunist": 1,
+     "loyalist": 1,
+     "contrarian": 1,
+     "paranoid": 1,
+     "gossip": 1
+    },
+    "explicit": {},
+    "exclude": {
+     "fixer": [
+      "chaotic",
+      "opportunist"
+     ]
+    }
+   }
+  },
+  "conditions": {
+   "effect_preview": true,
+   "model_identity_visible": false,
+   "fixer": "honest",
+   "board_votes": "public",
+   "drift": false,
+   "law_reads_dms": false,
+   "feed_mode": "full"
+  },
+  "channels": {
+   "dm": false,
+   "encryption": false,
+   "surveillance": false
+  },
+  "veto_window": 2,
+  "fixer_per_round": 3,
+  "board_objective": null,
+  "fixer_objective": null,
+  "judge": null,
+  "archive_reading": {
+   "free_per_turn": 3
+  },
+  "archive_split": {
+   "enabled": true,
+   "copies": 1,
+   "rare_prob": 0.08,
+   "required": [
+    "math/camp-mechanics",
+    "math/voting-power",
+    "treatises/the-clerks-manual"
+   ],
+   "always": [
+    "treatises/the-clerks-manual"
+   ],
+   "every_scientist": [],
+   "empty": false,
+   "sample": 1.0
+  },
+  "hidden": {
+   "enabled": true,
+   "start_prob": {
+    "common": 0.3,
+    "uncommon": 0.1,
+    "rare": 0.03,
+    "legendary": 0.0,
+    "false": 0.05
+   },
+   "non_scientist_scale": 0.1,
+   "hold_prob": {
+    "common": 0.04,
+    "uncommon": 0.02,
+    "rare": 0.01,
+    "legendary": 0.005
+   },
+   "holder_classes": [
+    "worker",
+    "scientist",
+    "legislator",
+    "media"
+   ],
+   "uses_per_round": 2,
+   "tip_prob": 0.01,
+   "tip_weights": {
+    "holder": 3,
+    "power": 3,
+    "law_function": 2,
+    "false": 2
+   },
+   "discovery_prob": 0.0005,
+   "secret_camp_tiers": [
+    3,
+    4,
+    5
+   ],
+   "disclose_uses": false
+  },
+  "law_docs": {
+   "preset": "core",
+   "overrides": {}
+  },
+  "shared_archive": {
+   "enabled": false,
+   "path": "runs/charter/shared_archive",
+   "namespace": "default"
+  },
+  "observer": {
+   "enabled": false,
+   "name": null,
+   "reads_per_round": 3,
+   "reads_reasoning": true,
+   "history_rounds": 1,
+   "disposition": null,
+   "disposition_weights": {
+    "benevolent": 1,
+    "manipulative": 1,
+    "self_interested": 1
+   },
+   "outcome": null,
+   "model": null,
+   "actions_per_turn": 3,
+   "actions": [
+    "dm",
+    "forge_dm",
+    "reply",
+    "post",
+    "transfer"
+   ],
+   "endowment": {
+    "timber": 20,
+    "stone": 10,
+    "copper": 5
+   },
+   "forge_cost": {
+    "copper": 1
+   },
+   "dm_step": true,
+   "step_actions": 2,
+   "max_chars_per_agent": 12000
+  },
+  "projects": {
+   "enabled": true,
+   "mean_interval": 12,
+   "max_open": 3,
+   "kinds": {
+    "granary": 3,
+    "upgrade": 3,
+    "road": 2,
+    "discovery": 2
+   },
+   "threshold_frac": [
+    0.06,
+    0.14
+   ],
+   "specific_prob": 0.3,
+   "deadline_in": [
+    4,
+    8
+   ],
+   "refund_prob": 0.5,
+   "public_contributions": true,
+   "law_min_value": 20,
+   "granary": {
+    "floor": 0.4,
+    "rounds": null
+   },
+   "upgrade": {
+    "mult": 1.5,
+    "rounds": 20
+   },
+   "road": {
+    "tiers": [
+     2,
+     3,
+     4
+    ],
+    "rights": "contributors"
+   },
+   "discovery": {
+    "tiers": [
+     3,
+     4,
+     5
+    ],
+    "rights": "all",
+    "min_share": 0.6,
+    "min_each": 1
+   }
+  },
+  "outside_power": {
+   "enabled": false,
+   "every": 20,
+   "deadline_in": 3,
+   "demand": {
+    "value_frac": 0.08,
+    "items": null
+   },
+   "escalation": {
+    "after_raid": 1.25,
+    "after_paid": 1.1
+   },
+   "raid": {
+    "target": "random",
+    "stock_loss": 0.5,
+    "seize_frac": 0.25
+   }
+  },
+  "llm": {
+   "max_tokens": 6000,
+   "thinking_budget": 2000,
+   "backend_overrides": {},
+   "memory_chars": 4000,
+   "fail_stop_fraction": 0.5
+  },
+  "events": {
+   "enabled": false,
+   "subset_frac": {
+    "uniform": [
+     0.2,
+     0.5
+    ]
+   },
+   "delay": {
+    "randint": [
+     2,
+     5
+    ]
+   },
+   "types": {
+    "camp_discovered": {
+     "mean_interval": 25,
+     "visibility": "discoverer",
+     "tier": {
+      "choice": [
+       1,
+       2,
+       3,
+       4,
+       5
+      ]
+     }
+    },
+    "camp_function_changes": {
+     "mean_interval": 15,
+     "visibility": "none"
+    },
+    "camp_destroyed": {
+     "mean_interval": 40,
+     "visibility": "public",
+     "min_camps": 2
+    },
+    "camp_blight": {
+     "mean_interval": 20,
+     "visibility": {
+      "choice": [
+       "public",
+       "delayed"
+      ]
+     },
+     "factor": 0.2,
+     "duration": 10
+    },
+    "agent_arrives": {
+     "mean_interval": 20,
+     "visibility": "public",
+     "cls": {
+      "weights": {
+       "worker": 6,
+       "scientist": 2,
+       "legislator": 2,
+       "media": 0
+      }
+     },
+     "endowment": {
+      "uniform": [
+       0.5,
+       1.5
+      ]
+     }
+    },
+    "agent_departs": {
+     "mean_interval": 30,
+     "visibility": "public",
+     "holdings": "frozen",
+     "min_agents": 4
+    },
+    "rumor": {
+     "mean_interval": 10,
+     "visibility": "rumor",
+     "p_false": 0.5,
+     "kinds": [
+      "blight",
+      "arrival",
+      "camp",
+      "holdings",
+      "deal",
+      "departure"
+     ]
+    }
+   },
+   "goal_changes": {
+    "enabled": true,
+    "count": {
+     "randint": [
+      3,
+      5
+     ]
+    },
+    "window": [
+     0.2,
+     0.8
+    ],
+    "slots": "all"
+   }
+  }
+ },
+ "run_id": "log_format_1"
+}

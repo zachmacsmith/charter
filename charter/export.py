@@ -13,6 +13,10 @@ The tables and their columns are SCHEMA below (the single source: `schema_markdo
 row is checked against it). Rounds are 0-based everywhere (the round numbers of events.jsonl and snapshots.json). Rows copied
 from a fork's or rewind's parent (rounds before the branch point) carry `inherited = true`, so cross-run aggregates can drop them.
 
+Schema 2 (docs/data_format.md, the contract the site reader codes against) adds messages, channels, channel_members, turns, state,
+documents, event_types and (with_prompts) blobs, `runs.log_format` / `runs.schema_minor`, and makes every exported path portable
+(relative to `root=`, else the last two parts): no exported string is an absolute path.
+
 Exporting reads the run directory only; it never writes into it (scores come from score.json when present, else they are
 computed in memory by scorer.goal_scores, and `score_source` says which).
 """
@@ -25,7 +29,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2           # major: a column removed, renamed, or changed in type or meaning (docs/data_format.md)
+SCHEMA_MINOR = 0             # additive changes (a new column or table) since the major
 TYPES = ("str", "int", "float", "bool", "json")
 
 
@@ -50,7 +55,9 @@ SCHEMA: dict[str, tuple] = {
     "runs": _cols(
         RUN_ID,
         ("schema_version", "int", "dataset schema version (SCHEMA_VERSION of charter/export.py)"),
-        ("run_dir", "str", "the run directory as exported (absolute path)"),
+        ("schema_minor", "int", "additive schema changes since the major version (SCHEMA_MINOR)"),
+        ("log_format", "int", "raw log format of the run directory (run.json log_format; absent = 0)"),
+        ("run_dir", "str", "the run directory, portable: relative to export(root=) when given, else its last two parts (<spec>/<run>)"),
         ("spec_sha", "str", "sha of the resolved spec (run.json)"),
         ("instance_sha", "str", "sha of instance.json (run.json)"),
         ("seed", "int", "the world seed"),
@@ -75,10 +82,10 @@ SCHEMA: dict[str, tuple] = {
         ("n_segments", "int", "segments in run.json (start, resume, rewind, fork)"),
         ("segment_kinds", "str", "the segments' kinds joined by '>' (e.g. start>fork>resume)"),
         ("code_changed", "bool", "some segment ran under code whose module hashes differ from the previous segment's"),
-        ("segments_json", "json", "run.json segments without the per-module hashes (kind, first_round, git, code versions, changed_modules, status)"),
+        ("segments_json", "json", "run.json segments without argv (kind, first_round, git, code versions, changed_modules, status); paths made portable"),
         ("kind", "str", "how the run began: run, fork or rewind"),
         ("parent_run_id", "str", "run_id of the parent of a fork or rewind"),
-        ("parent_run", "str", "the parent's directory as recorded"),
+        ("parent_run", "str", "the parent's directory, made portable like run_dir"),
         ("fork_round", "int", "first round played anew by a fork or rewind (rounds before it are inherited)"),
         ("checkpoint_round", "int", "the parent checkpoint the branch was restored from"),
         ("branch", "str", "branch name (the fork directory's name)"),
@@ -87,7 +94,7 @@ SCHEMA: dict[str, tuple] = {
         ("replay_mode", "str", "how the parent's calls before the fork point were replayed (strict, prompt-match, none)"),
         ("intervention_set_sha", "str", "sha of the fork's intervention schedule"),
         ("intervention_ids_json", "json", "ids of the interventions applied in this run (interventions.jsonl)"),
-        ("lineage_json", "json", "ancestors' parent records, oldest first (run.json lineage + parent)"),
+        ("lineage_json", "json", "ancestors' parent records, oldest first (run.json lineage + parent); paths made portable"),
         ("lineage_depth", "int", "number of ancestors"),
         ("n_agents", "int", "agents ever in play (founders, arrivals, births)"),
         ("constitution", "str", "the constitution drawn"),
@@ -293,7 +300,125 @@ SCHEMA: dict[str, tuple] = {
         ("params_json", "json", "goal parameters"),
         ("score_source", "str", "score.json or computed"),
     ),
+    # ------------------------------------------------------------------ schema 2 (docs/data_format.md)
+    "messages": _cols(
+        RUN_ID,
+        ("msg_id", "str", "the event id (joins events.event_id, which holds the cause chain)"),
+        ("seq", "int", "position in the event log (total order within the run)"),
+        ("round", "int", "round (0-based)"),
+        INHERITED,
+        ("type", "str", "event type (dm, post, channel_post, edition, gazette, notify, ...)"),
+        ("channel_id", "str", "the conversation it belongs to: dm:<a>|<b>, group:<a>|<b>|..., ch:<id>, public, outlet:<outlet>, "
+                              "submissions:<outlet>, gazette:<jurisdiction>, system:<type>"),
+        ("channel_kind", "str", "dm, group, channel, public, outlet, submissions, gazette, system"),
+        ("sender", "str", "the agent who wrote it (the true author, also of anonymous posts); null for system notices"),
+        ("anonymous", "bool", "published without the author's name (anon_post, an anonymous submission)"),
+        ("audience", "str", "the event's visibility class: public, parties, channel, monitor"),
+        ("recipients_json", "json", "the agents who could see it (sorted list; a closed kernel channel's members at the time); "
+                                    "null when public or an open channel"),
+        ("n_recipients", "int", "length of recipients_json; null when it is null"),
+        ("title", "str", "title, when the type has one (a story's headline, a poll's question)"),
+        ("text", "str", "the message text (data.text; a leak's shown text, a poll answer's choice)"),
+        ("encrypted", "bool", "DM sent encrypted"),
+        ("reply_to", "str", "msg_id it replies to, when given"),
+        ("data_json", "json", "the full event payload"),
+    ),
+    "channels": _cols(
+        RUN_ID,
+        ("channel_id", "str", "as in messages"),
+        ("channel_kind", "str", "as in messages"),
+        ("channel_source", "str", "kernel (created in the world by an agent or a law) or derived (a grouping by the exporter)"),
+        ("name", "str", "display name: the kernel channel's id, the outlet's name, the participants (dm/group), the jurisdiction, "
+                        "the notice type"),
+        ("owner", "str", "owning agent, when the world records one (kernel channels: the creator)"),
+        ("open", "bool", "anyone may post and read (kernel channels)"),
+        ("created_round", "int", "kernel: round created; derived: round of the first message"),
+        ("closed_round", "int", "kernel: round closed (null if open at the end of the run)"),
+        ("first_round", "int", "round of the first message"),
+        ("last_round", "int", "round of the last message"),
+        ("n_messages", "int", "messages in the channel"),
+        ("n_senders", "int", "distinct senders"),
+        ("members_json", "json", "members at the end of the run (kernel: [] once closed; dm/group: the participants); null for "
+                                 "public, outlet, submissions, gazette and system channels"),
+    ),
+    "channel_members": _cols(
+        RUN_ID,
+        ("channel_id", "str", "kernel or dm/group channel"),
+        ("agent", "str", "agent id"),
+        ("role", "str", "owner or member"),
+        ("from_round", "int", "round the spell began (kernel: creation or admission; dm/group: first message)"),
+        ("to_round", "int", "last round of the spell (removal or close); null = to the end of the run"),
+        ("source", "str", "kernel or derived"),
+    ),
+    "turns": _cols(
+        RUN_ID,
+        ("round", "int", "round (0-based)"),
+        ("agent", "str", "agent id (or observer)"),
+        INHERITED,
+        ("position", "int", "the agent's position in the round's turn order"),
+        ("phase", "str", "the phase the turn ran in (decide, dm_reply_<n>, editorial, step, ...)"),
+        ("mode", "str", "the policy mode (sequential, simultaneous, ...)"),
+        ("model", "str", "model id"),
+        ("reasoning", "str", "the model's private reasoning, when the backend returns it"),
+        ("stated_reasoning", "str", "the reasoning the agent wrote in its reply"),
+        ("notes", "str", "notes the agent kept for itself"),
+        ("actions_json", "json", "actions requested"),
+        ("results_json", "json", "results returned"),
+        ("n_actions", "int", "actions requested"),
+        ("n_failed", "int", "results that are errors ('<action>: ERROR ...')"),
+        ("prompt_sha", "str", "sha of the turn's prompt (16 hex digits; joins blobs.blob_sha)"),
+        ("prompt_chars", "int", "prompt length (system + user) as recorded"),
+        ("tokens_in", "int", "input tokens (usage.input)"),
+        ("tokens_out", "int", "output tokens (usage.output)"),
+        ("error", "str", "turn-level error, if any"),
+    ),
+    "blobs": _cols(
+        RUN_ID,
+        ("blob_sha", "str", "sha of the text (16 hex digits)"),
+        ("kind", "str", "prompt"),
+        ("chars", "int", "length of the text"),
+        ("text", "str", "the text"),
+    ),
+    "state": _cols(
+        RUN_ID,
+        ("round", "int", "round (0-based)"),
+        INHERITED,
+        ("key", "str", "top-level snapshot key (values, holdings, stocks, prices, contracts, franchise_share, ...)"),
+        ("entity", "str", "the first-level id under the key when it is a dict keyed by ids; null for world-level values"),
+        ("entity_kind", "str", "agent, camp, contract, currency, law, polity, channel, loan, project, lease, store, or null"),
+        ("path", "str", "dotted path below the entity (or below the key when entity is null); null when the value is itself the leaf"),
+        ("value", "float", "numeric leaf (bools as 0/1)"),
+        ("value_json", "json", "non-numeric leaf (strings, lists)"),
+    ),
+    "documents": _cols(
+        RUN_ID,
+        ("namespace", "str", "the directory namespace"),
+        ("store", "str", "the store (directory) within it"),
+        ("path", "str", "path within the store"),
+        ("kind", "str", "base (the store at run start), record (the run's digest, _records/<run_id>.md), file (the store at the "
+                        "run's last write-back)"),
+        ("author", "str", "the agent whose action last wrote it in this run (from the turns' results), or runner for records"),
+        ("round", "int", "round of that write"),
+        ("chars", "int", "length of the text"),
+        ("sha", "str", "blob sha (sha256 of the text)"),
+        ("text", "str", "the text"),
+    ),
+    "event_types": _cols(
+        RUN_ID,
+        ("type", "str", "event type (charter/eventtypes.py; types in the log the registry does not know have only n_events)"),
+        ("module", "str", "the module that logs it"),
+        ("kind", "str", "communication, primitive, legal_act, output, summary, truth, record"),
+        ("vis_json", "json", "the visibility classes call sites may use"),
+        ("natural", "str", "natural audience (publication layer)"),
+        ("feed", "str", "feed priority class"),
+        ("act", "str", "the agent action that logs it"),
+        ("primitive", "str", "the primitive whose change logs it"),
+        ("is_message", "bool", "included in messages"),
+        ("aliases_json", "json", "older names"),
+        ("n_events", "int", "events of this type in the run (old names counted under today's)"),
+    ),
 }
+OPTIONAL = ("blobs",)        # written only when asked for (export(with_prompts=True))
 
 
 # ====================================================================== helpers
@@ -435,7 +560,35 @@ def _scores(run: Path, h):
     return goals, {}, None, "computed"
 
 
-def run_tables(run, run_id: str | None = None, running_scores: bool = False) -> dict[str, list[dict]]:
+def portable(p, root=None) -> str | None:
+    """A path as exported: relative to root when it lies under it, else its last two parts (<spec>/<run>). Never absolute."""
+    if p is None:
+        return None
+    p = Path(str(p))
+    if root is not None:
+        try:
+            return p.resolve().relative_to(Path(root).resolve()).as_posix() or "."
+        except (ValueError, OSError):
+            pass
+    return "/".join(x for x in p.parts[-2:] if x not in ("/", "\\")) or None
+
+
+def _portable_tree(x, root=None):
+    """A JSON value with every string that is an absolute path made portable (run.json records: segments, lineage)."""
+    if isinstance(x, dict):
+        return {k: _portable_tree(v, root) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_portable_tree(v, root) for v in x]
+    if isinstance(x, str) and "/" in x:                                  # also a path inside text ("fork of /.../run at round 1")
+        return ABS_PATH.sub(lambda m: portable(m.group(0), root), x)
+    return x
+
+
+ABS_PATH = re.compile(r"(?<![\w.~/:])/[^\s'\",;)]+")
+
+
+def run_tables(run, run_id: str | None = None, running_scores: bool = False, *, root=None,
+               with_prompts: bool = False) -> dict[str, list[dict]]:
     """Every table's rows for one run directory (rows not yet coerced to the schema: `export` does that)."""
     from charter import history as HI
     from charter import lawlang as L
@@ -669,7 +822,8 @@ def run_tables(run, run_id: str | None = None, running_scores: bool = False) -> 
     ys = [v.get("score") for v in goals_sc.values() if v.get("score") is not None]
     git = meta.get("git") or {}
     run_row = {
-        "schema_version": SCHEMA_VERSION, "run_dir": str(run.resolve()), "spec_sha": meta.get("spec_sha"),
+        "schema_version": SCHEMA_VERSION, "schema_minor": SCHEMA_MINOR, "log_format": int(meta.get("log_format") or 0),
+        "run_dir": portable(run.resolve(), root), "spec_sha": meta.get("spec_sha"),
         "instance_sha": meta.get("instance_sha"), "seed": inst.get("seed"), "rounds": inst.get("rounds"),
         "rounds_played": gt.get("rounds_played"), "complete": gt.get("complete"), "dry": meta.get("dry"), "policy": meta.get("policy"),
         "backend": meta.get("backend"), "models_json": meta.get("models"), "git_sha": git.get("sha"), "git_branch": git.get("branch"),
@@ -679,25 +833,364 @@ def run_tables(run, run_id: str | None = None, running_scores: bool = False) -> 
         "rng_version": int(spec.get("rng_version") or 1), "n_segments": len(segs),
         "segment_kinds": ">".join(str(s.get("kind")) for s in segs) or None,
         "code_changed": any(s.get("changed_modules") or s.get("changed_versions") for s in segs),
-        "segments_json": [{x: v for x, v in s.items() if x not in ("argv",)} for s in segs] or None,
-        "kind": first_kind or "run", "parent_run_id": parent.get("run_id"), "parent_run": parent.get("run"), "fork_round": fork_round,
+        "segments_json": _portable_tree([{x: v for x, v in s.items() if x not in ("argv",)} for s in segs], root) or None,
+        "kind": first_kind or "run", "parent_run_id": parent.get("run_id"), "parent_run": portable(parent.get("run"), root),
+        "fork_round": fork_round,
         "checkpoint_round": parent.get("checkpoint_round", parent.get("round") if parent else None), "branch": parent.get("branch"),
         "replicate": meta.get("replicate", parent.get("replicate")), "live_seed": parent.get("live_seed"),
         "replay_mode": parent.get("replay"), "intervention_set_sha": parent.get("schedule_sha"),
-        "intervention_ids_json": [r.get("id") for r in applied], "lineage_json": lineage, "lineage_depth": len(lineage),
+        "intervention_ids_json": [r.get("id") for r in applied], "lineage_json": _portable_tree(lineage, root),
+        "lineage_depth": len(lineage),
         "n_agents": len(ever), "constitution": _s(inst.get("constitution")), "law_level": _s(inst.get("law_level")),
         "model_mix": (spec.get("models") or {}).get("mix"), "regime": _s((inst.get("regime") or {}).get("name"))
         if isinstance(inst.get("regime"), dict) else _s(inst.get("regime")),
         "mean_goal_score": (summary or {}).get("mean_goal_score") if summary else (round(sum(ys) / len(ys), 4) if ys else None),
-        "score_source": src, "spec_json": spec,
-        "summary_json": {x: v for x, v in summary.items() if x != "run"} if summary else None}
+        "score_source": src, "spec_json": _portable_tree(spec, root),
+        "summary_json": _portable_tree({x: v for x, v in summary.items() if x != "run"}, root) if summary else None}
 
     tables = {"runs": [run_row], "agents": agent_rows, "agent_rounds": ar_rows, "events": ev_rows, "calls": call_rows,
               "laws": law_rows, "law_versions": ver_rows, "interventions": iv_rows, "scores": score_rows}
+    tables.update(v2_tables(run, meta, h, inh, ever, with_prompts=with_prompts))
     for rows in tables.values():
         for row in rows:
             row["run_id"] = rid
     return tables
+
+
+# ====================================================================== schema 2 tables (docs/data_format.md)
+# The channel of a message type whose channel the registry's kind and visibility do not decide (every other message type: a
+# kernel channel by its "channel:<id>" visibility; communication logged public -> public; communication to a list of parties ->
+# dm (2 agents) or group (3+); anything else -> system:<type>).
+CHANNEL_OF = {"edition": "outlet", "placement_offer": "outlet", "poll": "outlet", "annotation": "outlet",
+              "leak": "submissions", "poll_answer": "submissions", "submission": "submissions", "gazette": "gazette"}
+SUBMISSIONS_OUTLET = "press"          # media2 submissions go to every open outlet's editor (media.submit): no single outlet
+ERROR_RESULT = re.compile(r"^[\w.:-]+: ERROR\b")
+DIR_RESULT = (re.compile(r"^dir_write: Saved ([^/]+)/(.+) \(\d+ bytes\); "), re.compile(r"^dir_edit: Edited ([^/]+)/(.+): \d+ replacement"),
+              re.compile(r"^dir_move: Moved ([^/]+)/(.+) to (.+)\.$"))
+# state: the entity kind of a snapshot key's first-level ids (a key not listed is classified by its ids, else world-level)
+STATE_KIND = {**dict.fromkeys(("values", "holdings", "rights", "vote_weight", "dm_limit", "efficiency", "member_of", "titles",
+                               "names"), "agent"),
+              **dict.fromkeys(("stocks", "camptypes", "granaries", "upgrades"), "camp"),
+              **dict.fromkeys(("prices", "supplies", "reserve_ratio", "redemption", "redemption_demand"), "currency"),
+              "contracts": "contract", "jurisdictions": "polity", "loans": "loan", "projects": "project", "leases": "lease",
+              "channels": "channel", "directories": "store", "probes": "law"}
+ID_LIKE = re.compile(r"^[A-Za-z]{1,3}\d+$")
+
+
+def message_types() -> frozenset:
+    """Event types copied into `messages`: every type of registry kind communication, plus the types flagged `messages`."""
+    from charter import eventtypes as ET
+    return frozenset(n for n, t in ET.REG.items() if t.kind == "communication" or "messages" in t.flags)
+
+
+def _etype(name):
+    from charter import eventtypes as ET
+    try:
+        return ET.get(name)
+    except ET.UnknownEvent:
+        return None
+
+
+def _audience(vis) -> str | None:
+    if isinstance(vis, list):
+        return "parties"
+    if isinstance(vis, str) and vis.startswith("channel:"):
+        return "channel"
+    return None if vis is None else str(vis)
+
+
+def _channel(e, et, d, poll_outlet) -> tuple[str, str]:
+    """(channel_id, channel_kind) of a message event."""
+    t, vis = e.get("type"), e.get("vis")
+    if e.get("channel_id"):                                             # channels v2 (doc 14) names it on the event
+        return f"ch:{e['channel_id']}", "channel"
+    if isinstance(vis, str) and vis.startswith("channel:"):
+        return f"ch:{vis.split(':', 1)[1]}", "channel"
+    ck = CHANNEL_OF.get(t)
+    if t == "annotation" and vis == "public":                           # a public annotation; subscribers-only ones: the outlet
+        return "public", "public"
+    if ck == "outlet":
+        return f"outlet:{d.get('outlet') or poll_outlet.get(str(d.get('poll'))) or SUBMISSIONS_OUTLET}", "outlet"
+    if ck == "submissions":
+        o = d.get("outlet") if t != "submission" else None
+        return f"submissions:{o or poll_outlet.get(str(d.get('poll'))) or SUBMISSIONS_OUTLET}", "submissions"
+    if ck == "gazette":
+        j = d.get("jurisdiction")
+        return f"gazette:{'main' if j in (None, '', 'all') else j}", "gazette"
+    if et is not None and et.kind == "communication":
+        if "public" in et.vis and "parties" not in et.vis:
+            return "public", "public"
+        if vis == "public":
+            return "public", "public"
+        if isinstance(vis, list):
+            who = sorted({str(x) for x in vis})
+            if len(who) == 2:
+                return "dm:" + "|".join(who), "dm"
+            if len(who) >= 3:
+                return "group:" + "|".join(who), "group"
+    return f"system:{t}", "system"
+
+
+def _text_of(d) -> str | None:
+    for k in ("text", "shown", "question", "choice"):
+        if isinstance(d.get(k), str):
+            return d[k]
+    return None
+
+
+def _flatten(x, path, out):
+    """(path, leaf) pairs of a snapshot value: numbers and bools as numbers, strings and lists as JSON leaves; None skipped."""
+    if isinstance(x, dict):
+        for k, v in x.items():
+            _flatten(v, f"{path}.{k}" if path else str(k), out)
+    elif x is not None:
+        out.append((path or None, x))
+
+
+def _state_rows(states, inh, agent_ids, ids) -> list[dict]:
+    rows = []
+    for s in states:
+        r = s.get("round")
+        for key, v in s.items():
+            if key == "round":
+                continue
+            kind = STATE_KIND.get(key)
+            if isinstance(v, dict) and v and kind is None:
+                ks = [str(x) for x in v]
+                kind = next((kk for kk, pool in (("agent", agent_ids), ("camp", ids["camp"]), ("contract", ids["contract"]),
+                                                 ("law", ids["law"]), ("polity", ids["polity"])) if all(x in pool for x in ks)), None)
+                if kind is None and all(ID_LIKE.match(x) for x in ks) and all(isinstance(y, dict) for y in v.values()):
+                    kind = ""                                           # keyed by ids of a kind the exporter does not know
+            leaves = []
+            if isinstance(v, dict) and kind is not None:
+                for ent, sub in v.items():
+                    pl = []
+                    _flatten(sub, "", pl)
+                    leaves += [(str(ent), p, x) for p, x in pl]
+            else:
+                pl = []
+                _flatten(v, "", pl)
+                leaves = [(None, p, x) for p, x in pl]
+            for ent, p, x in leaves:
+                num = isinstance(x, (int, float)) and not isinstance(x, bool)
+                rows.append({"round": r, "inherited": inh(r), "key": key, "entity": ent, "entity_kind": (kind or None) if ent is not None
+                             else None, "path": p, "value": float(x) if num or isinstance(x, bool) else None,
+                             "value_json": None if num or isinstance(x, bool) else x})
+    return rows
+
+
+def _turn_rows(run: Path, meta, h, events, inh, with_prompts) -> tuple[list, list]:
+    from charter import provenance as PV
+    rows, blobs, seen = [], [], set()
+    reasoning = _jsonl(run / "reasoning.jsonl")
+    if reasoning:
+        src = reasoning
+    else:                                                               # older runs: turns.jsonl, positions from the turn events
+        models = {a["id"]: a.get("model") for a in h.instance["agents"]}
+        pos = {}
+        for e in events:
+            if e.get("type") == "turn" and isinstance(e.get("data"), dict):
+                pos.setdefault((e.get("round"), e.get("agent")), []).append(e["data"].get("position"))
+        src, taken = [], {}
+        for t in _jsonl(run / "turns.jsonl"):
+            key = (t.get("round"), t.get("agent"))
+            i = taken[key] = taken.get(key, -1) + 1
+            ps = pos.get(key) or []
+            src.append({**t, "phase": "decide", "model": models.get(t.get("agent")), "position": ps[i] if i < len(ps) else None})
+    for t in src:
+        u = t.get("usage") if isinstance(t.get("usage"), dict) else {}
+        prompt = t.get("prompt")
+        psha = PV.sha(prompt) if isinstance(prompt, str) else None
+        if with_prompts and psha and psha not in seen:
+            seen.add(psha)
+            blobs.append({"blob_sha": psha, "kind": "prompt", "chars": len(prompt), "text": prompt})
+        acts, res = t.get("actions"), t.get("results")
+        rows.append({"round": t.get("round"), "agent": _s(t.get("agent")), "inherited": inh(t.get("round")),
+                     "position": t.get("position"), "phase": t.get("phase"), "mode": t.get("mode"), "model": t.get("model"),
+                     "reasoning": t.get("reasoning"), "stated_reasoning": t.get("stated_reasoning"), "notes": t.get("notes"),
+                     "actions_json": acts, "results_json": res, "n_actions": len(acts) if isinstance(acts, list) else None,
+                     "n_failed": sum(1 for x in res if isinstance(x, str) and ERROR_RESULT.match(x)) if isinstance(res, list) else None,
+                     "prompt_sha": psha, "prompt_chars": t.get("prompt_chars"), "tokens_in": u.get("input"),
+                     "tokens_out": u.get("output"), "error": _s(t.get("error"))})
+    return rows, blobs
+
+
+def _document_rows(run: Path, meta, inst, turn_rows) -> list[dict]:
+    from charter import directories as DR
+    from charter import provenance as PV
+    fz = run / DR.FROZEN_DIR
+    if not fz.is_dir():
+        return []
+    base = _json(fz / "base.json", {}) or {}
+    st = _json(fz / "state.json", {}) or {}
+    try:
+        conf = DR.stores(inst.get("spec") or {})
+    except Exception:                                                   # a spec this code cannot read: namespaces unknown
+        conf = {}
+    ns = {n: (c or {}).get("namespace") for n, c in conf.items()}
+    last = {}                                                           # (store, path) -> (agent, round): the last write
+    for t in turn_rows:
+        for x in t.get("results_json") or []:
+            if not isinstance(x, str) or not x.startswith("dir_"):
+                continue
+            for i, rx in enumerate(DIR_RESULT):
+                m = rx.match(x)
+                if m:
+                    last[(m.group(1), m.group(3) if i == 2 else m.group(2))] = (t["agent"], t["round"])
+                    break
+
+    def row(store, path, kind, h, author=None, rnd=None):
+        text = None
+        try:
+            text = PV.get_blob(run, h) if h else None
+        except Exception:
+            text = None
+        return {"namespace": ns.get(store), "store": store, "path": path, "kind": kind, "author": author, "round": rnd,
+                "chars": None if text is None else len(text), "sha": h, "text": text}
+    rows = []
+    for store, files in sorted((base.get("stores") or {}).items()):
+        rows += [row(store, p, "base", h) for p, h in sorted(files.items())]
+    if st.get("written_back_at"):                                       # the store at the last write-back (the run's end state)
+        for store, files in sorted((st.get("published") or {}).items()):
+            rows += [row(store, p, "file", h, *last.get((store, p), (None, None))) for p, h in sorted(files.items())]
+    rid = meta.get("run_id") or run.name
+    for f in sorted(fz.glob("records-*.md")):
+        text = f.read_text(errors="replace")
+        store = f.name[len("records-"):-len(".md")]
+        rows.append({"namespace": ns.get(store), "store": store, "path": f"{DR.RECORDS}{rid}.md", "kind": "record", "author": "runner",
+                     "round": None, "chars": len(text), "sha": PV.blob_sha(text), "text": text})
+    return rows
+
+
+def v2_tables(run: Path, meta: dict, h, inh, ever, with_prompts: bool = False) -> dict[str, list[dict]]:
+    """The schema 2 tables of one run: messages, channels, channel_members, turns, state, documents, event_types (and blobs)."""
+    from charter import eventtypes as ET
+    gt = h.gt
+    events = gt.get("events") or []
+    inst = h.instance
+    agent_ids = {a["id"] for a in inst["agents"]} | set(ever)
+    msg_types = message_types()
+    anon_author = {str(e["data"].get("event")): e.get("agent") for e in events
+                   if e.get("type") == "anon_truth" and isinstance(e.get("data"), dict)}
+    poll_outlet = {}
+    kch = {}                    # kernel channel id -> {owner, open, created_round, closed_round, members: {agent: [from, role]}}
+    spells = []                 # closed member spells: (channel_id, agent, role, from, to)
+    msgs, n_events = [], {}
+
+    def close_spell(cid, ch, a, r):
+        f, role = ch["members"].pop(a)
+        spells.append((cid, a, role, f, r))
+
+    for i, e in enumerate(events):
+        t = ET.canonical(e.get("type"))
+        n_events[t] = n_events.get(t, 0) + 1
+        d = e.get("data") if isinstance(e.get("data"), dict) else {}
+        r = e.get("round")
+        if t == "poll" and d.get("poll") is not None:
+            poll_outlet[str(d["poll"])] = d.get("outlet")
+        if t == "channel_created" and d.get("channel") is not None:
+            cid = f"ch:{d['channel']}"
+            ch = kch.get(cid)
+            if ch is not None:                                          # a name reused after a close: the same channel_id
+                for a in list(ch["members"]):
+                    close_spell(cid, ch, a, r)
+            ch = kch[cid] = {"owner": _s(e.get("agent")), "open": bool(d.get("open")),
+                             "created_round": ch["created_round"] if ch else r, "closed_round": None, "members": {}}
+            for a in d.get("members") or []:
+                ch["members"][str(a)] = [r, "owner" if str(a) == ch["owner"] else "member"]
+        elif t == "channel_member" and f"ch:{d.get('channel')}" in kch:
+            cid = f"ch:{d.get('channel')}"
+            ch, a = kch[cid], str(d.get("agent"))
+            if d.get("change") == "add" and a not in ch["members"]:
+                ch["members"][a] = [r, "owner" if a == ch["owner"] else "member"]
+            elif d.get("change") != "add" and a in ch["members"]:
+                close_spell(cid, ch, a, r)
+        elif t == "channel_closed" and f"ch:{d.get('channel')}" in kch:
+            cid = f"ch:{d.get('channel')}"
+            ch = kch[cid]
+            for a in list(ch["members"]):
+                close_spell(cid, ch, a, r)
+            ch["closed_round"] = r
+        if t not in msg_types:
+            continue
+        et = _etype(t)
+        cid, ck = _channel(e, et, d, poll_outlet)
+        vis = e.get("vis")
+        rec = sorted({str(x) for x in vis}) if isinstance(vis, list) else None
+        if ck == "channel" and cid in kch and not kch[cid]["open"]:
+            rec = sorted(kch[cid]["members"])
+        if t == "anon_post":
+            sender = anon_author.get(str(e.get("id")))
+        else:
+            sender = e.get("agent") if e.get("agent") in agent_ids else None
+        msgs.append({"msg_id": e.get("id"), "seq": i, "round": r, "inherited": inh(r), "type": t, "channel_id": cid,
+                     "channel_kind": ck, "sender": _s(sender), "anonymous": t == "anon_post" or (t == "submission" and bool(d.get("anon"))),
+                     "audience": _audience(vis), "recipients_json": rec, "n_recipients": None if rec is None else len(rec),
+                     "title": _s(d.get("headline") or d.get("title") or (d.get("question") if t == "poll" else None)),
+                     "text": _text_of(d), "encrypted": bool(d.get("encrypted")), "reply_to": _s(d.get("reply_to")),
+                     "data_json": e.get("data")})
+    msgs.sort(key=lambda m: (m["channel_id"], m["seq"]))
+
+    # --- channels and their members
+    by_ch = {}
+    for m in msgs:
+        by_ch.setdefault(m["channel_id"], []).append(m)
+    names = {}
+    for m in msgs:
+        nm = m["data_json"].get("name") if m["channel_kind"] == "outlet" and isinstance(m["data_json"], dict) else None
+        if nm and m["channel_id"] not in names:
+            names[m["channel_id"]] = str(nm)
+    ch_rows, mem_rows = [], []
+    for cid in sorted(set(by_ch) | set(kch)):
+        ms = by_ch.get(cid) or []
+        kc = kch.get(cid)
+        ck = "channel" if kc else ms[0]["channel_kind"]
+        senders = {m["sender"] for m in ms if m["sender"] is not None}
+        rounds = [m["round"] for m in ms if m["round"] is not None]
+        part = cid.split(":", 1)[1].split("|") if ck in ("dm", "group") else None
+        if kc:
+            members = sorted(kc["members"])
+        else:
+            members = part
+        name = (cid.split(":", 1)[1] if kc else ", ".join(part) if part else names.get(cid) or
+                (cid.split(":", 1)[1] if ":" in cid else cid))
+        ch_rows.append({"channel_id": cid, "channel_kind": ck, "channel_source": "kernel" if ck == "channel" else "derived", "name": name,
+                        "owner": kc["owner"] if kc else None, "open": kc["open"] if kc else None,
+                        "created_round": kc["created_round"] if kc else (min(rounds) if rounds else None),
+                        "closed_round": kc["closed_round"] if kc else None, "first_round": min(rounds) if rounds else None,
+                        "last_round": max(rounds) if rounds else None, "n_messages": len(ms), "n_senders": len(senders),
+                        "members_json": members})
+        if part and not kc:
+            mem_rows += [{"channel_id": cid, "agent": a, "role": "member", "from_round": min(rounds) if rounds else None,
+                          "to_round": None, "source": "derived"} for a in part]
+    for cid, a, role, f, to in spells:
+        mem_rows.append({"channel_id": cid, "agent": a, "role": role, "from_round": f, "to_round": to, "source": "kernel"})
+    for cid, kc in kch.items():
+        for a, (f, role) in kc["members"].items():
+            mem_rows.append({"channel_id": cid, "agent": a, "role": role, "from_round": f, "to_round": None, "source": "kernel"})
+    mem_rows.sort(key=lambda x: (x["channel_id"], x["agent"], x["from_round"] if x["from_round"] is not None else -1))
+
+    # --- turns, state, documents, event types
+    turn_rows, blob_rows = _turn_rows(run, meta, h, events, inh, with_prompts)
+    snaps = h.states
+    ids = {"camp": {str(c) for s in snaps for c in (s.get("stocks") or {})},
+           "contract": {str(c) for s in snaps for c in (s.get("contracts") or {})}, "law": {str(x) for x in gt.get("laws") or {}},
+           "polity": {str(j) for s in snaps for j in (s.get("jurisdictions") or {})}}
+    state_rows = _state_rows(snaps, inh, agent_ids, ids)
+    doc_rows = _document_rows(run, meta, inst, turn_rows)
+    et_rows = []
+    for n, t in ET.REG.items():
+        et_rows.append({"type": n, "module": t.module, "kind": t.kind, "vis_json": sorted(t.vis), "natural": t.natural, "feed": t.feed,
+                        "act": t.act, "primitive": t.primitive, "is_message": n in msg_types, "aliases_json": list(t.aliases),
+                        "n_events": n_events.get(n, 0)})
+    for n in sorted(set(n_events) - set(ET.REG)):                       # logged under a name the registry does not know
+        et_rows.append({"type": n, "module": None, "kind": None, "vis_json": None, "natural": None, "feed": None, "act": None,
+                        "primitive": None, "is_message": False, "aliases_json": None, "n_events": n_events[n]})
+    out = {"messages": msgs, "channels": ch_rows, "channel_members": mem_rows, "turns": turn_rows, "state": state_rows,
+           "documents": doc_rows, "event_types": et_rows}
+    if with_prompts:
+        out["blobs"] = blob_rows
+    return out
 
 
 # ====================================================================== typing
@@ -719,7 +1212,7 @@ def coerce(table: str, row: dict) -> dict:
         elif c.type == "json":
             out[c.name] = json.dumps(v, sort_keys=True, default=str, separators=(",", ":"))
         elif c.type == "str":
-            out[c.name] = str(v)
+            out[c.name] = str(v) or None                                # "" is null in both formats (a CSV cell cannot tell them apart)
         elif c.type == "int":
             out[c.name] = int(v)
         elif c.type == "float":
@@ -777,14 +1270,19 @@ def _write(table: str, rows: list[dict], path: Path, fmt: str) -> None:
     import pyarrow as pa
     import pyarrow.parquet as pq
     schema = pa.schema([pa.field(c.name, getattr(pa, _ARROW[c.type])()) for c in cols],
-                       metadata={"schema_version": str(SCHEMA_VERSION), "table": table, "charter_dataset": "1"})
+                       metadata={"schema_version": str(SCHEMA_VERSION), "schema_minor": str(SCHEMA_MINOR), "table": table,
+                                 "charter_dataset": "1"})
     t = pa.table({c.name: [r[c.name] for r in rows] for c in cols}, schema=schema)
     pq.write_table(t, path)
 
 
 # ====================================================================== export / load
-def export(runs, out, fmt: str | None = None, running_scores: bool = False, log=None) -> dict:
-    """Export run directories (or directories of runs) to `out`: one file per table plus manifest.json. Returns the manifest."""
+def export(runs, out, fmt: str | None = None, running_scores: bool = False, log=None, *, root=None,
+           with_prompts: bool = False) -> dict:
+    """Export run directories (or directories of runs) to `out`: one file per table plus manifest.json. Returns the manifest.
+
+    root: directory the exported run_dir / parent_run paths are made relative to (default: each path's last two parts).
+    with_prompts: also write the `blobs` table (each distinct turn prompt once; turns.prompt_sha joins it)."""
     fmt = fmt or ("parquet" if have_pyarrow() else "csv")
     if fmt not in ("parquet", "csv"):
         raise ValueError(f"format must be parquet or csv, not {fmt}")
@@ -793,7 +1291,7 @@ def export(runs, out, fmt: str | None = None, running_scores: bool = False, log=
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     dirs = find_runs(runs)
-    data = {t: [] for t in SCHEMA}
+    data = {t: [] for t in SCHEMA if t not in OPTIONAL or (t == "blobs" and with_prompts)}
     seen, exported = set(), []
     for d in dirs:
         from charter import provenance as PV
@@ -803,11 +1301,11 @@ def export(runs, out, fmt: str | None = None, running_scores: bool = False, log=
         seen.add(rid)
         if log:
             log(f"export {d} as {rid}")
-        for t, rows in run_tables(d, run_id=rid, running_scores=running_scores).items():
+        for t, rows in run_tables(d, run_id=rid, running_scores=running_scores, root=root, with_prompts=with_prompts).items():
             data[t].extend(coerce(t, r) for r in rows)
-        exported.append({"run_id": rid, "run_dir": str(d.resolve())})
+        exported.append({"run_id": rid, "run_dir": portable(d.resolve(), root)})
     from charter import provenance as PV
-    manifest = {"schema_version": SCHEMA_VERSION, "format": fmt, "runs": exported,
+    manifest = {"schema_version": SCHEMA_VERSION, "schema_minor": SCHEMA_MINOR, "format": fmt, "runs": exported,
                 "exporter": {"git": PV.git_info().get("sha"), "export_module": PV.sha(Path(__file__).read_bytes())},
                 "tables": {t: {"file": f"{t}.{fmt}", "rows": len(rows), "columns": [[c.name, c.type] for c in SCHEMA[t]]}
                            for t, rows in data.items()}}
@@ -853,7 +1351,8 @@ def frames(out, tables=None) -> dict:
 # ====================================================================== docs
 def schema_markdown() -> str:
     """docs/export.md body for the tables (regenerate after a schema change; tests check the file is current)."""
-    lines = [f"Dataset schema version **{SCHEMA_VERSION}**. Types: `str`, `int`, `float`, `bool`, `json` (JSON text). "
+    lines = [f"Dataset schema version **{SCHEMA_VERSION}.{SCHEMA_MINOR}** (`schema_version` {SCHEMA_VERSION}, `schema_minor` "
+             f"{SCHEMA_MINOR}). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). "
              "Every column may be null.", ""]
     for t, cols in SCHEMA.items():
         lines += [f"### `{t}`", "", "| column | type | meaning |", "|---|---|---|"]
@@ -869,10 +1368,13 @@ def add_command(sub) -> None:
     p.add_argument("--out", required=True, help="output directory")
     p.add_argument("--format", choices=["parquet", "csv"], default=None, help="parquet when pyarrow is importable, else csv")
     p.add_argument("--running-scores", action="store_true", help="score each agent's goal over rounds 0..r for every round (slow)")
+    p.add_argument("--root", default=None, help="make run_dir / parent_run relative to this directory (default: <spec>/<run>)")
+    p.add_argument("--with-prompts", action="store_true", help="also write the blobs table (each distinct turn prompt once)")
     p.set_defaults(fn=cmd)
 
 
 def cmd(a) -> None:
-    man = export(a.runs, a.out, fmt=a.format, running_scores=a.running_scores, log=print)
-    print(f"{len(man['runs'])} run(s) -> {a.out} ({man['format']}, schema {man['schema_version']}): "
+    man = export(a.runs, a.out, fmt=a.format, running_scores=a.running_scores, log=print, root=getattr(a, "root", None),
+                 with_prompts=getattr(a, "with_prompts", False))
+    print(f"{len(man['runs'])} run(s) -> {a.out} ({man['format']}, schema {man['schema_version']}.{man['schema_minor']}): "
           + ", ".join(f"{t} {v['rows']}" for t, v in man["tables"].items()))
