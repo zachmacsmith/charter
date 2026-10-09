@@ -31,6 +31,8 @@ def check_move(k, p):
                 raise L.LawError(f"no such agent: {key}")
     if isinstance(p["src"], str) and p["src"].startswith(AC.FUND):    # P4.4: only a fund's own law moves goods out of it
         AC.check_fund_move(k, p["src"], p["why"])
+    if any(isinstance(x, str) and x.startswith(AC.STORE) for x in (p["src"], p["dst"])):   # review 15 S3: food stores
+        AC.check_store_move(k, p["src"], p["dst"], p["item"], qty, p["why"])
     if not AC.can_pay(k, p["src"], p["item"], qty):
         raise PhysicsError("insufficient")
     if p.get("memo") is not None:                                    # W6a: a purpose memo (law.v2 only), a short string

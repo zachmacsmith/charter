@@ -817,6 +817,14 @@ _ROWS = [
       sites=("camptypes.fields:change_reap", "camptypes.fields:act"),
       why={"compel": _LNA, "gate": "law.v2: before_reap gates it (a Tillers' Right refuses a non-sower: review 15 U1, S6)"},
       notes="the crop becomes the reaper's food; the sower learns who reaped it (natural perception, E)"),
+    # review 15 S3: buildings (stores; irrigation and repair come with the ladder, S11)
+    P("build", "subsistence", "create", ("agent", "kind", "owner", "store_id"), "subsistence:change_build", routed=True,
+      subject="agent", parties=("agent",), agent_params=("agent",), event="store_built", causes=("agent",), reads=("stores",),
+      sites=("subsistence:change_build", "subsistence:act_build"),
+      why={"compel": _LNA, "gate": "law.v2: before_build gates it (permits, building taxes)"},
+      notes="kind store: its materials (subsistence.store.cost) are used up; a new account store:<store_id> owned by the builder or "
+            "an institution it is a member or officer of; anyone deposits (a move), only the owner takes food out "
+            "(accounts.check_store_move)"),
 ]
 
 # ---------------------------------------------------------------------- actions -> primitives
@@ -891,7 +899,7 @@ ACTION_PRIMITIVES = {
     "dir_list": LOOKUP, "dir_read": LOOKUP, "dir_search": LOOKUP, "dir_write": ("dir_write",), "dir_edit": ("dir_write",),
     "dir_move": ("dir_write",), "dir_delete": ("dir_write",), "dir_grant": ("dir_grant",),
     # subsistence (review 15): farm sows or reaps (its first primitive depends on its arguments: ANY_FIRST)
-    "farm": ("sow", "reap"),
+    "farm": ("sow", "reap"), "build": ("build",), "withdraw": ("move",),
 }
 
 # Actions whose first primitive depends on their arguments (any primitive they list may be the one the action is "for": a block of
@@ -944,7 +952,8 @@ TIER_OF = {
           "start_project",
           "dir_write", "dir_grant",                                    # directories
           "set_channel",                                               # wave 9 C (channels.v2)
-          "sow", "reap"),                                              # review 15 S2: who may sow or reap a plot is law (U1)
+          "sow", "reap",                                               # review 15 S2: who may sow or reap a plot is law (U1)
+          "build"),                                                    # review 15 S3: a store (a building permit is law)
     "L-route": (),
 }
 

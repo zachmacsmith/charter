@@ -481,3 +481,129 @@ def test_food_camps_in_the_prompt_only_when_on():
     inst, k = world("nature_design", [SMALL])
     core = CX.core_prompt(inst, next(x for x in inst["agents"] if x["cls"] != "fixer"), k)
     assert "food" not in core.lower() and "farm (" not in core
+
+
+# ---------------------------------------------------------------------- S3: stores
+def builder(k, aid):
+    k._add(aid, "timber", 10)
+    k._add(aid, "stone", 6)
+
+
+def test_building_a_store_costs_its_materials_and_makes_an_account():
+    inst, k = small()
+    a, b = eaters(k)[:2]
+    for x in (a, b):
+        for i in ("timber", "stone"):
+            k.w["agents"][x]["holdings"].pop(i, None)
+    with pytest.raises(A.ActionError, match="a store costs 10 timber, 6 stone"):
+        A.act(k, a, "build", {"kind": "store"})
+    builder(k, a)
+    t0, s0 = k.bal(a, "timber"), k.bal(a, "stone")
+    assert A.act(k, a, "build", {"kind": "store"}).startswith("Built store S1")
+    assert k.bal(a, "timber") == pytest.approx(t0 - 10) and k.bal(a, "stone") == pytest.approx(s0 - 6)
+    assert AC.kind_of(k, "store:S1") == "store" and "store:S1" in AC.keys(k)
+    assert SB.state(k)["stores"]["S1"]["owner"] == a and any(e["type"] == "store_built" and e["vis"] == "public" for e in k.events)
+    with pytest.raises(A.ActionError, match="irrigation"):
+        A.act(k, a, "build", {"kind": "irrigation"})
+    SB.state(k)["stage"][b] = -1
+    builder(k, b)
+    with pytest.raises(A.ActionError, match="you are hungry: build needs you fed"):
+        A.act(k, b, "build", {"kind": "store"})
+
+
+def test_anyone_deposits_only_the_owner_withdraws_and_capacity_holds():
+    inst, k = small()
+    a, b = eaters(k)[:2]
+    builder(k, a)
+    A.act(k, a, "build", {"kind": "store"})
+    set_food(k, b, 50)
+    assert A.act(k, b, "transfer", {"to": "store:S1", "item": "food", "qty": 30}).startswith("Put 30 food in store S1")
+    with pytest.raises(A.ActionError, match="holds at most 40 food"):
+        A.act(k, b, "transfer", {"to": "store:S1", "item": "food", "qty": 11})
+    k._add(a, "stone", 1)
+    with pytest.raises(A.ActionError, match="holds food only"):
+        A.act(k, a, "transfer", {"to": "store:S1", "item": "stone", "qty": 1})
+    with pytest.raises(A.ActionError, match="only its owner"):
+        A.act(k, b, "withdraw", {"store": "S1", "qty": 1})
+    f0 = k.bal(a, "food")
+    assert A.act(k, a, "withdraw", {"store": "S1", "qty": 5}).startswith("Took 5 food from store S1")
+    assert k.bal(a, "food") - f0 == pytest.approx(5) and k.bal("store:S1", "food") == pytest.approx(25)
+    with pytest.raises(A.ActionError, match="holds only 25"):
+        A.act(k, a, "withdraw", {"store": "S1", "qty": 26})
+    assert any(x.startswith("Your stores: S1 25/40 food") for x in SB.state_lines(k, a))
+
+
+def test_store_spoilage_is_slower():
+    inst, k = small(["subsistence.ration=0"])
+    a = eaters(k)[0]
+    builder(k, a)
+    A.act(k, a, "build", {"kind": "store"})
+    set_food(k, a, 30)
+    A.act(k, a, "transfer", {"to": "store:S1", "item": "food", "qty": 20})
+    end_round(k)
+    assert k.bal("store:S1", "food") == pytest.approx(20 * 0.98) and k.bal(a, "food") == pytest.approx(10 * 0.85)
+
+
+def test_a_law_cannot_take_from_a_store_it_does_not_own():
+    from charter import lawlang as L
+    inst, k = small()
+    a = eaters(k)[0]
+    builder(k, a)
+    A.act(k, a, "build", {"kind": "store"})
+    k._add("store:S1", "food", 10)
+    with pytest.raises(L.LawError, match="only its owner"):
+        k.apply("move", src="store:S1", dst=a, item="food", qty=1, why="law:L9")
+    with pytest.raises(L.LawError, match="only its owner"):
+        k.apply("move", src="store:S1", dst=a, item="food", qty=1, why="transfer")
+
+
+ASSOC_CODE = '''title = "Granary Club"
+intent = "Members' granary: the store feeds members who hold less than a meal."
+def on_round_end(r):
+    for m in members():
+        if food_of(m) < 1:
+            move("store:S1", m, "food", 1)
+'''
+
+
+def test_an_institution_owns_a_store_and_its_law_moves_food_out():
+    inst, k = world("society", ["subsistence.enabled=true", "law.v2=true", "contracts.enabled=true"], constitution=True)
+    a, b, c = eaters(k)[:3]
+    A.act(k, a, "create_contract", {"name": "Granary Club", "code": ASSOC_CODE})
+    cid = next(iter(AC.assocs(k)))
+    A.act(k, b, "join_contract", {"contract": cid})
+    builder(k, a)
+    builder(k, c)
+    with pytest.raises(A.ActionError, match="member or officer"):
+        A.act(k, c, "build", {"kind": "store", "owner": cid})
+    assert A.act(k, a, "build", {"kind": "store", "owner": cid}).startswith("Built store S1")
+    assert SB.state(k)["stores"]["S1"]["owner"] == cid
+    with pytest.raises(A.ActionError, match="only its owner"):
+        A.act(k, a, "withdraw", {"store": "S1", "qty": 1})                 # the founder is not an officer: only its code takes out
+    set_food(k, c, 20)
+    A.act(k, c, "transfer", {"to": "store:S1", "item": "food", "qty": 10})  # anyone deposits
+    set_food(k, b, 0)
+    end_round(k)
+    assert SB.stage(k, b) == 0                                             # fed from the granary before the ration
+    assert k.bal("store:S1", "food") < 9 * 0.98 + 1e-6                     # (and spoiled at 2%)
+
+
+def test_a_dead_owners_store_passes_on():
+    inst, k = small()
+    a = eaters(k)[0]
+    builder(k, a)
+    A.act(k, a, "build", {"kind": "store"})
+    assert MO.disable(k, a, "accident")
+    assert SB.state(k)["stores"]["S1"]["owner"] == "J0" and any(e["type"] == "store_owner" for e in k.events)
+
+
+def test_stores_conserve_food():
+    inst, k = small(["subsistence.ration=0", "subsistence.spoil=0", "subsistence.store_spoil=0"])
+    a, b = eaters(k)[:2]
+    builder(k, a)
+    A.act(k, a, "build", {"kind": "store"})
+    t0 = AC.totals(k)["food"]
+    A.act(k, b, "transfer", {"to": "store:S1", "item": "food", "qty": 2})
+    A.act(k, a, "withdraw", {"store": "S1", "qty": 1})
+    end_round(k)
+    assert AC.totals(k)["food"] == pytest.approx(t0)

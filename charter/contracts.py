@@ -959,6 +959,8 @@ def scope_api(k, lid, api: dict) -> dict:
             return x
         if "unlimited_seizure" in ext and x in rec["members"]:          # wave 9 E: a granted seizure, from members only
             return x
+        if isinstance(x, str) and x.startswith(AC.STORE) and (AC.stores(k).get(x[len(AC.STORE):]) or {}).get("owner") == cid:
+            return x                                                    # review 15 S3: a food store it owns
         return None
 
     def dst_key(x):
@@ -969,6 +971,8 @@ def scope_api(k, lid, api: dict) -> dict:
         if isinstance(x, str) and ((x.startswith(esc) and not word) or x.startswith(f"{AC.FUND}{lid}:") or x in k.w["agents"]
                                    or _other_treasury(k, x)):            # P4.5 (review 10 #13): another association holds goods
             return x
+        if isinstance(x, str) and x.startswith(AC.STORE) and x[len(AC.STORE):] in AC.stores(k):
+            return x                                                    # review 15 S3: anyone may put food in a store
         return None
 
     def move(src, dst, item, qty, memo=None):                           # W6a: memo (law.v2)

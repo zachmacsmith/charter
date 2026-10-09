@@ -10,6 +10,9 @@ Owner keys (what `Kernel.bal`, `Kernel._add`, `Kernel.move` / `k.apply("move")` 
                          open from the death phase's mark step to probate (mortality.py)                kind "estate"
     "assoc:<cid>"        an association's (contract's) treasury (k.w["contracts"]["assoc"][cid]["reserve"], P4.3)  kind "association"
     "escrow:<cid>:<aid>" a member's deposit held by association cid (its record's ["escrow"][aid], P4.3)   kind "escrow"
+    "store:<sid>"        a food store (k.w["subsistence"]["stores"][sid]["holdings"], review 15 S3; subsistence on): food
+                         only, up to its capacity; goods leave it only for its owner (an agent's withdraw, or a law of the
+                         owning institution, or of a polity binding the owning agent: check_store_move)            kind "store"
     "fund:<lid>:<name>"  a per-law fund (k.w["contracts"]["funds"][key]["holdings"], P4.4; contracts on): opened by law lid's
                          open_fund(name); only lid (and its amendments, which keep the id) moves goods out of it  kind "fund"
     "world"              reserved: the sink/source of interventions and gas (P3.8, P5.1)              kind "world"
@@ -41,13 +44,14 @@ from dataclasses import dataclass
 from charter import jurisdictions as J
 from charter import lawlang as L
 
-KINDS = ("agent", "polity", "estate", "association", "personal", "escrow", "world", "fund")
+KINDS = ("agent", "polity", "estate", "association", "personal", "escrow", "world", "fund", "store")
 RESERVED_KINDS = ("personal", "world")                           # named now, registered by later packages (P3.8, P5.1)
 J0_KEY = "reserve"                                                # J0's owner key forever (review 06 §9)
 ESTATE = "estate:"
 ASSOC = "assoc:"                                                  # P4.3: an association's treasury
 ESCROW = "escrow:"                                                # P4.3: a member's deposit held by an association
 FUND = "fund:"                                                    # P4.4: a per-law fund (contracts.open_fund)
+STORE = "store:"                                                  # review 15 S3: a food store (charter/subsistence.py)
 
 # Where totals of an item may change: the explicit sources and sinks, as "module.function" of their Kernel._add call sites. Every
 # other change is a move between accounts, or into or out of a held escrow (`escrows`); a child's endowment comes from its parent
@@ -64,7 +68,8 @@ SOURCES_SINKS = {
                 "resources.upkeep_start_round", "conflict._take", "conflict._spoils", "conflict.act_forge",
                 "conflict.act_fortify", "conflict.act_buy_initiative",                  # consumed, spent, destroyed or converted
                 "conflict.fort_change", "economy.do_convert", "conflict.commit", "conflict.pledge",
-                "conflict._release_pledge"),        # P2.4a: stone into and out of forts, forging, weapons committed/pledged/returned
+                "conflict._release_pledge",         # P2.4a: stone into and out of forts, forging, weapons committed/pledged/returned
+                "subsistence.change_build"),        # review 15 S3: a store's materials
     "eat": ("subsistence.change_eat",),                                 # review 15 S1: the ration (food eaten)
     "spoil": ("subsistence.change_spoil",),                             # review 15 S1: food spoiling in every account
     "sow": ("fields.change_sow",),                                      # review 15 S2: seed sown (the crop is a claim, not goods)
@@ -159,7 +164,48 @@ def check_fund_move(k, src, why) -> None:
         raise L.LawError(f"only law {f['law']} moves goods out of its fund {src}")
 
 
-RESOLVERS = {"reserve:": _reserve, ESTATE: _estate, ASSOC: _assoc, ESCROW: _escrow, FUND: _fund}   # key prefix -> resolver
+def stores(k) -> dict:
+    """The food store records (review 15 S3): {sid: {"id", "owner", "capacity", "built", "holdings"}}; {} when none."""
+    return ((k.w.get("subsistence") or {}).get("stores")) or {}
+
+
+def _store(k, key):
+    rec = stores(k).get(key[len(STORE):])
+    if rec is None:
+        raise L.LawError(f"no such store: {key}")
+    return Account(key, "store", rec["owner"], rec["holdings"])
+
+
+def check_store_move(k, src, dst, item, qty, why) -> None:
+    """Review 15 S3: a store holds food only, up to its capacity; goods leave it only for its owner: the owning agent's withdraw
+    (why "withdraw"; the action checks who), or a law (why "law:<lid>") of the owning institution, or of an account whose laws
+    bind the owning agent. Anything else is refused."""
+    if isinstance(dst, str) and dst.startswith(STORE):
+        rec = stores(k).get(dst[len(STORE):])
+        if rec is None:
+            raise L.LawError(f"no such store: {dst}")
+        if item != "food":
+            raise L.LawError(f"a store holds food only, not {item}")
+        if float(rec["holdings"].get("food", 0.0)) + float(qty) > float(rec["capacity"]) + 1e-9:
+            raise L.LawError(f"store {rec['id']} holds at most {float(rec['capacity']):g} food "
+                             f"(it holds {float(rec['holdings'].get('food', 0.0)):.3g})")
+    if isinstance(src, str) and src.startswith(STORE):
+        rec = stores(k).get(src[len(STORE):])
+        if rec is None:
+            raise L.LawError(f"no such store: {src}")
+        w = str(why)
+        if w == "withdraw":
+            return
+        if w.startswith("law:"):
+            acct = account_of(k, w[4:])
+            owner = rec["owner"]
+            if acct == owner or (owner in k.w["agents"] and binds(k, acct, owner)):
+                return
+        raise L.LawError(f"only its owner ({rec['owner']}) takes food out of store {rec['id']}")
+
+
+RESOLVERS = {"reserve:": _reserve, ESTATE: _estate, ASSOC: _assoc, ESCROW: _escrow, FUND: _fund,
+             STORE: _store}                                       # key prefix -> resolver (review 15 S3: stores)
 
 
 def resolve(k, key) -> Account:
@@ -296,6 +342,7 @@ def keys(k) -> list:
         out.append(f"{ASSOC}{cid}")
         out += [escrow_key(cid, aid) for aid in rec["escrow"]]
     out += list(funds(k))                                              # P4.4: per-law funds (a closed one is empty)
+    out += [f"{STORE}{sid}" for sid in stores(k)]                      # review 15 S3: food stores
     return out
 
 

@@ -588,11 +588,133 @@ def act_farm(k, aid, camp, sow=None, reap=None, plot=None):
 
 
 def stores_of(k, aid) -> list:
-    return []
+    """The stores aid may take food out of: its own, and those of institutions it holds an office of (S3)."""
+    return [s for _, s in sorted(state(k)["stores"].items()) if can_withdraw(k, aid, s)]
+
+
+def can_withdraw(k, aid, s) -> bool:
+    if s["owner"] == aid:
+        return True
+    if s["owner"] in k.w["agents"]:
+        return False
+    from charter import institutions as I
+    return aid in I.officers(k, s["owner"])
 
 
 def store_line(k, aid) -> str:
-    return ""
+    mine = stores_of(k, aid)
+    if not mine:
+        return ""
+    return "Your stores: " + "; ".join(f"{s['id']} {float(s['holdings'].get(FOOD, 0.0)):.3g}/{float(s['capacity']):g} food"
+                                       + ("" if s["owner"] == aid else f" ({s['owner']}'s)") for s in mine) + \
+        f" (food there loses {float(cfg(k.spec)['store_spoil']):.0%} a round; withdraw to eat it)."
+
+
+# ---------------------------------------------------------------------- stores (S3): build, deposit, withdraw
+def _store_id(k, x):
+    sid = str(x or "")
+    sid = sid[len(STORE):] if sid.startswith(STORE) else sid
+    if sid not in state(k)["stores"]:
+        raise _err(f"no store {x}" + (f". Stores: {', '.join(sorted(state(k)['stores']))}" if state(k)["stores"] else ""))
+    return sid
+
+
+def _err(msg):
+    from charter.actions import ActionError
+    return ActionError(msg)
+
+
+def act_build(k, aid, kind="store", owner=None):
+    """build {"kind": "store", "owner"?}: a store owned by the builder, or by an institution it is a member or officer of."""
+    from charter import institutions as I
+    if str(kind) != "store":
+        raise _err(f"you can build a store (\"kind\": \"store\"); {kind} is not buildable in this world"
+                   + (" (irrigation and repairs come with the agricultural ladder)" if str(kind) in ("irrigation", "repair") else ""))
+    c = cfg(k.spec)["store"]
+    own = aid if owner in (None, "", aid, "me", "self") else str(owner)
+    if own != aid:
+        if I.get(k, own) is None and own != "J0":
+            raise _err(f"no institution {own} (a store's owner is you or an institution you are a member or officer of)")
+        if not (I.is_member(k, own, aid) or aid in I.officers(k, own)):
+            raise _err(f"you are not a member or officer of {own}")
+    cost = {i: float(q) for i, q in c["cost"].items()}
+    if not all(k.bal(aid, i) + 1e-9 >= q for i, q in cost.items()):
+        raise _err("a store costs " + ", ".join(f"{q:g} {i}" for i, q in cost.items()) + "; you have "
+                   + ", ".join(f"{k.bal(aid, i):g} {i}" for i in cost))
+    st = state(k)
+    sid = f"S{st['seq'] + 1}"
+    out = k.apply("build", agent=aid, kind="store", owner=own, store_id=sid)
+    if not out.ok:
+        raise _err("a law blocked this building" + (f" ({out.reason})" if getattr(out, "reason", None) else ""))
+    return (f"Built store {sid} (owner {own}): it holds up to {float(c['capacity']):g} food, which loses "
+            f"{float(cfg(k.spec)['store_spoil']):.0%} a round there; anyone puts food in with transfer to \"{STORE}{sid}\", "
+            + ("you take it out with withdraw." if own == aid else f"{own}'s officers and laws take it out."))
+
+
+def change_build(k, agent, kind, owner, store_id) -> dict:
+    """A building (S3: a store): its materials are used up; a new account store:<sid> owned by `owner` (public: a building is
+    visible)."""
+    c = cfg(k.spec)["store"]
+    for i, q in c["cost"].items():
+        k._add(agent, i, -float(q))
+    st = state(k)
+    st["seq"] = max(st["seq"], int(store_id[1:]))
+    st["stores"][store_id] = {"id": store_id, "owner": owner, "capacity": float(c["capacity"]), "built": k.r, "builder": agent,
+                              "holdings": {}}
+    k.log("store_built", agent, {"store": store_id, "owner": owner, "capacity": float(c["capacity"]),
+                                 "text": f"{agent} built a food store, {store_id}, owned by {owner}."}, vis="public")
+    return {"store": store_id, "owner": owner}
+
+
+def deposit(k, aid, to, item, qty, memo=None) -> str:
+    """transfer {"to": "store:S1", "item": "food", "qty"}: anyone puts food in a store (a move: laws see it)."""
+    from charter import lawlang as L
+    sid = _store_id(k, to)
+    s = state(k)["stores"][sid]
+    qty = float(qty)
+    if qty <= 0:
+        raise _err("qty must be positive")
+    if item != FOOD:
+        raise _err(f"a store holds food only, not {item}")
+    if k.bal(aid, item) + 1e-9 < qty:
+        raise _err(f"you have only {k.bal(aid, item):g} {item}")
+    room = float(s["capacity"]) - float(s["holdings"].get(FOOD, 0.0))
+    if qty > room + 1e-9:
+        raise _err(f"store {sid} holds at most {float(s['capacity']):g} food (room for {max(0.0, room):.3g} more)")
+    try:
+        out = k.apply("move", src=aid, dst=f"{STORE}{sid}", item=item, qty=qty, why="store_deposit", actor=aid,
+                      **({"memo": memo} if memo is not None else {}))
+    except L.LawError as e:
+        raise _err(str(e))
+    if not out.ok:
+        raise _err("a law blocked this transfer" + (f" ({out.reason})" if getattr(out, "reason", None) else ""))
+    vis = sorted({aid, s["owner"]} & set(k.w["agents"])) or [aid]
+    k.log("store_deposit", aid, {"store": sid, "owner": s["owner"], "item": item, "qty": qty,
+                                 "text": f"{aid} put {qty:g} food in store {sid}."}, vis=vis)
+    return f"Put {qty:g} food in store {sid} ({float(s['holdings'].get(FOOD, 0.0)):.3g}/{float(s['capacity']):g})."
+
+
+def act_withdraw(k, aid, store, qty):
+    """withdraw {"store": "S1", "qty": 3}: the owner (or an officer of the owning institution) takes food out."""
+    from charter import lawlang as L
+    sid = _store_id(k, store)
+    s = state(k)["stores"][sid]
+    if not can_withdraw(k, aid, s):
+        raise _err(f"only its owner ({s['owner']}) takes food out of store {sid}"
+                   + ("" if s["owner"] in k.w["agents"] else ": its officers, or its laws with move"))
+    q = float(qty)
+    if q <= 0:
+        raise _err("qty must be positive")
+    have = float(s["holdings"].get(FOOD, 0.0))
+    if q > have + 1e-9:
+        raise _err(f"store {sid} holds only {have:.3g} food")
+    try:
+        k.apply("move", src=f"{STORE}{sid}", dst=aid, item=FOOD, qty=q, why="withdraw", actor=aid)
+    except L.LawError as e:
+        raise _err(str(e))
+    k.log("store_withdrawal", aid, {"store": sid, "owner": s["owner"], "qty": q, "text": f"{aid} took {q:g} food from store {sid}."},
+          vis=sorted({aid, s["owner"]} & set(k.w["agents"])) or [aid])
+    return f"Took {q:g} food from store {sid} ({float(s['holdings'].get(FOOD, 0.0)):.3g} left)."
 
 
 # ---------------------------------------------------------------------- the scripted bot (dry runs; own stream)

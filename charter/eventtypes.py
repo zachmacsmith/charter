@@ -511,6 +511,11 @@ E("reap", "subsistence", "primitive", "parties", "event", "subsistence", act="fa
   note="to the reaper and the crop's sower (the sower learns who reaped it: natural perception)")
 E("crop_failed", "subsistence", "summary", "parties", "event", "subsistence", note="blight or rot, told to the sower")
 E("plot_cleared", "subsistence", "summary", "public", "event", "subsistence", note="felling cleared a new plot on a fields camp")
+E("store_built", "subsistence", "primitive", "public", "event", "subsistence", act="build", primitive="build",
+  note="a building is visible: who built which store, owned by whom")
+E("store_deposit", "subsistence", "primitive", "parties", "event", "subsistence", primitive="move",
+  note="food put in a store: the depositor and an agent owner")
+E("store_withdrawal", "subsistence", "primitive", "parties", "event", "subsistence", act="withdraw", primitive="move")
 E("store_owner", "subsistence", "summary", "public", "event", "subsistence",
   note="a dead agent's store passes to its heir (living children, a co-parent, else its polity)")
 

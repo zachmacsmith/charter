@@ -516,6 +516,9 @@ def _pay_tribute(k, aid, item, qty):
 def _transfer(k, aid, to, item, qty, memo=None):
     if memo is not None and not D.v2(k):                               # W6a: a purpose memo exists only under law.v2 (off: as before)
         raise TypeError("_transfer() got an unexpected keyword argument 'memo'")
+    if isinstance(to, str) and to.startswith("store:") and "subsistence" in k.w:   # review 15 S3: a deposit in a food store
+        from charter import subsistence as SB
+        return SB.deposit(k, aid, to, item, qty, memo=memo)
     return _send(k, aid, to, item, qty, memo=memo)
 
 

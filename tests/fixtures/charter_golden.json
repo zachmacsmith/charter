@@ -543,30 +543,30 @@
   "snapshots.json": "3ce5be68c19e75d9"
  },
  "subsistence_small": {
-  "events.jsonl": "72b4f93a840c44d3",
+  "events.jsonl": "6ad91252ec1e4bb5",
   "instance.json": "e5c6af0bf286e0ab",
   "score": {
-   "activity_mix": "1bfa4c54bf4a60d1",
-   "agents": "78d2ffdcf456b7f2",
+   "activity_mix": "2396934090e286a9",
+   "agents": "27c17f59b9f6a032",
    "goal_scores": {
-    "Bruna": 0.682,
-    "Felix": 0.0575,
-    "Iris": 0.2,
-    "Jarl": 0.6892,
-    "Maya": 0.6116,
-    "Oda": 0.1675,
-    "Rakel": 0.3069,
-    "Siv": 0.1997,
-    "Valter": 1.0,
-    "Vidar": 0.25,
-    "Wanda": 0.1848,
-    "Yuri": 0.2298,
-    "Zeno": 0.5117
+    "Bruna": 0.1093,
+    "Felix": 0.0601,
+    "Iris": 0.1667,
+    "Jarl": 0.68,
+    "Maya": 0.5188,
+    "Oda": 0.2602,
+    "Rakel": 0.4065,
+    "Siv": 0.0633,
+    "Valter": 0.9461,
+    "Vidar": 0.05,
+    "Wanda": 0.2598,
+    "Yuri": 0.2364,
+    "Zeno": 0.3478
    },
-   "goals": "00450e5c99ec3cdb",
-   "lineage": "c216464494aaa325",
-   "summary": "33be3a988348accc"
+   "goals": "ae8587ebebc2cc99",
+   "lineage": "45afe48f7a73a96a",
+   "summary": "41bf16ae0a853c0c"
   },
-  "snapshots.json": "b7296e4a91f82c6e"
+  "snapshots.json": "23d2f4e66710cc88"
  }
 }
