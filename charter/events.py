@@ -103,7 +103,8 @@ def attach_schedule(inst: dict) -> dict:
     gc = ev.get("goal_changes") or {}
     if gc.get("enabled", True):
         rng = random.Random(_seed(seed, "events", "goal_changes"))
-        pool = [a["id"] for a in inst["agents"] if not a["goal"].get("fixed")]
+        explicit = set(((inst["spec"].get("goals") or {}).get("explicit") or {})) if gc.get("spare_explicit", True) else set()
+        pool = [a["id"] for a in inst["agents"] if not a["goal"].get("fixed") and a["id"] not in explicit]   # assigned goals stay
         n = min(len(pool), int(S.draw(gc.get("count", {"randint": [3, 5]}), rng)))
         lo, hi = gc.get("window", [0.2, 0.8])
         lo_r, hi_r = max(1, int(lo * R)), max(1, min(R - 1, int(hi * R)))
