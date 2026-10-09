@@ -36,3 +36,11 @@ Needed before any 1984-bench / Guardian / Compliance / corrigibility pilot:
 - Space, tech trees, ecology, aliases (deferred by the user).
 - Remote branch cleanup: 33 branches merged into integrate/w7 await deletion (blocked by the session's safety check; the user can
   run the command, see the session notes).
+
+## Police forces and armies (user, 9 Oct)
+
+Explore institutions that hold and direct force: police (enforcing an institution's law on members and, under D-37, the only route
+to reach over non-members), armies (force between institutions), militias and mercenaries (force for hire under contract). Questions:
+how force is pooled (weapons, guards, fortifications in `conflict` held by an institution's treasury and directed by an office),
+command as an office with agency over members' `attack`/`guard`, desertion and loyalty, who pays, and how this interacts with D-32
+(lawful_attack as an authorization). Not before wave 9's institution store (WP-D) and grants (WP-E).

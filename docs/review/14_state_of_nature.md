@@ -266,6 +266,51 @@ The directory is a lookup (E), not a primitive: listed institutions and channels
 - **Identity.** `as` must be attributable in the monitor record (cause chain: the office and the agent). It is never anonymous by
   default.
 
+### 4.6 Refinements (user, 9 Oct): channels as a general structure
+
+A channel is a named, owned, append-only log with access rules. Six properties define one, and every common communication form is a
+point in that space, so the forms are **templates** (library, presets), never kernel mechanisms:
+
+| Property | Values |
+|---|---|
+| Owner | an agent or an institution; changes settings under the owner's own code |
+| Writers | a selector (below) |
+| Readers | a selector |
+| Discoverability | `listed` in the directory, or unlisted (existence and membership secret) |
+| Sender identity | named; anonymous (a setting the owner's code allows); `as` an institution by a holder of a speak office (agency) |
+| Retention | new readers see the history, or only from when they joined |
+
+Selectors gain one value: **`{"address": true}`, anyone who knows the channel's address**. An address is a capability: it is
+learned by being told (a DM, a post), so "give someone a private line to me" and secret cells need no secrecy mechanism of their
+own. Unlisted addresses are not guessable (a random suffix).
+
+Common instantiations (templates; each is one `found(kind="channel")` with settings):
+
+| Template | Writers | Readers | Listed | Notes |
+|---|---|---|---|---|
+| DM / group chat | the members | the members | no | `send` to agents is the shortcut |
+| Square | present in the camp | present in the camp | yes | world-owned; rate-limited |
+| Inbox | anyone (or a selector) | the owner, or an institution's officers | yes | every agent and every institution has one; `send` to an account delivers here; institution-to-institution mail is `send ... as` |
+| Newspaper / gazette / bulletin | an editor office | subscribers or everyone | yes | subscription fee by the owner's code |
+| Chamber | members | members | optional | an institution's deliberation |
+| Secret cell | address holders | members | no | |
+
+Programmability needs no new machinery. `send` and `post` are routed primitives, so law v2 hooks already give: timed and recurring
+messages (standing orders whose act is `send`), censorship and moderation (`before_post` refusing), relays, forwarding and
+auto-replies to petitions (`after_post`), and laws triggered by a message. Standing orders gain `send` as an allowed act.
+
+**Attention is the real constraint.** Default delivery is **pull**: each turn an agent sees, per channel it reads, an unread count
+and the latest headline, and opens a channel with a `read` look-up that costs from its look-up budget. DMs and the agent's own
+inbox are **pushed** (in the feed, as today). A per-world setting `channels.delivery: push|pull` keeps today's push for old presets.
+Pull makes information scarce, which is what lets presses, inboxes and who-reads-what matter (and what the 1984 benchmark needs).
+
+Agent-facing verbs stay five: `send`, `read`, `open_channel`, `set_channel`, `join`/`leave` (subscribe). Templates appear as
+examples in the manual, not as verbs. Not built: threading, read receipts, per-message pricing as a kernel feature (an owner hook
+can charge), cryptographic encryption beyond today's DM flag (unlisted channels cover the use).
+
+What a world starts with is entirely configurable (presets and specs); there is no privileged starting state. The square, every
+agent's inbox and free channel founding are the residual defaults of a `nature` preset, not kernel facts.
+
 ---
 
 ## 5. Reducing hand-holding: measuring design, not selection
@@ -364,6 +409,18 @@ agents still found nothing new, that changes the priority of D through G.
 | **D11** | May an institution hook its consenting members' legal acts elsewhere (exclusivity, "allegiance"), relaxing D-24? | (a) keep D-24; (b) allowed when the code declared it at join | (b) is how nationality emerges without kernel ontology | **(b)** | It makes multi-membership unusable (every club bans every other) |
 | **D12** | Territory | (a) no kernel claim primitive (recognition plus force); (b) `claim(camp)` binding all harvesters there | (b) re-introduces a privileged reach | **(a)** now; revisit after pilots | Agents repeatedly try to claim land and fail for mechanical, not social, reasons |
 | **D13** | `#convention` / `anarchy` | (a) delete; (b) freeze for old runs, Assurance Founding in the library | (a) breaks `full10` and old goldens | **(b)** | — |
+
+
+### 7.1 Resolved (user, 9 Oct)
+
+- **D2:** institutions bind by consent; the only reach over non-members is force (and recognition by agents already bound).
+  Police forces and armies as institutions are on the backlog for exploration.
+- **D11:** allegiance clauses allowed, only if the code declaring them was visible at join (informed consent).
+- **D1:** superseded. A world's starting communication is configuration; channels follow §4.6.
+- **Model question:** not tested. Opus is known to produce more sophisticated behaviour; Haiku runs were for cost. Wave 9 proceeds
+  regardless of the design-arm result.
+- **D3, D4, D5, D6, D7, D9, D10, D12, D13:** as recommended. **D8** (institutions as members) postponed: largest package, nothing
+  in the runs needs it yet.
 
 ---
 
