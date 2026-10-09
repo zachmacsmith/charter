@@ -660,7 +660,7 @@ def match_goal(v, default=None):
 # words agents use for a spec field (the haiku runs: starting_holdings); difflib catches the rest
 _FIELD_SYNONYMS = {"starting_holdings": "holdings", "endowment": "holdings", "gift": "holdings", "gifts": "holdings",
                    "inheritance": "holdings", "items": "holdings", "class": "cls", "role": "cls", "model": "stats", "tier": "stats",
-                   "personality": "traits", "temperament": "traits", "primary": "goal", "primary_goal": "goal",
+                   "personality": "archetype", "temperament": "archetype", "primary": "goal", "primary_goal": "goal",
                    "secondary_goal": "secondary", "message": "letter", "note": "persona", "instructions": "persona",
                    "when": "timing", "born": "timing"}
 
@@ -684,6 +684,14 @@ def merge_spec(k, base: dict, over: dict) -> dict:
     from charter import goals as G
     if not isinstance(over, dict):
         raise L.LawError("spec must be an object")
+    over = dict(over)
+    for alias in ("temperament", "personality"):                       # the prompt calls the archetype "your temperament"
+        if alias in over:
+            v = over.pop(alias)
+            field = "traits" if isinstance(v, dict) else "archetype"
+            if field in over:
+                raise L.LawError(f"{alias} and {field} both given: give one")
+            over[field] = v
     bad = set(over) - SPEC_KEYS
     if bad:
         hints = [f"{b} -> {h}" for b in sorted(bad) if (h := closest_spec_field(b))]
@@ -729,7 +737,8 @@ def merge_spec(k, base: dict, over: dict) -> dict:
             if v in (None, "", "none"):
                 s["archetype"] = None
             elif v not in AR.ARCHETYPES or (v in AR.GATED and not AR.gate_on(v, k.spec)):
-                raise L.LawError(f"unknown archetype {v!r}")
+                ok = [a for a in AR.ARCHETYPES if a not in AR.GATED or AR.gate_on(a, k.spec)]
+                raise L.LawError(f"unknown archetype (temperament) {v!r}: one of {', '.join(ok)}, or none")
             else:
                 s["archetype"] = v
         elif key == "cls":
@@ -1356,7 +1365,7 @@ def rules_text(inst, maker=True) -> str:
     if enabled(sp):
         c = cfg(sp)
         parts.append(f"Every agent but the Fixer has a lifespan and sees how many rounds it has left. Any agent can commission a new agent "
-                     f"(a child: a full agent with its own turns) from a Maker (commission), choosing its goals, temperament, a persona "
+                     f"(a child: a full agent with its own turns) from a Maker (commission), choosing its goals, temperament (archetype), a persona "
                      f"note (up to {c['persona_tokens']} tokens, put verbatim in the child's instructions), a letter (up to "
                      f"{c['letter_tokens']} tokens), files and holdings to hand over at birth, stats, and whether it is born next round or at "
                      "your death. The Maker may change anything before making it, and the kernel adds small random changes; the parent "
