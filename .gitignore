@@ -11,3 +11,6 @@ runs/
 
 # header design drafts (python docs/assets/make_headers.py --candidates)
 docs/assets/candidates/
+
+# local dataset copy for the site demo (charter publish --staging DIR, then: ln -s DIR site/_data)
+site/_data
