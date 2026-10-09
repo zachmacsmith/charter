@@ -4,12 +4,13 @@
 extends: [charter/specs/pilot2/usurpers_historian.yaml]
 models: {overrides: {Siv: claude-opus-5-5, Iris: claude-opus-5-5, Elio: claude-opus-5-5, Willa: claude-sonnet-5-5, Wade: claude-sonnet-5-5}}
 goals:
+  show_rules: false             # agents see the aim, not the metric (user, 9 Oct)
   explicit:
     Siv: {primary: Sovereign, secondary: Overthrow}
     Iris: {primary: Sovereign, secondary: Spymaster}
-    Elio: {primary: Chronicler}
-    Willa: {primary: Chronicler}
-    Wade: {primary: Chronicler}
+    Elio: {primary: Chronicler, secondary: null}
+    Willa: {primary: Chronicler, secondary: null}
+    Wade: {primary: Chronicler, secondary: null}
 chronicle:
   enabled: true
   namespace: pilot3

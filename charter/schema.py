@@ -413,6 +413,7 @@ def _ann():
         "contracts.offer_templates": dict(types=("bool",)),             # review 14 A: the design arm
         "law.library.visibility": dict(types=("str",), enum=("prompt", "on_request", "none")),
         "goals.outcome_only": dict(types=("bool",)),
+        "goals.show_rules": dict(types=("bool",)),
         "actions.core_only": dict(types=("bool",)),
         "institutions.unified": dict(types=("bool",)),                  # review 14 WP-D (P4.6): one institution store
         "institutions.grants": dict(types=("bool",)),                   # review 14 WP-E: powers from grants (charter/grants.py)
@@ -500,6 +501,7 @@ EXTRA = {
     "contracts.offer_templates": True,
     "law.library.visibility": "prompt",
     "goals.outcome_only": False,
+    "goals.show_rules": True,
     "actions.core_only": False,
     "institutions.unified": False,                                     # review 14 WP-D: off = the two stores, byte-identical
     "institutions.grants": False,                                      # review 14 WP-E: off = the power table's kinds column
@@ -528,6 +530,8 @@ DOCS = {
                                  "appears in any prompt, doc, manual section or error (the templates stay for scripted presets)",
     "law.library.visibility": "review 14 A: prompt (today: the library in the manual) | on_request (one line says it exists; "
                               "read_library lists it and shows code, each for an action) | none (no library text, no lookup)",
+    "goals.show_rules": "show institution goals' scoring rules in the goal text (true: today's prompts); false: agents see the aim "
+                        "only, and the score stays a hidden measure (user, 9 Oct)",
     "goals.outcome_only": "review 14 A: draw only outcome goals (wealth, rank, security, influence, following, lineage, the commons; "
                           "goal_registry.GOAL_CLASS): never a goal naming an institution or an action recipe, no institution or "
                           "counter goals",

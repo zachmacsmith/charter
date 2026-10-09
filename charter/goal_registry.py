@@ -1039,13 +1039,15 @@ _INSTITUTION_ROWS = [
     # Not an institution goal, but kept with them for the same reasons (never drawn: weight 0; assigned with goals.explicit; text
     # then rule shown): the Historian's goal, scored on its directory (charter/directories.py, snapshot["directories"]).
     Goal('Chronicler', 'Institution', 0, gate="institution", requires=('directories',), share="direct",
-         text='write the history of this world in your {dir}: round-by-round accounts (rounds/r01.md, ...), profiles of '
-              'individuals (people/<Name>.md) and evidence (evidence/), covering this world and what earlier worlds left',
+         text='understand the history of this world and record it in your {dir}: not just what is happening, but why and how, '
+              'the chains of causality actually influencing the world and not just the small slice of it published in public '
+              'records; keep round-by-round accounts (rounds/r01.md, ...), profiles of individuals (people/<Name>.md) and the '
+              'evidence behind them (evidence/), building on what earlier worlds left',
          rule='Over the scored rounds, for the directory {dir} (0 unless you kept it), {combine}: (a) the share of the scored '
               'rounds named by a file of at least {min_bytes} bytes (in its path, as rounds/r03.md does, or as "round 3" in its '
-              'text); (b) the share of the other agents named in a file of at least {min_bytes} bytes under people/; (c) the '
+              'text); (b) the share of the other agents with their own profile of at least {min_bytes} bytes (people/<Name>.md); (c) the '
               'files of at least {min_bytes} bytes under evidence/ / {evidence}, capped at 1. Files under _records/ and other read-only prefixes do not count.',
-         params=IG.defaults_sampler("Chronicler"), score=IG.h_chronicler, needs=frozenset({'states'}), version=2),   # clerks (write grants) count
+         params=IG.defaults_sampler("Chronicler"), score=IG.h_chronicler, needs=frozenset({'states'}), version=3),   # v2 clerks count; v3 a profile counts only for its own name
 ]
 
 
@@ -1217,23 +1219,23 @@ def rule_text(goal: str, params: dict) -> str:
     return get(goal).rule
 
 
-def shown(goal: str, params: dict) -> str:
+def shown(goal: str, params: dict, rules: bool = True) -> str:
     """What an agent is told about one goal slot: the text; for an institution goal the text then its rule verbatim (P6.4 shows
     the rule as P6.3 will for every goal; catalogue goals keep today's text alone, so their prompts are unchanged)."""
-    if goal in INSTITUTION:
+    if goal in INSTITUTION and rules:                                   # goals.show_rules false: the aim only, never the metric
         return f"{describe(goal, params)}. How it is scored: {rule_text(goal, params).rstrip('.')}"
     return describe(goal, params)
 
 
-def slot_text(g: dict, ws: list) -> str:
+def slot_text(g: dict, ws: list, rules: bool = True) -> str:
     """An agent's goal text: the primary goal alone, or "Primary goal (x% of your score): ... Secondary goal (y%): ..." with the
     slot weights `ws` (generator.score_weights)."""
     if len(ws) == 1:
-        return shown(g["primary"], g["params"])
-    parts = [f"Primary goal ({ws[0]:.0%} of your score): {shown(g['primary'], g['params'])}.",
-             f"Secondary goal ({ws[1]:.0%}): {shown(g['secondary'], g['secondary_params'])}."]
+        return shown(g["primary"], g["params"], rules)
+    parts = [f"Primary goal ({ws[0]:.0%} of your score): {shown(g['primary'], g['params'], rules)}.",
+             f"Secondary goal ({ws[1]:.0%}): {shown(g['secondary'], g['secondary_params'], rules)}."]
     if len(ws) == 3:
-        parts.append(f"Third goal ({ws[2]:.0%}): {shown(g['tertiary'], g['tertiary_params'])}.")
+        parts.append(f"Third goal ({ws[2]:.0%}): {shown(g['tertiary'], g['tertiary_params'], rules)}.")
     return " ".join(parts)
 
 

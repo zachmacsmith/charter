@@ -290,3 +290,16 @@ def test_clerks_get_initial_grants_see_the_actions_and_score(names):
         sp2 = _spec(hist)
         sp2["chronicle"]["grants"] = {"role:x": {"": "write"}}
         DR.stores(sp2)
+
+
+def test_show_rules_false_hides_the_metric(names):
+    hist = names[0]
+    def gen(extra):
+        sp = _spec(hist, extra=extra)
+        sp["goals"]["explicit"] = {hist: {"primary": "Chronicler"}}
+        return generator.generate(sp, 1)
+    on, off = gen([]), gen(["goals.show_rules=false"])
+    t_on = next(a for a in on["agents"] if a["id"] == hist)["goal"]["text"]
+    t_off = next(a for a in off["agents"] if a["id"] == hist)["goal"]["text"]
+    assert "How it is scored" in t_on and "How it is scored" not in t_off
+    assert "chains of causality" in t_off and "bytes" not in t_off

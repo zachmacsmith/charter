@@ -237,7 +237,8 @@ def h_chronicler(h, agent, params, ctx=None):
     played = {s["round"] + 1 for s in h.states}
     covered = {r for f in files.values() for r in f.get("rounds") or ()} & played
     others = [x for x in h.agents if x != agent]
-    profiled = {x for path, f in files.items() if path.startswith("people/") for x in f.get("agents") or () if x in others}
+    stems = {path[len("people/"):].rsplit(".", 1)[0].strip().lower() for path in files if path.startswith("people/")}
+    profiled = {x for x in others if x.lower() in stems}               # v3: a roster naming everyone profiles nobody
     evidence = sum(1 for path in files if path.startswith("evidence/"))
     parts = [len(covered) / len(played), len(profiled) / len(others) if others else 1.0, _frac(evidence, p["evidence"])]
     return _combine(parts, p["scoring"])
