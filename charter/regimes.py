@@ -247,6 +247,10 @@ def on_enact():
     set_procedure("structural", federal)
     set_procedure("procedural", strict)
 ''',
+    # FROZEN (review 14 §2.2, D13): the anarchy constitution and its #convention hashtag gate stay loadable, unchanged, for old
+    # runs, full10's regime draw and the void constitution of the state_of_nature regime. New presets and new code must not select
+    # or depend on them (no kernel or default code keys on text in posts); the library's "Assurance Founding" template is the
+    # convention re-expressed as consent (library.TOOLKIT). Do not edit: a change reshuffles old goldens.
     "anarchy": '''
 title = "Constitution: Anarchy"
 intent = "There is no government: no procedure exists, so no law can pass. If more than half of the agents (Board and Fixer aside) post #convention within three rounds of each other, an open convention begins: from then on every agent but the Board and the Fixer votes on every law, majority of those voting."
@@ -270,6 +274,12 @@ def on_round_end(r):
         set_procedure("structural", convention)
         set_procedure("procedural", convention)
         gazette("A majority has called a convention: from now on every agent but the Board and the Fixer votes on every law (majority of those voting).")
+''',
+    # Review 14 B: the placeholder of a world that starts in a state of nature (nature_design). Void from round 0 (never in force:
+    # jurisdictions start: nature), it names no procedure and keys on nothing, so a new world need not name the frozen anarchy.
+    "nature": '''
+title = "No Constitution"
+intent = "The state of nature: there is no constitution and no procedure. This placeholder is never in force; laws exist only inside the institutions agents found."
 ''',
 }
 
@@ -456,6 +466,8 @@ REGIMES: dict[str, dict] = {
                        "procedural laws). Every 10 rounds the vote passes by lot to five new agents. Anyone except the Board and the Fixer "
                        "may propose laws.",
     },
+    # FROZEN (review 14 §2.2, D13): loadable for old runs and full10's draw; new presets do not select it (nature_design is the
+    # state of nature for new worlds).
     "anarchy": {
         "constitution": "anarchy", "expect": "anarchy", "no_vote_needed": True,
         "rights": [{"who": "legislator", "revoke": ["vote"]}, {"who": "citizens", "grant": ["propose"]}],
@@ -519,7 +531,8 @@ REGIMES: dict[str, dict] = {
         "cantons_text": " Each canton's council sets its own camp's harvest quota: invoke set_camp_quota with [camp, number]; once a "
                         "majority of the camp's holders name the same number, it becomes the quota.",
     },
-    # jurisdictions (charter/jurisdictions.py): the lawless start. The constitution named here is void (never in force).
+    # jurisdictions (charter/jurisdictions.py): the lawless start. The constitution named here is void (never in force); it names
+    # the frozen anarchy only for old runs' sake (nature_design uses the void "nature" placeholder instead).
     "state_of_nature": {
         "constitution": "anarchy", "expect": "anarchy", "no_vote_needed": True, "code": "none",   # code.enabled: no default code
         "spec": {"jurisdictions.enabled": True, "jurisdictions.start": "nature", "conflict.enabled": True},

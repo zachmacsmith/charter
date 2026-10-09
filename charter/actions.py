@@ -1182,12 +1182,15 @@ def _read_library(k, aid, name=None):
 
 def library_index(inst) -> dict:
     """{name: intent}: what read_library lists in this world (the instance's library laws, the toolkit families its spec lists,
-    and the lib:* blocks where law.library.access is not none)."""
+    the library's contract templates where contracts are on, and the lib:* blocks where law.library.access is not none)."""
+    from charter import features as FT
     from charter import goal_registry as GR
     from charter import library as LB
     out = {n: GR.intent(LB.code(n, inst)) for n in inst.get("library") or []}
     fams = LB.toolkit_families(inst)
     out.update({e["name"]: e["doc"] for e in LB.TOOLKIT.values() if e["family"] in fams})
+    if "contracts" in fams or FT.on("contracts", inst["spec"]):         # review 14 B: library contract templates (Assurance
+        out.update({e["name"]: e["doc"] for e in LB.CONTRACT_TEMPLATES.values()})   # Founding) wherever contracts can be founded
     if LB.settings(inst)["access"] != "none" and LB.edition(inst) == 2:
         out.update({b: GR.intent(LB.BLOCKS[b]["code"]) or "a building block" for b in LB.BLOCKS})
     return out

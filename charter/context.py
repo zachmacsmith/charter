@@ -877,6 +877,14 @@ def harvest_args(c) -> str:
     return "harvest args " + ", ".join(x + extra) + use
 
 
+def _constitution_clause(inst) -> str:
+    """Who decides how laws pass. A state-of-nature start (review 14 B) has no constitution in force (the one named is void)."""
+    from charter import jurisdictions as _J
+    if _J.nature_start(inst["spec"]):
+        return "no constitution is in force: a law exists only inside a jurisdiction, under its own procedure"
+    return f"the constitution ({inst['constitution']}) decides how laws pass"
+
+
 def overview(inst) -> str:
     """A short overview of the world's rules for the core prompt: one or two lines per topic, each pointing to the manual section
     with the details. The full rules are the manual's "World rules" section (and module sections)."""
@@ -895,7 +903,7 @@ def overview(inst) -> str:
              "everyone. [manual: World rules]",
              "Money: barter until a law creates a currency; a backed coin is worth its reserve per coin; unbacked coins are worth 0 at the end. "
              "[manual: World rules]",
-             "; ".join([f"Laws: restricted Python ({inst['law_level']})", f"the constitution ({inst['constitution']}) decides how laws pass"]
+             "; ".join([f"Laws: restricted Python ({inst['law_level']})", _constitution_clause(inst)]
                        + ([f"a Board of {_FX.facts(inst)['board_size']} can veto structural and procedural laws"] if has("board") else [])
                        + (["a Fixer patches broken ones"] if has("fixer") else [])) + ". [manual: Law language, Law library]",
              ("Turns: everyone decides at once, then actions run in a shown order. " if sp.get("turns") == "simultaneous" else
@@ -1036,13 +1044,19 @@ def _lookups(v):
     return ""
 
 
+def _nature(inst) -> bool:
+    from charter import jurisdictions as _J
+    return _J.nature_start(inst["spec"])
+
+
 @_SC.section("actions", layers=("core",), sep="\n\n")
 def _actions(v):
     inst, a, c, core = v.inst, v.a, cfg(v.inst), v.memo(_core)
     return (f"""ACTIONS (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual).{core['pre_note']}{core['acts']}"""
             + ("\n" + FULL_TURN_TEXT if c.get("full_turn_nudge", True) and not c.get("closing", True) else "")
             + ("\nYou cannot propose laws yourself: a law you draft must be proposed by a holder of the propose right (a Legislator)."
-               if "propose" not in v.rights and inst["law_level"] != "L0" and a["cls"] not in ("board", "fixer") else ""))
+               if "propose" not in v.rights and inst["law_level"] != "L0" and a["cls"] not in ("board", "fixer")
+               and not _nature(inst) else ""))           # a state of nature: a jurisdiction's members propose its laws without it
 
 
 @_SC.section("manual_index", layers=("core",), sep="\n\n")

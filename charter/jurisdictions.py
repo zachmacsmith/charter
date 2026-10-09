@@ -94,6 +94,12 @@ def enabled(k) -> bool:
     return FT.on("jurisdictions", k)
 
 
+def nature_start(spec: dict) -> bool:
+    """A world that starts in a state of nature (jurisdictions on, start: nature): no constitution is in force (it is void), so no
+    law exists until a jurisdiction is founded and declared (review 14 §2)."""
+    return enabled_spec(spec) and cfg_of(spec)["start"] == "nature"
+
+
 def cfg(k) -> dict:
     return cfg_of(k.spec)
 

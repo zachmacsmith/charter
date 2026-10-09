@@ -3804,6 +3804,75 @@ def before_offer_loan(p, chain):
 repeat offenders (loan hooks: before_offer_loan). Edition 2's Usury Law (LIB) is the plain cap.""", fires="before_offer_loan")
 
 
+# ====================================================================== library contract templates (review 14 B)
+# Contract code (an association's own law: create_contract {"code": ...}), not polity law, so they are kept apart from TOOLKIT
+# (whose entries a regime, start_laws or a polity may enact). Listed with the toolkit's "contracts" family wherever the toolkit is
+# (catalogue_text, read_library's index, novelty's references); checked by contracts.check_code in the tests.
+CONTRACT_TEMPLATES: dict[str, dict] = {}
+
+
+def contract_template(name, topic, src, doc, fires):
+    assert name not in LIB and name not in BLOCKS and name not in TOOLKIT and name not in CONTRACT_TEMPLATES, name
+    src = src.strip() + "\n"
+    L.check(src, v2=True)
+    CONTRACT_TEMPLATES[name] = {"name": name, "category": "toolkit", "kind": "contract", "edition": 2, "family": "contracts",
+                                "topic": topic, "rank": "bylaw", "doc": " ".join(doc.split()), "fires": fires, "needs": ("contracts",),
+                                "code": src, "sha": _sha(src)}
+
+
+# The #convention mechanism (the frozen anarchy constitution, review 14 §2.2, D13) re-expressed as consent: the crowdfund applied
+# to a charter. Nothing global and no hashtag: a coalition founds among its own signers, and nobody else is bound. It reads its
+# members through contract_state(...)["members"], not members(): contracts.scope_api's members() closes over the record of the
+# round the module was loaded in, which a dry run's restore (Kernel._restore deep-copies the world) leaves stale, so agents who
+# join in a later round would not be counted (a known bug, left for its own change: fixing it re-records the contracts golden).
+contract_template("Assurance Founding", "founding", '''
+title = "Assurance Founding"
+intent = "A founding pact that binds no one until it is assured. Agents sign by joining and pledging PLEDGE ITEM into escrow (deposit_escrow). At the end of the first round, no later than round DEADLINE, in which every agent named in SIGNERS (names separated by commas) has signed, or, when SIGNERS is empty, at least QUORUM agents have, the pact takes effect: the signers' pledges go to the treasury as its founding fund, its public status reads founded (its other laws may wait for it), and a member who leaves after that leaves its pledge behind. If it is not assured by the end of round DEADLINE, every pledge is refunded and the pact is void."
+ITEM = "grain"
+PLEDGE = 1
+QUORUM = 3
+SIGNERS = ""
+DEADLINE = 3
+
+def named():
+    return [s.strip() for s in SIGNERS.split(",") if s.strip() != ""]
+
+def signers():
+    return contract_state(jurisdiction())["members"]
+
+def signed():
+    return [m for m in signers() if escrow_of(m).get(ITEM, 0) >= PLEDGE]
+
+def assured():
+    ok = signed()
+    if named():
+        return all([n in ok for n in named()])
+    return len(ok) >= QUORUM
+
+def in_force():
+    return public.get("status") == "founded"
+
+def on_round_end(r):
+    if public.get("status"):
+        return
+    if assured():
+        public["status"] = "founded"
+        public["signers"] = signed()
+        public["round"] = r + 1
+        for m in signed():
+            forfeit(m, ITEM, PLEDGE)
+        gazette("Assurance Founding: assured by " + str(len(public["signers"])) + " signers; the pact is in force")
+    elif r + 1 >= DEADLINE:
+        public["status"] = "void"
+        for m in signers():
+            refund(m, ITEM)
+        gazette("Assurance Founding: not assured by round " + str(DEADLINE) + "; every pledge was refunded")
+''', doc="""Contract code (found it with create_contract): an assurance contract for founding. Signers join and pledge; the pact
+takes effect only once the named signers (or any QUORUM of them) are in, by the deadline, and otherwise refunds everyone. Write
+the pact's rules into the same code (guarded by in_force()) or propose them once it is in force.""",
+                  fires="on_round_end")
+
+
 # ---------------------------------------------------------------------- edition lookups
 def settings(x=None) -> dict:
     """{edition, access} of a kernel, an instance or a spec (None: edition 1, access none)."""
@@ -3823,6 +3892,8 @@ def code(name: str, x=None) -> str:
     toolkit template has one code whatever x says (it exists only as law.v2 code)."""
     if name in TOOLKIT:
         return TOOLKIT[name]["code"]
+    if name in CONTRACT_TEMPLATES:                                      # review 14 B: contract code, one code in any edition
+        return CONTRACT_TEMPLATES[name]["code"]
     if name in LIB2 and edition(x) == 2:
         return LIB2[name]["code"]
     return LIB[name]["code"]
@@ -3907,6 +3978,12 @@ def catalogue_text(x=None) -> str:
                 ps = ", ".join(f"{k}={v!r}" for k, v in params(e["name"]).items())
                 parts.append(f"- {e['name']} ({e['family']}/{e['topic']}, rank {e['rank']}): {e['doc']} Parameters: {ps or 'none'}."
                              f"\n```python\n{e['code']}```")
+        if "contracts" in fams and CONTRACT_TEMPLATES:                  # review 14 B: contract code, founded with create_contract
+            parts.append("Contract templates (an association's code: copy one, change its top-level constants, and found it with "
+                         "create_contract {\"code\": ...}):")
+            for e in CONTRACT_TEMPLATES.values():
+                ps = ", ".join(f"{k}={v!r}" for k, v in params(e["name"]).items())
+                parts.append(f"- {e['name']} (contracts/{e['topic']}): {e['doc']} Parameters: {ps or 'none'}.\n```python\n{e['code']}```")
     return "\n".join(parts)
 
 

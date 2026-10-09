@@ -180,9 +180,9 @@ def available(inst, k, a, rights=None) -> list:
         rights = k.w["agents"][aid]["rights"] if k is not None and aid in k.w["agents"] else a.get("rights", [])
     live = k is not None and aid in k.w["agents"]
     out = []
-    core = core_only(inst["spec"])
+    core = core_surface(inst["spec"]) if core_only(inst["spec"]) else None
     for act in REG.values():
-        if core and act.name not in CORE_SURFACE:                        # review 14 A: actions.core_only
+        if core is not None and act.name not in core:                    # review 14 A: actions.core_only
             continue
         if "dir:any" in act.needs:                                      # directories: who can reach one (the live state with a
             from charter import directories as DR                      # kernel; owners only in the system prompt written before)
@@ -763,6 +763,10 @@ CORE_SURFACE = (
     "attack", "forge", "fortify",                                       # force (where conflict is on)
     "commission", "create_agent",                                       # children (where life is on; create_agent: Makers)
     "patch", "rule")                                                    # the Fixer's patch; judges' rule (an office a law creates)
+# Review 14 B (nature_design): in a world that starts in a state of nature (jurisdictions on, start: nature) the only way to a
+# polity is to found one, so the core surface keeps the jurisdiction actions there (review 14 §5.1 lists found, join and leave in
+# the primitive core). They exist only where jurisdictions are on, so the design arm (jurisdictions off) is unchanged.
+NATURE_SURFACE = ("found", "invite", "join", "leave", "declare", "fund", "set_charter")
 NO_TEMPLATE_PURPOSE = {"create_contract": "found a contract: an association that runs on code you write"}
 NO_TEMPLATE_PHRASE = {"contracts": "found, join or leave contracts (associations that run on code their members write)"}
 CORE_ONLY_PHRASE = {"files": "save files", "powers": "use an action a law or contract defined"}
@@ -790,11 +794,19 @@ def core_only(spec) -> bool:
     return bool(((spec or {}).get("actions") or {}).get("core_only"))
 
 
+def core_surface(spec) -> tuple:
+    """The actions that exist under actions.core_only: CORE_SURFACE, plus NATURE_SURFACE in a world that starts in a state of
+    nature."""
+    from charter import jurisdictions as J
+    return CORE_SURFACE + NATURE_SURFACE if J.nature_start(spec) else CORE_SURFACE
+
+
 def hidden(spec) -> set:
     """Actions that do not exist in this world because of the design-arm flags (actions._act treats them as unknown)."""
     out = set() if library_visibility(spec) == "on_request" else {"read_library"}
     if core_only(spec):
-        out |= {n for n in REG if n not in CORE_SURFACE}
+        core = core_surface(spec)
+        out |= {n for n in REG if n not in core}
     return out
 
 
