@@ -8,6 +8,7 @@
   python -m charter fork RUN_DIR --at N --apply iv.yaml [--replicates K] [--out DIR]   branch at round N with interventions, play on live
   python -m charter branches RUN_DIR                                             the lineage tree of rewinds and forks
   python -m charter export RUN_DIR [RUN_DIR...] --out DIR [--format parquet|csv]  long-format analysis tables (docs/export.md)
+  python -m charter publish RUN_DIR [RUN_DIR...] [--card CARD] [--push]           export + raw archive + catalog to the HF dataset
   python -m charter score RUN_DIR                                                (re)score a run
   python -m charter show RUN_DIR                                                 summary + timeline of what happened
   python -m charter view RUN_DIR [--open]                                       story.html: the run as a group chat, inboxes, laws and wealth
@@ -362,6 +363,7 @@ def main(argv=None):
     difftest.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(difftest.cmd(a)))
     __import__("charter.replay", fromlist=["add_commands"]).add_commands(sub)   # replay, rewind, fork, branches
     __import__("charter.export", fromlist=["add_command"]).add_command(sub)     # export RUN.. --out DIR [--format parquet|csv]
+    __import__("charter.publish", fromlist=["add_command"]).add_command(sub)    # publish RUN.. --repo OWNER/NAME [--push]
     from charter import preview
     p = sub.add_parser("preview", help="render what agents see, with token counts (charter/preview.py)")
     preview.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(preview.cmd(a)))
