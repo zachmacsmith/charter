@@ -65,8 +65,10 @@ CHRONICLE_DEFAULTS = {
     "max_bytes": 2_000_000,
     "max_file_bytes": 200_000,
     "records": True,                     # the runner appends _records/<run_id>.md (a public digest of each completed run)
+    "readonly": [],                      # extra read-only prefixes (e.g. "archive/": an earlier chronicle kept for reference)
+    "grants": {},                        # initial grants, e.g. clerks: {"agent:Cleo": {"people/": "write", "": "read"}}
 }
-STORE_KEYS = ("owner", "scope", "namespace", "max_bytes", "max_file_bytes", "records", "title", "readonly")
+STORE_KEYS = ("owner", "scope", "namespace", "max_bytes", "max_file_bytes", "records", "title", "readonly", "grants")
 SCOPES = ("run", "namespace")
 RECORDS = "_records/"
 LOOKUPS = ("dir_list", "dir_read", "dir_search")
@@ -133,7 +135,8 @@ def stores(x) -> dict:
         ch = chronicle_cfg(sp)
         raw.setdefault("chronicle", {"owner": "role:historian", "scope": "namespace", "namespace": ch["namespace"],
                                      "max_bytes": ch["max_bytes"], "max_file_bytes": ch["max_file_bytes"],
-                                     "records": ch["records"], "title": "the chronicle"})
+                                     "records": ch["records"], "title": "the chronicle", "grants": ch.get("grants") or {},
+                                     "readonly": list(ch.get("readonly") or [])})
     out = {}
     for name, s in sorted(raw.items()):
         s = dict(s or {})
@@ -151,7 +154,25 @@ def stores(x) -> dict:
                           "max_file_bytes": int(s.get("max_file_bytes") or c["max_file_bytes"]),
                           "records": bool(s.get("records", False)) and scope == "namespace",
                           "title": str(s.get("title") or f"the directory {name}"),
-                          "readonly": sorted(set(s.get("readonly") or []) | ({RECORDS} if s.get("records") else set()))}
+                          "readonly": sorted(set(s.get("readonly") or []) | ({RECORDS} if s.get("records") else set())),
+                          "grants": _initial_grants(name, s.get("grants"))}
+    return out
+
+
+def _initial_grants(name, g) -> dict:
+    """A store's initial grants from the spec ({"agent:<id>": {prefix: read|write|none}}): run state from the start, so clerks
+    hold access before the owner's first turn. The owner may change them with dir_grant."""
+    out = {}
+    for subj, prefixes in sorted((g or {}).items()):
+        kind, _, v = str(subj).partition(":")
+        if kind != "agent" or not v:
+            raise ValueError(f"directories.stores.{name}.grants: subject {subj!r} must be agent:<id>")
+        if not isinstance(prefixes, dict):
+            raise ValueError(f"directories.stores.{name}.grants.{subj} must be {{prefix: level}}")
+        for prefix, lv in prefixes.items():
+            if lv not in LEVELS:
+                raise ValueError(f"directories.stores.{name}.grants.{subj}.{prefix!r}: level must be one of {LEVELS}")
+        out[f"agent:{v}"] = {str(pf): str(lv) for pf, lv in sorted(prefixes.items())}
     return out
 
 
@@ -205,7 +226,7 @@ def install(k) -> None:
     st = stores(k.spec)
     if not st:
         return
-    k.w["dirs"] = {n: {**s, "files": {}, "grants": {}} for n, s in st.items()}
+    k.w["dirs"] = {n: {**s, "files": {}, "grants": copy.deepcopy(s.get("grants") or {})} for n, s in st.items()}
 
 
 def create(k, name, conf) -> None:
@@ -270,6 +291,8 @@ def static_access(inst, a) -> bool:
         return False
     holders = ((inst.get("roles") or {}).get("holders") or {}) if isinstance(inst, dict) else {}
     for d in st.values():
+        if any(lv != "none" for lv in ((d.get("grants") or {}).get(f"agent:{a['id']}") or {}).values()):
+            return True                                                 # an initial grant (a clerk)
         kind, _, v = d["owner"].partition(":")
         if (kind == "agent" and a["id"] == v or kind == "role" and a["id"] in (holders.get(v) or ())
                 or kind == "class" and (a.get("cls") == v or v in (a.get("also") or ())) or kind == "right" and v in (a.get("rights") or ())):
@@ -624,8 +647,11 @@ def round_record(k) -> dict:
     names = [a for a in k.w["agents"] if k.w["agents"][a].get("cls") != "observer"]
     out = {}
     for name, d in sorted(_dirs(k).items()):
-        out[name] = {"owners": [a for a in names if is_owner(k, a, d)],
-                     "files": {p: file_index(t, p, names) for p, t in sorted(d["files"].items()) if not p.startswith(RECORDS)}}
+        owners = [a for a in names if is_owner(k, a, d)]
+        writers = [a for a in names if a not in owners and level(k, a, d) == "write"]
+        out[name] = {"owners": owners, **({"writers": writers} if writers else {}),
+                     "files": {p: file_index(t, p, names) for p, t in sorted(d["files"].items())
+                               if not p.startswith(RECORDS) and not any(_match(p, ro) for ro in d.get("readonly") or ())}}
     return {"directories": out}
 
 

@@ -269,3 +269,24 @@ def test_agent_rules_briefing(names):
     assert any("did you mean 'briefing'" in e for e in SC.validate(bad))
     with pytest.raises(ValueError, match="no agent 'Nobody'"):
         Kernel(dict(inst, spec=dict(sp, agent_rules={"Nobody": {"briefing": "x"}})))
+
+
+def test_clerks_get_initial_grants_see_the_actions_and_score(names):
+    hist, clerk, other = names
+    k = _kernel(hist, extra=[])
+    sp = _spec(hist)
+    sp["chronicle"]["grants"] = {f"agent:{clerk}": {"people/": "write", "": "read"}}
+    k = Kernel(generator.generate(sp, 1))
+    d = k.w["dirs"]["chronicle"]
+    assert DR.level(k, clerk, d, "people/Ann.md") == "write" and DR.level(k, clerk, d, "rounds/r01.md") == "read"
+    assert DR.level(k, other, d) == "none"
+    mine = {a.name for a in AR.available(k.inst, k, k.w["agents"][clerk])}
+    assert set(DR.ACTIONS) - {"dir_grant"} <= mine | {"dir_grant"} and "dir_write" in mine
+    assert DR.static_access(k.inst, next(a for a in k.inst["agents"] if a["id"] == clerk))
+    assert not DR.static_access(k.inst, next(a for a in k.inst["agents"] if a["id"] == other))
+    rec = DR.round_record(k)["directories"]["chronicle"]
+    assert rec["owners"] == [hist] and rec["writers"] == [clerk]
+    with pytest.raises(ValueError):
+        sp2 = _spec(hist)
+        sp2["chronicle"]["grants"] = {"role:x": {"": "write"}}
+        DR.stores(sp2)

@@ -1044,8 +1044,8 @@ _INSTITUTION_ROWS = [
          rule='Over the scored rounds, for the directory {dir} (0 unless you kept it), {combine}: (a) the share of the scored '
               'rounds named by a file of at least {min_bytes} bytes (in its path, as rounds/r03.md does, or as "round 3" in its '
               'text); (b) the share of the other agents named in a file of at least {min_bytes} bytes under people/; (c) the '
-              'files of at least {min_bytes} bytes under evidence/ / {evidence}, capped at 1. Files under _records/ do not count.',
-         params=IG.defaults_sampler("Chronicler"), score=IG.h_chronicler, needs=frozenset({'states'})),
+              'files of at least {min_bytes} bytes under evidence/ / {evidence}, capped at 1. Files under _records/ and other read-only prefixes do not count.',
+         params=IG.defaults_sampler("Chronicler"), score=IG.h_chronicler, needs=frozenset({'states'}), version=2),   # clerks (write grants) count
 ]
 
 

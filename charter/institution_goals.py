@@ -227,8 +227,11 @@ def h_chronicler(h, agent, params, ctx=None):
     p = params_of("Chronicler", params)
     if not h.states:
         return 0.0
-    if not any(agent in (((s.get("directories") or {}).get(p["dir"]) or {}).get("owners") or ()) for s in h.states):
-        return 0.0                                                     # it never kept that directory
+    def keeps(s):
+        d = ((s.get("directories") or {}).get(p["dir"]) or {})
+        return agent in (d.get("owners") or ()) or agent in (d.get("writers") or ())   # a clerk with write access shares the work
+    if not any(keeps(s) for s in h.states):
+        return 0.0                                                     # it never kept or wrote to that directory
     d = (h.final.get("directories") or {}).get(p["dir"]) or {}
     files = {path: f for path, f in (d.get("files") or {}).items() if f.get("bytes", 0) >= float(p["min_bytes"])}
     played = {s["round"] + 1 for s in h.states}
