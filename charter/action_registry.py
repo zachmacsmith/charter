@@ -47,7 +47,7 @@ error lists actions in the first (it reaches logged results), the legacy system 
 from __future__ import annotations
 
 import importlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable
 
 CORE_ORDER = ("TALK AND TRADE", "INFORMATION", "MEMORY", "PRODUCE", "POLITICS", "FORCE", "LINEAGE")
@@ -65,7 +65,7 @@ NICHE_PHRASE = {"your role": "use your role's other tools", "camps": "survey, im
 UNIVERSAL_RIGHTS = ()                                                   # rights everyone holds (none at present): never an edge
 CATEGORIES = ("productive", "economic", "political", "talk")           # activity categories, in scorer.CATEGORIES' key order
 MODULES = ("core", "context", "camps", "credit", "projects", "outside", "mortality", "life", "roles", "conflict", "jurisdictions",
-           "media", "scholars", "contracts", "directories")
+           "media", "scholars", "contracts", "directories", "subsistence")
 
 
 @dataclass(frozen=True)
@@ -90,6 +90,8 @@ class Act:
     aliases: dict = field(default_factory=dict, hash=False)             # {synonym: proper argument name}
     legacy: bool = True                                                 # listed by the legacy (context-off) system prompt
     alt: Callable | None = None                                         # W7e: admits it despite a missing right (see above)
+    fed: int = -1                                                       # review 15 S1: the lowest hunger stage allowing it (0 fed only,
+                                                                        # -1 hungry too, -2 starving too); read only with subsistence on
 
 
 REG: dict[str, Act] = {}
@@ -182,8 +184,14 @@ def available(inst, k, a, rights=None) -> list:
     live = k is not None and aid in k.w["agents"]
     out = []
     core = core_surface(inst["spec"]) if core_only(inst["spec"]) else None
+    hunger = None
+    if live and "subsistence" in k.w:                                   # review 15 S1: hunger closes actions (Act.fed)
+        from charter import subsistence as SB
+        hunger = SB.stage(k, aid)
     for act in REG.values():
         if core is not None and act.name not in core:                    # review 14 A: actions.core_only
+            continue
+        if hunger is not None and act.fed > hunger:
             continue
         if "dir:any" in act.needs:                                      # directories: who can reach one (the live state with a
             from charter import directories as DR                      # kernel; owners only in the system prompt written before)
@@ -937,6 +945,29 @@ DOC_ORDER = (
     "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")   # wave 9 C (channels.v2)
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
+
+
+# ---------------------------------------------------------------------- hunger gates (review 15 S1, §3.2; subsistence on only)
+# Refused while hungry (fed only), and allowed while starving (default: hungry allowed, starving refused). Vote stays open to the
+# starving (user decision U14: a polity may restrict it by law, with the hunger(agent) read).
+HUNGRY_REFUSED = ("attack", "join_attack", "contract", "found", "create_contract", "create_channel", "open_channel", "propose", "amend",
+                  "commission", "build", "fortify", "forge", "invest", "contribute", "buy_initiative")
+STARVING_OK = ("transfer", "reply", "dm", "post", "channel_post", "send", "harvest", "farm", "withdraw", "join", "leave",
+               "join_contract", "leave_contract", "authorize", "revoke_authorization", "standing_order", "bequest", "vote",
+               "accept_loan", "repay_loan", "write_scratchpad")
+
+
+def _fed_table() -> dict:
+    out = {n: 0 for n in HUNGRY_REFUSED if n in REG}                    # fed only
+    out.update({n: -2 for n in STARVING_OK if n in REG})               # starving too
+    out.update({n: -2 for n, a in REG.items() if a.pre and n not in out})   # look-ups
+    return out
+
+
+FED = _fed_table()
+for _n, _v in FED.items():
+    REG[_n] = replace(REG[_n], fed=_v)
+del _n, _v
 
 
 # ---------------------------------------------------------------------- derived views (the old constants)

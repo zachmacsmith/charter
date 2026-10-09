@@ -493,6 +493,9 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
             if cx:                                                      # context: the Core layer, with the current manual index
                 sysp[aid] = CX.core_prompt(inst, a, k)
             n = RS.actions_after_upkeep(k, aid, n)                     # camps: optional upkeep arrears cost an action (off by default)
+            if "subsistence" in k.w:                                    # review 15 S1: hunger costs actions (off: nothing)
+                from charter import subsistence as SB
+                n = SB.actions_after_hunger(k, aid, n)
             user, cursor = AG.turn_prompt(k, a, order, cursors.get(aid, 0), notes.get(aid, ""), results.get(aid, []), n, final,
                                           simultaneous=(mode == "simultaneous"))
             user = R.turn_section(k, aid, user)                         # roles: the Spy's private "What you saw" section

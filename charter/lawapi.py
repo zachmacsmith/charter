@@ -325,6 +325,13 @@ LAWFNS = _fns(
           primitive="post", v2=True),
     ),
     _module(
+        "subsistence",                                                  # review 15 (subsistence worlds only: its law_api)
+        F("hunger", "read", ((0, "agent"),), scope="read", docs="requires"),   # U2 (b): public and coarse; U14: a vote law reads it
+        F("food_of", "read", ((0, "agent"),), scope="read", docs="requires", why="also a store or treasury key"),
+        F("stores", "read", docs="requires"),
+        F("plots", "read", docs="requires"),
+    ),
+    _module(
         "amendment",                                                    # law.v2 (P3.4): laws propose laws and amendments (D-16: L3)
         F("propose_law", "governance", scope="none", why="a draft of the calling law's own jurisdiction, decided by its procedure",
           docs="requires", primitive="propose", v2=True),
@@ -403,6 +410,7 @@ LAWFNS.update({n: replace(f, contract=CONTRACT_COLUMN.get(n, "deny")) for n, f i
 CONTRACT_DENIED = frozenset(n for n, f in LAWFNS.items() if f.contract == "deny")
 V2_ONLY = {f.name for f in LAWFNS.values() if f.v2}                    # law.v2 names: off, Kernel.api_for has none of them
 CONTRACTS_ONLY = {f.name for f in LAWFNS.values() if f.module == "contracts"}   # P4.3: only with contracts.enabled (an association's law)
+SUBSISTENCE_ONLY = {f.name for f in LAWFNS.values() if f.module == "subsistence"}   # review 15: only with subsistence.enabled
 # P1.7: the primitive column of the two rows P1.4 edits (kept off their lines to avoid a merge conflict; fold in after the merge)
 LAWFNS.update({n: replace(LAWFNS[n], primitive=p) for n, p in (("repeal", "repeal"), ("set_official_editor", "appoint"))})
 

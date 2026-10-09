@@ -181,7 +181,7 @@ def test_phases_are_todays_order():
     assert list(FT.PHASES) == ["init", "round_start", "round_end", "after_turns", "death", "birth"]
     assert [x for x in FT.PHASES["round_start"] if x[0] == "law"] == [("law", "on_round_start")]
     assert FT.PHASES["round_end"][-2:] == [("core", "record"), ("core", "advance")]
-    assert [f.name for f in FT.FEATURES if f.skip_off] == ["life"]
+    assert [f.name for f in FT.FEATURES if f.skip_off] == ["life", "subsistence"]
 
 
 @pytest.mark.parametrize("name", ["E2", "society", "camps_pilot", "context_pilot", "conflict_pilot", "jurisdictions_pilot"])
@@ -253,7 +253,8 @@ def test_death_phase_runs_in_todays_order(monkeypatch):
     """mortality.disable: out of play, the public record, children ordered on death, the bequest, rights lapse, roles lapse and
     pass on, Board succession, commissions refunded, the monitor record."""
     from charter import life as LF, mortality as MO, roles as RO
-    assert FT.PHASES["death"] == [("core", "mark"), ("core", "announce"), ("life", "on_death"), ("core", "bequest"), ("core", "lapse"),
+    assert FT.PHASES["death"] == [("core", "mark"), ("core", "announce"), ("life", "on_death"), ("subsistence", "on_death"),
+                                  ("core", "bequest"), ("core", "lapse"),
                                   ("core", "roles"), ("core", "seat"), ("life", "after_death"), ("core", "record")]
     k = Kernel(generator.generate(S.apply_overrides(S.load("society"), ["shared_archive.enabled=false"]), 1))   # its own world
     seen = []

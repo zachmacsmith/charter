@@ -35,6 +35,7 @@ MEDIA_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module in ("media", "schol
 LAW_V2_ACTIONS = ("amend", "appeal")                                  # law.v2 (P3.4; courts v2): only in law.v2 worlds (off: unknown)
 DM_ACTIONS = AR.dm_actions()                                         # private messages: the DM limit applies; fast mode's DM step delivers them
 CONTRACT_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module == "contracts")   # P4.3: only when contracts are on
+SUBSISTENCE_ACTIONS = tuple(n for n in ACTIONS if AR.REG[n].module == "subsistence")   # review 15: only when subsistence is on
 
 
 class ActionError(Exception):
@@ -138,8 +139,14 @@ def _act(k, aid: str, name: str, args: dict) -> str:
         hidden_here |= set(DR.ACTIONS)
     hidden_here |= AR.hidden(k.spec)                                   # review 14 A: the design arm's flags (none by default)
     hidden_here |= AR.channel_hidden(k.spec)                           # wave 9 C: channels.v2's verbs (off: unknown, as before)
+    sub = "subsistence" in k.w
+    if not sub:                                                         # review 15: farm, withdraw, build only with subsistence on
+        hidden_here |= set(SUBSISTENCE_ACTIONS)
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
+    if sub:                                                             # review 15 S1: hunger closes actions (Act.fed; agency: both)
+        from charter import subsistence as SB
+        SB.check_gate(k, aid, name, args)
     if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):
         from charter import life as LF, roles as RO                       # a Maker making its own child directly
         if LF.enabled(k.spec) and "life" in k.w and RO.has_role(k, aid, "maker"):

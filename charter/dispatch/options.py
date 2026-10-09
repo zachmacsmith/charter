@@ -80,4 +80,6 @@ OPTIONS = {
     # wave 9 C (channels.v2): found's settings (a v2 channel's owner, selectors, listing, identity, retention, rate); subscribe's
     # via "channel" (join_channel, leave_channel)
     "set_channel": frozenset(),
+    # review 15 (subsistence): the ration, hunger and spoilage take no options
+    "eat": frozenset(), "hunger": frozenset(), "spoil": frozenset(),
 }

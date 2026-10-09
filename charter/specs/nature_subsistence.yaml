@@ -1,0 +1,8 @@
+# Review 15 (S1-S3): the state of nature with subsistence. nature_design (the design arm in a state of nature: no polity at the
+# start, contracts, the core action surface, citizens and the Fixer, with the S0 demography: charter/specs/fragments/demography.yaml
+# through arms/base) plus food: every agent eats 1 food at the end of each round, hungers and may starve if it cannot
+# (charter/subsistence.py); forests, fields and a hunt are appended to the camps; stores can be built. For scripted dry runs and
+# calibration (S7); births stay with the Makers until pair reproduction (S4).
+extends: [nature_design]
+rounds: 40
+subsistence: {enabled: true}

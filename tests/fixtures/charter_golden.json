@@ -541,5 +541,32 @@
    "summary": "097f58cf74a663e5"
   },
   "snapshots.json": "3ce5be68c19e75d9"
+ },
+ "subsistence_small": {
+  "events.jsonl": "005804bbd0b94a1b",
+  "instance.json": "4fee0fff6480b612",
+  "score": {
+   "activity_mix": "c41c7891b1d99933",
+   "agents": "80c8465280645137",
+   "goal_scores": {
+    "Bruna": 0.5444,
+    "Felix": 0.1792,
+    "Iris": 0.1533,
+    "Jarl": 0.7166,
+    "Maya": 0.5993,
+    "Oda": 0.1603,
+    "Rakel": 0.5901,
+    "Siv": 0.6841,
+    "Valter": 0.9774,
+    "Vidar": 0.7,
+    "Wanda": 0.215,
+    "Yuri": 0.239,
+    "Zeno": 0.4855
+   },
+   "goals": "b7cb06e2f777543f",
+   "lineage": "083871b8e06841b4",
+   "summary": "0556f0b9fd58d24a"
+  },
+  "snapshots.json": "8adf4f790dca7818"
  }
 }

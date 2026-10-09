@@ -69,7 +69,7 @@ EFFECTS = ("move", "create", "destroy", "relation", "rule", "status", "life", "s
 CAUSES = ("agent", "law", "world", "kernel")
 COMPEL_VIS = ("parties", "public", "monitor")
 FEATURES = ("core", "conflict", "media2", "scholars", "jurisdictions", "life", "mortality", "projects", "outside", "credit", "hidden",
-            "camptypes", "leases", "context", "roles", "events", "contracts", "directories")
+            "camptypes", "leases", "context", "roles", "events", "contracts", "directories", "subsistence")
 
 
 class UnknownPrimitive(KeyError):
@@ -157,6 +157,7 @@ PARAM_SAMPLES = {
     "members": ["a1", "a2"],                                                                              # W8b: found
     "channel": "guild",                                                                                   # wave 9 C: set_channel
     "dir": "chronicle", "path": "people/", "access": "read",                                             # directories
+    "missed": 1, "plot": 2, "store_id": "S1",                                                            # subsistence (review 15)
 }
 
 
@@ -787,6 +788,24 @@ _ROWS = [
            "gate": "law.v2 only: before_act_for (and the inner transfer's or deposit's own hooks)"},
       notes="the grantor's own transfer or escrow deposit, made by the grantee within the authorization's bounds; logged to both "
             "(agency_used {grantor, grantee, auth}); a use a law blocks or the balance refuses counts nothing"),
+    # subsistence (charter/subsistence.py, review 15 S1): the ration, hunger and spoilage are physics. Laws cannot stop them (no
+    # before-hook, not blockable); they may react (after_eat, after_hunger, after_spoil) and move food before the ration
+    # (on_round_end runs first).
+    P("eat", "subsistence", "destroy", ("agent", "item", "qty"), "subsistence:change_eat", routed=True, subject="agent",
+      parties=("agent",), agent_params=("agent",), before=False, blockable=False, causes=("world",),
+      reads=("food_of",), sites=("subsistence:change_eat", "subsistence:_eat"),
+      why={"gate": _PHYS, "event": "aggregated in the monitor-only subsistence_round record; the agent's food line shows it"},
+      notes="each eater's ration at the end of the round, from its own holdings (review 15 §3.1)"),
+    P("hunger", "subsistence", "status", ("agent", "stage", "missed"), "subsistence:change_hunger", routed=True, subject="agent",
+      parties=("agent",), agent_params=("agent",), before=False, blockable=False, event="hunger", causes=("world",),
+      reads=("hunger",), sites=("subsistence:change_hunger", "subsistence:_eat"), why={"gate": _PHYS},
+      notes="stage 0 fed, -1 hungry, -2 starving; missed: consecutive missed meals (the hazard reads it). A stage change is logged "
+            "(hunger: public and coarse by default, U2)"),
+    P("spoil", "subsistence", "destroy", ("owner", "item", "qty"), "subsistence:change_spoil", routed=True, subject="owner",
+      parties=("owner",), agent_params=("owner",), before=False, blockable=False, causes=("world",),
+      sites=("subsistence:change_spoil", "subsistence:_spoil"),
+      why={"gate": _PHYS, "event": "aggregated in the monitor-only subsistence_round record"},
+      notes="every account holding food loses subsistence.spoil of it each round (a store: store_spoil)"),
 ]
 
 # ---------------------------------------------------------------------- actions -> primitives
@@ -890,7 +909,8 @@ OUTPUT_EVENTS = {
 TIER_OF = {
     "P": ("regrow", "drift", "set_camp_state", "create_camp", "settle_project", "begin_life", "end_life", "default_loan",
           "close_ballot", "deauthorize",           # world causes, time, ballots counted as cast, consent (K-2: the grantor may revoke)
-          "demand_tribute"),                       # unrouted: to route as blockable=False, after-hooks only
+          "demand_tribute",                        # unrouted: to route as blockable=False, after-hooks only
+          "eat", "hunger", "spoil"),               # review 15 S1: the ration, hunger and spoilage
     "E": ("write_note", "use_power"),
     "X": ("set_role", "set_goal", "suspend_law", "request_fix"),
     "L": ("move", "harvest", "mint", "burn", "create_currency", "convert", "destroy", "grant_right", "revoke_right",

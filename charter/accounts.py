@@ -64,6 +64,8 @@ SOURCES_SINKS = {
                 "conflict.act_fortify", "conflict.act_buy_initiative",                  # consumed, spent, destroyed or converted
                 "conflict.fort_change", "economy.do_convert", "conflict.commit", "conflict.pledge",
                 "conflict._release_pledge"),        # P2.4a: stone into and out of forts, forging, weapons committed/pledged/returned
+    "eat": ("subsistence.change_eat",),                                 # review 15 S1: the ration (food eaten)
+    "spoil": ("subsistence.change_spoil",),                             # review 15 S1: food spoiling in every account
 }
 
 

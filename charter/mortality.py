@@ -48,13 +48,14 @@ from charter import features as FT                                    # the one 
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
 
-CAUSES = ("attack", "assassin", "accident", "old_age", "law")
+CAUSES = ("attack", "assassin", "accident", "old_age", "law", "starvation")   # starvation: subsistence (review 15 S1)
 SWITCH_CAUSES = ("attack", "assassin", "law")                      # dead man's switch terms apply to these
 SECRET_ROLES = ("spy", "assassin")
 RIGHT_ROLES = ("scholar", "maker", "media")                       # roles that are rights: they lapse, and the Board cannot hold them
 HOSTILE = ("attack", "attack_result", "attack_failed", "disabled_truth", "accuse", "lawful_attack")
 CAUSE_TEXT = {"attack": "disabled in an attack", "assassin": "disabled by an unknown attacker", "accident": "removed from the game by an accident",
-              "old_age": "removed from the game: their lifespan has ended", "law": "removed from the game by law"}
+              "old_age": "removed from the game: their lifespan has ended", "law": "removed from the game by law",
+              "starvation": "removed from the game: they starved"}
 
 
 def active(spec) -> bool:

@@ -324,7 +324,7 @@ def test_scoping_is_generated_from_the_law_api_metadata():
                                                               "media2.enabled=true", "life.enabled=true"]), 1)
     api = Kernel(inst).api_for("_")
     v2_only = {n for n, f in LA.LAWFNS.items() if getattr(f, "v2", False)}    # law.v2 functions (use, public_of) are absent when it is off
-    assert set(api) == LL.API - v2_only - LA.CONTRACTS_ONLY and set(LA.LAWFNS) <= LL.API   # P4.3: contract functions need contracts on
+    assert set(api) == LL.API - v2_only - LA.CONTRACTS_ONLY - LA.SUBSISTENCE_ONLY and set(LA.LAWFNS) <= LL.API   # P4.3: contract functions need contracts on
     undeclared = []
     for name, fn in api.items():
         params = list(inspect.signature(fn).parameters)

@@ -61,7 +61,7 @@ VIS = ("public", "parties", "channel", "monitor")
 NATURALS = ("given", "public", "parties", "channel")
 FEEDS = ("post", "message", "official", "event", "silent")
 RENDERERS = ("agents", "hidden", "credit", "projects", "conflict", "media", "outside", "camptypes", "leases", "mortality", "life",
-             "jurisdictions", "contracts")
+             "jurisdictions", "contracts", "subsistence")
 FLAGS = ("post", "board", "forge", "veil", "lawpost", "quote", "goalpub", "leak:public", "leak:passing", "recent:editions",
          "recent:posts", "recent:gazette", "recent:dms", "observed", "messages", "own")
 PRIORITY = {"event": 1, "official": 5, "silent": 1}                     # post and message depend on the reader (context._priority)
@@ -500,6 +500,14 @@ E("assets_locked", "succession", "summary", "public", "event", "contracts", prim
   note="a dissolved institution with nobody to receive its holdings: goods and loans owed frozen, channels read-only")
 E("party_died", "succession", "summary", "public", "event", "contracts", primitive="leave",
   note="a contract member died: its party_death clause (end | estate | heirs) applies")
+
+# subsistence (charter/subsistence.py, review 15 S1-S3; only with subsistence on)
+E("hunger", "subsistence", "summary", "public|parties", "event", "subsistence", primitive="hunger",
+  note="a hunger stage change: public (coarse) by default (review 15 U2 b), to the agent only with subsistence.visibility private")
+E("subsistence_round", "subsistence", "record", "monitor", "silent", None, primitive="eat",
+  note="the round's ration: meals eaten and missed, starvation deaths, food spoiled and held, agents by stage")
+E("store_owner", "subsistence", "summary", "public", "event", "subsistence",
+  note="a dead agent's store passes to its heir (living children, a co-parent, else its polity)")
 
 
 # ---------------------------------------------------------------------- natural audiences (review 12 WP2, §4.2)

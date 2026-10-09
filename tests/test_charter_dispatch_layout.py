@@ -111,4 +111,5 @@ def test_routed_changes_live_in_dispatch_changes():
     for n in D.ROUTED:
         mod, _, qual = PR.get(n).fn.partition(":")
         assert (mod.startswith("dispatch.changes.") or (mod, qual) == ("dispatch.ranks", "do_set_conflict_rule")
-                or (n in PR.TIER_OF["L"] and not mod.startswith("dispatch") and qual.startswith("change_"))), (n, mod)
+                or (n in PR.TIER_OF["L"] and not mod.startswith("dispatch") and qual.startswith("change_"))
+                or (mod == "subsistence" and qual.startswith("change_"))), (n, mod)   # review 15: the physics rows (P) too

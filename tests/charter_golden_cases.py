@@ -52,6 +52,10 @@ CASES = {
     # P4.3: contracts (associations) with law.v2: the scripted bots found a club, a cartel, a crowdfund and a company, join, set
     # allowances, deposit escrow, vote a change and leave (contracts.scripted_actions)
     "contracts_small": ("E2", 3, ["rounds=5", "law.v2=true", "contracts.enabled=true"]),
+    # review 15 (S1-S3): subsistence in the state of nature: the ration, hunger, spoilage, the food camps (forage, sow and reap, the
+    # hunt) and stores, by the scripted food bot (subsistence.scripted_actions), 11 agents, 6 rounds
+    "subsistence_small": ("nature_subsistence", 3, ["rounds=6", "agents={worker: 10, scientist: 0, legislator: 0, media: 0, board: 0, "
+                                                    "fixer: 1}"]),
 }
 V2_CASES = {"society_law_v2"}                          # their start laws are test fixtures: registered in library.LIB while they run
 

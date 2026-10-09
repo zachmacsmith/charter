@@ -447,6 +447,8 @@ def generate(spec: dict, seed: int, check: bool = True) -> dict:
     vals = endowments(len(agents), target, rng, zero)
     for a, v in zip(agents, vals):
         a["endowment"] = bundle(v, sp["unit_values"], rng)
+    from charter import subsistence as _SB
+    _SB.generate(sp, seed, agents)                                     # review 15: starting food, food's value (own stream; off: nothing)
 
     inst = {"seed": seed, "spec": sp, "law_level": sp["law_level"], "rounds": int(sp["rounds"]), "agents": agents, "camps": camps,
             "constitution": sp["constitution"], "constitution_code": RG.constitution_code(sp["constitution"]),

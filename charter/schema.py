@@ -98,6 +98,7 @@ FEATURE_DEFAULTS = {
     "contracts": ("contracts", _mod("charter.contracts"), "charter.contracts"),     # P4.3: associations (needs law.v2)
     "directories": ("directories", _mod("charter.directories"), "charter.directories"),   # owned trees of text files
     "chronicle": ("directories", _mod("charter.directories", "CHRONICLE_DEFAULTS"), "charter.directories"),   # the Historian's
+    "subsistence": ("subsistence", _mod("charter.subsistence"), "charter.subsistence"),   # review 15: food, hunger, food camps, stores
 }
 ALIASES = {"media": "media2", "outside": "outside_power", "camptypes": "camps.typed", "leases": "camps.leases"}
 
@@ -378,6 +379,15 @@ def _ann():
         "conflict.visibility.failure": dict(types=("str",), enum=("target", "public", "none")),
         "conflict.start.*": dict(types=("number", "list")),
         "conflict.start": dict(kind="map"),
+        "subsistence.start_food": dict(types=("list",)),                  # review 15 (charter/subsistence.py)
+        "subsistence.frailty": dict(types=("list",)),
+        "subsistence.exempt": dict(types=("list",), items=CLASSES + ("observer",)),
+        "subsistence.visibility": dict(types=("str",), enum=("public", "private")),
+        "subsistence.bot": dict(types=("str",), enum=("eat", "basic")),
+        "subsistence.spoil": dict(range=PROB),
+        "subsistence.store_spoil": dict(range=PROB),
+        "subsistence.store.cost": dict(kind="map"),
+        "subsistence.store.cost.*": dict(types=("number",), range=NONNEG),
         "life.lifespan": dict(types=("list", "dict"), fields=("mean", "sd", "min", "max")),
         "life.elapsed": dict(types=("list",)),
         "life.design_rounds": dict(types=("int", "null"), range=(1, None)),
@@ -663,6 +673,38 @@ DOCS = {
     "conflict.assassin.disguise_prob_scientist": "chance a Scientist starts with the disguise article",
     "conflict.assassin.disguise_prob_assassin": "chance the assassin starts with the disguise article",
     "conflict.start": "per agent outside the Board and the Fixer: starting weapons and quicksilver",
+    # ---- subsistence (review 15, charter/subsistence.py)
+    "subsistence.hazard.step": "added to the starvation hazard per further missed meal (base: the hidden frailty)",
+    "subsistence.hazard.max_rounds": "starving rounds after which death is certain",
+    "subsistence.hunger_yield.hungry": "forage and reap yield multiplier while hungry",
+    "subsistence.hunger_yield.starving": "forage and reap yield multiplier while starving",
+    "subsistence.forest.per_agent": "one forest per this many agents (at least one)",
+    "subsistence.forest.capacity_per_agent": "forest capacity K: this x agents / forests (food)",
+    "subsistence.forest.regrowth": "logistic regrowth rate r of a forest",
+    "subsistence.forest.yield": "food per forage action at full stock (x stock/capacity x the hunger multiplier)",
+    "subsistence.forest.refuge": "share of capacity foraging cannot take (the last berries are hard to find)",
+    "subsistence.forest.forage_per_round": "forest actions (forage or fell) per agent per round, over all forests",
+    "subsistence.forest.fell_timber": "timber per fell action",
+    "subsistence.forest.fell_cost_k": "share of the initial capacity each fell removes for good",
+    "subsistence.forest.fell_floor": "felling never takes capacity below this share of the initial capacity",
+    "subsistence.forest.clearing": "fells that clear one new plot on the paired fields",
+    "subsistence.forest.start_stock": "a forest's starting stock as a share of its capacity",
+    "subsistence.fields.per_agent": "one fields camp per this many agents (at least one)",
+    "subsistence.fields.plots_per_agent": "plots in all: this x agents (shared over the fields camps)",
+    "subsistence.fields.plots_max_per_agent": "clearing adds plots up to this x agents",
+    "subsistence.fields.seed_max": "most food sown on one plot (any amount from 1)",
+    "subsistence.fields.grow": "rounds from sowing to a ripe crop",
+    "subsistence.fields.mult": "crop yield per unit of seed at full fertility",
+    "subsistence.fields.noise": "sd of the crop's relative yield noise",
+    "subsistence.fields.fertility_loss": "fertility a plot loses per harvest",
+    "subsistence.fields.fertility_gain": "fertility a fallow plot regains per round (up to 1)",
+    "subsistence.fields.fertility_floor": "lowest fertility",
+    "subsistence.fields.blight": "chance a crop fails when it ripens",
+    "subsistence.fields.rot": "share of a ripe, unreaped crop lost each round after its first ripe round",
+    "subsistence.hunt.party_food": "food per hunter per hunt action at full, matched effort in a party of two or more",
+    "subsistence.store.cost": "a store's building cost (destroyed)",
+    "subsistence.store.cost.*": "quantity of this resource",
+    "subsistence.store.capacity": "food a store holds",
     # ---- life
     "life.lifespan": "rounds each agent lives at full scale: [lo, hi] or {mean, sd, min, max}",
     "life.elapsed": "rounds already behind starting agents at full scale, [lo, hi]",
@@ -1384,6 +1426,14 @@ def validate(spec) -> list[str]:
         errs.append("law.gas_price: gas is metered only under law.v2, which needs law.v2: true")
     if law.get("digest") is True and law.get("v2") is not True:
         errs.append("law.digest: the legal digest describes law.v2's hooks, which needs law.v2: true")
+    sub = spec.get("subsistence") if isinstance(spec.get("subsistence"), dict) else {}
+    if sub.get("enabled") is True:                                     # review 15: food replaces upkeep; its camps are typed camps
+        up = ((spec.get("resources") or {}).get("upkeep") or {}) if isinstance(spec.get("resources"), dict) else {}
+        if isinstance(up, dict) and up.get("enabled") is True:
+            errs.append("subsistence.enabled: the ration replaces resources.upkeep; turn one of them off")
+        camps = spec.get("camps") if isinstance(spec.get("camps"), dict) else {}
+        if camps.get("model") != "types":
+            errs.append("subsistence.enabled: the food camps (forests, fields, the hunt) are typed camps, which need camps.model: types")
     return errs
 
 

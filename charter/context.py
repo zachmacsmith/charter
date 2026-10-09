@@ -935,6 +935,9 @@ def overview(inst) -> str:
         mods.append("projects are funded together and pay only if they reach their threshold [manual: Projects and tribute]")
     if on("outside_power"):
         mods.append("an outside power demands tribute and raids if unpaid [manual: Projects and tribute]")
+    if on("subsistence"):                                               # review 15 (off: no word)
+        from charter import subsistence as _SB
+        mods.append(_SB.overview_line(inst))
     if mods:
         lines.append("Also: " + "; ".join(mods) + ".")
     return "\n".join(lines)

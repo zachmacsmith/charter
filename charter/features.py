@@ -120,7 +120,7 @@ FEATURES: list[Feature] = [
       golden="E2_seq_6"),
     F("outside", "charter.outside", "outside_power", state=("outside",), rng=("raid", "tribute"), golden="E4_observer_hidden_4"),
     F("camps", "charter.camptypes.framework", "camps", rng=("camptypes", "camptypes-bot", "calibrate"), golden="society_small_4"),
-    F("mortality", "charter.mortality", None, implied_by=("life", "conflict"), state=("mortality",), golden="society_small_4"),
+    F("mortality", "charter.mortality", None, implied_by=("life", "conflict", "subsistence"), state=("mortality",), golden="society_small_4"),
     F("conflict", "charter.conflict", "conflict", state=("conflict",), rng=("conflict", "conflict-bot"), golden="society_small_4",
       live="conflict"),
     F("jurisdictions", "charter.jurisdictions", "jurisdictions", state=("jurisdictions", "jur"), rng=("jurisdictions",),
@@ -137,6 +137,9 @@ FEATURES: list[Feature] = [
     # P4.3: associations (contracts); needs law.v2. Every entry below returns at once (and changes nothing) when it is off.
     F("contracts", "charter.contracts", "contracts", state=("contracts",), rng=("contracts",), golden="contracts_small",
       live="contracts"),
+    # Review 15 S1-S3: food, hunger, the food camps and stores (spec subsistence; off: every entry is skipped and the tails are empty)
+    F("subsistence", "charter.subsistence", "subsistence", state=("subsistence",), rng=("subsistence", "subsistence-bot"),
+      golden="subsistence_small", skip_off=True),
 ]
 del F
 REG: dict[str, Feature] = {f.name: f for f in FEATURES}
@@ -163,14 +166,14 @@ def on(name: str, x) -> bool:
 # ---------------------------------------------------------------------- phases (today's order, exactly)
 PHASES: dict[str, list[tuple[str, str]]] = {
     "init": [("projects", "init_state"), ("outside", "init_state"), ("core", "effects"), ("hidden", "install"),
-             ("context", "install"), ("roles", "init_state"), ("camps", "init_state"), ("life", "install"), ("conflict", "install"),
+             ("context", "install"), ("roles", "init_state"), ("camps", "init_state"), ("subsistence", "install"), ("life", "install"), ("conflict", "install"),
              ("jurisdictions", "install"), ("media", "install"), ("contracts", "install")],   # media.install installs the Scholars
     "round_start": [("core", "reset_counters"), ("core", "settle_loans"), ("projects", "start_round"), ("outside", "start_round"),
                     ("projects", "maybe_spawn"), ("core", "pending_patches"), ("core", "drift"), ("camps", "start_round"),
                     ("law", "on_round_start"), ("hidden", "on_round_start"), ("conflict", "start_round"), ("media", "start_round")],
     "round_end": [("conflict", "resolve_attacks"), ("camps", "end_of_round"), ("core", "close_ballots"), ("core", "veto_queue"),
                   ("law", "on_round_end"), ("jurisdictions", "end_round"), ("contracts", "end_round"), ("core", "regrow"),
-                  ("camps", "world_update"),
+                  ("camps", "world_update"), ("subsistence", "end_of_round"),
                   ("life", "end_of_round"), ("core", "succession"), ("core", "expire_cases"), ("credit", "end_round"),
                   ("core", "record"), ("core", "advance")],
     # runner-level, declared (call sites inline in runner.run until P5.3): the observer reads and acts after the turns, then
@@ -178,7 +181,7 @@ PHASES: dict[str, list[tuple[str, str]]] = {
     "after_turns": [("observer", "Observer.turn"), ("core", "end_round"), ("media", "editorial_turns")],
     # end_life (mortality.end): core = mortality's own steps (mark opens the estate; bequest is probate); feature functions are
     # called (k, aid) and their results kept
-    "death": [("core", "mark"), ("core", "announce"), ("life", "on_death"), ("core", "bequest"), ("core", "lapse"), ("core", "roles"),
+    "death": [("core", "mark"), ("core", "announce"), ("life", "on_death"), ("subsistence", "on_death"), ("core", "bequest"), ("core", "lapse"), ("core", "roles"),
               ("core", "seat"), ("life", "after_death"), ("core", "record")],
     # begin_life (events.begin), called (k, aid, parent/sponsor): the agent enters, the sponsor's subscriptions, its extra messages,
     # a child's own bookkeeping (life._birth), then its jurisdiction (an arrival's founding one; a child's parent's, whose on_birth
@@ -200,17 +203,18 @@ FRAMES: dict[tuple[str, str], tuple[str, str]] = {
 # ---------------------------------------------------------------------- tails (merge order, exactly today's)
 TAILS: dict[str, list[tuple[str, str]]] = {
     "law_api": [(f, "law_api") for f in ("credit", "hidden", "projects", "outside", "camps", "mortality", "conflict", "jurisdictions",
-                                         "media", "life", "contracts")],
+                                         "media", "life", "contracts", "subsistence")],
     "snapshot_fields": [("credit", "snapshot_fields"), ("core", "effects"), ("projects", "snapshot_fields"),
                         ("outside", "snapshot_fields"), ("camps", "snapshot_fields"), ("conflict", "snapshot_fields"),
                         ("jurisdictions", "snapshot_fields"), ("media", "snapshot_fields"), ("core", "efficiency"),
-                        ("contracts", "snapshot_fields")],
+                        ("contracts", "snapshot_fields"), ("subsistence", "snapshot_fields")],
     "state_lines": [("credit", "state_lines"), ("core", "channels"), ("projects", "state_lines"), ("outside", "state_lines"),
-                    ("camps", "state_lines"), ("life", "state_lines"), ("core", "archive_reminder"), ("conflict", "state_lines"),
+                    ("camps", "state_lines"), ("subsistence", "state_lines"), ("life", "state_lines"), ("core", "archive_reminder"), ("conflict", "state_lines"),
                     ("jurisdictions", "state_lines"), ("media", "state_lines"), ("contracts", "state_lines")],
-    "truth": [(f, "truth") for f in ("hidden", "events", "context", "roles", "camps", "mortality", "life", "conflict", "media")],
+    "truth": [(f, "truth") for f in ("hidden", "events", "context", "roles", "camps", "mortality", "life", "conflict", "media",
+                                     "subsistence")],
     "render_event": [(f, "render_event") for f in ("projects", "conflict", "media", "outside", "camps", "jurisdictions", "mortality",
-                                                   "life", "contracts")],
+                                                   "life", "contracts", "subsistence")],
 }
 
 # Fixed module names and their parameters (names only; defaults allowed after them).

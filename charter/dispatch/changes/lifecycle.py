@@ -22,7 +22,7 @@ from __future__ import annotations
 LIFE_HOWS = ("arrival", "born", "made", "copy")                       # made/copy: reserved (a Maker's order is born as "born")
 
 
-LIFE_CAUSES = ("attack", "assassin", "accident", "old_age", "law", "departure")      # mortality.CAUSES + departure; intervention: P5
+LIFE_CAUSES = ("attack", "assassin", "accident", "old_age", "law", "starvation", "departure")      # mortality.CAUSES + departure; intervention: P5
 
 
 def do_begin_life(k, agent, how, parent, record=None, inst=None, settle=None) -> dict:

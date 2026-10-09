@@ -16,7 +16,8 @@ def test_law_api_classification_and_docs_agree():
     k = Kernel(generator.generate(S.load("E6"), 1))
     api = set(k.api_for("L0"))
     from charter import lawapi as LA
-    assert api == L.API - LA.V2_ONLY - LA.CONTRACTS_ONLY, (sorted(api - L.API), sorted(L.API - api))   # law.v2 and contract names: only there
+    sub = LA.SUBSISTENCE_ONLY                                           # review 15: only with subsistence on
+    assert api == L.API - LA.V2_ONLY - LA.CONTRACTS_ONLY - sub, (sorted(api - L.API), sorted(L.API - api))   # law.v2 and contract names: only there
     non_functions = set(L.HOOKS) | {e for e, v in LD.ENTRIES.items() if v["topic"] in ("ballots", "rare-mechanics")} \
         | {"approval_rules", "ballot_gate", "ballot_weights", "dry_run_preview", "step_limits"}
     gated = set(LD.REQUIRES) | set(LD.OPTIONAL)                         # entries documented only in some worlds (law.v2, contracts)

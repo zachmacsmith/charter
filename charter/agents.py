@@ -757,6 +757,9 @@ class ScriptedPolicy:
         if (k.spec.get("life") or {}).get("enabled"):                   # life: commissions, making agents, successors, bequests
             from charter import life as LF                              # (own RNG stream; no draw at all when Life is off)
             acts = LF.scripted_actions(k, aid, n_actions) + acts
+        if "subsistence" in k.w:                                         # review 15: food first (own RNG stream; nothing when off)
+            from charter import subsistence as SB
+            acts = SB.scripted_actions(k, aid, n_actions) + acts
         mail, replied = [], set()                                    # answer (and pay 1 timber with) the newest unanswered DM of the
         for e in reversed(k.events):                                 # last two rounds; no RNG draw, so runs without DMs are unchanged
             if e["round"] < k.r - 1:

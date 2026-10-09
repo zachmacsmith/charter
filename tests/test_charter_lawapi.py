@@ -26,11 +26,13 @@ W8E_FNS = ("company_rule", "company_rules", "companies")   # W8e (contracts.law_
 PUB_FNS = ("publication", "publish", "unpublish")                                             # W8c (publication.law_api)
 W6_V2_FNS = {*W6A_FNS, *CO_FNS, *EV_FNS, *W7E_FNS, *PUB_FNS, "send_message"}   # wave 9 C: send_message (channels.law_api)                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
 CH_FNS = {"send_message"}                                             # wave 9 C (channels.law_api; law.v2 and channels.v2 worlds)
+SUB_FNS = {n for n, f in LA.LAWFNS.items() if f.module == "subsistence"}   # review 15: subsistence worlds only (subsistence.law_api)
+CH_FNS = CH_FNS | SUB_FNS                                             # (excluded from the snapshot comparisons alike)
 W6_FNS = {*W6_V2_FNS}                                        # every W6 law function (contract-module ones are in CONTRACT_FNS)
 SNAPSHOT = Path(__file__).parent / "fixtures" / "charter_lawapi_snapshot.json"
 ALL_ON = ["jurisdictions.enabled=false", "conflict.enabled=true", "media2.enabled=true", "life.enabled=true",
           "shared_archive.enabled=false", "law.v2=true", "contracts.enabled=true",
-          "law.publication=true", "channels.v2=true"]                                        # W8c: publish, unpublish, publication   # law.v2: use and public_of exist (lawapi.V2_ONLY)
+          "law.publication=true", "channels.v2=true", "subsistence.enabled=true"]                                        # W8c: publish, unpublish, publication   # law.v2: use and public_of exist (lawapi.V2_ONLY)
 CONTRACT_FNS = {n for n, f in LA.LAWFNS.items() if f.module == "contracts"}   # P4.3: new rows, after the snapshot (contracts on only)
 assert set(W8E_FNS) <= CONTRACT_FNS                                     # W8e: company law rows are contract-module rows
 
@@ -70,7 +72,7 @@ def test_every_reachable_function_has_a_row_and_every_row_is_reachable():
     k = _kernel()
     api = k.api_for("_")
     assert set(api) == set(LA.LAWFNS), (sorted(set(api) - set(LA.LAWFNS)), sorted(set(LA.LAWFNS) - set(api)))
-    assert len(LA.LAWFNS) == 129 + len(CONTRACT_FNS) + len(W6_FNS)   # 129 at w5 (P3.2, P3.4, loans); P4.3 contracts; W6 packages
+    assert len(LA.LAWFNS) == 129 + len(CONTRACT_FNS) + len(W6_FNS) + len(SUB_FNS)   # 129 at w5 (P3.2, P3.4, loans); P4.3 contracts; W6 packages; review 15
     mods = {f.module for f in LA.LAWFNS.values()} - {"kernel"}
     from_modules = set()
     for m in sorted(mods):

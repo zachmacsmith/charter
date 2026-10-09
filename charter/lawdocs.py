@@ -468,6 +468,18 @@ E += [
      "prompt", "common"),
 ]
 REQUIRES["send_message"] = lambda spec: bool((spec.get("channels") or {}).get("v2")) and bool((spec.get("law") or {}).get("v2"))
+# subsistence (charter/subsistence.py, review 15): documented only in worlds with subsistence on (REQUIRES)
+E += [
+    ("hunger", "reads", "Read", "hunger(agent)", "an agent's hunger: \"fed\", \"hungry\" or \"starving\" (None for one who does not "
+     "eat). Public, like the roster: a relief law can target the hungry; a polity may also restrict what the starving may do.",
+     "prompt", "common"),
+    ("food_of", "reads", "Read", "food_of(agent)", "the food an agent (or a store \"store:<id>\", or a treasury) holds.", "prompt", "common"),
+    ("stores", "reads", "Read", "stores()", "every food store: id -> owner, food held, capacity. A law of the institution owning a "
+     "store moves food out of it with move(\"store:<id>\", ...).", "prompt", "common"),
+    ("plots", "reads", "Read", "plots(camp)", "a fields camp's plots: id, status (fallow, growing, ripe), sower, ripe round, fertility.",
+     "prompt", "common"),
+]
+REQUIRES.update({n: (lambda spec: bool((spec.get("subsistence") or {}).get("enabled"))) for n in ("hunger", "food_of", "stores", "plots")})
 # contracts (charter/contracts.py, P4.3): documented only in worlds with contracts on (OPTIONAL), for the code of a contract
 E += [
     ("pull", "contracts", "Contracts", "pull(member, item, qty)", "a contract's law only: takes qty of item from a member into its "
