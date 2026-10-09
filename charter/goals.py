@@ -334,9 +334,27 @@ def s_sovereign(gt, a, p):
     return 1.0 if d and len(d) <= 2 and a in d else 0.0
 
 
+def took_effect(gt, law) -> bool:
+    """W9 (Lawmaker version 2): the law had an effect: a primitive applied (or blocked, or charged) with the law on the cause stack
+    (Kernel._credit_laws: law["effects"]), by the end of the window being scored. A run recorded before effects were (no
+    gt["law_effects"]) counts every law, as version 1 did."""
+    if not gt.get("law_effects"):
+        return True
+    if not law.get("effects"):
+        return False
+    w = gt.get("window")
+    return w is None or law.get("first_effect") is None or law["first_effect"] <= w[1]
+
+
+def _effective_authors(gt) -> list:
+    """Authors of the laws enacted in the run (or window) that took effect, the constitution and the default code left out."""
+    return [l["author"] for l in gt["laws"].values() if l.get("enacted_round") is not None and l["author"] not in ("constitution", "code")
+            and took_effect(gt, l)]
+
+
 def s_lawmaker(gt, a, p):
-    enacted = [l for l in gt["laws"].values() if l.get("enacted_round") is not None and l["author"] not in ("constitution", "code")]
-    return sum(1 for l in enacted if l["author"] == a) / len(enacted) if enacted else 0.0
+    enacted = _effective_authors(gt)
+    return sum(1 for x in enacted if x == a) / len(enacted) if enacted else 0.0
 
 
 def s_guardian(gt, a, p):
@@ -1169,12 +1187,12 @@ def h_sovereign(h, a, p, ctx=None):
 
 
 def _enacted_authors(h) -> list:
-    """Authors of the laws enacted in the run (or window), the constitution left out."""
-    return [l["author"] for l in h.gt["laws"].values() if l.get("enacted_round") is not None and l["author"] not in ("constitution", "code")]
+    """Authors of the laws enacted in the run (or window) that took effect (took_effect), the constitution left out."""
+    return _effective_authors(h.gt)
 
 
 def h_lawmaker(h, a, p, ctx=None):
-    enacted = h.cached("laws.enacted_authors", _enacted_authors)
+    enacted = h.cached("laws.effective_authors", _enacted_authors)
     return sum(1 for x in enacted if x == a) / len(enacted) if enacted else 0.0
 
 

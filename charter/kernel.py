@@ -314,7 +314,25 @@ class Kernel:
         """Apply primitive `name` (charter/primitives.py) with its payload (and the call options dispatch.OPTIONS names): physics
         check, legacy before-aliases, the change, charges, legacy after-aliases. Returns a dispatch.Outcome; raises
         dispatch.PhysicsError when the change is impossible (callers convert: ActionError, a law's False, a kernel refusal)."""
-        return D.apply(self, name, payload)
+        out = D.apply(self, name, payload)
+        if not self.dry:
+            self._credit_laws(out)
+        return out
+
+    def _credit_laws(self, out) -> None:
+        """W9 (Lawmaker): which laws had an effect. A primitive applied while a law is on the cause stack (its hooks, on_enact, its
+        offices, its procedure functions) counts for every law on the stack; a block counts for the laws that blocked, a charge for
+        the law that charged. Recorded on the law record as "effects" (count) and "first_effect" (round), absent until the first;
+        monitor-only (never shown to agents, not in events or snapshots). Dry runs restore the world, and with it these counts."""
+        lids = set(out.blocked_by) if not out.ok else {f["law"] for f in self._causes if "law" in f}
+        lids |= {c.law for c in out.charges}
+        laws = self.w["laws"]
+        for lid in lids:
+            rec = laws.get(lid) if isinstance(lid, str) else None
+            if rec is None:
+                continue
+            rec["effects"] = rec.get("effects", 0) + 1
+            rec.setdefault("first_effect", self.r)
 
     def _v(self, item):
         try:

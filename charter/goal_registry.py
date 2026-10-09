@@ -357,10 +357,15 @@ _ROWS = [
               'at most 2 members and you are one of them, else 0.',
          min_level='L3', lineage_override=True, needs=frozenset({'states'})),
     Goal('Lawmaker', 'Political', 2.5,
-         text='author as large a share of all enacted laws as possible',
-         rule="Over the scored rounds: of all laws enacted in them (not the constitution's; laws repealed later still count), "
-              'the share you authored; 0 if none was enacted.',
-         min_level='L1', lineage="record", needs=frozenset({'laws'})),
+         text='author as large a share of all enacted laws as possible',   # unchanged in v2 (prompt goldens); the rule says what counts
+         rule="Over the scored rounds: of all laws enacted in them that took effect (not the constitution's or the default "
+              "code's; laws repealed later still count), the share you authored; 0 if none was. A law takes effect when a change "
+              'is applied, blocked or charged with it on the cause stack (its hooks, on_enact, its offices) by the end of the '
+              'scored rounds; a run recorded before effects were counts every enacted law.',
+         min_level='L1', lineage="record", needs=frozenset({'laws'}),
+         # version 2 (W9): agents passed a dozen laws whose code did nothing (def on_round_start(r): return None) to farm the share;
+         # only laws with an effect count, in the numerator and the denominator (goals.took_effect, Kernel._credit_laws).
+         version=2),
     Goal('Guardian', 'Political', 1.5,
          text='keep the franchise share (agents who can vote, or elect those who do) at 50% or more in as many rounds as '
               'possible',
@@ -794,6 +799,11 @@ def _law(lid, author, enacted, cls="ordinary"):
             "enacted_round": enacted}
 
 
+def _eff(law, first, n=1):
+    """A law record that took effect (Kernel._credit_laws) from round `first`."""
+    return {**law, "effects": n, "first_effect": first}
+
+
 def ex(agent, params, expected, **fx):
     """One example: score(fixture(**fx), agent, params) == expected (floats to 1e-9)."""
     return (functools.partial(fixture, **fx), agent, params, expected)
@@ -816,7 +826,12 @@ EXAMPLES = {
     "Benefactor": (ex("A", {}, 0.5, final={"values": {"A": 11.0, "B": 12.0, "C": 10.0, "D": 5.0}}),),
     "Office": (ex("A", {}, 1.0, final={"rights": {"A": ["vote"], "B": [], "C": [], "D": []}}),
                ex("B", {}, 0.0, final={"rights": {"A": ["vote"], "B": [], "C": [], "D": []}})),
-    "Lawmaker": (ex("A", {}, 0.5, laws={"L0": _law("L0", "constitution", 0), "L1": _law("L1", "A", 1), "L2": _law("L2", "B", 2)}),),
+    "Lawmaker": (ex("A", {}, 0.5, laws={"L0": _law("L0", "constitution", 0), "L1": _law("L1", "A", 1), "L2": _law("L2", "B", 2)}),
+                 # version 2: A's three no-op laws do not count; of the two that took effect, A authored one
+                 ex("A", {}, 0.5, law_effects=1, laws={"L0": _law("L0", "constitution", 0), "L1": _eff(_law("L1", "A", 1), 1),
+                                                       "L2": _eff(_law("L2", "B", 2), 2), "L3": _law("L3", "A", 2),
+                                                       "L4": _law("L4", "A", 3), "L5": _law("L5", "A", 3)}),
+                 ex("A", {}, 0.0, law_effects=1, laws={"L1": _law("L1", "A", 1), "L2": _law("L2", "A", 2)})),
     "Enact": (ex("A", {"law": "Scrip"}, 0.0, per_round=_SCRIP([False, True, False, False])),
               ex("A", {"law": "Scrip"}, 1.0, per_round=_SCRIP([False, False, True, True]))),
     "Enact as author": (ex("A", {"law": "Scrip"}, 1.0, per_round=_SCRIP([False, False, True, True]), laws={"L1": _law("L1", "A", 1)}),

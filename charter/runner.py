@@ -767,7 +767,8 @@ def _truth(out, inst, k, const, start_values, guesses, welfare_series, shared_sn
                     for a in inst["agents"]},
           "guesses": guesses, "laws": laws, "welfare": welfare_series, "unit": k.w["unit"],
           "camp_resource": {c: v["resource"] for c, v in k.w["camps"].items()}, "shared_archive_at_start": shared_snap,
-          "cases": k.w["cases"], "currencies": k.w["currencies"], "names": k.w["names"]}
+          "cases": k.w["cases"], "currencies": k.w["currencies"], "names": k.w["names"],
+          "law_effects": 1}                                             # W9: law records carry "effects" (Kernel._credit_laws)
     from charter import features as FT                                  # hidden, events, context, roles, camps, mortality, life,
     for part in FT.merge("truth", {}, k, inst):                         # conflict, media2 (monitor-only; features.TAILS order)
         gt.update(part)
