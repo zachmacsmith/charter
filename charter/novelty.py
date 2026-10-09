@@ -14,6 +14,13 @@ builtins), and compared with difflib's ratio (1.0: the same code up to names and
   adaptation   not a copy, and its nearest reference entry is at least THRESHOLD similar
   novel        nearest similarity below THRESHOLD; `novel_ran` further requires that it was enacted and acted (an event cites it as
                its cause, data `why` "law:<id>" or `law` <id>), so broken code does not count as invention
+  no_effect    (W9) enacted, but nothing it did can be attributed to it: no primitive applied, blocked or charged with it on the
+               cause stack (the law record's "effects", Kernel._credit_laws; for a run recorded before effects were, no event cites it
+               as its cause). It overrides the three classes above: a law that does nothing is neither copied nor invented work. Laws
+               never enacted keep their similarity class.
+An author's own laws with identical code (title, intent, rank, exports and docstrings aside) are one design: the first is counted,
+the others are listed as its duplicates (row "duplicate_of") and left out of every count but `laws` and `own_duplicates`, so twelve
+copies of one law by one agent count once.
 An institution (a contract, from contract_created) takes the highest similarity of its agent-written laws (one copied clause
 makes it template-like) and is novel below THRESHOLD; one founded from a template by name has similarity 1.0. Distinct designs:
 greedy clusters of the normalised codes (a code joins the first cluster whose first member it is THRESHOLD similar to).
@@ -193,25 +200,45 @@ def _acted(events) -> set:
     return out
 
 
+def body_key(code: str) -> str:
+    """Identity of law code for collapsing an author's duplicates: its syntax tree with the title, intent, rank and exports lines and
+    docstrings dropped (identifiers and constants kept); the stripped text for code that does not parse."""
+    try:
+        tree = ast.parse(str(code or ""))
+    except (SyntaxError, ValueError):
+        return str(code or "").strip()
+    body = [n for n in tree.body if not (isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)
+                                         and n.targets[0].id in DROP)
+            and not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant) and isinstance(n.value.value, str))]
+    return ast.dump(ast.Module(body=body, type_ignores=[]))
+
+
 def analyse(run_dir, threshold: float = THRESHOLD) -> dict:
     """The novelty summary of one run directory (ground_truth.json and events.jsonl)."""
     run_dir = Path(run_dir)
     gt, events = _read(run_dir)
-    return analyse_parts(gt.get("laws") or {}, events, threshold, run=str(run_dir))
+    return analyse_parts(gt.get("laws") or {}, events, threshold, run=str(run_dir), effects_recorded=bool(gt.get("law_effects")))
 
 
-def analyse_parts(laws: dict, events: list, threshold: float = THRESHOLD, run: str = "") -> dict:
+def analyse_parts(laws: dict, events: list, threshold: float = THRESHOLD, run: str = "", effects_recorded: bool = False) -> dict:
+    """effects_recorded: the law records carry "effects" (runs from W9 on, ground_truth "law_effects"); otherwise a law took
+    effect when an event cites it as its cause (_acted)."""
     acted = _acted(events)
-    rows = []
+    rows, seen = [], {}
     for lid, l in sorted(laws.items(), key=lambda kv: (len(kv[0]), kv[0])):
         author = l.get("author")
         if not isinstance(author, str) or author in SYSTEM_AUTHORS or not l.get("code"):
             continue
         near = nearest(l["code"])
         enacted = l.get("enacted_round") is not None
+        effect = enacted and (bool(l.get("effects")) if effects_recorded else lid in acted)
+        cls = classify(near, threshold)
+        key = (author, body_key(l["code"]))
         rows.append({"law": lid, "title": l.get("title"), "author": author, "jurisdiction": l.get("jurisdiction"),
-                     "status": l.get("status"), "enacted": enacted, "ran": enacted and lid in acted,
-                     "nearest": near["ref"], "similarity": near["similarity"], "class": classify(near, threshold)})
+                     "status": l.get("status"), "enacted": enacted, "ran": enacted and lid in acted, "effect": effect,
+                     "nearest": near["ref"], "similarity": near["similarity"],
+                     "class": "no_effect" if enacted and not effect else cls, "duplicate_of": seen.get(key)})
+        seen.setdefault(key, lid)
     insts = {}
     for e in events:
         if e.get("type") == "contract_created":
@@ -228,23 +255,26 @@ def analyse_parts(laws: dict, events: list, threshold: float = THRESHOLD, run: s
         c["novel"] = None if c["similarity"] is None else c["similarity"] < threshold
         c["nearest"] = (f"template:{c['template']}" if c["template"] else
                         max(((by_law[x]["similarity"], by_law[x]["nearest"]) for x in c["laws"]), default=(0, None))[1])
-    codes = {r["law"]: laws[r["law"]]["code"] for r in rows}
+    designs = [r for r in rows if r["duplicate_of"] is None]           # an author's identical laws: one design
+    codes = {r["law"]: laws[r["law"]]["code"] for r in designs}
     law_ids = list(codes)
     cl = clusters([codes[x] for x in law_ids], threshold)
     inst_ids = [cid for cid, c in insts.items() if c["laws"]]
     inst_codes = ["\n".join(codes[x] for x in insts[cid]["laws"]) for cid in inst_ids]
     icl = clusters(inst_codes, threshold)
-    n = len(rows)
-    cnt = lambda k: sum(1 for r in rows if r["class"] == k)
+    n = len(designs)
+    cnt = lambda k: sum(1 for r in designs if r["class"] == k)
     scored = [c for c in insts.values() if c["novel"] is not None]
     summary = {
         "run": run, "threshold": threshold,
-        "laws": n, "copies": cnt("copy"), "adaptations": cnt("adaptation"), "novel": cnt("novel"),
-        "novel_ran": sum(1 for r in rows if r["class"] == "novel" and r["ran"]),
-        "same_structure": sum(1 for r in rows if r["similarity"] >= 0.999),   # copies and copies with constants changed
+        "laws": len(rows), "own_duplicates": len(rows) - n, "designs": n,
+        "copies": cnt("copy"), "adaptations": cnt("adaptation"), "novel": cnt("novel"), "no_effect": cnt("no_effect"),
+        "novel_ran": sum(1 for r in designs if r["class"] == "novel" and r["ran"]),
+        "same_structure": sum(1 for r in designs if r["similarity"] >= 0.999),   # copies and copies with constants changed
         "copy_rate": round(cnt("copy") / n, 4) if n else None,
         "novel_share": round(cnt("novel") / n, 4) if n else None,
-        "mean_similarity": round(sum(r["similarity"] for r in rows) / n, 4) if n else None,
+        "no_effect_share": round(cnt("no_effect") / n, 4) if n else None,
+        "mean_similarity": round(sum(r["similarity"] for r in designs) / n, 4) if n else None,
         "distinct_law_designs": len(cl),
         "institutions": len(insts), "institutions_from_templates": sum(1 for c in insts.values() if c["template"]),
         "novel_institutions": sum(1 for c in scored if c["novel"]),
@@ -257,14 +287,16 @@ def analyse_parts(laws: dict, events: list, threshold: float = THRESHOLD, run: s
 
 def text(res: dict) -> str:
     s = res["summary"]
-    out = [f"{s['run']}: {s['laws']} agent-written laws: {s['copies']} copies, {s['adaptations']} adaptations, {s['novel']} novel "
-           f"({s['novel_ran']} of them ran); copy rate {s['copy_rate']}, novel share {s['novel_share']}, mean similarity "
+    out = [f"{s['run']}: {s['laws']} agent-written laws ({s['own_duplicates']} an author's own duplicates, so {s['designs']} "
+           f"designs): {s['copies']} copies, {s['adaptations']} adaptations, {s['novel']} novel ({s['novel_ran']} of them ran), "
+           f"{s['no_effect']} enacted without effect; copy rate {s['copy_rate']}, novel share {s['novel_share']}, mean similarity "
            f"{s['mean_similarity']}; {s['distinct_law_designs']} distinct designs",
            f"  institutions: {s['institutions']} ({s['institutions_from_templates']} from templates by name), {s['novel_institutions']} "
            f"novel (share {s['novel_institution_share']}), {s['distinct_institution_designs']} distinct designs"]
     for r in res["laws"]:
         out.append(f"  {r['law']:6} {r['class']:10} {r['similarity']:.2f} ~ {r['nearest']}  [{r['author']}, {r['status']}"
-                   + (", ran" if r["ran"] else "") + f"] {r['title']}")
+                   + (", ran" if r["ran"] else "") + (f", duplicate of {r['duplicate_of']}" if r["duplicate_of"] else "")
+                   + f"] {r['title']}")
     return "\n".join(out)
 
 
