@@ -25,7 +25,8 @@ def test_registry_covers_the_catalogue():
 
 
 VERSIONS = {"Leaker": 2,                                             # P7.2: common text rendered from the sections
-            "Lawmaker": 2}                                            # W9: only laws that took effect count
+            "Lawmaker": 2,                                            # W9: only laws that took effect count
+            "Sovereign": 2, "Overthrow": 2}                           # W9: scored over the final window
 
 
 @pytest.mark.parametrize("name", list(GR.GOALS) + list(GR.FIXED))
