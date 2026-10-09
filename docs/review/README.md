@@ -11,6 +11,23 @@ Six read-only reviews of the code at `c5aa40d` (action registry wired into the c
 | [04](04_provenance_replay_interventions.md) | Recording, replay, fork, interventions | C+ instrument on a B+ engine |
 | [05](05_goals_and_scoring.md) | Goals and scoring | draft B- |
 
+Later design reviews (one topic each, not part of this synthesis):
+
+| Doc | Topic |
+|---|---|
+| [06](06_contracts_and_systems.md) | Contracts, systems and institutions |
+| [07](07_future_primitives.md) | Triage of further primitive proposals |
+| [08](08_feature_contract.md) | The feature contract |
+| [09](09_law_composition.md) | Law composition |
+| [10](10_legal_expressiveness.md) | Legal expressiveness |
+| [11](11_enforcement_spectrum.md) | The enforcement spectrum |
+| [12](12_hardcoded_inventory.md) | What is hard-coded, and what should be law |
+| [13](13_benchmark_suite.md) | A safety benchmark suite |
+| [14](14_state_of_nature.md) | State of nature, institutions that grow into polities, channels |
+| [15](15_subsistence_reproduction.md) | Subsistence, hunger and two-parent reproduction |
+| [16](16_economy_audit.md) | Economy and population audit |
+| [18](18_institution_holdings.md) | What institutions should be able to hold (title, control, custody) |
+
 ## Verdict
 
 Partly right. The code is not too big: the reviews agree a restructure removes a few hundred lines, not thousands, because most of the bulk is prose and
