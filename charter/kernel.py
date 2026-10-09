@@ -314,6 +314,9 @@ class Kernel:
         """Apply primitive `name` (charter/primitives.py) with its payload (and the call options dispatch.OPTIONS names): physics
         check, legacy before-aliases, the change, charges, legacy after-aliases. Returns a dispatch.Outcome; raises
         dispatch.PhysicsError when the change is impossible (callers convert: ActionError, a law's False, a kernel refusal)."""
+        w = self.__dict__.get("_watch")
+        if w is not None and any(f.get("law") == w[0] for f in self._causes):   # W9: a trial records what the draft does
+            w[1].append((name, dict(payload)))
         out = D.apply(self, name, payload)
         if not self.dry:
             self._credit_laws(out)
@@ -799,6 +802,9 @@ class Kernel:
         hit = [l for l in DC.laws_in_force(self) if l["id"] == target or l["title"].lower() == target.lower()]   # native Acts too
         if "contracts" in self.w:                                       # P4.3: associations' laws end only by their own procedure
             hit = [l for l in hit if J.association(self, J.law_jur(self, l["id"])) is None]
+        w = self.__dict__.get("_watch")
+        if w is not None and by_law == w[0]:                            # W9: a trial records what the draft tries to repeal
+            w[1].extend(("repeal_attempt", {"law": law["id"]}) for law in hit)
         if by_law is not None:                                          # law-caused: never a law of a stricter class (review F1)
             rank = self.w["laws"].get(by_law, {}).get("cls")
             hit = [l for l in hit if L.CLASS_RANK.get(l["cls"], 0) <= L.CLASS_RANK.get(rank, 0)]
@@ -1077,6 +1083,31 @@ class Kernel:
             after = self.view()
             return self.diff(before, after)
         finally:
+            self.dry = False
+            self._restore(snap)
+
+    def trial(self, lid, rounds=1) -> list:
+        """W9 (dispatch.ranks.requirement): what a draft does, on a copy of the world: enact it and run `rounds` round-ends of hooks
+        (ballots it opens close with no votes), recording every primitive applied, or tried, with the draft on the cause stack and
+        every repeal it attempts: [(primitive, payload)], ("repeal_attempt", {"law": id}) for a repeal. Errors end the trial
+        (the dry run and the procedure report them); the world is restored."""
+        snap = self._snapshot()
+        self.dry = True
+        self._watch = (lid, [])
+        try:
+            with D.isolated(self):
+                try:
+                    self.enact(lid, via="preview")
+                    for _ in range(rounds):
+                        self.hooks("on_round_start", self.r)
+                        self.hooks("on_round_end", self.r)
+                        self._close_ballots_dry()
+                        self.w["round"] += 1
+                except Exception:                                       # a broken draft: what it did until then
+                    pass
+            return list(self._watch[1])
+        finally:
+            self._watch = None
             self.dry = False
             self._restore(snap)
 

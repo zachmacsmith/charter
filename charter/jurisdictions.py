@@ -754,6 +754,9 @@ def propose(k, aid, code, intent=None, jurisdiction=None):
             law["status"] = "failed_check"
             raise L.LawError(f"no active law {law['repeal_target']!r} of {jid} to repeal")
         law["cls"] = tgt["cls"]
+    from charter import dispatch as D_
+    D_.apply_requirement(k, lid)                                       # W9: the class of what it does (procedure, electorate, repeals)
+    law = k.w["laws"][lid]                                             # (its trial restored a copy of the world)
     level = P.law_level(k, jid)
     if not P.level_allows(k, jid, law["cls"]):
         law["status"] = "failed_check"
@@ -775,7 +778,7 @@ def propose(k, aid, code, intent=None, jurisdiction=None):
     k.apply("propose", jurisdiction=jid, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
     where = "" if j.get("legacy") else f" in {jid}" + (" (hidden: no effect until it is declared)" if j["status"] == "hidden" else "")
-    return f"Proposed {lid} '{law['title']}' ({law['cls']}){where}; status: {k.w['laws'][lid]['status']}.{note}"
+    return f"Proposed {lid} '{law['title']}' ({law['cls']}{D.requirement_note(law)}){where}; status: {k.w['laws'][lid]['status']}.{note}"
 
 
 # ---------------------------------------------------------------------- courts and offices

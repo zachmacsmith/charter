@@ -608,6 +608,8 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
             law["status"] = "failed_check"
             raise ActionError(f"no active law {law['repeal_target']!r} to repeal")
         law["cls"] = tgt["cls"]
+    D.apply_requirement(k, lid)                                        # W9: the class of what it does (procedure, electorate, repeals)
+    law = k.w["laws"][lid]                                             # (its trial restored a copy of the world)
     if not PW.level_allows(k, "J0", law["cls"]):                       # the law_levels power: J0's preset (spec law_level)
         law["status"] = "failed_check"
         raise ActionError(f"{law['cls']} laws are not allowed at law level {level}")
@@ -626,7 +628,8 @@ def _propose(k, aid, code, intent=None, jurisdiction=None):
     note = LG.similar_note(k, lid)                                     # law.v2: an identical active or pending law is noted
     k.apply("propose", jurisdiction=None, draft=D.draft(k, lid), actor=aid, preview=diff)   # on_proposal(None) after it, as before
     k.decide(lid)
-    return f"Proposed {lid} '{law['title']}' ({law['cls']}); status: {k.w['laws'][lid]['status']}.{note}"
+    return (f"Proposed {lid} '{law['title']}' ({law['cls']}" + D.requirement_note(law) + f"); status: {k.w['laws'][lid]['status']}."
+            + note)
 
 
 def _amend(k, aid, law, code, reason="", intent=None):
@@ -649,6 +652,7 @@ def _amend(k, aid, law, code, reason="", intent=None):
         raise ActionError("no laws can be made in this world (law level L0)")
     try:
         lid = AM.amendment_draft(k, law, str(code), aid, reason, intent=intent)
+        D.apply_requirement(k, lid)                                     # W9: the class of what the new code does
         AM.check_level(k, jid, k.w["laws"][lid])
     except L.LawError as e:
         raise ActionError(f"your amendment was refused: {e}. " + (LAW_TEMPLATE if "syntax" in str(e) or "title" in str(e) else ""))

@@ -65,7 +65,8 @@ def draft(k, lid) -> dict:
             **({"imports": info["imports"], "exports": info["exports"], "amends": law.get("amends"),               # law.v2 only
                 "in_force_from": L.window(tree)[0], "in_force_until": L.window(tree)[1]} if v2(k) else {}),   # W7e: W6a's window
             **({"reason": law.get("amend_reason") or "", "dependents": [dict(x) for x in law.get("dependents") or ()]}
-               if law.get("amends") else {})}
+               if law.get("amends") else {}),
+            **({"requires": dict(law["requires"])} if law.get("requires") else {})}   # W9: ranks.requirement
 
 
 # ---------------------------------------------------------------------- duplicate proposals (law.v2: a signal, never a block)

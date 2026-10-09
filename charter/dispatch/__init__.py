@@ -62,7 +62,7 @@ from charter.dispatch.routing import (_accepts, apply, _apply_charges, _apply_v2
     ENTRENCHED_WHEN, _fail_closed, _fn, _FNS, _law_caused, on_block, _refusable, _run_before, _unhooked)
 from charter.dispatch.hooks import (_binds_value, bound_laws, DecisionV2, hidden_agents, HIDE, _hook_fn, _hook_index,
     hook_payload, hooked, normalise, resolve_v2, _rule_function, _scrub, SECRET, _specificity, Verdict)
-from charter.dispatch.ranks import (check_procedure_rank, check_propose, CLASSES, conflict_rule, _conflict_rule_arg,
+from charter.dispatch.ranks import (apply_requirement, requirement, requirement_note, check_procedure_rank, check_propose, CLASSES, conflict_rule, _conflict_rule_arg,
     declared_rank, do_set_conflict_rule, law_rank, law_set_conflict_rule, may_change, _polity, procedure_lookup, rank_of,
     RankRefused, set_conflict_rule, _targets)
 from charter.dispatch.validity import code_window, expire_laws, in_force, window_note, window_of, window_text
