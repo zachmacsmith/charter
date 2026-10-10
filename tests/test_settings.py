@@ -132,17 +132,20 @@ def test_infer_version_from_git_history():
     s = ST.infer(PV.ENGINE_FLIPS[3]["commits"][0])                       # version 3 without version 2's flip
     assert s["engine_version"] == 3 and s["defaults"] == {"charter.channels.DEFAULTS": {"delivery": "pull"}}
     assert ST.patches(s) == {"charter.channels.DEFAULTS": {"delivery": "pull"},
-                             "charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}}}
+                             "charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}},
+                             "charter.conflict.DEFAULTS": {"model": "disable"}}
     assert ST.infer_version("HEAD") == PV.ENGINE_VERSION
     assert ST.infer_version("0" * 40) is None
 
 
 def test_patches_revert_later_flips_only_where_the_snapshot_is_silent():
     p = ST.patches({"engine_version": 3, "defaults": {}})
-    assert p == {"charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}}}
+    assert p == {"charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}},
+                 "charter.conflict.DEFAULTS": {"model": "disable"}}
     p = ST.patches({"engine_version": 1, "defaults": {"charter.context.DEFAULTS": {"memory_text": "v2"}}})
     assert p == {"charter.channels.DEFAULTS": {"delivery": "pull"},
-                 "charter.context.DEFAULTS": {"dm_delta": False, "history": {"enabled": False}}}
+                 "charter.context.DEFAULTS": {"dm_delta": False, "history": {"enabled": False}},
+                 "charter.conflict.DEFAULTS": {"model": "disable"}}
     with ST.use({"engine_version": 1, "defaults": {}}):
         assert CX.DEFAULTS["memory_text"] == "v1" and CX.cfg({})["dm_delta"] is False
         assert CX.DEFAULTS["history"]["enabled"] is False and CX.DEFAULTS["history"]["chunk"] == 3   # the rest of the block kept

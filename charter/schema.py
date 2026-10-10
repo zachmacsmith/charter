@@ -716,6 +716,7 @@ DOCS = {
     "conflict.agent_base.attack": "harm: attack base (a number or a distribution), times the hunger multiplier",
     "conflict.agent_base.defense": "harm: defence base (a number or a distribution), times the hunger multiplier",
     "conflict.weapon_quality": "harm: strength each weapon item adds to the one fighter using it (the best one held; used up)",
+    "conflict.weapon_quality.*": "harm: strength this holdings item adds as a weapon",
     "conflict.forge_copper": "harm: copper per forged weapon (forge makes one blade)",
     "conflict.forge_timber": "harm: timber per forged weapon",
     "conflict.craft_cost": "harm: timber or stone per crude weapon (craft)",

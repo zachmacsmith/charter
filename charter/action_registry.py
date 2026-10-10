@@ -582,11 +582,11 @@ R("attack", "disable an agent for good", "FORCE", core=True, needs=("mod:conflic
   handler="conflict:act_attack", module="conflict", category="political", emits=("attack_order",),
   doc='attack {"target": "Name", "units": 3}: uses $attack_cost actions; commit weapons to disable the target (remove it from the game); the weapons are used up whether it succeeds or not')
 R("craft", "make a crude weapon from timber or stone", "FORCE", core=True, needs=("mod:conflict", "combat:harm"),
-  handler="conflict:act_craft", module="conflict", category="economic", emits=("arms",),
+  handler="conflict:act_craft", module="conflict", category="economic",
   aliases={"material": "from", "item": "from", "src": "from", "source": "from", "with": "from"},
   doc='craft {"from": "timber"}: make a crude weapon (a club or spear)')                # harm only; the doc is HARM_DOC's
 R("watch", "stay on guard this round", "FORCE", core=True, needs=("mod:conflict", "combat:harm"),
-  handler="conflict:act_watch", module="conflict", category="political", emits=("arms",),
+  handler="conflict:act_watch", module="conflict", category="political",
   doc='watch {}: stay on guard this round')                                              # harm only; the doc is HARM_DOC's
 R("forge_dm", "send a message that looks like someone else's", "FORCE", core=True, msg=True, needs=("right:impersonate", "mod:dm"),
   handler="actions:_forge_dm", module="roles", category="talk", emits=("forged_dm",),

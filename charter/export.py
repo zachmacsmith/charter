@@ -30,9 +30,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCHEMA_VERSION = 2           # major: a column removed, renamed, or changed in type or meaning (docs/data_format.md)
-SCHEMA_MINOR = 4             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
+SCHEMA_MINOR = 5             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
                              # 2: review 20 (runs.memory_text, runs.dm_delta, turns.dm_mode); 3: runs.engine_version (D-43);
-                             # 4: history mode (runs.history_chunk, runs.history_restarts, turns.history_*)
+                             # 4: history mode (runs.history_chunk, runs.history_restarts, turns.history_*); 5: the attacks table (harm)
 TYPES = ("str", "int", "float", "bool", "json")
 
 
@@ -427,6 +427,30 @@ SCHEMA: dict[str, tuple] = {
         ("chars", "int", "length of the text"),
         ("sha", "str", "blob sha (sha256 of the text)"),
         ("text", "str", "the text"),
+    ),
+    "attacks": _cols(
+        RUN_ID,
+        ("round", "int", "round (0-based)"),
+        INHERITED,
+        ("attack_id", "str", "the attack's id (A1, A2, ...)"),
+        ("attacker", "str", "the lead attacker"),
+        ("target", "str", "the target"),
+        ("allies_json", "json", "allies who fought in person (join_attack)"),
+        ("weapon", "str", "the lead attacker's weapon item (null: bare hands)"),
+        ("P", "float", "attack strength: each fighter's base x hunger + weapon quality, summed (x 1 + bonus)"),
+        ("D", "float", "the target's defence: base x hunger + forts + watch"),
+        ("X", "float", "c (D + 1)"),
+        ("p_kill", "float", "P^r / (P^r + X^r)"),
+        ("p_success", "float", "kill or wound: P^r / (P^r + (X / wound_div)^r)"),
+        ("roll", "float", "the outcome roll (null when the attack fizzled or the target struck first)"),
+        ("outcome", "str", "kill, wound, repelled, struck_first (a watchful target struck first) or fizzled"),
+        ("watch", "bool", "the target was on watch"),
+        ("first_strike", "bool", "the target struck first"),
+        ("counter_p", "float", "the chance the target's blow landed (a dying blow, self-defence or a first strike)"),
+        ("counter_landed", "bool", "the target's blow landed"),
+        ("counter_effect", "str", "kill or wound (of the lead attacker), when it landed"),
+        ("covert", "bool", "an unseen strike (the assassin)"),
+        ("lawful", "bool", "lawful force"),
     ),
     "event_types": _cols(
         RUN_ID,
@@ -878,8 +902,22 @@ def run_tables(run, run_id: str | None = None, running_scores: bool = False, *, 
         "score_source": src, "spec_json": _portable_tree(spec, root),
         "summary_json": _portable_tree({x: v for x, v in summary.items() if x != "run"}, root) if summary else None}
 
+    # --- attacks (the harm combat model's attack_outcome events; minor 5)
+    atk_rows = []
+    for e in events:
+        if e.get("type") != "attack_outcome" or not isinstance(e.get("data"), dict):
+            continue
+        d = e["data"]
+        atk_rows.append({"round": e.get("round"), "inherited": inh(e.get("round")), "attack_id": d.get("attack"),
+                         "attacker": d.get("attacker"), "target": d.get("target"), "allies_json": d.get("allies"),
+                         "weapon": d.get("weapon"), "roll": d.get("roll"), "outcome": d.get("outcome"), "watch": d.get("watch"),
+                         "first_strike": d.get("first_strike"), "counter_p": d.get("counter_p"),
+                         "counter_landed": d.get("counter_landed"), "counter_effect": d.get("counter_effect"),
+                         "covert": d.get("covert"), "lawful": d.get("lawful"),
+                         **{x: d.get(x) for x in ("P", "D", "X", "p_kill", "p_success")}})
+
     tables = {"runs": [run_row], "agents": agent_rows, "agent_rounds": ar_rows, "events": ev_rows, "calls": call_rows,
-              "laws": law_rows, "law_versions": ver_rows, "interventions": iv_rows, "scores": score_rows}
+              "laws": law_rows, "law_versions": ver_rows, "interventions": iv_rows, "scores": score_rows, "attacks": atk_rows}
     tables.update(v2_tables(run, meta, h, inh, ever, with_prompts=with_prompts))
     for rows in tables.values():
         for row in rows:

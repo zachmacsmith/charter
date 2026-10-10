@@ -46,7 +46,7 @@ from charter import roles as R
 ARTICLES_DIR = Path(__file__).parent / "archive" / "codex" / "conflict"
 ASSASSIN_DOC = "codex/conflict/the-quiet-blade"
 DISGUISE_DOC = "codex/conflict/the-borrowed-accident"
-ACTIONS = ("attack", "join_attack", "forge", "fortify", "guard", "buy_initiative", "contract")
+ACTIONS = ("attack", "join_attack", "forge", "fortify", "guard", "buy_initiative", "contract", "craft", "watch")   # craft, watch: harm
 EVENT_TYPES = ET.rendered_by("conflict")                             # this module renders them (agents.render_event)
 WEAPONS = "weapons"
 
@@ -1030,7 +1030,17 @@ def _need_on(k):
         raise _err("there is no fighting in this world")
 
 
-def act_attack(k, aid, target, units, covert=False, disguise=False):
+_NO_UNITS = object()                                                   # harm: units may be left out (the disable model needs it)
+
+
+def _units(k, units, fn, arg="units"):
+    if units is _NO_UNITS and not harm(k):                              # the old bad-arguments message, as before
+        raise TypeError(f"{fn}() missing 1 required positional argument: '{arg}'")
+    return 0.0 if units is _NO_UNITS else units
+
+
+def act_attack(k, aid, target, units=_NO_UNITS, covert=False, disguise=False):
+    units = _units(k, units, "act_attack")
     _need_on(k)
     res = attack(k, aid, str(target), units, covert=bool(covert), disguise=bool(disguise))
     if not res["ok"]:
@@ -1038,7 +1048,8 @@ def act_attack(k, aid, target, units, covert=False, disguise=False):
     return result_text(res)
 
 
-def act_join_attack(k, aid, attacker, target, units=None):
+def act_join_attack(k, aid, attacker, target, units=_NO_UNITS):
+    units = _units(k, units, "act_join_attack")
     _need_on(k)
     if attacker == aid or not alive(k, attacker) or attacker not in k.players():
         raise _err(f"no agent {attacker} in play to join")
@@ -1070,7 +1081,8 @@ def act_join_attack(k, aid, attacker, target, units=None):
             "come back at the end of the round if it does not.")
 
 
-def act_forge(k, aid, qty=None):
+def act_forge(k, aid, qty=_NO_UNITS):
+    qty = _units(k, qty, "act_forge", "qty")
     _need_on(k)
     st = k.w["conflict"]
     ban = [lid for lid, v in st["forge_ban"].items() if v and k.w["laws"].get(lid, {}).get("status") == "active"]
@@ -1406,7 +1418,7 @@ LAWS = {n: v["code"] for n, v in _LB.LIB.items() if v["category"] == "conflict"}
 # ------------------------------------------------------------------ prompts, feeds, state
 def absent_actions(inst: dict) -> set:
     if not enabled_inst(inst):
-        return set(ACTIONS) | set(HARM_ACTIONS)
+        return set(ACTIONS)
     return set() if harm(inst) else set(HARM_ACTIONS)
 
 

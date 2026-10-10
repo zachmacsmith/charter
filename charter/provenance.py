@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 7
+ENGINE_VERSION = 8
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -77,6 +77,10 @@ ENGINE_FLIPS = {
         "flips": [],
         "note": "llm.cache_ttl 5m in base.yaml (a spec key, so each run's saved spec records it; absent = auto, the backend's choice, "
                 "which was 1h on the CLI subscription); a run flags rounds averaging longer than the lifetime"},
+    8: {"commits": ["57114937a19e09b3325f01de6fd5019358f62276"],
+        "flips": [("charter.conflict.DEFAULTS", ("model",), "disable", "auto")],
+        "note": "conflict.model auto: the harm combat model (kill, wound or repelled; one weapon per fighter, food per attack, "
+                "fighting back, watch and craft; docs/review/21_combat.md) in worlds with subsistence; disable elsewhere, as before"},
 }
 
 

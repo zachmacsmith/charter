@@ -121,7 +121,7 @@ FEATURES: list[Feature] = [
     F("outside", "charter.outside", "outside_power", state=("outside",), rng=("raid", "tribute"), golden="E4_observer_hidden_4"),
     F("camps", "charter.camptypes.framework", "camps", rng=("camptypes", "camptypes-bot", "calibrate"), golden="society_small_4"),
     F("mortality", "charter.mortality", None, implied_by=("life", "conflict", "subsistence"), state=("mortality",), golden="society_small_4"),
-    F("conflict", "charter.conflict", "conflict", state=("conflict",), rng=("conflict", "conflict-bot"), golden="society_small_4",
+    F("conflict", "charter.conflict", "conflict", state=("conflict",), rng=("conflict", "conflict-bot", "conflict_base"), golden="society_small_4",
       live="conflict"),
     F("jurisdictions", "charter.jurisdictions", "jurisdictions", state=("jurisdictions", "jur"), rng=("jurisdictions",),
       golden="society_small_4", live="jur"),

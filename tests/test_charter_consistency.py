@@ -85,6 +85,7 @@ def test_unknown_action_error_lists_actions_in_the_old_order():
     hidden |= AR.channel_hidden(k.spec)                                 # wave 9 C: channels.v2's verbs exist only where it is on
     hidden |= set(A.SUBSISTENCE_ACTIONS)                                # review 15: farm, build, withdraw only with subsistence on
     hidden.add("conceive")                                              # review 15 S4: conceive only with two-parent reproduction
+    hidden |= {"craft", "watch"}                                        # the harm combat model only (subsistence worlds)
     assert str(e.value) == "unknown action 'no_such_action'. Actions: " + ", ".join(x for x in A.ACTIONS if x not in hidden)
 
 

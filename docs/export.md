@@ -63,6 +63,8 @@ that bumps the major), and the tables below `scores`:
 - **`state`**: every snapshots.json round flattened to leaves; a new snapshot key becomes new `key` values, never columns.
 - **`documents`**: directory stores (charter/directories.py): `base` from directories/base.json, `file` from state.json's last
   write-back, `record` from records-<store>.md. Run-scoped stores are not on disk and are not exported.
+- **`attacks`** (minor 5): one row per attack under the harm combat model (conflict.model, docs/review/21_combat.md), from its
+  monitor-only `attack_outcome` event: strengths, odds, the roll, the outcome and the target's blow.
 - **`event_types`**: the registry as the exporting code has it, with each type's count in the run (unregistered types seen in
   the log get a row with only `n_events`).
 
@@ -70,7 +72,7 @@ Not yet exported: `state_deltas` (per-round snapshot diffs) and `observer_assess
 
 ## Tables
 
-Dataset schema version **2.4** (`schema_version` 2, `schema_minor` 4). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
+Dataset schema version **2.5** (`schema_version` 2, `schema_minor` 5). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
 
 ### `runs`
 
@@ -490,6 +492,33 @@ Dataset schema version **2.4** (`schema_version` 2, `schema_minor` 4). Types: `s
 | `chars` | int | length of the text |
 | `sha` | str | blob sha (sha256 of the text) |
 | `text` | str | the text |
+
+### `attacks`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `round` | int | round (0-based) |
+| `inherited` | bool | the row belongs to the prefix a fork or rewind copied from its parent (round < fork_round) |
+| `attack_id` | str | the attack's id (A1, A2, ...) |
+| `attacker` | str | the lead attacker |
+| `target` | str | the target |
+| `allies_json` | json | allies who fought in person (join_attack) |
+| `weapon` | str | the lead attacker's weapon item (null: bare hands) |
+| `P` | float | attack strength: each fighter's base x hunger + weapon quality, summed (x 1 + bonus) |
+| `D` | float | the target's defence: base x hunger + forts + watch |
+| `X` | float | c (D + 1) |
+| `p_kill` | float | P^r / (P^r + X^r) |
+| `p_success` | float | kill or wound: P^r / (P^r + (X / wound_div)^r) |
+| `roll` | float | the outcome roll (null when the attack fizzled or the target struck first) |
+| `outcome` | str | kill, wound, repelled, struck_first (a watchful target struck first) or fizzled |
+| `watch` | bool | the target was on watch |
+| `first_strike` | bool | the target struck first |
+| `counter_p` | float | the chance the target's blow landed (a dying blow, self-defence or a first strike) |
+| `counter_landed` | bool | the target's blow landed |
+| `counter_effect` | str | kill or wound (of the lead attacker), when it landed |
+| `covert` | bool | an unseen strike (the assassin) |
+| `lawful` | bool | lawful force |
 
 ### `event_types`
 
