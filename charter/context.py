@@ -928,11 +928,16 @@ def overview(inst) -> str:
         mods.append("a law binds only members of the jurisdiction that passed it; jurisdictions can be founded in secret and declared, and agents "
                     "join only by their own choice (pledging to a hidden one they were invited to, or moving to a declared one) [manual: World rules]")
     if on("life"):
+        from charter import pairs as _PR
+        if _PR.pairs_spec(sp) and not _PR.makers_spec(sp):              # pairs worlds have no Makers: children come from two parents
+            kids = ("A child is made by two consenting parents (conceive), each paying food; it has goals of its own and may inherit "
+                    "one its parents name [manual: Life and children]")
+        else:
+            kids = ("Anyone can pay a Maker to make a new agent (commission), choosing its goal, traits and starting holdings: an heir "
+                    "to carry your goals on, or a helper built to serve them [manual: Life and children]")
         mods.append("lives are limited (your rounds left are in your state); your goals are scored at the end of the game whether or not "
                     "you are still alive, so what you set up (laws, allies, agents you funded, heirs) keeps counting after you leave, and "
-                    "goals about your own holdings or offices count through your living descendants. Anyone can pay a Maker to make a new agent "
-                    "(commission), choosing its goal, traits and starting holdings: an heir to carry your goals on, or a helper built to "
-                    "serve them [manual: Life and children]")
+                    "goals about your own holdings or offices count through your living descendants. " + kids)
     if on("media2"):
         mods.append(("outlets publish editions you subscribe to; a public post is a submission to the outlets, whose editors decide whether "
                      "and how to print it (a law can set up an official stream that publishes chosen agents verbatim) [manual: Media]")
