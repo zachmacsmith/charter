@@ -38,6 +38,9 @@ three fixed policies; real agents will do something else, and that difference is
    per action, refuge 0.10; game K 10 per agent, r 0.2, inflow 0.01, no Allee threshold, catch proportional to density; three game
    classes with sigmoid party-size curves; seasons on (x0.6 / x1 / x1.3, persistence 0.5, game half as sensitive). The Allee
    threshold and hyperstable catch are treatment arms, not defaults.
+7. **Dry runs (§11).** In the default world the bots' generic contracts confiscate 35-40% of the food and cause most of the
+   starvation; with contracts off the forest feeds the population until Makers births (about 2% a round) push it into overshoot.
+   The N = 100 sweep was cut for time (three runs).
 
 ## 1. What changed and why
 
@@ -447,12 +450,95 @@ weak_link hunt (party_food 2) is gone.
 - The ration stays automatic (no eat action; `eat_from_store` off by default); hunger stage changes are monitor-only; a Maker's
   child starts with 2 rations; withdrawal from an institution's store is the routed `withdraw` primitive its own code decides
   (residual: its officers). These are the user's other decisions of 10 Oct, recorded in ARCHITECTURE D-41.
-- With subsistence off nothing changes (golden fixtures unchanged but `subsistence_small`; difftest in §11).
+- With two-parent reproduction (S4), a minor forages and hunts at x0.5 (`subsistence.minor_yield`, review 15 §4.4).
+- World events no longer destroy or blight forests (a destroyed sole forest ended a dry run; §12 Q3).
+- With subsistence off nothing changes: every golden fixture but the subsistence-on cases (`subsistence_small`, `pairs_small`) is
+  unchanged, and `python -m charter difftest --base 9ba0667 --head WORKTREE` on society, nature_design, life_pilot, E4 and
+  jurisdictions_pilot (seeds 1-2, 3 rounds) reports every case identical.
 
 ## 11. Scripted dry runs of nature_subsistence
 
-PENDING
+Scripted bots only (agents.ScriptedPolicy plus the subsistence food bot), no model calls, at the branch's code before the S4/S5
+rebase (Makers mode, so the rebase changes nothing here). The setting `bot_hunt` is the chance that a bot hunts in a round (in a
+band of about four at its home forest, `bot_effort` units). When it is short of a meal a bot puts both forest actions on whichever
+source pays better. Workers only, plus a Fixer. Columns: population at rounds 10 / 20 / 30 / end; deaths by cause; Makers births;
+plants and game as shares of capacity (averaged over the forests: minimum over the run and at the end); food from hunting / foraging
+(gross); food deducted by laws on harvest; agent-rounds spent hungry or starving; seasons counted as lean / normal / plentiful.
+
+| N | R | setting | seed | pop 10 / 20 / 30 / end | starved | old age | attack | births | plants min / end | game min / end | meat / foraged | deducted by law | hungry agent-rounds | seasons l/n/p |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 30 | 50 | bot_hunt 0.2 | 1 | 31 / 25 / 18 / 16 | 15 | 9 | 4 | 14 | 0.49 / 0.72 | 0.57 / 0.67 | 748 / 1470 | n/a | 117 | 3/33/14 |
+| 30 | 50 | bot_hunt 0.2 | 2 | 32 / 25 / 21 / 12 | 11 | 13 | 3 | 8 | 0.39 / 0.81 | 0.46 / 0.72 | 797 / 1328 | n/a | 99 | 13/23/14 |
+| 30 | 50 | bot_hunt 0.2 | 3 | 33 / 30 / 19 / 15 | 18 | 12 | 0 | 14 | 0.32 / 0.67 | 0.36 / 0.74 | 755 / 1354 | n/a | 136 | 18/21/11 |
+| 30 | 50 | bot_hunt 0.5 | 1 | 29 / 26 / 20 / 18 | 9 | 9 | 5 | 11 | 0.44 / 0.59 | 0.42 / 0.65 | 889 / 1528 | n/a | 84 | 3/33/14 |
+| 30 | 50 | bot_hunt 0.5 | 2 | 31 / 25 / 17 / 8 | 9 | 16 | 5 | 7 | 0.42 / 0.83 | 0.38 / 0.88 | 748 / 1309 | 849 | 57 | 13/23/14 |
+| 30 | 50 | bot_hunt 0.5 | 3 | 35 / 26 / 17 / 12 | 18 | 12 | 1 | 12 | 0.26 / 0.74 | 0.19 / 0.71 | 773 / 1276 | 850 | 121 | 18/21/11 |
+| 30 | 50 | bot_hunt 0.9 | 1 | 30 / 31 / 24 / 19 | 3 | 10 | 9 | 11 | 0.37 / 0.64 | 0.18 / 0.33 | 924 / 1537 | 544 | 19 | 3/33/14 |
+| 30 | 50 | bot_hunt 0.9 | 2 | 30 / 27 / 21 / 8 | 8 | 14 | 9 | 9 | 0.31 / 0.84 | 0.18 / 0.86 | 726 / 1369 | 780 | 47 | 13/23/14 |
+| 30 | 50 | bot_hunt 0.9 | 3 | 33 / 23 / 14 / 12 | 17 | 11 | 1 | 10 | 0.26 / 0.78 | 0.19 / 0.77 | 740 / 1231 | 787 | 149 | 18/21/11 |
+| 30 | 50 | bot_hunt 0.9, effort 2 | 1 | 30 / 24 / 18 / 15 | 10 | 11 | 4 | 10 | 0.37 / 0.74 | 0.23 / 0.65 | 848 / 1426 | 932 | 52 | 3/33/14 |
+| 30 | 50 | bot_hunt 0.5, **contracts off** | 1 | 31 / 36 / 36 / 34 | 2 | 12 | 13 | 31 | 0.22 / 0.35 | 0.12 / 0.20 | 919 / 1457 | 0 | 51 | 3/33/14 |
+| 30 | 50 | bot_hunt 0.5, **contracts off** | 2 | 34 / 35 / 35 / 28 | 0 | 14 | 9 | 20 | 0.20 / 0.38 | 0.12 / 0.31 | 826 / 1351 | 0 | 63 | 13/23/14 |
+| 30 | 50 | bot_hunt 0.5, **contracts off** | 3 | 35 / 40 / 43 / 27 | 22 | 11 | 3 | 32 | 0.15 / 0.43 | 0.03 / 0.22 | 760 / 1148 | 0 | 333 | 18/21/11 |
+| 100 | 40 | bot_hunt 0.2 | 1 | 98 / 79 / 60 / 49 | 37 | 31 | 21 | 38 | 0.53 / 0.73 | 0.55 / 0.80 | 2012 / 4088 | n/a | 298 | 0/26/14 |
+| 100 | 40 | bot_hunt 0.9 | 1 | 99 / 85 / 65 / 50 | 32 | 36 | 12 | 30 | 0.46 / 0.70 | 0.40 / 0.73 | 2314 / 4183 | n/a | 256 | 0/26/14 |
+| 100 | 40 | bot_hunt 0.9 | 2 | 103 / 76 / 60 / 44 | 43 | 34 | 5 | 25 | 0.46 / 0.67 | 0.43 / 0.62 | 2294 / 3692 | n/a | 297 | 13/18/9 |
+
+(n/a: the deduction counter was added mid-batch.) **The N = 100 sweep was cut for time.** Only three of the planned N = 100 runs
+finished, and the contracts-off N = 100 arm did not. A scripted 100-agent round takes about 30 s on this machine (most of it the
+runner's per-turn prompt and report building, not subsistence), so one 40-round run is about 20 minutes even with nothing else
+running. That performance should be profiled separately.
+
+Readings:
+
+1. **In the default world, laws take the food, not the forest.** The scripted bots join the generic contract templates. One of them
+   is a harvest quota that confiscates everything over 3 units a round, and others take share cuts. These templates were written
+   for timber camps and know nothing about food. Laws deducted 550-930 food per N = 30 run, about 35-40% of everything gathered and
+   hunted, and a 20-food large animal is mostly confiscated on arrival. Starvation of 30-60% of N follows while plants and game stay
+   at 40-80% of capacity. This is a real institutional effect (a quota cooperative that confiscates its members' meals), but it is
+   not an ecological one.
+2. **With contracts off, the forest feeds the population and then the Makers overshoot it.** Starvation fell to 0-2 in two seeds of
+   three, but the Makers produced 20-32 births per 30 founders (about 2% a round), so the population grew to 1.2-1.4 N. That pushed
+   plants down to 15-22% and game down to 3-12%. In the third seed, a run of lean seasons (18 of 50 rounds) then killed 22. This is
+   the Malthusian regime of §6.8 (births at 2-3% a round), produced by the simulator rather than by the toy.
+3. **Hunting effort shows up where the toy said it would.** At `bot_hunt` 0.9 the game minimum falls to 0.18-0.19, against
+   0.36-0.57 at 0.2. Hunger was lowest in the run that hunted most and lost least to laws (seed 1: 19 agent-rounds, 3 starved).
+   With confiscation in the way, the population effect of hunting effort cannot be separated from the effect of the laws in these
+   runs.
+4. Old-age deaths run at about 1% of N a round (9-16 per 30 in 50 rounds, 31-36 per 100 in 40), as the S0 demography intends.
+   Attacks add 0-13.
+5. Bot artifacts fixed along the way, each found by a dry run: a world event destroyed the only forest (forests are now exempt);
+   the bot always foraged when short (it now picks the better source); and at N = 100 every bot crowded the fullest forest (each
+   bot now has a home forest).
+
+What to run next, before any Haiku spend: the full sweep with contracts off and with a food-aware contract library, N = 100 included.
 
 ## 12. Questions for the user
 
-PENDING
+1. **Should the world start near capacity or below it?** Starting at 80-90% of capacity guarantees a draw-down in the first 15
+   rounds, which is where most starvation comes from. Starting at about half capacity (the MSY level) would make the first rounds
+   steadier and the long-run regime easier to read; starting full makes "early abundance, later scarcity" part of every run.
+2. **How many forests?** One per 30 agents means a world of 30 has a single forest, so territories, borders and competition
+   between polities over forests cannot arise. Do you want more, smaller forests (say one per 10-15 agents, the same total
+   capacity), so that land can be claimed?
+3. **Should forests ever suffer shocks beyond lean seasons?** I stopped the camp_destroyed and blight world events from touching
+   forests (destroying the only forest ends a run). A partial shock (a fire that burns half the plants, a disease that halves the
+   game) is easy to add as a world event. Do you want one, and how often?
+4. **How visible should the game be?** Agents and laws see a coarse word (plentiful, fair, scarce, very scarce) while plants show
+   as a percentage. Is that asymmetry what you want, or should hunters see a number too (or plants be coarse as well)?
+5. **Should hunting parties be free-text names, as now, or a formal object** (a party an agent creates and others join, visible
+   to members before the round's end)? Free text keeps the kernel small but makes coordination entirely a matter of talk.
+6. **Is the hunt's public round line right?** Each forest posts the parties' sizes and catches each round (not names). That makes
+   overhunting visible to everyone; hiding it would make the commons harder to manage.
+7. **Do you want the island arm** (game with an Allee threshold and no inflow: overhunting can wipe the game out for good) as a
+   preset, alongside the default mainland forest?
+8. **Should seasons stay on by default?** They cost restrained populations almost nothing and make storage and granaries pay, but
+   they add variance between seeds that a calibration batch has to average out.
+9. **Births and food.** In Makers mode births do not depend on food at all, so the population cannot grow into a good forest or
+   shrink its birth rate in a bad one. Should conception under pairs mode (S4) get harder when parents are hungry, so that the
+   Malthusian feedback of §6.8 can appear?
+10. **eat_from_store stays off by default.** Is that right? With it on, an agent's own store feeds it automatically when its hands
+    are empty, which removes a bookkeeping failure but also removes a reason to keep food in hand.
+11. **Should the generic contract templates leave food alone?** In the dry runs the bots' quota and share contracts confiscated
+    35-40% of all food gathered (§11), which dominated the starvation. Should their on_harvest hooks exclude food, or is a quota
+    cooperative that confiscates meals a result worth keeping?
