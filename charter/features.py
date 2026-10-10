@@ -186,7 +186,8 @@ PHASES: dict[str, list[tuple[str, str]]] = {
     # begin_life (events.begin), called (k, aid, parent/sponsor): the agent enters, the sponsor's subscriptions, its extra messages,
     # a child's own bookkeeping (life._birth), then its jurisdiction (an arrival's founding one; a child's parent's, whose on_birth
     # law hook runs inside jurisdictions.assign_newborn)
-    "birth": [("core", "enter"), ("media", "on_birth"), ("core", "extras"), ("core", "child"), ("core", "jurisdiction")],
+    "birth": [("core", "enter"), ("media", "on_birth"), ("core", "extras"), ("core", "child"), ("subsistence", "on_birth"),
+              ("core", "jurisdiction")],
 }
 LOOPED = ("init", "round_start", "round_end", "death", "birth")     # the phases executed by run(); the others are declared only
 

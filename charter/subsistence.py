@@ -65,8 +65,10 @@ DEFAULTS = {
     "hazard": {"step": 0.15, "max_rounds": 4},   # hazard rises by step per further missed meal; certain death at max_rounds
     "hunger_yield": {"hungry": 0.75, "starving": 0.5},   # forage and reap yield multipliers by stage
     "exempt": ["board", "fixer", "observer"],   # classes that do not eat or hunger (X: control arms, U6)
-    "visibility": "public",             # public: hunger stages are shown to everyone, coarse (U2 b) | private: to the agent only
-    "bot": "basic",                     # scripted bot (dry runs): eat (eating is automatic; nothing else) | basic (forage, farm, hunt, relief, stores)
+    "visibility": "public",             # public: the coarse hunger roster on everyone's state lines (U2 b) | private: own stage only
+    "eat_from_store": False,            # the ration draws on the eater's own stores when its hands hold less than a meal
+    "child_food": 2,                    # a Maker's child starts with this many rounds' food (rations; until pair births, S4)
+    "bot": "basic",                     # scripted bot (dry runs): idle (does nothing about food) | basic (forage, hunt, relief, stores)
     "forest": {"per_agent": 30, "capacity_per_agent": 8.0, "regrowth": 0.4, "yield": 3.0, "refuge": 0.10,
                "forage_per_round": 2, "fell_timber": 3.0, "fell_cost_k": 0.01, "fell_floor": 0.5, "clearing": 5,
                "start_stock": 0.8},     # forests: one per per_agent agents; K = capacity_per_agent x N / forests
@@ -205,6 +207,8 @@ def _eat(k, aid, c, rec) -> None:
     if "pairs" in (k.w.get("life") or {}):                               # S4 hook (charter/pairs.py): a minor eats from its parents
         from charter import pairs as PR
         PR.household_draw(k, aid, ration)
+    if c.get("eat_from_store") and food(k, aid) + 1e-9 < ration:
+        _from_store(k, aid, ration - food(k, aid))
     if food(k, aid) + 1e-9 >= ration:
         k.apply("eat", agent=aid, item=FOOD, qty=min(ration, food(k, aid)))
         new, missed = min(0, old + 1), 0
@@ -214,6 +218,17 @@ def _eat(k, aid, c, rec) -> None:
         rec["missed"] += 1
     if new != old or missed != int(st["missed"].get(aid, 0)):
         k.apply("hunger", agent=aid, stage=new, missed=missed)
+
+
+def _from_store(k, aid, need) -> None:
+    """subsistence.eat_from_store (off by default): the ration tops the eater's hands up from its own stores (agent-owned only, in id
+    order), a move with why "ration" (accounts.check_store_move lets it reach the owner only)."""
+    for s in sorted((s for s in state(k)["stores"].values() if s["owner"] == aid), key=lambda s: s["id"]):
+        q = round(min(need, float(s["holdings"].get(FOOD, 0.0))), 6)
+        if q > 1e-9 and k.apply("move", src=f"{STORE}{s['id']}", dst=aid, item=FOOD, qty=q, why="ration").ok:
+            need -= q
+        if need <= 1e-9:
+            return
 
 
 def _hazard(k, aid, c, rec) -> None:
@@ -271,7 +286,8 @@ def change_eat(k, agent, item, qty) -> dict:
 
 
 def change_hunger(k, agent, stage, missed) -> dict:
-    """An eater's hunger stage and count of missed meals (physics). A stage change is told to the agent."""
+    """An eater's hunger stage and count of missed meals (physics). A stage change is logged for the monitor only (user, 10 Oct:
+    not a public event); agents read stages on their state lines (their own, and the coarse roster when visibility is public)."""
     st = state(k)
     old = int(st["stage"].get(agent, 0))
     st["stage"][agent], st["missed"][agent] = int(stage), int(missed)
@@ -280,8 +296,7 @@ def change_hunger(k, agent, stage, missed) -> dict:
                 -1: (f"{agent} is hungry: one action fewer, and no attacking, founding, proposing or building until they eat."
                      if int(stage) < old else f"{agent} ate but is still hungry (one more meal to be fed)."),
                 -2: f"{agent} is starving: they may die at the end of any round until they eat."}[int(stage)]
-        k.log("hunger", agent, {"agent": agent, "stage": int(stage), "was": old, "text": text},
-              vis="public" if cfg(k.spec)["visibility"] == "public" else [agent])
+        k.log("hunger", agent, {"agent": agent, "stage": int(stage), "was": old, "text": text}, vis="monitor")
     return {"stage": int(stage), "missed": int(missed)}
 
 
@@ -314,7 +329,7 @@ def refusal(k, aid, act) -> str | None:
     if s >= act.fed:
         return None
     return (f"you are {STAGE_NAMES[s]}: {act.name} needs you " + ("fed" if act.fed == 0 else "at most hungry")
-            + " (eat to recover: you eat automatically at the end of the round if you hold 1 food)")
+            + " (to recover, hold 1 food at the end of the round: it is eaten automatically)")
 
 
 def check_gate(k, aid, name, args) -> None:
@@ -330,7 +345,7 @@ def check_gate(k, aid, name, args) -> None:
         if g and g.get("grantor") in k.w["agents"] and g.get("action") in AR.REG:
             why = refusal(k, g["grantor"], AR.REG[g["action"]])
             if why:
-                raise ActionError(f"{g['grantor']} " + why.replace("you are", "is", 1).split(" (eat")[0])
+                raise ActionError(f"{g['grantor']} " + why.replace("you are", "is", 1).split(" (to recover")[0])
 
 
 # ---------------------------------------------------------------------- what agents see
@@ -357,10 +372,10 @@ def state_lines(k, aid) -> list:
         if s == 0:
             out.append("Hunger: fed.")
         elif s == -1:
-            out.append("HUNGRY: you missed a meal. One action fewer; you cannot attack, found, propose or build. Eat to recover "
-                       "(one meal a round: two meals to be fed again).")
+            out.append("HUNGRY: you missed a meal. One action fewer; you cannot attack, found, propose or build. Each meal "
+                       "eaten at a round's end recovers one stage (two meals to be fed again).")
         else:
-            out.append(f"STARVING: you may die at the end of any round from now on; eating ends it. You have "
+            out.append(f"STARVING: you may die at the end of any round from now on; a meal at a round's end ends it. You have "
                        f"{actions_after_hunger(k, aid, int(k.w['agents'][aid].get('actions') or 3))} action(s) at most.")
         if f + 1e-9 < float(c["ration"]):
             mine = [s for s in stores_of(k, aid) if float(s["holdings"].get(FOOD, 0)) > 1e-9]
@@ -486,6 +501,24 @@ def on_death(k, aid) -> dict:
             k.log("store_owner", None, {"store": s["id"], "owner": s["owner"], "from": aid,
                                         "text": f"{aid}'s store {s['id']} passes to {s['owner']}."}, vis="public")
     return out
+
+
+def on_birth(k, aid, sponsor) -> dict:
+    """The birth phase (after life's child step): a Maker's child starts with child_food rations of food (user, 10 Oct; until pair
+    reproduction, S4). A world provision (the `provision` primitive); nothing for an arrival or a child without a Maker."""
+    life = k.w.get("life") or {}
+    q = round(float(cfg(k.spec)["child_food"]) * float(cfg(k.spec)["ration"]), 6)
+    if q <= 0 or exempt(k, aid) or not (life.get("maker_of") or {}).get(aid):
+        return {}
+    with k.cause("world", "provision", root=True):
+        k.apply("provision", agent=aid, item=FOOD, qty=q)
+    return {"food": q}
+
+
+def change_provision(k, agent, item, qty) -> dict:
+    """A newborn's provision (physics): qty food enters the world in the child's hands."""
+    k._add(agent, item, float(qty))
+    return {"provided": float(qty)}
 
 
 def _store_heir(k, aid) -> str:

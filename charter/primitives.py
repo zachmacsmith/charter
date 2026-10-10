@@ -800,12 +800,17 @@ _ROWS = [
       parties=("agent",), agent_params=("agent",), before=False, blockable=False, event="hunger", causes=("world",),
       reads=("hunger",), sites=("subsistence:change_hunger", "subsistence:_eat"), why={"gate": _PHYS},
       notes="stage 0 fed, -1 hungry, -2 starving; missed: consecutive missed meals (the hazard reads it). A stage change is logged "
-            "(hunger: public and coarse by default, U2)"),
+            "for the monitor only (user, 10 Oct); agents see stages on their state lines (the coarse roster: U2 b)"),
     P("spoil", "subsistence", "destroy", ("owner", "item", "qty"), "subsistence:change_spoil", routed=True, subject="owner",
       parties=("owner",), agent_params=("owner",), before=False, blockable=False, causes=("world",),
       sites=("subsistence:change_spoil", "subsistence:_spoil"),
       why={"gate": _PHYS, "event": "aggregated in the monitor-only subsistence_round record"},
       notes="every account holding food loses subsistence.spoil of it each round (a store: store_spoil)"),
+    P("provision", "subsistence", "create", ("agent", "item", "qty"), "subsistence:change_provision", routed=True, subject="agent",
+      parties=("agent",), agent_params=("agent",), before=False, blockable=False, causes=("world",),
+      sites=("subsistence:change_provision", "subsistence:on_birth"),
+      why={"gate": _PHYS, "event": "the child's starting holdings: its first state lines show them"},
+      notes="a Maker's child starts with subsistence.child_food rations of food (user, 10 Oct; until pair reproduction, S4)"),
     # review 15 S2: fields. Physics records the sower; who may sow which plot and reap which crop is law (the residual: liberty).
     P("sow", "subsistence", "destroy", ("agent", "camp", "plot", "qty"), "camptypes.fields:change_sow", routed=True, subject="agent",
       parties=("agent",), agent_params=("agent",), event="sow", causes=("agent",), reads=("plots", "food_of"),
@@ -940,7 +945,7 @@ TIER_OF = {
     "P": ("regrow", "drift", "set_camp_state", "create_camp", "settle_project", "begin_life", "end_life", "default_loan",
           "close_ballot", "deauthorize",           # world causes, time, ballots counted as cast, consent (K-2: the grantor may revoke)
           "demand_tribute",                        # unrouted: to route as blockable=False, after-hooks only
-          "eat", "hunger", "spoil"),               # review 15 S1: the ration, hunger and spoilage
+          "eat", "hunger", "spoil", "provision"),  # review 15 S1: the ration, hunger and spoilage; a child's food
     "E": ("write_note", "use_power"),
     "X": ("set_role", "set_goal", "suspend_law", "request_fix"),
     "L": ("move", "harvest", "mint", "burn", "create_currency", "convert", "destroy", "grant_right", "revoke_right",

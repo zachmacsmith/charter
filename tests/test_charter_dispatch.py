@@ -274,7 +274,7 @@ def test_routed_rows_name_dispatch_functions():
     want |= {"authorize", "deauthorize", "act_for"}                   # P4.5 (W7a): agency
     want |= {"set_company_rule"}                                      # W8e: company law
     want |= {"set_channel"}                                           # wave 9 C: channels v2
-    want |= {"eat", "hunger", "spoil", "sow", "reap", "build"}        # review 15 S1-S3: subsistence
+    want |= {"eat", "hunger", "spoil", "sow", "reap", "build", "provision"}   # review 15 S1-S3: subsistence (+ a child's food)
     want |= {"conceive"}                                              # review 15 S4: two-parent reproduction
     w8b = {"found", "invite", "declare", "set_charter", "dissolve", "invoke", "commission", "set_will", "name_successor", "licence",
            "set_price", "library_doc", "library_permit", "set_capacity", "share_note", "offer_lease", "set_initiative",

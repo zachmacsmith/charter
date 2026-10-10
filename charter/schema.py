@@ -383,7 +383,7 @@ def _ann():
         "subsistence.frailty": dict(types=("list",)),
         "subsistence.exempt": dict(types=("list",), items=CLASSES + ("observer",)),
         "subsistence.visibility": dict(types=("str",), enum=("public", "private")),
-        "subsistence.bot": dict(types=("str",), enum=("eat", "basic")),
+        "subsistence.bot": dict(types=("str",), enum=("idle", "basic")),
         "subsistence.spoil": dict(range=PROB),
         "subsistence.store_spoil": dict(range=PROB),
         "subsistence.store.cost": dict(kind="map"),
@@ -684,6 +684,8 @@ DOCS = {
     "conflict.assassin.disguise_prob_assassin": "chance the assassin starts with the disguise article",
     "conflict.start": "per agent outside the Board and the Fixer: starting weapons and quicksilver",
     # ---- subsistence (review 15, charter/subsistence.py)
+    "subsistence.eat_from_store": "the ration draws on the eater's own stores when its hands hold less than a meal (off by default)",
+    "subsistence.child_food": "rations of food a Maker's child starts with (until pair reproduction)",
     "subsistence.hazard.step": "added to the starvation hazard per further missed meal (base: the hidden frailty)",
     "subsistence.hazard.max_rounds": "starving rounds after which death is certain",
     "subsistence.hunger_yield.hungry": "forage and reap yield multiplier while hungry",

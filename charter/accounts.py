@@ -72,6 +72,7 @@ SOURCES_SINKS = {
                 "subsistence.change_build"),        # review 15 S3: a store's materials
     "eat": ("subsistence.change_eat",),                                 # review 15 S1: the ration (food eaten)
     "spoil": ("subsistence.change_spoil",),                             # review 15 S1: food spoiling in every account
+    "provision": ("subsistence.change_provision",),                     # a Maker's child's starting food (user, 10 Oct)
     "sow": ("fields.change_sow",),                                      # review 15 S2: seed sown (the crop is a claim, not goods)
     "conceive": ("pairs._burn_fee",),                                   # review 15 S4: the conception fee (destroyed)
 }
@@ -195,7 +196,7 @@ def check_store_move(k, src, dst, item, qty, why) -> None:
         if rec is None:
             raise L.LawError(f"no such store: {src}")
         w = str(why)
-        if w == "withdraw":
+        if w == "withdraw" or (w == "ration" and dst == rec["owner"]):   # the ration from the eater's own store (eat_from_store)
             return
         if w.startswith("law:"):
             acct = account_of(k, w[4:])

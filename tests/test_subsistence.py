@@ -113,7 +113,66 @@ def test_stages_fall_one_per_missed_meal_and_recover_one_per_meal():
     end_round(k)
     assert SB.stage(k, a) == 0                                              # and fed after a second meal
     hunger = [e for e in k.events if e["type"] == "hunger" and e["agent"] == a]
-    assert [e["data"]["stage"] for e in hunger] == [-1, -2, -1, 0] and hunger[0]["vis"] == "public"   # U2 (b): public, coarse
+    assert [e["data"]["stage"] for e in hunger] == [-1, -2, -1, 0] and {e["vis"] for e in hunger} == {"monitor"}   # (user, 10 Oct)
+
+
+def test_hunger_is_on_the_roster_never_a_public_event():
+    inst, k = small(["subsistence.spoil=0"])
+    a, b = eaters(k)[:2]
+    set_food(k, a, 0)
+    end_round(k)
+    assert SB.stage(k, a) == -1
+    assert f"Hunger now: hungry: {a}." in SB.state_lines(k, b)                # the coarse roster on everyone's state lines
+    assert not [e for e in k.events if e["type"] == "hunger" and k.can_see(b, e)]
+    assert not [e for e in k.events if e["type"] == "hunger" and k.can_see(a, e)]
+    inst, k = small(["subsistence.spoil=0", "subsistence.visibility=private"])
+    a, b = eaters(k)[:2]
+    set_food(k, a, 0)
+    end_round(k)
+    assert not any(x.startswith("Hunger now") for x in SB.state_lines(k, b))
+    assert any(x.startswith("HUNGRY") for x in SB.state_lines(k, a))
+
+
+def test_there_is_no_eat_action_the_ration_is_automatic():
+    assert "eat" not in AR.REG and not any("eat" == n for n in AR.ACTIONS_ORDER)
+    inst, k = small(["subsistence.spoil=0"])
+    a = eaters(k)[0]
+    set_food(k, a, 3)
+    names = [x.name for x in AR.available(inst, k, k.agent(a))]
+    assert "eat" not in names
+    with pytest.raises(A.ActionError, match="unknown action"):
+        A.act(k, a, "eat", {})
+    end_round(k)
+    assert k.bal(a, "food") == pytest.approx(2)                            # drained 1, with no action at all
+
+
+def test_eat_from_store_is_off_by_default_and_draws_only_on_own_stores():
+    for on_, want in ((False, -1), (True, 0)):
+        inst, k = small(["subsistence.spoil=0", "subsistence.store_spoil=0", f"subsistence.eat_from_store={str(on_).lower()}"])
+        a, b = eaters(k)[:2]
+        builder(k, a)
+        A.act(k, a, "build", {"kind": "store"})
+        k._add("store:S1", "food", 5)
+        set_food(k, a, 0.4)
+        set_food(k, b, 0)
+        end_round(k)
+        assert SB.stage(k, a) == want and SB.stage(k, b) == -1               # b owns no store: never fed from a's
+        assert k.bal("store:S1", "food") == pytest.approx(5 if not on_ else 4.4)
+    from charter import lawlang as L
+    with pytest.raises(L.LawError, match="only its owner"):
+        k.apply("move", src="store:S1", dst=b, item="food", qty=1, why="ration")   # the ration's move reaches the owner only
+
+
+def test_a_makers_child_starts_with_two_rounds_food():
+    from charter import events as EV
+    inst, k = small()
+    a = eaters(k)[0]
+    k.w.setdefault("life", {}).setdefault("maker_of", {})["kid"] = a
+    k.w["agents"]["kid"] = {"id": "kid", "cls": "worker", "holdings": {}, "rights": []}
+    assert SB.on_birth(k, "kid", a) == {"food": 2.0} and k.bal("kid", "food") == pytest.approx(2.0)
+    assert SB.on_birth(k, a, None) == {}                                     # no Maker: nothing
+    assert ("subsistence", "on_birth") in FT.PHASES["birth"] and PR.get("provision").tier == "P"
+    assert EV is not None
 
 
 def test_hazard_never_before_the_third_missed_meal_and_max_rounds_forces_death():

@@ -81,7 +81,7 @@ OPTIONS = {
     # via "channel" (join_channel, leave_channel)
     "set_channel": frozenset(),
     # review 15 (subsistence): the ration, hunger and spoilage take no options
-    "eat": frozenset(), "hunger": frozenset(), "spoil": frozenset(), "sow": frozenset(), "reap": frozenset(),
+    "eat": frozenset(), "hunger": frozenset(), "spoil": frozenset(), "provision": frozenset(), "sow": frozenset(), "reap": frozenset(),
     "build": frozenset(),
     "conceive": frozenset(),                                            # review 15 S4
 }

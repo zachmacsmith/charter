@@ -502,8 +502,8 @@ E("party_died", "succession", "summary", "public", "event", "contracts", primiti
   note="a contract member died: its party_death clause (end | estate | heirs) applies")
 
 # subsistence (charter/subsistence.py, review 15 S1-S3; only with subsistence on)
-E("hunger", "subsistence", "summary", "public|parties", "event", "subsistence", primitive="hunger",
-  note="a hunger stage change: public (coarse) by default (review 15 U2 b), to the agent only with subsistence.visibility private")
+E("hunger", "subsistence", "record", "monitor", "silent", None, primitive="hunger",
+  note="a hunger stage change, for measurement only (user, 10 Oct): agents read stages on their state lines (U2 b: the roster)")
 E("subsistence_round", "subsistence", "record", "monitor", "silent", None, primitive="eat",
   note="the round's ration: meals eaten and missed, starvation deaths, food spoiled and held, agents by stage")
 E("sow", "subsistence", "primitive", "parties", "event", "subsistence", act="farm", primitive="sow")
