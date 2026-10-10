@@ -2,7 +2,8 @@
 
   python -m charter generate E3 --seed 4 [--set constitution=council ...]       print / save the drawn world
   python -m charter run E3 --seed 4 [--dry] [--set ...]                          generate, play, score, report -> charter/out/<spec>/E3_seed4_<hash>
-  python -m charter resume RUN_DIR                                               continue a stopped or crashed run from its last complete round
+  python -m charter resume RUN_DIR [--allow-code-drift]                         continue a stopped or crashed run from its last complete round
+  python -m charter rerun RUN_DIR [--out DIR] [--dry-run]                        the run's command again under its recorded git sha (a worktree)
   python -m charter replay RUN_DIR [--to N] [--out DIR]                          re-execute a run from its recorded replies; byte-identical?
   python -m charter rewind RUN_DIR --to N --out NEW_DIR                          a copy of the run after round N, to resume (charter/replay.py)
   python -m charter fork RUN_DIR --at N --apply iv.yaml [--replicates K] [--out DIR]   branch at round N with interventions, play on live
@@ -377,6 +378,7 @@ def main(argv=None):
     __import__("charter.replay", fromlist=["add_commands"]).add_commands(sub)   # replay, rewind, fork, branches
     __import__("charter.export", fromlist=["add_command"]).add_command(sub)     # export RUN.. --out DIR [--format parquet|csv]
     __import__("charter.publish", fromlist=["add_command"]).add_command(sub)    # publish RUN.. --repo OWNER/NAME [--push]
+    __import__("charter.rerun", fromlist=["add_command"]).add_command(sub)      # rerun RUN [--out DIR] [--dry-run]: its own code
     from charter import preview
     p = sub.add_parser("preview", help="render what agents see, with token counts (charter/preview.py)")
     preview.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(preview.cmd(a)))
