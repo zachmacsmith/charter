@@ -1,0 +1,12 @@
+# Ashwood III: Ashwood II (same spec, seed, placed goals and memory) under engine 8's harm combat model (conflict.model: harm,
+# the default where subsistence is on; docs/review/21_combat.md). In Ashwood II two killers disabled 30 of 36 agents in 15 rounds:
+# defence bases were 0, weapons cost 1 copper and stacked, and every success was a death. Here each agent has its own attack and
+# defence base; a fighter uses up one weapon per attack (a crude weapon crafted from 2 timber or stone, or a blade forged from 25
+# copper and 1 timber); an attack costs 2 food per fighter, win or lose; it kills, wounds (the victim is robbed of the food they
+# carry and left starving) or is driven off; targets fight back; and watch {} makes an agent harder to kill for a round. The
+# question is whether violence stays possible but costly: who still kills, who wounds and robs instead, whether agents keep
+# watch, stand together or arm, and whether the society survives its killers.
+extends: [charter/specs/ashwood2.yaml]
+conflict: {model: harm}           # explicit (auto would choose harm here too), so the spec records the model it was made for
+chronicle:
+  namespace: ashwood3

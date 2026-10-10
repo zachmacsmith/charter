@@ -30,6 +30,7 @@ Later reviews (design documents, 7-9 Oct):
 | [18](18_institution_holdings.md) | What institutions should be able to hold (title, control, custody) |
 | [19](19_ecosystem.md) | The forest ecosystem: plants and game, carrying capacity, hunting speed and population (toy model, recommendation, dry runs) |
 | [20](20_memory_and_prompts.md) | Memory and prompts: what agents remember, prompt sizes and caching in Ashwood; chunked conversations with a memory gradient, recall, DM deltas, scratchpad text |
+| [21](21_combat.md) | Combat, the harm model: kill, wound or repelled; one weapon per fighter; food per attack; fighting back; watch (formulas, a computed outcome table, measured yields) |
 
 ## Verdict
 
