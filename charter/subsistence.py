@@ -1007,10 +1007,12 @@ def scripted_actions(k, aid, n) -> list:
         hunt = [act("hunt", camp=game[idx % len(game)], party=band)] * e
     forage = 0
     if forests and (f < 4 or stage(k, aid) < 0):
-        forage = max(0, min((2 if f < 2 else 1), budget - len(hunt)))
-    out += [act("harvest", camp=forests[0])] * forage if f < 2 else []
+        forage = min(2, budget) if f < 2 else max(0, min(1, budget - len(hunt)))   # short of a meal: gather first
+        hunt = hunt[:max(0, budget - forage)]
+    gather = [act("harvest", camp=forests[0])] * forage if forests else []
+    out += gather if f < 2 else []
     out += hunt
-    out += [act("harvest", camp=forests[0])] * forage if f >= 2 else []
+    out += gather if f >= 2 else []
     if forests and not forage and not hunt and r.random() < 0.15 and not mine and \
             k.bal(aid, "timber") < float(c["store"]["cost"].get("timber", 0)):
         out.append(act("harvest", camp=forests[0], fell=True))

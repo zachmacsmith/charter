@@ -598,7 +598,7 @@ def h_camp_function_changes(k, inst, ctx):
 
 def h_camp_destroyed(k, inst, ctx):
     rng, cfg = ctx["rng"], ctx["cfg"]
-    pool = _camps(k)
+    pool = [c for c in _camps(k) if c.get("role") != "subsistence"]   # review 19: forests are the food; their shocks are seasons
     if len(pool) <= int(cfg.get("min_camps", 2)):
         return None
     c = rng.choice(pool)
@@ -621,7 +621,8 @@ def _wrong_camp(k, inst, ctx, res):
 
 def h_camp_blight(k, inst, ctx):
     rng, cfg = ctx["rng"], ctx["cfg"]
-    pool = [c for c in _camps(k) if not c.get("blight") and c.get("compute") not in ("factoring", "pow")]
+    pool = [c for c in _camps(k) if not c.get("blight") and c.get("compute") not in ("factoring", "pow")
+            and c.get("role") != "subsistence"]                        # review 19: a forest has no max_yield to blight
     if not pool:
         return None
     c = rng.choice(pool)

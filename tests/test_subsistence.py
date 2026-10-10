@@ -714,6 +714,36 @@ def test_a_law_closes_the_hunt_when_game_is_scarce():
     assert p.tier == "L" and p.routed and p.before and PR.ACTION_PRIMITIVES["hunt"][0] == "hunt"
 
 
+def test_world_events_never_destroy_or_blight_a_forest():
+    import random as _r
+    from charter import events as EV
+    inst, k = small()
+    f, cm = forest(k)
+    for i in range(40):
+        EV.h_camp_destroyed(k, inst, {"rng": _r.Random(i), "cfg": {"min_camps": 0}})
+        EV.h_camp_blight(k, inst, {"rng": _r.Random(i), "cfg": {}, "id": "E1"})
+    assert cm.get("destroyed") is None and not cm.get("blight") and f in SB.forest_camps(k)
+
+
+def test_the_bot_hunts_in_bands_and_forages_when_short():
+    inst, k = small(["subsistence.bot_hunt=1.0", "subsistence.bot_effort=2"])
+    f, cm = forest(k)
+    a = eaters(k)[0]
+    acts = SB.scripted_actions(k, a, 5)
+    hunts = [json.loads(x["args_json"]) for x in acts if x["action"] == "hunt"]
+    assert len(hunts) == 2 and hunts[0] == {"camp": f, "party": "band0"}
+    set_food(k, a, 0.5)
+    acts = SB.scripted_actions(k, a, 5)
+    assert [x["action"] for x in acts][:2] == ["harvest", "harvest"] and "hunt" not in [x["action"] for x in acts]   # short: gather
+    inst, k = small(["subsistence.bot_hunt=0"])
+    a = eaters(k)[0]
+    set_food(k, a, 0.5)
+    assert [x["action"] for x in SB.scripted_actions(k, a, 5)][:2] == ["harvest", "harvest"]
+    cm2 = forest(k)[1]
+    cm2["destroyed"] = 0                                                      # no forest left: the bot does not crash
+    assert all(x["action"] != "harvest" for x in SB.scripted_actions(k, a, 5))
+
+
 def test_overhunting_empties_the_forest_and_restraint_keeps_it():
     def game_after(hunters, rounds=12):
         inst, k = small(["subsistence.seasons.enabled=false", "subsistence.ration=0"])
