@@ -202,7 +202,17 @@ def bundle(value, unit, rng):
     return {k: v for k, v in out.items() if v > 0}
 
 
-def generate(spec: dict, seed: int, check: bool = True) -> dict:
+def generate(spec: dict, seed: int, check: bool = True, settings: dict | None = None) -> dict:
+    """spec + seed -> the instance. inst["settings"] freezes every code default (charter/settings.py): the current code's, or
+    `settings` (a saved run's, when its world is regenerated to resume it), under which the world is then drawn as well."""
+    from charter import settings as ST
+    with ST.use(settings):
+        inst = _generate(spec, seed, check)
+    inst["settings"] = settings if settings is not None else ST.frozen()
+    return inst
+
+
+def _generate(spec: dict, seed: int, check: bool = True) -> dict:
     if check:                                                        # unknown keys, bad enums, malformed distributions: fail first
         SC.check(spec)                                               # (check=False: resuming a run made before the schema)
     source = copy.deepcopy(spec)                                     # as given: generation resolves draws into inst["spec"]

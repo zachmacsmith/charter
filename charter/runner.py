@@ -53,6 +53,7 @@ from charter import goal_registry as GR
 from charter import library as LB
 from charter import life as LF                                         # life.max_population: the budget stop
 from charter import provenance as PV
+from charter import settings as ST                                     # frozen code defaults per run (charter/settings.py)
 from charter import media as MD                                       # media2
 from charter import memory as HM                                      # history mode (review 20 §4; context.history)
 from charter import observer as OBS
@@ -214,6 +215,7 @@ def _as_item(q) -> dict | None:
     return {"action": str(name), "args_json": q.get("args_json", q.get("args", "{}"))} if name else None
 
 
+@ST.frozen_run                                                          # plays under inst["settings"]
 def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=(), dry=None,
         instance_source=None, until=None, keep_checkpoints=None, schedule=None, archive_from=None, publish_archive=None) -> Path:
     """dry: recorded in run.json (None: inferred from the policy, scripted = dry). instance_source: how a resume got its world

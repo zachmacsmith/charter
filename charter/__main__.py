@@ -2,7 +2,8 @@
 
   python -m charter generate E3 --seed 4 [--set constitution=council ...]       print / save the drawn world
   python -m charter run E3 --seed 4 [--dry] [--set ...]                          generate, play, score, report -> charter/out/<spec>/E3_seed4_<hash>
-  python -m charter resume RUN_DIR                                               continue a stopped or crashed run from its last complete round
+  python -m charter resume RUN_DIR [--allow-code-drift]                         continue a stopped or crashed run from its last complete round
+  python -m charter rerun RUN_DIR [--out DIR] [--dry-run]                        the run's command again under its recorded git sha (a worktree)
   python -m charter replay RUN_DIR [--to N] [--out DIR]                          re-execute a run from its recorded replies; byte-identical?
   python -m charter rewind RUN_DIR --to N --out NEW_DIR                          a copy of the run after round N, to resume (charter/replay.py)
   python -m charter fork RUN_DIR --at N --apply iv.yaml [--replicates K] [--out DIR]   branch at round N with interventions, play on live
@@ -101,6 +102,8 @@ def _same_instance(out: Path, inst: dict) -> bool:
     now = json.loads(json.dumps(inst, default=str))
     if "spec_source" not in saved:                                    # saved before generation recorded the spec as given
         now.pop("spec_source", None)
+    if "settings" not in saved:                                       # saved before settings were frozen (charter/settings.py)
+        now.pop("settings", None)
     return json.dumps(saved, indent=1, default=str) == json.dumps(now, indent=1, default=str)
 
 
@@ -118,7 +121,8 @@ def sandbox_for(dry, mode):
     return DockerSandbox()
 
 
-def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fresh=False, live=None, notices=(), schedule=None):
+def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fresh=False, live=None, notices=(), schedule=None,
+            allow_code_drift=False):
     inst = generator.generate(sp, seed)
     tag = Path(spec_name).stem
     parent = parent or RUNS / tag
@@ -134,6 +138,9 @@ def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fr
             return out, res["summary"]
         out.mkdir(parents=True, exist_ok=True)
         if (out / "checkpoint.pkl").exists():
+            from charter import settings as ST                        # the run's own code defaults, not today's (D-43)
+            saved = json.loads((out / "instance.json").read_text()) if (out / "instance.json").exists() else {}
+            inst = generator.generate(sp, seed, settings=ST.resolve(out, saved, allow_code_drift))
             inst["run_id"] = out.name
             if not _same_instance(out, inst):
                 raise SystemExit(f"[{out.name}] has a checkpoint but the world it would generate now differs from instance.json "
@@ -144,18 +151,19 @@ def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fr
     print(f"[{out.name}] {len(inst['agents'])} agents x {inst['rounds']} rounds, constitution {inst['constitution']}, "
           + (f"regime {inst['regime']['name']}, " if inst.get("regime") else "") +
           f"law level {inst['law_level']}, backend {backend}" + (" (resuming)" if resume else ""))
-    _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live, notices, schedule=schedule)
+    _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live, notices, schedule=schedule, allow_code_drift=allow_code_drift)
     res = scorer.score(out)
     from charter import report
     report.build(out)
     return out, res["summary"]
 
 
-def _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live=None, notices=(), instance_source=None, schedule=None):
+def _play(inst, out, dry, seed, sandbox_mode, quiet, resume, live=None, notices=(), instance_source=None, schedule=None,
+          allow_code_drift=False):
     try:
         runner.run(inst, policy_for(inst["spec"], dry, seed), out, sandbox_for(dry, sandbox_mode),
                    log=(lambda *a: None) if quiet else print, resume=resume, live=live, notices=notices, dry=dry,
-                   instance_source=instance_source, schedule=schedule)
+                   instance_source=instance_source, schedule=schedule, allow_code_drift=allow_code_drift)
     except runner.RunStopped as e:
         print(f"[{out.name}] stopped: {e}\nContinue later with the same command, or: python -m charter resume {out}")
         raise SystemExit(2)
@@ -175,8 +183,11 @@ def cmd_resume(a):
     if not (out / "checkpoint.pkl").exists():
         raise SystemExit(f"{out} has no checkpoint.pkl (runs from before checkpoints existed cannot be resumed)")
     saved = json.loads((out / "instance.json").read_text())
+    from charter import settings as ST                                # the run's frozen code defaults (inferred for older runs; D-43)
+    settings = ST.resolve(out, saved, getattr(a, "allow_code_drift", False))
     if "spec_source" in saved:                                        # regenerate from the spec as given and check the code still agrees
-        inst = generator.generate(saved["spec_source"], saved["seed"], check=False)   # a run made before the schema still resumes
+        inst = generator.generate(saved["spec_source"], saved["seed"], check=False,   # a run made before the schema still resumes
+                                  settings=settings)
         inst["run_id"] = saved.get("run_id", out.name)
         if not _same_instance(out, inst):
             raise SystemExit(f"{out}: the world generated now differs from instance.json (spec or code changed); cannot resume")
@@ -184,6 +195,7 @@ def cmd_resume(a):
     else:                                                             # runs from before spec_source: instance.json holds the resolved spec,
         inst = saved                                                  # from which generation draws a different world; the saved world is
         inst.setdefault("run_id", out.name)                           # the record, so resume from it (run.json notes it was not re-checked)
+        inst["settings"] = settings
         source = "instance.json (not regenerated: saved before spec_source)"
         print(f"[{out.name}] resuming from instance.json as saved (this run predates spec_source; the world is not regenerated)")
     dry = run_mode_dry(out)
@@ -352,6 +364,8 @@ def main(argv=None):
     p.add_argument("--perturb", action="append", default=[], help="key=<distribution YAML> (repeatable)"); p.set_defaults(fn=cmd_explore)
     p = sub.add_parser("resume"); p.add_argument("run"); p.add_argument("--sandbox", choices=["docker", "off"], default="docker")
     p.add_argument("--apply", action="append", default=[], help="an intervention schedule to add (merged by id)")
+    p.add_argument("--allow-code-drift", action="store_true", help="a run without frozen settings whose code defaults cannot be "
+                   "inferred: continue under the current defaults (recorded in run.json) instead of refusing")
     p.set_defaults(fn=cmd_resume)
     p = sub.add_parser("score"); p.add_argument("run"); p.set_defaults(fn=cmd_score)
     p = sub.add_parser("show"); p.add_argument("run"); p.set_defaults(fn=cmd_show)
@@ -364,6 +378,7 @@ def main(argv=None):
     __import__("charter.replay", fromlist=["add_commands"]).add_commands(sub)   # replay, rewind, fork, branches
     __import__("charter.export", fromlist=["add_command"]).add_command(sub)     # export RUN.. --out DIR [--format parquet|csv]
     __import__("charter.publish", fromlist=["add_command"]).add_command(sub)    # publish RUN.. --repo OWNER/NAME [--push]
+    __import__("charter.rerun", fromlist=["add_command"]).add_command(sub)      # rerun RUN [--out DIR] [--dry-run]: its own code
     from charter import preview
     p = sub.add_parser("preview", help="render what agents see, with token counts (charter/preview.py)")
     preview.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(preview.cmd(a)))
