@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 6
+ENGINE_VERSION = 7
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -73,6 +73,10 @@ ENGINE_FLIPS = {
         "flips": [("charter.context.DEFAULTS", ("history", "enabled"), False, True)],
         "note": "history mode on by default (review 20 §4: chunked conversations, the memory gradient, recall); recall added to "
                 "the lookups and actions (only in history mode)"},
+    7: {"commits": ["05f21c4550da3c39ed4f2c0bff3602cb5ecd5894"],
+        "flips": [],
+        "note": "llm.cache_ttl 5m in base.yaml (a spec key, so each run's saved spec records it; absent = auto, the backend's choice, "
+                "which was 1h on the CLI subscription); a run flags rounds averaging longer than the lifetime"},
 }
 
 
