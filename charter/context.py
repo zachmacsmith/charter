@@ -1177,8 +1177,9 @@ def _priority(k, aid, e) -> int:
     return ET.PRIORITY[feed]
 
 
-def feed_layer(k, aid, since, budget) -> tuple[str, int, dict]:
-    """The Feed layer: (text, cursor, record). Items over budget are dropped deterministically by priority, newest kept first."""
+def feed_layer(k, aid, since, budget, exclude=()) -> tuple[str, int, dict]:
+    """The Feed layer: (text, cursor, record). Items over budget are dropped deterministically by priority, newest kept first.
+    exclude: ids of events shown elsewhere in the prompt (last round's private messages, round_exchange)."""
     from charter import agents as AG
     c = cfg(k)
     digest_only = k.spec["conditions"].get("feed_mode") == "digest_only"
@@ -1199,6 +1200,8 @@ def feed_layer(k, aid, since, budget) -> tuple[str, int, dict]:
             continue
         if e["agent"] == aid and e["type"] in OWN_RESULTS:
             continue                                                    # your own actions are in "Your last turns"
+        if exclude and e["id"] in exclude:
+            continue
         s = AG.render_event(k, e, aid)
         if not s:
             continue
@@ -1223,6 +1226,40 @@ def feed_layer(k, aid, since, budget) -> tuple[str, int, dict]:
            "dropped": {PRIORITY_NAMES[p]: n for p, n in sorted(dropped.items())},
            "by_priority": {PRIORITY_NAMES[p]: sum(1 for x in items if x[0] == p) for p in sorted({x[0] for x in items})}}
     return text, len(k.events), rec
+
+
+EXCHANGE_HEADER = "## Your private messages last round"
+
+
+def exchange_events(k, aid, r) -> list:
+    """Every private message of round r that this agent sent or received, in the order they happened (decide-time DMs and every
+    DM-step exchange)."""
+    import bisect
+    ev = k.events                                                       # in round order: start at round r's first event
+    i = bisect.bisect_left(ev, r, key=lambda e: e.get("round") if e.get("round") is not None else -1)
+    out = []
+    for e in ev[i:]:
+        if e.get("round") != r:
+            break
+        if e["type"] == "dm" and (e["agent"] == aid or (e["data"] or {}).get("to") == aid) and k.can_see(aid, e):
+            out.append(e)
+    return out
+
+
+def round_exchange(k, aid, r) -> str:
+    """Round r's private-message exchange as this agent saw it: one thread per counterpart (in order of the thread's first
+    message), each message in full and in order, what it received and what it sent. "" when it had none. The names are the ones
+    the agent saw (a forged DM under its apparent sender; a reply to one under the name the agent believed it answered).
+    Review 20: with context.dm_delta the next round's prompt shows it whole; history mode renders full rounds with it."""
+    from charter import agents as AG
+    threads: dict = {}
+    for e in exchange_events(k, aid, r):
+        d = e["data"] or {}
+        who = (d.get("shown_to") or d.get("to")) if e["agent"] == aid else (d.get("shown_as") or e["agent"])
+        s = AG.render_event(k, e, aid)
+        if s:
+            threads.setdefault(who, []).append(s)
+    return "\n".join(f"With {who}:\n" + "\n".join("  " + s for s in msgs) for who, msgs in threads.items())
 
 
 def _optional(module, fn, *args):
@@ -1309,7 +1346,12 @@ def turn_prompt(k, a: dict, order: list, since: int, n_actions: int, final: bool
     st = _st(k, aid)
     rec = {}
     state, rec["state"] = state_layer(k, a, order, n_actions, simultaneous, int(b["state"]))
-    feed, cursor, rec["feed"] = feed_layer(k, aid, since, int(b["feed"]))
+    exchange, shown = "", ()
+    if c.get("dm_delta") and k.r > 0:                                    # review 20: last round's DMs whole, as threads (the DM
+        exchange = round_exchange(k, aid, k.r - 1)                       # step's replies are otherwise only "Message sent to X")
+        shown = {e["id"] for e in exchange_events(k, aid, k.r - 1)}
+        rec["exchange"] = {"tokens": tokens(exchange), "messages": len(shown)}
+    feed, cursor, rec["feed"] = feed_layer(k, aid, since, int(b["feed"]), shown)
     recent, rec["recent"] = recent_layer(k, aid, int(b["recent"]))
     pad, cut = clip(k.w["scratchpad"][aid], scratchpad_size(k, aid))
     rec["scratchpad"] = {"tokens": tokens(pad), "budget": scratchpad_size(k, aid), "trimmed": cut}
@@ -1327,6 +1369,8 @@ def turn_prompt(k, a: dict, order: list, since: int, n_actions: int, final: bool
                       "carried": len(carry), "fetched": len(got)}
     parts = ["## State\n" + state, "## What changed since your last turn\n" + feed, "## Your last turns (newest first)\n" + recent,
              f"## Your scratchpad ({tokens(pad)} of {scratchpad_size(k, aid)} tokens)\n" + (pad or "(empty)")]
+    if exchange:
+        parts.insert(2, f"{EXCHANGE_HEADER} (round {k.r}, every message you received and sent, in order)\n" + exchange)
     if med:
         parts.append("## Media (written by other agents)\n" + "\n\n".join(med))
     if pinned:

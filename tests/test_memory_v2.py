@@ -277,6 +277,50 @@ def test_a_run_records_the_mode_of_each_dm_reply(tmp_path):
     assert run_json["memory_text"] == "v1" and run_json["dm_delta"] is False
 
 
+class _Talkers:
+    """Two agents talk across the DM step of round 1: A's decide DM m1 to B; B replies r1 (exchange 1); A answers m2 (exchange 2);
+    B replies r2 (exchange 3). Everyone else does nothing. Every prompt is kept."""
+    parallel_safe = False
+
+    def __init__(self, a, b):
+        self.a, self.b, self.prompts = a, b, []
+
+    def act(self, k, ag, system, user, n_actions, final):
+        self.prompts.append((k.r, ag["id"], str(user)))
+        acts = []
+        dm = lambda to, text: {"action": "dm", "args_json": json.dumps({"to": to, "text": text})}
+        step = "private messages have arrived" in user
+        if k.r == 0 and ag["id"] == self.a:
+            acts = [dm(self.b, "m1: shall we share the camp?")] if not step else [dm(self.b, "m2: yes, from round 2 on.")]
+        elif k.r == 0 and ag["id"] == self.b and step:
+            n = sum(1 for r, x, u in self.prompts if r == 0 and x == self.b and "private messages have arrived" in u)
+            acts = [dm(self.a, "r1: only if you give me grain.")] if n == 1 else [dm(self.a, "r2: agreed, see you then.")]
+        return {"reasoning": "", "lookups": [], "actions": acts, "goal_guesses_json": "{}"}, "", {}
+
+
+@pytest.mark.parametrize("sets", [[], V1])
+def test_next_round_shows_last_rounds_whole_exchange_in_order(tmp_path, sets):
+    """Today (dm_delta off) the agent's own DM-step replies vanish next round: "dm" is one of its own results (not in the feed)
+    and "Your last turns" keeps only "Message sent to X (e..)". With dm_delta on, round 2's prompt has all four, in order."""
+    inst = generator.generate(S.apply_overrides(S.load("society"), ["rounds=2", "shared_archive.enabled=false", "dm_step.exchanges=3",
+                                                                    "dm_step.dms_per_round=6", *sets]), 1)
+    a, b = inst["agents"][0]["id"], inst["agents"][1]["id"]
+    pol = _Talkers(a, b)
+    runner.run(inst, pol, tmp_path / "run", log=lambda *x: None)
+    texts = ["m1: shall we share the camp?", "r1: only if you give me grain.", "m2: yes, from round 2 on.", "r2: agreed, see you then."]
+    for who in (a, b):
+        p = next(u for r, x, u in pol.prompts if r == 1 and x == who and "private messages have arrived" not in u)
+        if sets:                                                      # v1 / off: the old prompt, the agent's own replies missing
+            assert CX.EXCHANGE_HEADER not in p and sum(t in p for t in texts) == 2
+            continue
+        sec = p[p.index(CX.EXCHANGE_HEADER):]
+        sec = sec[:sec.index("\n## ")]
+        assert f"With {b if who == a else a}:" in sec
+        pos = [sec.index(t) for t in texts]
+        assert pos == sorted(pos), (who, sec)
+        assert all(p.count(t) == 1 for t in texts)                    # not repeated in the feed
+
+
 def test_the_export_tells_delta_and_full_dm_replies_apart(tmp_path):
     from charter import export as X
     on, _ = _dry(tmp_path / "on", [])
