@@ -217,8 +217,41 @@ class Kernel:
         """Hard ceiling on any DM limit (protects model usage: every DM in fast mode can trigger a reply call)."""
         return int((self.spec.get("dm_step") or {}).get("max_per_round", 10))
 
+    def dm_capacity_natural(self) -> bool:
+        """dm_step.capacity: natural (an agent's capacity is physics; law only caps it) or legacy (law sets the limit)."""
+        return (self.spec.get("dm_step") or {}).get("capacity", "legacy") == "natural"
+
+    def dm_capacity(self, aid) -> int:
+        """An agent's own DM capacity per round (physics): dms_per_round plus its drawn dm_extra, under the hard cap."""
+        extra = int((self.w.get("dm_extra") or {}).get(aid, 0))
+        return max(0, min(self.dm_cap(), int((self.spec.get("dm_step") or {}).get("dms_per_round", 5)) + extra))
+
+    def _dm_law_caps(self, aid) -> list:
+        """The caps law imposes on this agent under dm_step.capacity natural: the one set for it, the one set for everyone, and
+        the Communications Act's LIMIT (plus its drawn extra, as the Act reads) when the Act is in force; [] when none applies."""
+        lim, caps = self.w["dm_limit"], []
+        if aid in lim["agents"]:
+            caps.append(int(lim["agents"][aid]))
+        if lim["all"] is not None:
+            caps.append(int(lim["all"]))
+        else:
+            act = DC.rule(self, DC.root(self), "Communications Act", "limit", int((self.spec.get("dm_step") or {}).get("dms_per_round", 5)))
+            if act is not None:
+                caps.append(int(act) + int((self.w.get("dm_extra") or {}).get(aid, 0)))
+        return caps
+
+    def dm_limit_source(self, aid) -> str | None:
+        """Under dm_step.capacity natural: "capacity" (the agent's own capacity binds) or "law" (a cap set by law or dm_rules is
+        below it). None under legacy (the prompts then say nothing about the source)."""
+        if not self.dm_capacity_natural():
+            return None
+        return "law" if any(c < self.dm_capacity(aid) for c in self._dm_law_caps(aid)) else "capacity"
+
     def dm_limit(self, aid) -> int:
-        """DMs this agent may send this round (new messages and replies together). Set by holders of dm_rules or by law."""
+        """DMs this agent may send this round (new messages and replies together). Set by holders of dm_rules or by law. Under
+        dm_step.capacity natural: min(its capacity, every cap law sets for it or for everyone); a law never raises it."""
+        if self.dm_capacity_natural():
+            return max(0, min([self.dm_capacity(aid)] + self._dm_law_caps(aid)))
         lim = self.w["dm_limit"]
         if aid in lim["agents"]:                                        # a limit set for this agent (dm_rules or a law) is exact
             return max(0, min(self.dm_cap(), int(lim["agents"][aid])))

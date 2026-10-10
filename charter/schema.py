@@ -268,6 +268,7 @@ def _ann():
         "dm_step.dms_per_round": dict(range=NONNEG),
         "dm_step.dms_jitter": dict(range=NONNEG),
         "dm_step.max_per_round": dict(range=NONNEG),
+        "dm_step.capacity": dict(types=("str",), enum=("legacy", "natural")),
         "dm_step.controller": dict(types=("str",), enum=CLASSES),
         "dm_step.exchanges": dict(types=("int",), range=NONNEG),
         "camps.tiers": dict(types=("list",), items=(1, 2, 3, 4, 5, 6)),
@@ -483,6 +484,7 @@ EXTRA = {
     "law.publication_seed": "today",                                   # review 12 WP2: the publication table every polity starts from
     "fixer_model": None,
     "camps.model": "legacy",
+    "dm_step.capacity": "legacy",                                      # natural: DM limit = capacity, law only caps (Kernel.dm_limit)
     "models.by_class": {},
     "models.deal_by_class": False,
     "goals.new_features": False,
@@ -612,6 +614,10 @@ DOCS = {
     "llm": "model call settings",
     "llm.max_tokens": "output token limit per call",
     "dm_step.enabled": "the DM step runs in simultaneous mode",
+    "dm_step.capacity": "how an agent's DM limit is computed. legacy: the limit set for it (law, dm_rules) or the general limit "
+                        "(set for all, else the Communications Act's LIMIT, else the hard cap) plus its drawn extra. natural: its "
+                        "capacity (dms_per_round + its drawn dm_extra, under max_per_round) is physics; a law or dm_rules can only "
+                        "cap it (min of capacity, the cap for all, the cap for it), never raise it",
     "roles.scaling": "proportional (the only rule): counts scale with population over reference_population",
     "roles.counts": "role counts at reference_population agents (assassin < 1: present with that probability)",
     "roles.reference_population": "population at which roles.counts apply as given",

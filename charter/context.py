@@ -1180,7 +1180,7 @@ def state_layer(k, a, order, n_actions, simultaneous, budget) -> tuple[str, dict
     when = (f"Everyone decides now, at the same time; actions then run in this order: {', '.join(order)} (yours run {pos} of {len(order)})."
             if simultaneous else f"Order this round: {', '.join(order)} (you are {pos} of {len(order)}).")
     dmc = k.spec.get("dm_step") or {}
-    lim = k.dm_limit(aid)
+    lim = f"{k.dm_limit(aid)}{AG.dm_source(k, aid)}"
     extra = (f", plus at most {lim} private messages (dm) this round, replies included; they are delivered first and can be answered within the round"
              if simultaneous and dmc.get("enabled") and k.spec["channels"].get("dm", True) else
              f" (at most {lim} of them can be private messages)" if k.spec["channels"].get("dm", True) else "")
@@ -1305,9 +1305,10 @@ def _short_goal(a) -> str:
 def situation_lines(k, a, n_actions) -> list:
     """The facts that matter most this turn: limits, time, holdings, what is waiting for a decision."""
     aid = a["id"]
+    from charter import agents as AG
     left = max(0, int(k.spec["rounds"]) - k.r)
     lines = [f"Round {k.r + 1} of {k.spec['rounds']} ({left} left, this one included). This turn: {n_actions} actions and "
-             f"{max(0, k.dm_limit(aid) - k.w.get('dm_sent', {}).get(aid, 0))} private messages (of {k.dm_limit(aid)} this round)."]
+             f"{max(0, k.dm_limit(aid) - k.w.get('dm_sent', {}).get(aid, 0))} private messages (of {k.dm_limit(aid)} this round{AG.dm_source(k, aid)})."]
     try:
         from charter import life as _LF
         if _LF.enabled(k.spec) and "life" in k.w:

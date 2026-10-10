@@ -164,8 +164,9 @@ RULES = (
       "natural presence"),
     # ------------------------------------------------------------------ 2.6 Communications
     R("M1", "Default DM limit (dms_per_round plus per-agent jitter)", ("kernel:Kernel.dm_limit", "generator:generate"), "L-rule",
-      "spec", "Communications Act LIMIT; the jitter stays drawn", spec=("dm_step.dms_per_round",),
-      note="L (the limit), P (the jitter)"),
+      "spec", "Communications Act LIMIT; the jitter stays drawn", spec=("dm_step.dms_per_round", "dm_step.capacity"),
+      note="L (the limit), P (the jitter); dm_step.capacity natural: P (capacity = dms_per_round + jitter, under the X cap), "
+           "law (the Act's LIMIT, set_dm_limit) only caps it, never raises it; the residual without law is the capacity, not M3's cap"),
     R("M2", "The dm_rules office held by Media at the start", (), "L-rule", "spec", "Communications Act on_enact grant",
       spec=("dm_step.controller",)),
     R("M3", "Hard cap of 10 DMs", ("kernel:Kernel.dm_cap",), "X", "spec", "model cost"),

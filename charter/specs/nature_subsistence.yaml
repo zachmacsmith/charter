@@ -8,3 +8,4 @@
 extends: [nature_design]
 rounds: 40
 subsistence: {enabled: true}
+dm_step: {capacity: natural}      # each agent's DM capacity (dms_per_round + its drawn dm_extra) is physics; law can only cap it

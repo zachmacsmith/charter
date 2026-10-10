@@ -137,7 +137,11 @@ def world_rules(inst: dict) -> str:
                   "confirm a deal within a round. All other actions then run in the round's order; agreeing to something does not carry it out.")
     ctl = dmc.get("controller", "media")
     who = "Media" if ctl == "media" else f"the {ctl}s" if any(a["cls"] == ctl for a in inst["agents"]) else "nobody"
-    turns += (f"\nThe private-message limit (starting at {dmc.get('dms_per_round', 5)} or more per agent per round, set for each agent, never above {dmc.get('max_per_round', 10)}) "
+    turns += (f"\nEach agent can send a number of private messages per round (new messages and replies together) that is its own "
+              f"capacity: {dmc.get('dms_per_round', 5)} or more, different for each agent, never above {dmc.get('max_per_round', 10)}. "
+              f"Holders of the dm_rules right ({who} at the start) and laws can cap it, for everyone or for one agent, but never raise "
+              "anyone above their capacity; laws can grant or revoke dm_rules.") if sp["channels"].get("dm", True) and dmc.get("capacity") == "natural" else (
+              f"\nThe private-message limit (starting at {dmc.get('dms_per_round', 5)} or more per agent per round, set for each agent, never above {dmc.get('max_per_round', 10)}) "
               f"is set by holders of the dm_rules right ({who} at the start), for everyone or for one agent; laws can set it too, and can "
               "grant or revoke dm_rules.") if sp["channels"].get("dm", True) else ""
     turns += " Your feed shows what you are allowed to see that changed since your last turn."
@@ -594,6 +598,12 @@ def feed(k, aid: str, since: int, max_items: int = 80) -> tuple[str, int]:
     return "\n".join(lines[-max_items:]) or "(nothing new)", len(k.events)
 
 
+def dm_source(k, aid) -> str:
+    """" (your capacity)" / " (capped by law)" after an agent's DM allowance under dm_step.capacity natural; "" under legacy."""
+    src = k.dm_limit_source(aid)
+    return "" if src is None else " (your capacity)" if src == "capacity" else " (capped by law)"
+
+
 def state_view(k, aid: str) -> str:
     a = k.w["agents"][aid]
     w = k.w
@@ -658,6 +668,7 @@ def turn_prompt(k, a: dict, order: list[str], since: int, notes: str, last_resul
             if simultaneous else f"Order this round: {', '.join(order)} (you are {pos} of {len(order)}).")
     dmc = k.spec.get("dm_step") or {}
     lim = k.dm_limit(a["id"])
+    lim = f"{lim}{dm_source(k, a['id'])}"
     extra = (f", plus at most {lim} private messages (dm) this round, replies included; they are delivered first and can be answered within the round"
              if simultaneous and dmc.get("enabled") and k.spec["channels"].get("dm", True) else
              f" (at most {lim} of them can be private messages)" if k.spec["channels"].get("dm", True) else "")

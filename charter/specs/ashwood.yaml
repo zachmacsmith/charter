@@ -17,6 +17,7 @@ extends: [charter/specs/nature_pairs.yaml, charter/specs/fragments/channels_v2.y
 agents: {worker: 35, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}
 rounds: 60
 parallel_calls: 12
+dm_step: {capacity: natural}      # DM capacity varies by agent (physics); law can only cap it (set here explicitly; nature_subsistence also does)
 models:
   overrides:
     Saga: claude-opus-5-5
