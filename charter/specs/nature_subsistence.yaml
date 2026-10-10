@@ -1,7 +1,7 @@
 # Review 15 (S1-S3) and review 19 (the forest ecosystem): the state of nature with subsistence. nature_design (the design arm in a
 # state of nature: no polity at the start, contracts, the core action surface, citizens and the Fixer, with the S0 demography:
 # charter/specs/fragments/demography.yaml through arms/base) plus food: every agent eats 1 food automatically at the end of each
-# round, hungers and may starve if it cannot (charter/subsistence.py). Food comes from forests (ceil(N/30) appended to the camps),
+# round, hungers and may starve if it cannot (charter/subsistence.py). Food comes from forests (ceil(N/12) appended to the camps),
 # each with two stocks: plants (forage) and game (hunt, alone or in a party), with their own regrowth and a shared season. Fields
 # are parked (subsistence.fields.enabled: false). Stores can be built. For scripted dry runs and calibration; births stay with the
 # Makers (a Maker's child starts with 2 rounds' food) until pair reproduction (S4).

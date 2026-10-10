@@ -357,13 +357,13 @@ def test_the_composer_appends_forests_and_draws_nothing_else():
     inst = generator.generate(S.apply_overrides(S.load("nature_subsistence"), [
         "shared_archive.enabled=false", "agents={worker: 100, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}"]), 1)
     fo = [c for c in inst["camps"] if c.get("role") == "subsistence"]
-    assert [c["type"] for c in fo] == ["forest"] * 4
+    assert [c["type"] for c in fo] == ["forest"] * 9                             # ceil(100/12); total capacity per agent unchanged
     assert sum(c["K"] for c in fo) == pytest.approx(700) and sum(c["game"]["K"] for c in fo) == pytest.approx(1000)
     assert all(c["S"] == pytest.approx(0.95 * c["K"]) and c["game"]["G"] == pytest.approx(0.95 * c["game"]["K"]) for c in fo)   # near capacity
     inst = generator.generate(S.apply_overrides(S.load("nature_subsistence"), [
         "shared_archive.enabled=false", "agents={worker: 100, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}", FIELDS]), 1)
     types = [c["type"] for c in inst["camps"] if c.get("role") == "subsistence"]
-    assert types.count("forest") == 4 and types.count("fields") == 3 and "weak_link" not in types
+    assert types.count("forest") == 9 and types.count("fields") == 3 and "weak_link" not in types
     assert sum(len(c["plots"]) for c in inst["camps"] if c["type"] == "fields") == 40
 
 

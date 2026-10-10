@@ -29,7 +29,7 @@ capacity, game as a coarse word, the season), crops and stores; one "Food" manua
 anyone sees (user, 10 Oct): the hunger event is monitor-only. Law reads: hunger, food_of, stores, plots, forest,
 food_totals (S6).
 
-Forests (review 19; camptypes/forest.py): the composer appends ceil(N/30) forests after the standard set, from its own stream
+Forests (review 19; camptypes/forest.py): the composer appends ceil(N/12) forests after the standard set, from its own stream
 "{seed}|subsistence|camps"; food's unit value is 1. Each holds plants (K = forest.capacity_per_agent x N / forests, logistic regrowth
 forest.regrowth x the season) and game (K = game.capacity_per_agent x N / forests, logistic regrowth game.regrowth, inflow, optional
 Allee threshold). harvest {"camp"} forages plants at once; hunt {"camp", "party"?} enters a unit of hunting effort (the routed `hunt`
@@ -79,7 +79,7 @@ DEFAULTS = {
     "child_food": 2,                    # a Maker's child starts with this many rounds' food (rations; until pair births, S4)
     "bot": "basic",                     # scripted bot (dry runs): idle (does nothing about food) | basic (forage, hunt, relief, stores)
     # review 19 (the forest ecosystem): forests hold plants (forage) and game (hunt), separate stocks with their own regrowth
-    "forest": {"per_agent": 30, "capacity_per_agent": 7.0, "regrowth": 0.6, "yield": 3.0, "refuge": 0.10,
+    "forest": {"per_agent": 12, "capacity_per_agent": 7.0, "regrowth": 0.6, "yield": 3.0, "refuge": 0.10,
                "forage_per_round": 2, "fell_timber": 3.0, "fell_cost_k": 0.01, "fell_floor": 0.5, "clearing": 5,
                "start_stock": 0.95},    # plants: one forest per per_agent agents; K = capacity_per_agent x N / forests
     "game": {"capacity_per_agent": 10.0, "regrowth": 0.2, "inflow": 0.01, "allee": 0.0, "theta": 1.0, "start_stock": 0.95,
@@ -693,7 +693,7 @@ def crop_line(k, aid) -> str:
 
 # ---------------------------------------------------------------------- the composer (S2: generator, after the standard camps)
 def compose_camps(sp, seed, agents, start: int) -> list:
-    """The food camps appended after the standard set (own stream "{seed}|subsistence|camps"): ceil(N/30) forests, each with plants
+    """The food camps appended after the standard set (own stream "{seed}|subsistence|camps"): ceil(N/12) forests, each with plants
     (K = forest.capacity_per_agent x N / forests) and game (K = game.capacity_per_agent x N / forests); with fields.enabled (parked,
     off by default) also ceil(N/40) fields with plots_per_agent x N plots between them. N: the agents who eat. Sets food's unit
     value. Returns the camp dicts (ids camp<start+1>, ...); nothing when off."""
