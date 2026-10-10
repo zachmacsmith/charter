@@ -13,6 +13,14 @@ fort also defends another agent, free or for a fee per round the protected agent
 agent's attack on a target this round; unused pledges come back at the end of the round). Weapons are the holdings item "weapons"
 (unit value 0 unless unit_values sets one). Forts live in k.w["conflict"]["forts"][aid] and are not part of holdings value.
 
+The harm model (conflict.model harm; auto, the default, is harm where subsistence is on; docs/review/21_combat.md). Per-agent
+attack and defence bases (drawn at generation, x hunger); each fighter (the attacker and allies who join in person) uses up its
+one best weapon (crude 2: craft from 2 timber or stone; a blade 5: forge from forge_copper copper and forge_timber timber) and
+food_cost food, win or lose. P = sum of base x hunger + weapon; D = defence base x hunger + forts + watch. One roll: kill
+(P^2 / (P^2 + X^2), X = 2 (D + 1)), wound (P^2 / (P^2 + (X/2)^2)) or repelled. A wound takes the food the victim carries, splits
+the rest as spoils (fort and stores untouched) and leaves it starving (the hunger primitive). The target fights back (a dying
+blow, self-defence, a first strike on watch). watch {} defends for one round. A starvation death soon after a wound is "wounds".
+
 Initiative (immediate timing only). buy_initiative {"n"} spends n quicksilver to act n places earlier next round. The published
 order is unchanged; the true order is revealed publicly after the round.
 
@@ -1159,7 +1167,7 @@ def act_watch(k, aid, **_kw):
     if on_watch(k, aid):
         return "You are already on watch this round."
     k.apply("fortify", agent=aid, qty=0.0, op="watch")
-    return (f"You are on watch this round: your defence is {defense(k, aid):g} (+{float(c['watch']['defense']):g}), you are more "
+    return (f"You are on watch this round: your defence is {defense(k, aid):.3g} (+{float(c['watch']['defense']):g}), you are more "
             "likely to fight back if attacked, and you may strike an attacker first. Nobody else knows.")
 
 
@@ -1566,7 +1574,7 @@ def state_lines(k, aid) -> list:
         item, q = best_weapon(k, aid)
         held_ = [f"{k.bal(aid, i):g} {'blades' if i == WEAPONS else i}" for i in sorted(c["weapon_quality"]) if k.bal(aid, i) > 0]
         out = [f"Arms: best weapon {_weapon_words(item).replace('your ', '')}" + (f" (you hold {', '.join(held_)})" if held_ else "")
-               + f"; your attack strength {strength(k, aid, q):g}, your defence {defense(k, aid):g} (fort {fort(k, aid):g}"
+               + f"; your attack strength {strength(k, aid, q):.3g}, your defence {defense(k, aid):.3g} (fort {fort(k, aid):g}"
                + (", " + ", ".join(f"{u['qty']:g} unlocking, back in round {u['due'] + 1}" for u in unl) if unl else "")
                + (f"; guarded by {', '.join(g)}" if g else "") + ")" + ("; on watch this round" if on_watch(k, aid) else "") + "."]
     else:
