@@ -980,3 +980,33 @@ def test_a_rare_forest_shock_strips_a_stock_and_tells_the_users():
     for _ in range(10):
         end_round(k)
     assert sum(e["type"] == "forest_shock" for e in k.events) <= 2
+
+
+NO_FORAGE = '''title = "No Forage"
+intent = "No foraging."
+def before_harvest(p, chain):
+    return False
+'''
+
+
+def test_a_blocked_forage_takes_no_fee(monkeypatch):
+    from charter import jurisdictions as J
+    for blocked in (True, False):
+        inst, k = world("society", ["subsistence.enabled=true", "law.v2=true"], constitution=True)
+        if blocked:
+            k.enact(k.new_law(NO_FORAGE, "noforage"))
+        a, b = eaters(k)[:2]
+        f = food_camps(k, "forest")[0]
+        monkeypatch.setattr(J, "camp_rules", lambda k_, aid, camp: {"quota": None, "harvest_limit": None, "qkey": f"x|{camp}",
+                                                                     "fee": {"item": "food", "qty": 1.0}, "reserve": b})
+        set_food(k, a, 3)
+        set_food(k, b, 0)
+        if blocked:
+            with pytest.raises(Exception, match="block|refus"):
+                A.act(k, a, "harvest", {"camp": f})
+            assert k.bal(a, "food") == pytest.approx(3) and k.bal(b, "food") == pytest.approx(0)   # no fee taken
+            assert not SB.state(k)["forage"].get(a)
+        else:
+            A.act(k, a, "harvest", {"camp": f})
+            assert k.bal(b, "food") == pytest.approx(1)                     # the fee, paid once the forage went through
+        monkeypatch.undo()
