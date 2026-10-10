@@ -210,7 +210,9 @@ def test_admission_and_exit_hooks():
     act(k, a, "vote", ballot=bid, choice="yes")
     assert J.member_of(k, y) == "J0"
     next_round(k)
-    assert J.member_of(k, x) == "J0" and J.member_of(k, y) == jid and J.member_of(k, z) == jid
+    assert J.member_of(k, x) == "J0" and J.member_of(k, y) == jid
+    next_round(k)                                                       # the ballot closes a round after it opens (engine 9)
+    assert J.member_of(k, z) == jid
     k._add(y, "timber", 5)
     act(k, y, "leave")
     assert J.member_of(k, y) == jid

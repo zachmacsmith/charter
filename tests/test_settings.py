@@ -133,7 +133,8 @@ def test_infer_version_from_git_history():
     assert s["engine_version"] == 3 and s["defaults"] == {"charter.channels.DEFAULTS": {"delivery": "pull"}}
     assert ST.patches(s) == {"charter.channels.DEFAULTS": {"delivery": "pull"},
                              "charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}},
-                             "charter.conflict.DEFAULTS": {"model": "disable"}}
+                             "charter.conflict.DEFAULTS": {"model": "disable"},
+                             "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}}
     assert ST.infer_version("HEAD") == PV.ENGINE_VERSION
     assert ST.infer_version("0" * 40) is None
 
@@ -141,11 +142,13 @@ def test_infer_version_from_git_history():
 def test_patches_revert_later_flips_only_where_the_snapshot_is_silent():
     p = ST.patches({"engine_version": 3, "defaults": {}})
     assert p == {"charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}},
-                 "charter.conflict.DEFAULTS": {"model": "disable"}}
+                 "charter.conflict.DEFAULTS": {"model": "disable"},
+                             "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}}
     p = ST.patches({"engine_version": 1, "defaults": {"charter.context.DEFAULTS": {"memory_text": "v2"}}})
     assert p == {"charter.channels.DEFAULTS": {"delivery": "pull"},
                  "charter.context.DEFAULTS": {"dm_delta": False, "history": {"enabled": False}},
-                 "charter.conflict.DEFAULTS": {"model": "disable"}}
+                 "charter.conflict.DEFAULTS": {"model": "disable"},
+                             "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}}
     with ST.use({"engine_version": 1, "defaults": {}}):
         assert CX.DEFAULTS["memory_text"] == "v1" and CX.cfg({})["dm_delta"] is False
         assert CX.DEFAULTS["history"]["enabled"] is False and CX.DEFAULTS["history"]["chunk"] == 3   # the rest of the block kept
