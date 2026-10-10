@@ -47,6 +47,7 @@ DEFAULTS = {
     "closing": True,                  # the turn prompt ends with "Your situation" and "Before you act" (goal, limits, strategy, memory)
     "lookup_phase": True,             # free lookups before acting (one extra model call, only when the agent asks for lookups)
     "free_lookups": 3,                # free lookups per turn
+    "roster": False,                  # a state line of who is alive and who is gone (died, killed by whom when public, left), by round
     "lookups_in_dm_step": True,       # lookups in a reply's "lookups" use private-message slots and are answered in the DM step, before
                                       # actions (fast); a lookup in "actions" uses an action and its text comes next turn (slow)
     "action_purposes": False,         # the core prompt lists each action with a few words on what it does and why it helps
@@ -225,6 +226,36 @@ def set_scratchpad(k, aid, text) -> None:
     """Replace an agent's scratchpad (cut to its size), e.g. a child's letter."""
     init_agent(k, aid)
     k.w["scratchpad"][aid] = clip(text, scratchpad_size(k, aid))[0]
+
+
+def note_gone(k, aid, cause, by, public, named) -> None:
+    """Record a death or departure as the world saw it, for the roster line (only when context.roster is on): the killer only when
+    the death was public and the attacker named."""
+    if not (enabled(k) and cfg(k).get("roster")):
+        return
+    k.w.setdefault("roster_gone", {})[aid] = {"round": k.r, "cause": cause if public else "unknown",
+                                              "by": by if (public and named) else None}
+
+
+def roster_line(k, aid) -> str:
+    """Who is alive and who is gone: "Alive (12): A, B, ... Gone (24): Iris (killed by Zane, r3), Aksel (died of old age, r2), ..."."""
+    gone = k.w.get("roster_gone") or {}
+    alive = [a for a in k.players() if a not in gone and k.w["agents"][a].get("cls") != "observer"]
+    def why(g):
+        c, by, r = g["cause"], g.get("by"), g["round"] + 1
+        if c == "attack":
+            return f"killed by {by}, r{r}" if by else f"killed, r{r}"
+        if c == "old_age":
+            return f"died of old age, r{r}"
+        if c == "starvation":
+            return f"starved, r{r}"
+        if c == "departure":
+            return f"left, r{r}"
+        return f"{c.replace('_', ' ')}, r{r}"
+    parts = [f"Alive ({len(alive)}): " + ", ".join(sorted(alive)) + "."]
+    if gone:
+        parts.append(f"Gone ({len(gone)}): " + "; ".join(f"{a} ({why(g)})" for a, g in sorted(gone.items(), key=lambda x: (x[1]["round"], x[0]))) + ".")
+    return "People: " + " ".join(parts)
 
 
 def memory_line(k, aid) -> str:
@@ -1193,6 +1224,10 @@ def state_layer(k, a, order, n_actions, simultaneous, budget) -> tuple[str, dict
         left = _optional("life", "rounds_left", k, aid)
         if left is not None:
             lines.append(f"Rounds of life left: {left}.")
+    if cfg(k).get("roster"):
+        rl = roster_line(k, aid)
+        lines.append(rl)
+        budget += tokens(rl)                                             # the roster has its own room: it never pushes other state out
     lines.append(memory_line(k, aid))
     text, dropped = _clip_lines(lines, budget, "lines of state")
     return text, {"tokens": tokens(text), "budget": budget, "lines": len(lines), "dropped_lines": dropped}

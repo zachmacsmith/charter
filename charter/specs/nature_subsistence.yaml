@@ -8,3 +8,4 @@
 extends: [nature_design]
 rounds: 40
 subsistence: {enabled: true}
+context: {roster: true}       # user, 10 Oct: a People line (who is alive; who is gone, how and when, killer named when public)

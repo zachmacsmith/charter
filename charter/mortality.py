@@ -172,6 +172,8 @@ def _disable(k, aid, cause, by, public, named, v) -> dict:
     def mark():                                                           # out of play: votes dropped, channels left; the estate opens
         v["departed"] = r
         v["dead"] = {"round": r, "cause": cause, "by": by}
+        from charter import context as _CX
+        _CX.note_gone(k, aid, cause, by, public, named)                  # the roster line (context.roster), only when on
         st["dead"][aid] = {"round": r, "cause": cause, "by": by, "cls": v["cls"]}
         EV.state(k)["departures"][aid] = r                                # segment scoring ends here (events.segments)
         for b in k.w["ballots"].values():                                 # votes from a disabled agent are dropped
