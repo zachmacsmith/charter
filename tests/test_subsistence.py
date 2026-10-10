@@ -954,3 +954,29 @@ def test_a_minor_forages_and_hunts_at_half(monkeypatch):
     assert SB.yield_mult(k, a) == 0.5 and SB.yield_mult(k, b) == 1.0
     SB.state(k)["stage"][a] = -1
     assert SB.yield_mult(k, a) == pytest.approx(0.375)                       # hungry minor: x0.75 x0.5
+
+
+def test_a_rare_forest_shock_strips_a_stock_and_tells_the_users():
+    assert SB.DEFAULTS["forest"]["shock"] == {"p": 0.02, "loss": [0.3, 0.6]}
+    inst, k = small(["subsistence.forest.shock.p=1.0", "subsistence.game.regrowth=0", "subsistence.game.inflow=0"])
+    f, cm = forest(k)
+    a, b = eaters(k)[:2]
+    k.begin_round_cause(k.r, "round_start")
+    k.start_round()
+    A.act(k, a, "harvest", {"camp": f})                                      # a used the forest this round; b did not
+    G0 = cm["game"]["G"]
+    k.phase("end_of_round")
+    k.end_round()
+    k.end_round_cause()
+    ev = [e for e in k.events if e["type"] == "forest_shock"]
+    assert len(ev) == 1 and ev[0]["data"]["users"] == [a] and k.can_see(a, ev[0]) and not k.can_see(b, ev[0])
+    d = ev[0]["data"]
+    assert 0.3 <= d["loss"] <= 0.6
+    if d["stock"] == "game":
+        assert d["before"] == pytest.approx(G0) and cm["game"]["G"] == pytest.approx(G0 * (1 - d["loss"]), abs=1e-3)
+    else:
+        assert cm["S"] == pytest.approx(d["before"] * (1 - d["loss"]), abs=1e-3)
+    inst, k = small()                                                        # the default: rare (2% a forest a round)
+    for _ in range(10):
+        end_round(k)
+    assert sum(e["type"] == "forest_shock" for e in k.events) <= 2

@@ -7,7 +7,7 @@ Food is physics (P). Every living agent but the exempt classes (`exempt`: the Bo
 10 Oct): the ration drains the holdings. With eat_from_store (on by default) it tops an empty hand up from the eater's own stores.
 
     round end, after the laws' on_round_end, core regrow (the plants) and camps.world_update, before life.end_of_round:
-      0. ecology: each forest's game regrows (_ecology); next round's season is drawn and sets the plants' regrowth (_next_season)
+      0. ecology: rare forest shocks (_shock), each forest's game regrows (_ecology); next round's season is drawn and sets the plants' regrowth (_next_season)
       1. crops:   fields only (parked, off by default): ripening, blight, rot, fallow recovery (camptypes/fields.py)
       2. eat:     for each eater, sorted by id (minors after the adults: S4's household draw is the hook `_eaters`):
                     own food >= ration (1e-9 tolerance): eat it (the `eat` primitive); stage = min(0, stage + 1); missed = 0
@@ -81,7 +81,8 @@ DEFAULTS = {
     # review 19 (the forest ecosystem): forests hold plants (forage) and game (hunt), separate stocks with their own regrowth
     "forest": {"per_agent": 12, "capacity_per_agent": 7.0, "regrowth": 0.6, "yield": 3.0, "refuge": 0.10,
                "forage_per_round": 2, "fell_timber": 3.0, "fell_cost_k": 0.01, "fell_floor": 0.5, "clearing": 5,
-               "start_stock": 0.95},    # plants: one forest per per_agent agents; K = capacity_per_agent x N / forests
+               "start_stock": 0.95,
+               "shock": {"p": 0.02, "loss": [0.3, 0.6]}},   # plants: one forest per per_agent agents; K = capacity_per_agent x N / forests
     "game": {"capacity_per_agent": 10.0, "regrowth": 0.2, "inflow": 0.01, "allee": 0.0, "theta": 1.0, "start_stock": 0.95,
              "large": {"food": 20.0, "scale": 5.0, "shape": 3.0, "catch": 0.7},
              "medium": {"food": 5.0, "scale": 2.5, "shape": 2.0, "catch": 0.4},
@@ -253,6 +254,7 @@ def _ecology(k, c) -> dict:
     mg = 1.0 + float(c["seasons"]["game"]) * (mult - 1.0) if c["seasons"].get("enabled") else 1.0
     out = {}
     for cid in forest_camps(k):
+        _shock(k, cid, c)
         cm = k.w["camps"][cid]
         g = cm.get("game")
         if not g:
@@ -265,6 +267,36 @@ def _ecology(k, c) -> dict:
         G2 = round(max(0.0, min(K, G + grow + float(gc["inflow"]) * (K - G))), 4)
         k.apply("set_camp_state", camp=cid, key="game", value={**g, "G": G2})
         out[cid] = {"plants": round(cm["S"] / cm["K"], 4), "game": round(G2 / K, 4) if K > 0 else 0.0}
+    return out
+
+
+def _shock(k, cid, c) -> dict | None:
+    """A rare forest shock (fire, blight, murrain): with chance forest.shock.p a round, from random.Random(f"{seed}|subsistence|
+    shock|{camp}|{round}"), the plants or the game (even odds) lose a share U[forest.shock.loss] of their stock (a world change,
+    set_camp_state). The agents who used the forest this round (any forest action there) are told (forest_shock); with none, the
+    record is monitor-only. Returns the shock or None."""
+    sc = c["forest"].get("shock") or {}
+    p = float(sc.get("p", 0.0))
+    if p <= 0:
+        return None
+    rng = random.Random(f"{k.inst['seed']}|subsistence|shock|{cid}|{k.r}")
+    if rng.random() >= p:
+        return None
+    cm = k.w["camps"][cid]
+    lo, hi = sc.get("loss", [0.3, 0.6])
+    stock = "plants" if (rng.random() < 0.5 or not cm.get("game")) else "game"
+    loss = round(rng.uniform(float(lo), float(hi)), 4)
+    if stock == "plants":
+        before = float(cm["S"])
+        k.apply("set_camp_state", camp=cid, key="S", value=round(before * (1 - loss), 4))
+        text = f"A blight swept {cid}: about {loss:.0%} of its plants are gone."
+    else:
+        before = float(cm["game"]["G"])
+        k.apply("set_camp_state", camp=cid, key="game", value={**cm["game"], "G": round(before * (1 - loss), 4)})
+        text = f"A murrain struck the game at {cid}: about {loss:.0%} of the animals are gone."
+    users = sorted({key.split("|", 1)[0] for key, n in k.w["harvest_count"].items() if n and key.split("|", 1)[1] == cid})
+    out = {"camp": cid, "round": k.r, "stock": stock, "loss": loss, "before": round(before, 4), "users": users, "text": text}
+    k.log("forest_shock", None, out, vis=users or "monitor")
     return out
 
 

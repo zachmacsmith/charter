@@ -528,6 +528,8 @@ E("hunt", "subsistence", "primitive", "parties", "event", "subsistence", act="hu
   note="a hunting entry (sealed until the round's end): the hunter only")
 E("hunt_result", "subsistence", "summary", "parties", "event", "subsistence",
   note="a hunting party's catch and the hunter's share, to each member only (hunt results are private)")
+E("forest_shock", "subsistence", "summary", "parties", "event", "subsistence",
+  note="a rare forest shock (forest.shock): the plants or the game lose 30-60%; told to the agents who used that forest that round")
 E("hunt_round", "subsistence", "record", "monitor", "silent", None, primitive="hunt",
   note="a forest's hunting round: each party's hunters, effort, quarry and catch, and the game left (monitor-only; a law may publish it)")
 
