@@ -66,6 +66,8 @@ DEFAULTS = {
     "free_scratchpad_writes": 1,      # write_scratchpad actions per turn that use no action
     "memory_text": "v2",              # review 20 §6.1: v2 says accurately what the agent will remember and asks for a planning notebook;
                                       # v1: the text before review 20 (byte-identical, to reproduce older runs)
+    "dm_delta": True,                 # review 20 §4.5: a DM reply continues the agent's decide conversation (a short "since you acted"
+                                      # message) instead of resending the whole turn prompt; false: the full DM prompt, as before
 }
 MEMORY_TEXTS = ("v1", "v2")
 LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file", "read_archive", "search_archive",

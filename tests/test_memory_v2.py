@@ -1,23 +1,27 @@
-"""Review 20, decision 7: context.memory_text (v2: the accurate memory text and the notebook scratchpad text, §6.1)
-(on by default; v1 reproduces the text of earlier runs). No model is ever called."""
+"""Review 20, decisions 6 and 7: context.memory_text (v2: the accurate memory text and the notebook scratchpad text, §6.1) and
+context.dm_delta (DM replies continue the agent's decide conversation, §4.5). Both are on by default; v1 / false reproduce the
+text and prompts of earlier runs. No model is ever called: scripted bots, a fake anthropic client and a fake `claude` process."""
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from charter import action_registry as AR
 from charter import agents as AG
 from charter import context as CX
-from charter import generator, manual
+from charter import generator, llm, manual, runner
 from charter import spec as S
 from charter.kernel import Kernel
 
 import charter_golden_cases as GC
 from test_charter_golden import _sha
 
-V1 = ["context.memory_text=v1"]
+V1 = ["context.memory_text=v1", "context.dm_delta=false"]
 V1_PROMPTS = Path(__file__).parent / "fixtures" / "memory_v1_prompts.json"   # the prompt goldens from before review 20
 
 
@@ -40,8 +44,8 @@ def test_v1_reproduces_the_prompts_from_before(name):
     assert got == json.loads(V1_PROMPTS.read_text())[name]
 
 
-def test_defaults_are_v2():
-    assert CX.DEFAULTS["memory_text"] == "v2"
+def test_defaults_are_v2_and_delta():
+    assert CX.DEFAULTS["memory_text"] == "v2" and CX.DEFAULTS["dm_delta"] is True
     from charter import schema
     assert schema.validate(S.apply_overrides(S.load("society"), V1)) == []
     assert any("memory_text" in e for e in schema.validate(S.apply_overrides(S.load("society"), ["context.memory_text=v3"])))
@@ -109,3 +113,180 @@ def test_dm_prompt_drops_the_stale_notes_line_under_v2_only():
         p = AG.dm_prompt(k, a, "TURN PROMPT", **_dm_args(k, a))
         assert ('"notes" in this reply replaces them' in p) is has
         assert p.endswith("TURN PROMPT")
+
+
+def test_dm_delta_prompt_is_short_and_keeps_the_scripted_marker():
+    inst, k = _world()
+    a = inst["agents"][0]
+    args = _dm_args(k, a)
+    d = AG.dm_delta_prompt(k, a, args["new_dms"], 1, 5, 4, 1, 2, False)
+    assert d.startswith("Round 1: private messages have arrived before anyone's actions") and "Since you acted you received:\n[e1]" in d
+    assert "You have 4 of your 5 messages left" in d and "TURN" not in d and "notes" not in d and "my plan" not in d
+    assert "Anyone you message now" in d
+    assert "last exchange" in AG.dm_delta_prompt(k, a, args["new_dms"], 1, 5, 4, 2, 2, False)
+
+
+# ------------------------------------------------------------------ dm_delta: the policy and the backends
+REPLY = {"reasoning": "r", "lookups": [], "actions": [], "goal_guesses_json": "{}"}
+
+
+def _k(r=0, sets=None):
+    spec = {"context": sets or {}}
+    return SimpleNamespace(inst={"spec": spec}, spec=spec, r=r)
+
+
+A = {"id": "a1", "cls": "worker", "model": "m"}
+
+
+def test_api_reply_continues_the_decide_conversation(monkeypatch):
+    """API: the DM reply sends [decide prompt, decide reply, the delta], with a cache breakpoint on the system prompt and on the
+    newest user message (the decide call's breakpoint is the cached prefix the reply reads)."""
+    sent = []
+
+    class Msgs:
+        def create(self, **kw):
+            sent.append(kw)
+            raw = json.dumps({**REPLY, "reasoning": f"call {len(sent)}"})
+            return SimpleNamespace(content=[SimpleNamespace(type="text", text=raw)],
+                                   usage=SimpleNamespace(input_tokens=1, output_tokens=2, cache_read_input_tokens=0,
+                                                         cache_creation_input_tokens=0))
+    monkeypatch.setitem(sys.modules, "anthropic", types.ModuleType("anthropic"))
+    monkeypatch.setattr(llm, "_client", SimpleNamespace(messages=Msgs()))
+    pol = AG.LLMPolicy("api", {})
+    k = _k(3)
+    pol.act_recorded(k, A, "SYS", "TURN PROMPT", 4, False)
+    out, _, usage, _ = pol.act_recorded(k, A, "SYS", AG.DMDelta("DELTA 1", "FULL 1"), 4, False)
+    assert usage["dm_mode"] == "delta" and usage["turn"] == "continued"
+    m = sent[1]["messages"]
+    assert [x["role"] for x in m] == ["user", "assistant", "user"]
+    assert m[0]["content"] == "TURN PROMPT" and json.loads(m[1]["content"])["reasoning"] == "call 1"
+    assert m[2]["content"] == [{"type": "text", "text": "DELTA 1", "cache_control": {"type": "ephemeral"}}]
+    assert sent[0]["messages"][0]["content"][0]["cache_control"] == {"type": "ephemeral"}   # the decide prompt is written
+    assert sent[1]["system"][0]["cache_control"] == {"type": "ephemeral"}
+    pol.act_recorded(k, A, "SYS", AG.DMDelta("DELTA 2", "FULL 2"), 4, False)     # the second exchange appends again
+    assert [x["content"] if isinstance(x["content"], str) else x["content"][0]["text"] for x in sent[2]["messages"]][::2] == \
+        ["TURN PROMPT", "DELTA 1", "DELTA 2"]
+    pol.act_recorded(_k(4), A, "SYS", AG.DMDelta("DELTA r5", "FULL r5"), 4, False)   # next round: nothing to continue
+    assert sent[3]["messages"] == [{"role": "user", "content": "FULL r5"}]
+
+
+def test_dm_delta_off_sends_plain_prompts(monkeypatch):
+    seen = []
+    monkeypatch.setattr(llm, "_api", lambda model, system, user, *a: (seen.append(user), (json.dumps(REPLY), None, "", {}))[1])
+    pol = AG.LLMPolicy("api", {})
+    k = _k(0, {"dm_delta": False})
+    pol.act_recorded(k, A, "SYS", "TURN", 4, False)
+    _, _, usage, _ = pol.act_recorded(k, A, "SYS", "FULL DM", 4, False)
+    assert seen == ["TURN", "FULL DM"] and all(type(u) is str for u in seen) and "dm_mode" not in usage
+
+
+def _fake_cli(monkeypatch, fail_resume=False):
+    calls = []
+
+    def run(cmd, **kw):
+        calls.append((cmd, kw["env"]))
+        if fail_resume and "--resume" in cmd:
+            res = {"type": "result", "is_error": True, "subtype": "error_during_execution", "errors": ["No conversation found"]}
+        else:
+            sid = cmd[cmd.index("--session-id") + 1] if "--session-id" in cmd else (cmd[cmd.index("--resume") + 1] if "--resume" in cmd else None)
+            res = {"type": "result", "result": json.dumps(REPLY), "structured_output": REPLY, "usage": {}, "session_id": sid}
+        return SimpleNamespace(stdout=json.dumps(res) + "\n", stderr="", returncode=0)
+    monkeypatch.setattr(llm.subprocess, "run", run)
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-NOT-A-REAL-TOKEN")
+    return calls
+
+
+def test_cli_decide_starts_a_session_in_the_run_folder_and_the_reply_resumes_it(monkeypatch, tmp_path):
+    calls = _fake_cli(monkeypatch)
+    pol = AG.LLMPolicy("claude_code", {})
+    pol.use_run_dir(tmp_path)
+    k = _k(2)
+    pol.act_recorded(k, A, "SYS", "TURN PROMPT", 4, False)
+    _, _, usage, _ = pol.act_recorded(k, A, "SYS", AG.DMDelta("DELTA", "FULL"), 4, False)
+    (c1, e1), (c2, e2) = calls
+    sid = c1[c1.index("--session-id") + 1]
+    assert len(sid) == 36 and "--no-session-persistence" not in c1 and c1[c1.index("-p") + 1] == "TURN PROMPT"
+    assert c2[c2.index("--resume") + 1] == sid and c2[c2.index("-p") + 1] == "DELTA" and "--session-id" not in c2
+    assert e1["CLAUDE_CONFIG_DIR"] == e2["CLAUDE_CONFIG_DIR"] == str(tmp_path / llm.Sessions.DIRNAME)
+    assert (tmp_path / llm.Sessions.DIRNAME).is_dir() and "ANTHROPIC_API_KEY" not in e1
+    assert usage["dm_mode"] == "delta" and usage["session"] == sid
+
+
+def test_cli_without_sessions_keeps_todays_argv(monkeypatch, tmp_path):
+    """dm_delta off, or no run folder: the argv is today's (--no-session-persistence, no CLAUDE_CONFIG_DIR)."""
+    calls = _fake_cli(monkeypatch)
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    AG.LLMPolicy("claude_code", {}).act_recorded(_k(0, {"dm_delta": False}), A, "SYS", "TURN", 4, False)
+    pol = AG.LLMPolicy("claude_code", {})                                # on, but never given a run folder
+    pol.act_recorded(_k(0), A, "SYS", "TURN", 4, False)
+    _, _, usage, _ = pol.act_recorded(_k(0), A, "SYS", AG.DMDelta("DELTA", "FULL"), 4, False)
+    for cmd, env in calls:
+        assert "--no-session-persistence" in cmd and "CLAUDE_CONFIG_DIR" not in env
+    assert calls[-1][0][calls[-1][0].index("-p") + 1] == "FULL" and usage["dm_mode"] == "full"
+
+
+def test_cli_resume_failure_falls_back_to_the_full_prompt(monkeypatch, tmp_path):
+    calls = _fake_cli(monkeypatch, fail_resume=True)
+    pol = AG.LLMPolicy("claude_code", {})
+    pol.use_run_dir(tmp_path)
+    k = _k(1)
+    pol.act_recorded(k, A, "SYS", "TURN", 4, False)
+    out, _, usage, attempts = pol.act_recorded(k, A, "SYS", AG.DMDelta("DELTA", "FULL"), 4, False)
+    assert not out.get("_error") and usage["dm_mode"] == "fallback"
+    assert "--resume" in calls[1][0] and calls[2][0][calls[2][0].index("-p") + 1] == "FULL" and "--no-session-persistence" in calls[2][0]
+    assert attempts[0]["ok"] is False and attempts[0]["turn"] == "continued" and attempts[-1]["ok"] is True
+    _, _, usage2, _ = pol.act_recorded(k, A, "SYS", AG.DMDelta("DELTA 2", "FULL 2"), 4, False)   # the conversation is gone now
+    assert usage2["dm_mode"] == "full" and calls[-1][0][calls[-1][0].index("-p") + 1] == "FULL 2"
+
+
+def test_cli_failed_session_start_is_retried_without_a_session(monkeypatch, tmp_path):
+    calls = []
+
+    def run(cmd, **kw):
+        calls.append(cmd)
+        if "--session-id" in cmd:
+            return SimpleNamespace(stdout="", stderr="Invalid API key", returncode=1)
+        return SimpleNamespace(stdout=json.dumps({"type": "result", "result": json.dumps(REPLY), "usage": {}}) + "\n", stderr="", returncode=0)
+    monkeypatch.setattr(llm.subprocess, "run", run)
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "x")
+    pol = AG.LLMPolicy("claude_code", {})
+    pol.use_run_dir(tmp_path)
+    for r in range(llm.Sessions.GIVE_UP + 1):
+        out, *_ = pol.act_recorded(_k(r), A, "SYS", "TURN", 4, False)
+        assert not out.get("_error")
+    assert sum("--session-id" in c for c in calls) == llm.Sessions.GIVE_UP   # then sessions are off for the run
+    assert "--no-session-persistence" in calls[-1]
+
+
+# ------------------------------------------------------------------ dm_delta in a run (scripted bots)
+def _dry(tmp_path, sets):
+    inst = generator.generate(S.apply_overrides(S.load("society"), ["rounds=2", "shared_archive.enabled=false", *sets]), 1)
+    out = runner.run(inst, AG.ScriptedPolicy(1), tmp_path / "run", log=lambda *a: None)
+    rows = [json.loads(x) for x in (out / "reasoning.jsonl").read_text().splitlines()]
+    return out, [r for r in rows if str(r.get("phase", "")).startswith("dm_reply")]
+
+
+def test_a_run_records_the_mode_of_each_dm_reply(tmp_path):
+    out, dm = _dry(tmp_path / "on", [])
+    assert dm and all(r["dm_mode"] == "delta" and "Since you acted you received" in r["prompt"] for r in dm)
+    run_json = json.loads((out / "run.json").read_text())
+    assert run_json["memory_text"] == "v2" and run_json["dm_delta"] is True
+    out, dm = _dry(tmp_path / "off", V1)
+    assert dm and all("dm_mode" not in r and "The turn prompt you saw at the start" in r["prompt"] for r in dm)
+    run_json = json.loads((out / "run.json").read_text())
+    assert run_json["memory_text"] == "v1" and run_json["dm_delta"] is False
+
+
+def test_the_export_tells_delta_and_full_dm_replies_apart(tmp_path):
+    from charter import export as X
+    on, _ = _dry(tmp_path / "on", [])
+    off, _ = _dry(tmp_path / "off", V1)
+    X.export([on, off], tmp_path / "ds", fmt="csv")
+    data = X.load(tmp_path / "ds")
+    runs = {r["run_id"]: r for r in data["runs"]}
+    assert {(r["memory_text"], r["dm_delta"]) for r in runs.values()} == {("v2", True), ("v1", False)}
+    modes = {}
+    for t in data["turns"]:
+        if str(t["phase"]).startswith("dm_reply"):
+            modes.setdefault(runs[t["run_id"]]["memory_text"], set()).add(t["dm_mode"])
+    assert modes == {"v2": {"delta"}, "v1": {None}}

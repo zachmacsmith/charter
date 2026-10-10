@@ -30,7 +30,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCHEMA_VERSION = 2           # major: a column removed, renamed, or changed in type or meaning (docs/data_format.md)
-SCHEMA_MINOR = 1             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns
+SCHEMA_MINOR = 2             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
+                             # 2: review 20 (runs.memory_text, runs.dm_delta, turns.dm_mode)
 TYPES = ("str", "int", "float", "bool", "json")
 
 
@@ -79,6 +80,8 @@ SCHEMA: dict[str, tuple] = {
         ("law_api", "int", "law API version"),
         ("scoring_version", "int", "scoring rules version (scorer.SCORING_VERSION) the run started under"),
         ("rng_version", "int", "1: one shared kernel stream; 2: named substreams (P5.3)"),
+        ("memory_text", "str", "context.memory_text of the run (v1, v2; run.json; null before review 20, which ran v1)"),
+        ("dm_delta", "bool", "context.dm_delta: DM replies continue the decide conversation (run.json; null before review 20: off)"),
         ("n_segments", "int", "segments in run.json (start, resume, rewind, fork)"),
         ("segment_kinds", "str", "the segments' kinds joined by '>' (e.g. start>fork>resume)"),
         ("code_changed", "bool", "some segment ran under code whose module hashes differ from the previous segment's"),
@@ -375,6 +378,7 @@ SCHEMA: dict[str, tuple] = {
         ("n_failed", "int", "results that are errors ('<action>: ERROR ...')"),
         ("prompt_sha", "str", "sha of the turn's prompt (16 hex digits; joins blobs.blob_sha)"),
         ("prompt_chars", "int", "prompt length (system + user) as recorded"),
+        ("dm_mode", "str", "a DM reply under context.dm_delta: delta (continued the conversation), fallback (continuing failed: the full prompt), full (nothing to continue); null otherwise"),
         ("tokens_in", "int", "input tokens (usage.input)"),
         ("tokens_out", "int", "output tokens (usage.output)"),
         ("error", "str", "turn-level error, if any"),
@@ -837,7 +841,8 @@ def run_tables(run, run_id: str | None = None, running_scores: bool = False, *, 
         "git_dirty": git.get("dirty"), "git_diff_sha": git.get("diff_sha"), "python": meta.get("python"),
         "code_sha": _sha(code.get("modules")) if code.get("modules") else None, "code_modules_json": code.get("modules"),
         "state_schema": code.get("state_schema"), "law_api": code.get("law_api"), "scoring_version": code.get("scoring"),
-        "rng_version": int(spec.get("rng_version") or 1), "n_segments": len(segs),
+        "rng_version": int(spec.get("rng_version") or 1), "memory_text": meta.get("memory_text"), "dm_delta": meta.get("dm_delta"),
+        "n_segments": len(segs),
         "segment_kinds": ">".join(str(s.get("kind")) for s in segs) or None,
         "code_changed": any(s.get("changed_modules") or s.get("changed_versions") for s in segs),
         "segments_json": _portable_tree([{x: v for x, v in s.items() if x not in ("argv",)} for s in segs], root) or None,
@@ -1044,7 +1049,7 @@ def _turn_rows(run: Path, meta, h, events, inh, with_prompts) -> tuple[list, lis
                      "reasoning": t.get("reasoning"), "stated_reasoning": t.get("stated_reasoning"), "notes": t.get("notes"),
                      "actions_json": acts, "results_json": res, "n_actions": len(acts) if isinstance(acts, list) else None,
                      "n_failed": sum(1 for x in res if isinstance(x, str) and ERROR_RESULT.match(x)) if isinstance(res, list) else None,
-                     "prompt_sha": psha, "prompt_chars": t.get("prompt_chars"), "tokens_in": u.get("input"),
+                     "prompt_sha": psha, "prompt_chars": t.get("prompt_chars"), "dm_mode": t.get("dm_mode"), "tokens_in": u.get("input"),
                      "tokens_out": u.get("output"), "error": _s(t.get("error"))})
     return rows, blobs
 

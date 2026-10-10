@@ -70,7 +70,7 @@ Not yet exported: `state_deltas` (per-round snapshot diffs) and `observer_assess
 
 ## Tables
 
-Dataset schema version **2.1** (`schema_version` 2, `schema_minor` 1). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
+Dataset schema version **2.2** (`schema_version` 2, `schema_minor` 2). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
 
 ### `runs`
 
@@ -102,6 +102,8 @@ Dataset schema version **2.1** (`schema_version` 2, `schema_minor` 1). Types: `s
 | `law_api` | int | law API version |
 | `scoring_version` | int | scoring rules version (scorer.SCORING_VERSION) the run started under |
 | `rng_version` | int | 1: one shared kernel stream; 2: named substreams (P5.3) |
+| `memory_text` | str | context.memory_text of the run (v1, v2; run.json; null before review 20, which ran v1) |
+| `dm_delta` | bool | context.dm_delta: DM replies continue the decide conversation (run.json; null before review 20: off) |
 | `n_segments` | int | segments in run.json (start, resume, rewind, fork) |
 | `segment_kinds` | str | the segments' kinds joined by '>' (e.g. start>fork>resume) |
 | `code_changed` | bool | some segment ran under code whose module hashes differ from the previous segment's |
@@ -434,6 +436,7 @@ Dataset schema version **2.1** (`schema_version` 2, `schema_minor` 1). Types: `s
 | `n_failed` | int | results that are errors ('<action>: ERROR ...') |
 | `prompt_sha` | str | sha of the turn's prompt (16 hex digits; joins blobs.blob_sha) |
 | `prompt_chars` | int | prompt length (system + user) as recorded |
+| `dm_mode` | str | a DM reply under context.dm_delta: delta (continued the conversation), fallback (continuing failed: the full prompt), full (nothing to continue); null otherwise |
 | `tokens_in` | int | input tokens (usage.input) |
 | `tokens_out` | int | output tokens (usage.output) |
 | `error` | str | turn-level error, if any |

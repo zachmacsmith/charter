@@ -316,6 +316,11 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
     ev_rs = rs                                                        # events.sync reads agents, sysp, cursors, start_values, out
     mem = inst["spec"]["llm"].get("memory_chars", 4000)
     cx = CX.enabled(inst)                                               # context: fixed layers, lookup phase, scratchpad and files
+    dm_delta = bool(CX.cfg(inst)["dm_delta"])                           # review 20 §4.5: DM replies continue the conversation
+    PV.annotate(out, memory_text=str(CX.cfg(inst)["memory_text"]), dm_delta=dm_delta)   # review 20: the prompt design of the run
+    use_run_dir = getattr(policy, "use_run_dir", None)                  # the CLI's sessions live in the run folder (llm.Sessions)
+    if dm_delta and use_run_dir is not None:
+        use_run_dir(out)
     t0 = time.time()
 
     def runner_state():
@@ -458,8 +463,12 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
                         + [f"(lookup result) {t}" for t in looked[aid]]
                     looked[aid] = []
                     seen[aid] = len(k.events)
-                    asks.append((aid, AG.dm_prompt(k, agents[aid], preps[aid][2], decisions[aid][0], plan[aid], new, k.w["dm_sent"].get(aid, 0), k.dm_limit(aid),
-                                                    preps[aid][1], wave + 1, waves, final)))
+                    full = AG.dm_prompt(k, agents[aid], preps[aid][2], decisions[aid][0], plan[aid], new, k.w["dm_sent"].get(aid, 0),
+                                        k.dm_limit(aid), preps[aid][1], wave + 1, waves, final)
+                    if dm_delta:                                        # review 20 §4.5: continue the agent's conversation
+                        full = AG.DMDelta(AG.dm_delta_prompt(k, agents[aid], new, k.w["dm_sent"].get(aid, 0), k.dm_limit(aid),
+                                                             preps[aid][1], wave + 1, waves, final), full)
+                    asks.append((aid, full))
                 outs = in_parallel(lambda q: policy.act(k, agents[q[0]], sysp[q[0]], q[1], preps[q[0]][1], final,
                                                         key={"phase": "dm_reply", "wave": wave + 1}), asks)
                 agent_calls = [(o, q[0]) for o, q in zip(outs, asks) if not (obs and q[0] == obs.id)]   # the observer never counts
@@ -467,11 +476,16 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
                 stop_if_failing(r, tally)
                 for (aid, prompt), (o, reasoning, usage) in zip(asks, outs):
                     acts = list(o.get("actions") or [])
+                    dmx = {}
+                    if dm_delta:                                        # how the reply was asked: delta (a continuation), or the
+                        dmx["dm_mode"] = (usage or {}).get("dm_mode", "delta")   # full prompt (fallback: continuing failed)
+                        if dmx["dm_mode"] != "delta":
+                            prompt = prompt.full
                     reason_f.write(json.dumps({"round": r, "position": order.index(aid) + 1, "agent": aid, "model": agents[aid]["model"],
                                                "phase": f"dm_reply_{wave + 1}", "reasoning": reasoning, "stated_reasoning": str(o.get("reasoning", "")),
                                                "notes": str(o.get("notes", "")), "actions": acts, "results": [], "usage": usage, "mode": mode,
                                                "prompt_chars": len(sysp[aid]) + len(prompt), "prompt": prompt, "error": o.get("_error"),
-                                               **CX.record_fields(k, aid)}) + "\n")   # context: layer sizes ({} when off)
+                                               **dmx, **CX.record_fields(k, aid)}) + "\n")   # context: layer sizes ({} when off)
                     if o.get("_error"):
                         pre[aid].append(f"(your reply to the messages could not be used, so your plan stands: {o['_error'][:200]})")
                         continue

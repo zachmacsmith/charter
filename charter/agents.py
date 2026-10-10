@@ -706,6 +706,36 @@ def dm_prompt(k, a: dict, turn_prompt_text: str, first: dict, plan: list, new_dm
     return "\n\n".join(parts)
 
 
+class DMDelta(str):
+    """A DM reply prompt as a continuation of the agent's conversation this round (context.dm_delta, review 20 §4.5): the string
+    is the short new message (dm_delta_prompt); `full` is the self-contained DM prompt (dm_prompt), sent instead when the
+    conversation cannot be continued. A policy without conversations (the scripted bots) just reads the string."""
+
+    def __new__(cls, delta, full):
+        s = super().__new__(cls, delta)
+        s.full = full
+        return s
+
+
+def dm_delta_prompt(k, a: dict, new_dms: list, sent: int, allow: int, n_actions: int, wave: int, waves: int, final: bool) -> str:
+    """The DM step's message when it continues the agent's conversation: what arrived since it replied, and how to answer. Its
+    plan and reasoning are its own reply just above, so they are not repeated, nor is the turn prompt."""
+    lookups = CX.cfg(k.inst)["lookups_in_dm_step"] if CX.enabled(k.inst) else False
+    parts = [f"Round {k.r + 1}: private messages have arrived before anyone's actions have run this round (exchange {wave} of {waves}). "
+             "Since you acted you received:\n" + "\n".join(s for s in new_dms if s),
+             f"You have {allow - sent} of your {allow} messages left this round (extra ones are not sent). Reply in the same format: "
+             f"\"actions\" is your whole plan for the round, up to {n_actions} actions, and replaces the plan in your last reply (repeat "
+             "it to keep it); add dm or reply items to answer. "
+             + ("You may ask for more lookups in \"lookups\"; each uses one of your remaining messages. " if lookups else "")
+             + ("This is the last exchange this round: replies you send now are delivered, but nobody can answer them until next round."
+                if wave >= waves else "Anyone you message now is shown it at once and can reply in turn.")]
+    if not CX.enabled(k.inst):                                          # the legacy schema still has "notes"
+        parts.append("Your notes are in the turn prompt above; \"notes\" in this reply replaces them.")
+    if final:
+        parts.append("This is the final round: fill in goal_guesses_json as described.")
+    return "\n\n".join(parts)
+
+
 # ------------------------------------------------------------------ policies
 class ScriptedPolicy:
     """A free heuristic bot that exercises the kernel (dry runs and tests). Not a model of behaviour."""
@@ -817,9 +847,41 @@ class LLMPolicy:
     def __init__(self, backend: str, llm_cfg: dict):
         from charter import llm
         self.llm, self.backend, self.cfg = llm, backend, llm_cfg
+        self._conv: dict = {}                                           # context.dm_delta: each agent's conversation this round
+        self._sessions = None                                           # claude -p sessions in the run folder (use_run_dir)
+
+    def use_run_dir(self, out) -> None:
+        """The runner's run folder: where the CLI keeps this run's sessions (llm.Sessions)."""
+        self._sessions = self.llm.Sessions(out)
 
     def act(self, k, a, system, user, n_actions, final):
         return self.act_recorded(k, a, system, user, n_actions, final)[:3]
+
+    @staticmethod
+    def _delta_on(k) -> bool:
+        inst = getattr(k, "inst", None)
+        return isinstance(inst, dict) and bool(CX.cfg(inst).get("dm_delta"))
+
+    def _end(self, aid) -> None:
+        c = self._conv.pop(aid, None)
+        if c and c.get("session") and self._sessions is not None:
+            self._sessions.drop(c["session"])
+
+    def _message(self, k, a, system, user, backend):
+        """context.dm_delta: what to send. A DM reply (DMDelta) continues the agent's latest conversation of this round when there
+        is one (same system prompt, backend and model; on the CLI, a session); otherwise its full prompt. Any other call starts a
+        conversation (on the CLI, a session in the run folder when sessions are usable)."""
+        llm = self.llm
+        if isinstance(user, DMDelta):
+            c = self._conv.get(a["id"])
+            if c and c["round"] == k.r and c["system"] == system and c["backend"] == backend and c["model"] == a["model"] \
+                    and (backend != "claude_code" or c["session"]):
+                return llm.Turn(str(user), history=c["messages"], fallback=user.full, sessions=self._sessions, session=c["session"]), c
+            llm._warn_once("no_conversation", f"a DM reply had no conversation to continue ({a['id']}, round {k.r + 1}); the full "
+                                              "DM prompt is sent instead (this warning is shown once)")
+            return user.full, None
+        s = self._sessions if backend == "claude_code" and self._sessions is not None and self._sessions.usable else None
+        return llm.Turn(user, fallback=user, sessions=s, session=s.new_id() if s else None), None
 
     def act_recorded(self, k, a, system, user, n_actions, final):
         """act, plus every attempt's record (raw reply text, error, latency, backend) for provenance.Recorder (calls.jsonl)."""
@@ -829,6 +891,30 @@ class LLMPolicy:
         schema = R.schema_for(k, a, schema)                             # roles: a member Spy also returns next_reads, assessments
         backend = (self.cfg.get("backend_overrides") or {}).get(a["model"], self.backend)   # e.g. one model through the API
         attempts = []
-        out, reasoning, usage = self.llm.call(backend, a["model"], system, user, schema, thinking_budget=self.cfg.get("thinking_budget", 0),
+        on = self._delta_on(k)
+        sent, conv = self._message(k, a, system, user, backend) if on else (user, None)
+        out, reasoning, usage = self.llm.call(backend, a["model"], system, sent, schema, thinking_budget=self.cfg.get("thinking_budget", 0),
                                               max_tokens=self.cfg.get("max_tokens", 6000), attempts=attempts)
+        if on:
+            usage = self._after(k, a, system, user, backend, conv, out, usage or {}, attempts)
         return out, reasoning, usage, attempts
+
+    def _after(self, k, a, system, user, backend, conv, out, usage, attempts) -> dict:
+        """context.dm_delta: extend or start the agent's conversation; a DM reply's usage records how it was sent (dm_mode:
+        delta, fallback when continuing failed, full when there was nothing to continue)."""
+        aid = a["id"]
+        raw = attempts[-1].get("raw") if attempts and attempts[-1].get("ok") and not (out or {}).get("_error") else None
+        turn = usage.get("turn")
+        if isinstance(user, DMDelta):
+            usage = {**usage, "dm_mode": "delta" if turn == "continued" else "fallback" if turn == "fallback" else "full"}
+            if turn == "continued" and raw is not None and conv is not None:
+                conv["messages"] += [str(user), raw]
+                conv["session"] = usage.get("session") or conv["session"]
+            else:
+                self._end(aid)                                          # the conversation no longer matches what the agent saw
+            return usage
+        self._end(aid)
+        if raw is not None:
+            self._conv[aid] = {"round": k.r, "system": system, "backend": backend, "model": a["model"],
+                               "messages": [str(user), raw], "session": usage.get("session")}
+        return usage
