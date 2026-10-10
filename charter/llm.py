@@ -21,10 +21,13 @@ log = logging.getLogger("charter.llm")
 
 # ------------------------------------------------------------------ conversations (review 20 §4.5, §4.7)
 def sessions_available() -> bool:
-    """Whether `claude -p` sessions in a run-local config directory can authenticate: the one gate for every session user (the DM
-    delta, history mode). Today: CLAUDE_CODE_OAUTH_TOKEN is set (a fresh CLAUDE_CONFIG_DIR holds no login). Change it here when the
-    CLI is known to authenticate another way."""
-    return bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
+    """Whether `claude -p` sessions in a run-local config directory may be used: the one gate for every session user (the DM delta,
+    history mode). The stage-0 probe (review 20 §5) found that the CLI logs in with a fresh CLAUDE_CONFIG_DIR and no OAuth variable,
+    so sessions are on; Sessions.usable still turns them off for a run after GIVE_UP failed starts (the flattened fallback)."""
+    return True
+
+
+SESSION_MAX_IDLE = 55 * 60      # seconds: the CLI's cache lives 1 hour from a session's last call; a later call starts afresh
 
 
 REPLY_MARK = "[Your reply]"
@@ -43,11 +46,12 @@ def flatten(texts) -> str:
 
 class Sessions:
     """Run-local `claude -p` sessions: CLAUDE_CONFIG_DIR points at a directory inside the run folder, so session files are kept
-    there and never in the user's ~/.claude. A first call starts a session with `--session-id <uuid>`; a later call continues it
-    with `--resume <uuid>` (a new user message, everything before it served from the session). Authentication must come from the
-    environment (sessions_available: CLAUDE_CODE_OAUTH_TOKEN), since a fresh config directory holds no login; without it sessions
-    are not used.
-    Reusable by any conversation-shaped caller (the DM delta now, history mode later)."""
+    there. A first call starts a session with `--session-id <uuid>`; a later call continues it with `--resume <uuid>` (a new user
+    message, everything before it served from the session), with the same --tools and --json-schema (they lead the cached prefix;
+    --system-prompt is ignored on resume: the CLI keeps the first call's, so a changed system prompt needs a new session). Calls run
+    in <run>/claude_sessions/cwd: the CLI also writes transcripts under ~/.claude/projects/<cwd slug>/, which collect() moves into
+    the run folder at its end. total_cost_usd is cumulative over a session on resume: cost() turns it into the call's own.
+    Used by the DM delta and history mode."""
     DIRNAME = "claude_sessions"
     GIVE_UP = 3                                                       # session starts that failed while a plain retry worked
 
@@ -55,6 +59,48 @@ class Sessions:
         self.root = Path(run_dir) / self.DIRNAME
         self.failures = 0
         self._lock = threading.Lock()
+        self._cost: dict = {}                                        # session id -> its cumulative total_cost_usd so far
+
+    @property
+    def cwd(self) -> Path:
+        """The working directory of session calls (its slug names the CLI's transcript folder)."""
+        d = self.root / "cwd"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def cost(self, sid, total):
+        """The call's own cost from a session's cumulative total_cost_usd."""
+        if total is None or sid is None:
+            return total
+        with self._lock:
+            prev = self._cost.get(sid, 0.0)
+            self._cost[sid] = float(total)
+        return round(float(total) - prev, 10)
+
+    def transcript_dirs(self) -> list:
+        """Where the CLI keeps this run's session transcripts: the run-local config directory and ~/.claude (by cwd slug)."""
+        slug = re.sub(r"[^A-Za-z0-9]", "-", str(self.cwd.resolve()))
+        return [self.root / "projects" / slug, Path.home() / ".claude" / "projects" / slug]
+
+    def collect(self) -> dict:
+        """At the run's end: move the run's transcripts out of ~/.claude into <run>/claude_sessions/transcripts (best effort).
+        Returns where they went, for run.json."""
+        dest = self.root / "transcripts"
+        moved = 0
+        home = self.transcript_dirs()[1]
+        if home.is_dir():
+            dest.mkdir(parents=True, exist_ok=True)
+            for f in home.iterdir():
+                try:
+                    f.replace(dest / f.name)
+                    moved += 1
+                except OSError:
+                    pass
+            try:
+                home.rmdir()
+            except OSError:
+                pass
+        return {"from": str(home), "to": str(dest), "moved": moved}
 
     @property
     def usable(self) -> bool:
@@ -78,11 +124,12 @@ class Sessions:
 
     def drop(self, sid) -> None:
         """Delete a finished session's files (best effort): a session only has to live until its conversation ends."""
-        for p in self.root.glob(f"projects/*/{sid}.jsonl"):
-            try:
-                p.unlink()
-            except OSError:
-                pass
+        for d in self.transcript_dirs():
+            for p in d.glob(f"{sid}*"):
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
 
 
 class Turn(str):
@@ -232,9 +279,12 @@ def _api(model, system, user, schema, thinking_budget, max_tokens):
     reasoning = "\n\n".join(b.thinking for b in resp.content if b.type == "thinking" and getattr(b, "thinking", ""))
     text = next(b.text for b in resp.content if b.type == "text")
     u = resp.usage
+    cc = getattr(u, "cache_creation", None)
     return text, None, reasoning, {"input": u.input_tokens, "output": u.output_tokens,
                                           "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0,
-                                          "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0}
+                                          "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0,
+                                          "cache_write_1h": getattr(cc, "ephemeral_1h_input_tokens", None),
+                                          "cache_write_5m": getattr(cc, "ephemeral_5m_input_tokens", None)}
 
 
 # Subscription usage (claude_code backend): every `claude -p` stream carries a rate_limit_event with the utilization (0..1) of the
@@ -289,7 +339,9 @@ def cli_command(model, system, user, schema, thinking_budget=0) -> tuple[list, d
 
 def _claude_code(model, system, user, schema, thinking_budget):
     cmd, env = cli_command(model, system, user, schema, thinking_budget)
-    p = subprocess.run(cmd, capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL, timeout=900, cwd="/tmp")
+    sess = user.sessions if isinstance(user, Turn) and user.session and user.sessions is not None else None
+    p = subprocess.run(cmd, capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL, timeout=900,
+                       cwd=str(sess.cwd) if sess is not None else "/tmp")     # a session's transcripts: by its run's own cwd
     reasoning, result, withheld = [], None, 0
     for ln in p.stdout.splitlines():
         try:
@@ -315,9 +367,14 @@ def _claude_code(model, system, user, schema, thinking_budget):
     if raw is None or raw == "":
         raw = json.dumps(out) if out is not None else ""
     u = result.get("usage") or {}
+    cc = u.get("cache_creation") or {}
     usage = {"input": u.get("input_tokens", 0), "output": u.get("output_tokens", 0),
              "cache_read": u.get("cache_read_input_tokens", 0), "cache_write": u.get("cache_creation_input_tokens", 0),
+             "cache_write_1h": cc.get("ephemeral_1h_input_tokens"), "cache_write_5m": cc.get("ephemeral_5m_input_tokens"),
              "cc_equiv_usd": result.get("total_cost_usd"), "thinking_withheld": withheld}
     if "--no-session-persistence" not in cmd:                    # the session to resume next (the CLI's own id when it reports one)
         usage["session"] = result.get("session_id") or user.session
+        if sess is not None:                                     # on resume total_cost_usd is the session's total so far
+            usage["cc_session_usd"] = result.get("total_cost_usd")
+            usage["cc_equiv_usd"] = sess.cost(usage["session"], result.get("total_cost_usd"))
     return str(raw), out, "\n\n".join(reasoning), usage

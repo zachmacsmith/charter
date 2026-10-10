@@ -322,10 +322,7 @@ def _cli_run(tmp_path, monkeypatch, inst, brain, sessions):
         res = {"type": "result", "result": raw, "structured_output": json.loads(raw), "usage": {}, "session_id": sid}
         return SimpleNamespace(stdout=json.dumps(res) + "\n", stderr="", returncode=0)
     monkeypatch.setattr(llm.subprocess, "run", run)
-    if sessions:
-        monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-NOT-A-REAL-TOKEN")
-    else:
-        monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.setattr(llm, "sessions_available", lambda: sessions)
     pol = AG.LLMPolicy("claude_code", {})
     pol.parallel_safe = False
     out = runner.run(inst, pol, tmp_path / ("sessions" if sessions else "flat"), log=lambda *a: None)
@@ -417,11 +414,102 @@ def test_uncached_history_is_logged_once(tmp_path, monkeypatch, caplog):
     assert sum("history mode is uncached" in r.getMessage() for r in caplog.records) == 1
 
 
-def test_sessions_gate_is_one_function(monkeypatch):
+def test_sessions_gate_is_one_function(monkeypatch, tmp_path):
+    """Stage 0: the CLI logs in with a fresh config directory and no OAuth variable, so sessions are on; the one gate turns them
+    off, and GIVE_UP failed starts turn them off for a run."""
     monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
-    assert llm.sessions_available() is False and llm.Sessions("/tmp/x").usable is False
+    assert llm.sessions_available() is True and llm.Sessions(tmp_path).usable is True
+    monkeypatch.setattr(llm, "sessions_available", lambda: False)
+    assert llm.Sessions(tmp_path).usable is False
     monkeypatch.setattr(llm, "sessions_available", lambda: True)
-    assert llm.Sessions("/tmp/x").usable is True
+    s = llm.Sessions(tmp_path)
+    s.failures = llm.Sessions.GIVE_UP
+    assert s.usable is False
+
+
+# ------------------------------------------------------------------ claude -p sessions (stage-0 findings)
+def _fake_cli(monkeypatch, costs=None):
+    calls = []
+    total = {}
+
+    def run(cmd, **kw):
+        sid = cmd[cmd.index("--session-id") + 1] if "--session-id" in cmd else cmd[cmd.index("--resume") + 1] if "--resume" in cmd else None
+        total[sid] = total.get(sid, 0.0) + 0.01 * (len(calls) + 1)
+        calls.append((cmd, kw))
+        reply = {"reasoning": "", "lookups": [], "actions": [], "goal_guesses_json": "{}"}
+        res = {"type": "result", "result": json.dumps(reply), "structured_output": reply, "session_id": sid,
+               "total_cost_usd": round(total[sid], 6),
+               "usage": {"input_tokens": 3, "output_tokens": 5, "cache_read_input_tokens": 12000, "cache_creation_input_tokens": 300,
+                         "cache_creation": {"ephemeral_1h_input_tokens": 300, "ephemeral_5m_input_tokens": 0}}}
+        return SimpleNamespace(stdout=json.dumps(res) + "\n", stderr="", returncode=0)
+    monkeypatch.setattr(llm.subprocess, "run", run)
+    return calls
+
+
+def _hk(r=0):
+    return SimpleNamespace(inst={"spec": {"context": {"enabled": True}}}, spec={}, r=r)
+
+
+def _flag(cmd, f):
+    return cmd[cmd.index(f) + 1] if f in cmd else None
+
+
+def test_resumes_keep_tools_and_schema_and_a_new_system_prompt_starts_a_new_session(monkeypatch, tmp_path):
+    """--tools "" and --json-schema are the same on every call of a session (they lead the cached prefix); the CLI ignores
+    --system-prompt on resume, so a conversation whose system prompt changed is never resumed: a new session starts."""
+    calls = _fake_cli(monkeypatch)
+    pol = AG.LLMPolicy("claude_code", {})
+    pol.use_run_dir(tmp_path)
+    a = {"id": "a1", "cls": "worker", "model": "m"}
+    pol.act_recorded(_hk(0), a, "SYS A", HM.HistoryTurn("OPEN", ("a1", 0), True), 3, False)
+    pol.act_recorded(_hk(0), a, "SYS A", AG.DMDelta("DELTA", "FULL"), 3, False)
+    pol.act_recorded(_hk(1), a, "SYS A", HM.HistoryTurn("NEXT", ("a1", 0), False, "RESTART"), 3, False)
+    pol.act_recorded(_hk(2), a, "SYS B", HM.HistoryTurn("NEXT 2", ("a1", 0), False, "RESTART 2"), 3, False)
+    cmds = [c for c, _ in calls]
+    sid = _flag(cmds[0], "--session-id")
+    assert [_flag(c, "--resume") for c in cmds[1:3]] == [sid, sid]
+    assert {_flag(c, "--json-schema") for c in cmds[:3]} == {_flag(cmds[0], "--json-schema")}
+    assert all(_flag(c, "--tools") == "" for c in cmds)
+    assert "--resume" not in cmds[3] and _flag(cmds[3], "--session-id") not in (None, sid)
+    assert _flag(cmds[3], "-p") == "RESTART 2" and _flag(cmds[3], "--system-prompt") == "SYS B"
+    assert all(kw["cwd"] == str(tmp_path / llm.Sessions.DIRNAME / "cwd") for _, kw in calls)   # the run's own cwd
+
+
+def test_a_resume_after_55_minutes_starts_a_new_session(monkeypatch, tmp_path):
+    calls = _fake_cli(monkeypatch)
+    pol = AG.LLMPolicy("claude_code", {})
+    pol.use_run_dir(tmp_path)
+    a = {"id": "a1", "cls": "worker", "model": "m"}
+    pol.act_recorded(_hk(0), a, "SYS", HM.HistoryTurn("OPEN", ("a1", 0), True), 3, False)
+    pol._conv["a1"]["t"] -= llm.SESSION_MAX_IDLE + 1                    # the session's cache is about to expire
+    _, _, usage, _ = pol.act_recorded(_hk(1), a, "SYS", HM.HistoryTurn("NEXT", ("a1", 0), False, "RESTART"), 3, False)
+    assert "--resume" not in calls[1][0] and _flag(calls[1][0], "-p") == "RESTART" and usage["history_restart"] is True
+
+
+def test_session_cost_is_per_call_and_cache_writes_are_logged(monkeypatch, tmp_path):
+    """total_cost_usd is cumulative over a session on resume: cc_equiv_usd is this call's share; the 1h/5m cache writes and the
+    cache read are in the call's usage (calls.jsonl)."""
+    _fake_cli(monkeypatch)
+    pol = AG.LLMPolicy("claude_code", {})
+    pol.use_run_dir(tmp_path)
+    a = {"id": "a1", "cls": "worker", "model": "m"}
+    u = [pol.act_recorded(_hk(0), a, "SYS", HM.HistoryTurn("OPEN", ("a1", 0), True), 3, False)[2]]
+    u.append(pol.act_recorded(_hk(1), a, "SYS", HM.HistoryTurn("NEXT", ("a1", 0), False, "R"), 3, False)[2])
+    u.append(pol.act_recorded(_hk(2), a, "SYS", HM.HistoryTurn("NEXT 2", ("a1", 0), False, "R2"), 3, False)[2])
+    assert [x["cc_equiv_usd"] for x in u] == pytest.approx([0.01, 0.02, 0.03])        # session totals 0.01, 0.03, 0.06
+    assert [x["cc_session_usd"] for x in u] == pytest.approx([0.01, 0.03, 0.06])
+    assert all(x["cache_write_1h"] == 300 and x["cache_write_5m"] == 0 and x["cache_read"] == 12000 for x in u)
+
+
+def test_transcripts_move_into_the_run_folder_at_the_end(monkeypatch, tmp_path):
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path / "home"))
+    s = llm.Sessions(tmp_path / "run")
+    home = s.transcript_dirs()[1]
+    home.mkdir(parents=True)
+    (home / "abc.jsonl").write_text("{}")
+    info = s.collect()
+    assert info["moved"] == 1 and (tmp_path / "run" / llm.Sessions.DIRNAME / "transcripts" / "abc.jsonl").exists()
+    assert not home.exists() and info["from"] == str(home)
 
 
 def test_a_lost_conversation_restarts_with_the_full_memory(monkeypatch):
@@ -440,7 +528,7 @@ def test_a_lost_conversation_restarts_with_the_full_memory(monkeypatch):
         att.append({"ok": True, "raw": raw})
         return json.loads(raw), "", {}
     pol = AG.LLMPolicy("api", {})
-    monkeypatch.setattr(pol, "llm", SimpleNamespace(**{n: getattr(llm, n) for n in ("Turn", "flatten", "Sessions", "_warn_once")},
+    monkeypatch.setattr(pol, "llm", SimpleNamespace(**{n: getattr(llm, n) for n in ("Turn", "flatten", "Sessions", "_warn_once", "SESSION_MAX_IDLE")},
                                                     call=fake_call))
     k = SimpleNamespace(inst={"spec": {"context": {"enabled": True}}}, spec={}, r=0)
     a = {"id": "a1", "cls": "worker", "model": "m"}

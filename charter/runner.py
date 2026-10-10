@@ -702,6 +702,10 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
     ev_f.close()
     policy.close()
     HM.store(k).close()
+    end_run = getattr(policy, "end_run", None)                          # the CLI's session transcripts into the run folder
+    moved = end_run(out) if end_run is not None else None
+    if moved:
+        PV.annotate(out, claude_transcripts=moved)
     if obs:
         obs.close()
     complete = last_round == inst["rounds"]
