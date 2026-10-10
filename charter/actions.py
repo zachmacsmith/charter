@@ -142,6 +142,8 @@ def _act(k, aid: str, name: str, args: dict) -> str:
     sub = "subsistence" in k.w
     if not sub:                                                         # review 15: farm, withdraw, build only with subsistence on
         hidden_here |= set(SUBSISTENCE_ACTIONS)
+    if not CX._recall_on(k):                                            # review 20: recall only in history mode
+        hidden_here.add("recall")
     if "pairs" not in (k.w.get("life") or {}):                          # review 15 S4: conceive only with two-parent reproduction
         hidden_here.add("conceive")
     if sub and not any(c.get("type") == "fields" for c in k.w["camps"].values()):   # review 19: fields parked (off): no farm action
@@ -1196,6 +1198,10 @@ def _read_law(k, aid, law=None):
 
 def _search_dms(k, aid, query):
     return CX.act_lookup(k, aid, "search_dms", {"query": query})
+
+
+def _recall(k, aid, round=None, **kw):
+    return CX.act_lookup(k, aid, "recall", {"round": round, **kw})
 
 
 def _read_file(k, aid, name):

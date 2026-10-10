@@ -60,7 +60,10 @@ def turn_text(f: dict, lookups: list) -> str:
              "search_dms": f"only your own private messages, {f['search_hits']} best matches", "read_archive": "documents you hold",
              "run_python": "your sandbox"}
     names = ", ".join(n + (f" ({notes[n]})" if n in notes else "") for n in lookups)
-    if f.get("memory_text") == "v2":                                     # review 20 §6.1: what is shown once, what for N turns
+    if f.get("memory_text") == "v2" and f.get("history"):                # review 20 §4: history mode
+        from charter import memory as HM
+        text = HM.turn_text(f)
+    elif f.get("memory_text") == "v2":                                   # review 20 §6.1: what is shown once, what for N turns
         text = ("Each turn is built fresh: your state; what happened since your last turn, shown once (trimmed to a budget: the most "
                 "important first, then counts and pointers such as \"(14 older posts not shown: search_board)\"); your own last "
                 f"{f['memory_turns']} turns with their results; your scratchpad ({f['scratchpad']} tokens, every turn); the media you "

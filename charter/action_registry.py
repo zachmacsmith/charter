@@ -177,6 +177,9 @@ def _need(inst, a, rights, n) -> bool:
     if kind == "life":                                                  # review 15 S4: "life:pairs" (life.reproduction.mode pairs or both)
         from charter import pairs as PR
         return PR.pairs_spec(inst["spec"]) if v == "pairs" else False
+    if kind == "history":                                               # review 20 §4.4: "history:recall" (context.history on, recall on)
+        from charter import memory as HM
+        return HM.on(inst) and bool(HM.hcfg(inst)[v])
     if kind == "camp":                                                  # review 15/19: "camp:<type>": the world has such a camp
         return any(c.get("type") == v for c in inst.get("camps") or [])
     raise ValueError(f"unknown requirement {n!r}")
@@ -434,6 +437,10 @@ R("legal_position", "the laws that bind you, by what they act on", "INFORMATION"
   doc='legal_position {}: a digest of every law in force that binds you, grouped by what it acts on (transfers, harvests, speech, '
       'rights, lawmaking, membership, ...): who taxes, blocks or reacts to what, with ranks, overlaps and shared definitions; '
       'read_law gives a law\'s code')
+R("recall", "a past round in full, as you saw it then", "INFORMATION", core=True, pre=True, needs=("mod:context", "history:recall"),
+  args='{"round": N}', handler="actions:_recall", module="context", category="productive", legacy=False,
+  doc='recall {"round": N}: round N as your memory showed it in full: what you saw, your private messages, what you did and the '
+      'results (never your reasoning)')
 R("read_file", "read a file", "INFORMATION", core=True, pre=True, needs=("mod:context",), args='{"name": "..."}',
   handler="actions:_read_file", module="context", category="productive", legacy=False,
   doc='read_file {"name": "..."}: read one of your files')
@@ -1004,7 +1011,8 @@ ACTIONS_ORDER = (
     "read_library",                                                     # review 14 A
     "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel",   # wave 9 C (channels.v2)
     "farm", "build", "withdraw", "hunt",                                # review 15 (subsistence; hunt: review 19)
-    "conceive")                                                         # review 15 S4 (pairs)
+    "conceive",                                                         # review 15 S4 (pairs)
+    "recall")                                                           # review 20 (history mode)
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -1024,7 +1032,8 @@ DOC_ORDER = (
     "read_library",                                                     # review 14 A
     "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel",   # wave 9 C (channels.v2)
     "farm", "build", "withdraw", "hunt",                                # review 15 (subsistence; hunt: review 19)
-    "conceive")                                                         # review 15 S4 (pairs)
+    "conceive",                                                         # review 15 S4 (pairs)
+    "recall")                                                           # review 20 (history mode)
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 

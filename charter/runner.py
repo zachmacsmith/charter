@@ -54,6 +54,7 @@ from charter import library as LB
 from charter import life as LF                                         # life.max_population: the budget stop
 from charter import provenance as PV
 from charter import media as MD                                       # media2
+from charter import memory as HM                                      # history mode (review 20 §4; context.history)
 from charter import observer as OBS
 from charter import regimes as RG
 from charter import report
@@ -318,8 +319,15 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
     cx = CX.enabled(inst)                                               # context: fixed layers, lookup phase, scratchpad and files
     dm_delta = bool(CX.cfg(inst)["dm_delta"])                           # review 20 §4.5: DM replies continue the conversation
     PV.annotate(out, memory_text=str(CX.cfg(inst)["memory_text"]), dm_delta=dm_delta)   # review 20: the prompt design of the run
+    hist = HM.on(inst)                                                  # review 20 §4: conversations with a memory gradient
+    if hist:
+        if not resuming:
+            (out / HM.FILE).unlink(missing_ok=True)                     # memory.jsonl: a fresh start keeps no earlier rows
+        HM.attach(k, out, first_round)                                  # a resume or fork restarts every agent's conversation
+        restarts = (PV.read(out) or {}).get("history_restarts") or []
+        PV.annotate(out, history=HM.run_info(inst), history_restarts=restarts + ([first_round] if resuming else []))
     use_run_dir = getattr(policy, "use_run_dir", None)                  # the CLI's sessions live in the run folder (llm.Sessions)
-    if dm_delta and use_run_dir is not None:
+    if (dm_delta or hist) and use_run_dir is not None:
         use_run_dir(out)
     t0 = time.time()
 
@@ -465,7 +473,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
                     seen[aid] = len(k.events)
                     full = AG.dm_prompt(k, agents[aid], preps[aid][2], decisions[aid][0], plan[aid], new, k.w["dm_sent"].get(aid, 0),
                                         k.dm_limit(aid), preps[aid][1], wave + 1, waves, final)
-                    if dm_delta:                                        # review 20 §4.5: continue the agent's conversation
+                    if dm_delta or hist:                                # review 20 §4.5: continue the agent's conversation
                         full = AG.DMDelta(AG.dm_delta_prompt(k, agents[aid], new, k.w["dm_sent"].get(aid, 0), k.dm_limit(aid),
                                                              preps[aid][1], wave + 1, waves, final), full)
                     asks.append((aid, full))
@@ -477,7 +485,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
                 for (aid, prompt), (o, reasoning, usage) in zip(asks, outs):
                     acts = list(o.get("actions") or [])
                     dmx = {}
-                    if dm_delta:                                        # how the reply was asked: delta (a continuation), or the
+                    if dm_delta or hist:                                # how the reply was asked: delta (a continuation), or the
                         dmx["dm_mode"] = (usage or {}).get("dm_mode", "delta")   # full prompt (fallback: continuing failed)
                         if dmx["dm_mode"] != "delta":
                             prompt = prompt.full
@@ -506,6 +514,8 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
                 n = min(n, lim["n"])
             if cx:                                                      # context: the Core layer, with the current manual index
                 sysp[aid] = CX.core_prompt(inst, a, k)
+            if hist:                                                    # history mode: frozen for the agent's conversation
+                sysp[aid] = HM.system(k, a, sysp[aid])
             n = RS.actions_after_upkeep(k, aid, n)                     # camps: optional upkeep arrears cost an action (off by default)
             if "subsistence" in k.w:                                    # review 15 S1: hunger costs actions (off: nothing)
                 from charter import subsistence as SB
@@ -515,7 +525,9 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
                 n = PR.actions_of_minor(k, aid, n)
             user, cursor = AG.turn_prompt(k, a, order, cursors.get(aid, 0), notes.get(aid, ""), results.get(aid, []), n, final,
                                           simultaneous=(mode == "simultaneous"))
-            user = R.turn_section(k, aid, user)                         # roles: the Spy's private "What you saw" section
+            spy = R.turn_section(k, aid, user)                          # roles: the Spy's private "What you saw" section
+            if spy is not user:
+                user = user.extend(spy[len(user):]) if isinstance(user, HM.HistoryTurn) else spy
             return a, n, user, cursor
 
         def cx_lookups(items):
@@ -578,6 +590,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
             results[aid] = res
             notes[aid] = str(last.get("notes") or outp.get("notes", ""))[:mem]
             CX.record_turn(k, aid, acts, res)                           # context: recent turns, paid lookups, manual seen (no-op when off)
+            HM.note_turn(k, aid, acts, res)                             # history mode: the round's record (no-op when off)
             if final:
                 for o in (last, outp):
                     try:
@@ -669,6 +682,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         k.phase("editorial")
         MD.editorial_turns(k, PV.Keyed(policy, phase="editorial"), agents, sysp, in_parallel, reason_f, results, r, final)   # media2: editors write next round's editions
         k.end_round_cause()
+        HM.end_round(k)                                                 # history mode: memory.jsonl rows of this round (off: nothing)
         for e in k.events[n_ev:]:
             ev_f.write(json.dumps(e, default=list) + "\n")
         n_ev = len(k.events)
@@ -685,6 +699,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
     reason_f.close()
     ev_f.close()
     policy.close()
+    HM.store(k).close()
     if obs:
         obs.close()
     complete = last_round == inst["rounds"]

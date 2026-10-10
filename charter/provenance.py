@@ -41,7 +41,8 @@ from pathlib import Path
 PKG = Path(__file__).resolve().parent
 REPO = PKG.parent
 APPEND_ONLY = ("events.jsonl", "reasoning.jsonl", "observer.jsonl", "calls.jsonl", "turns.jsonl",   # turns.jsonl: k.turn_log
-               "archive_overlay.jsonl", "sandbox.jsonl")                # P5.4: this run's shared-archive writes; sandbox calls
+               "archive_overlay.jsonl", "sandbox.jsonl",                # P5.4: this run's shared-archive writes; sandbox calls
+               "memory.jsonl")                                          # review 20: history mode's round records (charter/memory.py)
 KEEP_CUT = {"calls.jsonl": "abandoned_calls.jsonl"}                     # cut bytes of these files are moved, not deleted
 SECRET = re.compile(r"key|token|secret|password|credential|auth", re.I)
 # The raw log format (run.json `log_format`): bump it when what the runner writes into a run directory changes shape, and keep

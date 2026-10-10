@@ -378,6 +378,7 @@ def _ann():
         "context.strategy_prompt": dict(types=("number", "bool"), range=PROB),
         "context.memory_text": dict(types=("str",), enum=("v1", "v2")),   # review 20 §6.1 (v1: the text before it)
         "context.dm_delta": dict(types=("bool",)),                       # review 20 §4.5
+        "context.history.salience.*": dict(types=("int", "null"), range=(0, None)),   # review 20 §4.3 (null: kept for good)
         "conflict.timing": dict(types=("str",), enum=("end_of_round", "immediate")),
         "conflict.visibility.failure": dict(types=("str",), enum=("target", "public", "none")),
         "conflict.start.*": dict(types=("number", "list")),

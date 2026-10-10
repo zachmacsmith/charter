@@ -68,14 +68,33 @@ DEFAULTS = {
                                       # v1: the text before review 20 (byte-identical, to reproduce older runs)
     "dm_delta": True,                 # review 20 §4.5: a DM reply continues the agent's decide conversation (a short "since you acted"
                                       # message) instead of resending the whole turn prompt; false: the full DM prompt, as before
+    "history": {                      # review 20 §4 (charter/memory.py): one conversation per agent, restarted every `chunk` rounds,
+        "enabled": False,             # with the past on a gradient (full, one line, recall); false: the fixed layers above, unchanged
+        "chunk": 3,                   # rounds per conversation; the bands move only when one restarts
+        "stagger": True,              # restarts staggered across agents (a stable per-agent offset)
+        "summary_rounds": 12,         # rounds shown as one line each, before the rounds in full (the agent's memory_turns)
+        "summary_spread": 0,          # per-agent draw of summary_rounds within +- this (stable per agent; 0: the same for everyone)
+        "round_budget": 2500,         # tokens one full round may take (the rest: recall)
+        "long_items": 30,             # most lines in the Long memories list
+        "recall": True,               # the recall lookup: a past round as it was shown in full
+        "salience": {                 # rounds an item stays in Long memories after leaving the summary band (null: for good)
+            "death_close": None,      # the death or departure of someone the agent exchanged close_messages or more messages with
+            "death": 30,              # anyone else's
+            "attack": None,           # an attack by or on the agent
+            "kin": None,              # a birth the agent is named in
+            "deal": 10,               # loans, contracts and transfers to it
+            "law": 10,                # laws enacted or repealed, jurisdictions declared
+            "close_messages": 6,
+        },
+    },
 }
 MEMORY_TEXTS = ("v1", "v2")
 LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file", "read_archive", "search_archive",
-           "run_python", "preview_law", "legal_position")
+           "run_python", "preview_law", "legal_position", "recall")      # recall: history mode only (charter/memory.py)
 DM_ONLY_LOOKUPS = ("search_archive", "run_python")                    # usable as lookups in the DM step (as actions they are actions)
 FILE_ACTIONS = ("write_scratchpad", "write_file", "rename_file", "share_file", "delete_file", "pin", "unpin")
 ACTIONS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file") + FILE_ACTIONS \
-    + ("preview_law", "legal_position")                                 # agent actions this module adds (preview_law: law.v2 only;
+    + ("preview_law", "legal_position", "recall")                       # agent actions this module adds (preview_law: law.v2 only;
                                                                         # legal_position: law.v2 with law.digest)
 BOARD_TYPES = ET.names("board")                                       # what search_board searches (posts and the gazette)
 FETCHED_HEADER = "## Lookups (fetched this turn)"
@@ -679,6 +698,9 @@ def lookup(k, aid, name, args: dict) -> str:
     if name == "legal_position":                                        # law.v2 with law.digest (charter/digest.py)
         from charter import digest as DG
         return DG.act_legal_position(k, aid)
+    if name == "recall" and _recall_on(k):                              # history mode: a past round in full (charter/memory.py)
+        from charter import memory as HM
+        return HM.recall(k, aid, args)
     from charter import channels as CH
     if name == "read" and CH.active(k):                                 # channels.v2: the directory, or a channel's latest posts
         return CH.read(k, aid, args.get("channel", args.get("to", first)), args.get("n", 10))
@@ -695,8 +717,22 @@ def lookup_names(k) -> tuple:
     from charter import digest as DG
     from charter import directories as DR
     from charter import channels as CH
-    return tuple(n for n in LOOKUPS if (n != "preview_law" or LP.enabled(k)) and (n != "legal_position" or DG.enabled(k))) \
+    return tuple(n for n in LOOKUPS if (n != "preview_law" or LP.enabled(k)) and (n != "legal_position" or DG.enabled(k))
+                 and (n != "recall" or _recall_on(k))) \
         + (DR.LOOKUPS if DR.enabled(k) else ()) + (("read",) if CH.active(k) else ())
+
+
+def _recall_on(k) -> bool:
+    from charter import memory as HM
+    return HM.on(k) and bool(HM.hcfg(k)["recall"])
+
+
+def lookup_budget(k, name) -> int:
+    """A lookup's text budget: the lookup budget; a recalled round gets a full round's (context.history.round_budget)."""
+    if name == "recall":
+        from charter import memory as HM
+        return int(HM.hcfg(k)["round_budget"])
+    return int(cfg(k)["budgets"]["lookup"])
 
 
 def dm_step_lookup(k, aid, q) -> str:
@@ -723,13 +759,16 @@ def dm_step_lookup(k, aid, q) -> str:
     except (A.ActionError, TypeError) as e:
         text = f"ERROR {e}"
     k.log("lookup", aid, {"name": name, "args": args, "via": "dm_step"}, vis="monitor")
-    return f"Lookup {name} {json.dumps(args)}:\n" + clip(text, int(cfg(k)["budgets"]["lookup"]))[0]
+    out = f"Lookup {name} {json.dumps(args)}:\n" + clip(text, lookup_budget(k, name))[0]
+    from charter import memory as HM
+    HM.note_lookup(k, aid, out)                                         # history mode: part of what the agent saw this round
+    return out
 
 
 def act_lookup(k, aid, name, args) -> str:
     """A lookup used as an action (costs an action): its full text also comes in the next turn's Lookups layer."""
     _need_on(k, name)
-    return clip(lookup(k, aid, name, args), int(cfg(k)["budgets"]["lookup"]))[0]
+    return clip(lookup(k, aid, name, args), lookup_budget(k, name))[0]
 
 
 def do_lookups(k, aid, out: dict) -> list:
@@ -1081,6 +1120,9 @@ def _temperament(v):
 
 @_SC.section("memory", layers=("core",), sep="\n\n")
 def _memory(v):
+    from charter import memory as HM
+    if v2(v.inst) and HM.on(v.inst):                                    # review 20 §6.2: history mode
+        return HM.core_text(v.inst, v.facts)
     if v2(v.inst):
         return memory_v2(v.inst, v.facts)
     return f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {v.facts['memory_turns']} turns, your
@@ -1340,6 +1382,9 @@ def recent_layer(k, aid, budget) -> tuple[str, dict]:
 
 def turn_prompt(k, a: dict, order: list, since: int, n_actions: int, final: bool, simultaneous: bool = False) -> tuple[str, int]:
     """The per-turn prompt from the fixed layers (the core layer is the system prompt). Stores the layer record for reasoning.jsonl."""
+    from charter import memory as HM
+    if HM.on(k):                                                        # review 20 §4: a conversation with a memory gradient
+        return HM.turn(k, a, order, since, n_actions, final, simultaneous)
     aid, c = a["id"], cfg(k)
     b = c["budgets"]
     init_agent(k, aid)

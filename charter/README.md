@@ -48,7 +48,7 @@ Built from "Charter: Economy and Governance Simulation Spec" (4 Oct 2026), with 
   (scorer.SCORING_VERSION)). Every start and resume appends a `segments` entry with its first round, the code it ran under, the
   modules whose hash changed since the previous segment, and how it ended (`complete` or `stopped`). `resume` reads the dry flag from
   it (older runs: from the directory name).
-- Every append-only file (`provenance.APPEND_ONLY`: events, reasoning, observer, calls, turns, archive_overlay, sandbox) is covered by the checkpoint offsets.
+- Every append-only file (`provenance.APPEND_ONLY`: events, reasoning, observer, calls, turns, archive_overlay, sandbox, memory) is covered by the checkpoint offsets.
 
 ## What a run produces (`charter/out/<spec>/<run>/`, git-ignored)
 - `story.html`: the run as a story you scroll through (`python -m charter view RUN_DIR --open` rebuilds it; it also updates every
