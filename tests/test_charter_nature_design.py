@@ -73,7 +73,7 @@ def test_nature_design_prompts_name_no_anarchy_and_offer_founding(nature):
     a = next(x for x in inst["agents"] if x["cls"] == "worker")
     allowed = set(CX.allowed_actions(inst, a, k.w["agents"][a["id"]]["rights"], k))
     assert {"found", "join", "create_contract"} <= allowed
-    assert allowed <= set(AR.CORE_SURFACE + AR.NATURE_SURFACE)
+    assert allowed <= set(AR.core_surface(inst["spec"]))                           # incl. guard/join_attack (conflict on)
     assert "found" not in AR.CORE_SURFACE                                          # the design arm (jurisdictions off) is unchanged
     assert "found" in AR.hidden(S.load("design_arm")) and "found" not in AR.hidden(inst["spec"])
     assert "Assurance Founding" in A.library_index(inst)
