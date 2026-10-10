@@ -316,6 +316,14 @@ def _pairs_on(spec) -> bool:
 
 
 REQUIRES["parents_of"] = _pairs_on
+E += [                                                                  # review 15 S6: the law surface over reproduction
+    ("minors", "life", "Life", "minors()", "every living minor: agent, parents, born (round) and adult_at (the round it comes of "
+     "age, as round() counts). A Child Support or Guardianship law reads it.", "prompt", "common"),
+    ("gestations", "life", "Life", "gestations()", "every child on the way: id, parents, due (born at the end of that round) and "
+     "the polity named for it (never a goal). Laws refuse or react to a conception with before_conceive / after_conceive "
+     "(p: a, b, inherit (True if a goal is passed on), polity).", "prompt", "common"),
+]
+REQUIRES.update({n: _pairs_on for n in ("minors", "gestations")})
 # linker (charter/linker.py, P3.3): documented only in law.v2 worlds (REQUIRES), so every other world's prompt and codex are unchanged
 E += [
     ("use", "linker", "Meta", "use(ref)", "links another law's exports into this law, as a read-only mapping: at the top level only, "
@@ -496,8 +504,10 @@ E += [
      "\"very scarce\", as hunters see it), the season and hunters entered this round (None if not a forest). A law can close the "
      "hunt (before_hunt(p, chain) returning False; p: agent, camp, party, effort) or cap forest actions with set_quota.",
      "prompt", "common"),
+    ("food_totals", "reads", "Read", "food_totals()", "the world's food: held by agents who eat, in stores, elsewhere (treasuries, "
+     "escrows, estates) and in total.", "prompt", "common"),
 ]
-REQUIRES.update({n: (lambda spec: bool((spec.get("subsistence") or {}).get("enabled"))) for n in ("hunger", "food_of", "stores", "plots", "forest")})
+REQUIRES.update({n: (lambda spec: bool((spec.get("subsistence") or {}).get("enabled"))) for n in ("hunger", "food_of", "stores", "plots", "forest", "food_totals")})
 # contracts (charter/contracts.py, P4.3): documented only in worlds with contracts on (OPTIONAL), for the code of a contract
 E += [
     ("pull", "contracts", "Contracts", "pull(member, item, qty)", "a contract's law only: takes qty of item from a member into its "

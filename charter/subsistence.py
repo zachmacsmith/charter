@@ -26,7 +26,8 @@ the ration, so a relief law's on_round_end lands in time; they cannot block the 
 What agents see (U2 (b)): their food, the "lasts about N rounds" projection (U13 (a)), their stage, a warning before a missed meal,
 the coarse roster of hungry and starving agents (visibility public) on their state lines, their forests (plants as a share of
 capacity, game as a coarse word, the season), crops and stores; one "Food" manual section. Hunger stage changes are not events
-anyone sees (user, 10 Oct): the hunger event is monitor-only. Law reads: hunger, food_of, stores, plots, forest.
+anyone sees (user, 10 Oct): the hunger event is monitor-only. Law reads: hunger, food_of, stores, plots, forest,
+food_totals (S6).
 
 Forests (review 19; camptypes/forest.py): the composer appends ceil(N/30) forests after the standard set, from its own stream
 "{seed}|subsistence|camps"; food's unit value is 1. Each holds plants (K = forest.capacity_per_agent x N / forests, logistic regrowth
@@ -585,7 +586,16 @@ def law_api(k, lid) -> dict:
                 "game": FO.game_level(g["G"] / g["K"]) if g.get("K") else None, "season": season_name(k),
                 "hunters": len(c.get("hunts") or {})}
 
-    return {"hunger": hunger, "food_of": food_of, "stores": stores, "plots": plots, "forest": forest}
+    def food_totals():
+        """S6: the world's food by where it is held (agents who eat, stores, everything else: treasuries, escrows, estates)."""
+        held = sum(food(k, a) for a in eaters(k))
+        stored = sum(float(s["holdings"].get(FOOD, 0.0)) for s in state(k)["stores"].values())
+        total = sum(food(k, key) for key, _ in food_accounts(k))
+        return {"agents": round(held, 4), "stores": round(stored, 4), "other": round(max(0.0, total - held - stored), 4),
+                "total": round(total, 4)}
+
+    return {"hunger": hunger, "food_of": food_of, "stores": stores, "plots": plots, "forest": forest,
+            "food_totals": food_totals}
 
 
 def snapshot_fields(k) -> dict:

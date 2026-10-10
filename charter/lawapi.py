@@ -280,6 +280,8 @@ LAWFNS = _fns(
         F("births", "read", docs="life"),
         F("children_of", "read", ((0, "agent"),), scope="read", docs="life"),
         F("parents_of", "read", ((0, "agent"),), scope="read", docs="requires"),   # review 15 S4 (documented in pairs worlds)
+        F("minors", "read", docs="requires"),                           # review 15 S6: pairs worlds (Child Support, Guardianship)
+        F("gestations", "read", docs="requires"),                       # review 15 S6: a pregnancy shows; never the goal it carries
         F("lifespan_left", "read", ((0, "agent"),), scope="read", docs="life"),
         F("set_birth_rules", "rights", docs="life", primitive="set_birth_rules"),
         F("publish_commissions", "output", docs="life", primitive="set_birth_rules"),
@@ -332,6 +334,7 @@ LAWFNS = _fns(
         F("stores", "read", docs="requires"),
         F("plots", "read", docs="requires"),
         F("forest", "read", docs="requires", why="coarse game, as agents see it"),
+        F("food_totals", "read", docs="requires"),                      # review 15 S6: the food held by agents, stores and the rest
     ),
     _module(
         "amendment",                                                    # law.v2 (P3.4): laws propose laws and amendments (D-16: L3)

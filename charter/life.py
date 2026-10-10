@@ -1031,6 +1031,14 @@ def law_api(k, lid) -> dict:
         from charter import pairs as PR
         return PR.parents_of(k, str(agent)) if _on() else []
 
+    def minors():
+        from charter import pairs as PR
+        return PR.minors_view(k) if _on() else []
+
+    def gestations():
+        from charter import pairs as PR
+        return PR.gestations_view(k) if _on() else []
+
     def set_birth_rules(classes=None, models=None, max_children=None, max_stats=None, banned_goals=None):
         """What may be made for parents this law binds: allowed classes and models, a cap on children per parent, caps on stats,
         banned goals. All None: this law's rules are lifted."""
@@ -1051,7 +1059,8 @@ def law_api(k, lid) -> dict:
         return True
 
     return {"makers": makers, "commissions": commissions, "births": births, "children_of": children_of,
-            "lifespan_left": lifespan_left, "parents_of": parents_of, "set_birth_rules": set_birth_rules,
+            "lifespan_left": lifespan_left, "parents_of": parents_of, "minors": minors, "gestations": gestations,
+            "set_birth_rules": set_birth_rules,
             "publish_commissions": lambda on=True: _flag("commissions", on), "publish_births": lambda on=True: _flag("births", on)}
 
 

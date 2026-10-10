@@ -27,7 +27,7 @@ PUB_FNS = ("publication", "publish", "unpublish")                               
 W6_V2_FNS = {*W6A_FNS, *CO_FNS, *EV_FNS, *W7E_FNS, *PUB_FNS, "send_message"}   # wave 9 C: send_message (channels.law_api)                                       # W6 packages' law.v2 functions (merge: add each package's tuple)
 CH_FNS = {"send_message"}                                             # wave 9 C (channels.law_api; law.v2 and channels.v2 worlds)
 SUB_FNS = {n for n, f in LA.LAWFNS.items() if f.module == "subsistence"}   # review 15: subsistence worlds only (subsistence.law_api)
-PAIR_FNS = {"parents_of"}                                             # review 15 S4: pairs worlds only (documented there)
+PAIR_FNS = {"parents_of", "minors", "gestations"}                                             # review 15 S4: pairs worlds only (documented there)
 CH_FNS = CH_FNS | SUB_FNS | PAIR_FNS                                  # (excluded from the snapshot comparisons alike)
 W6_FNS = {*W6_V2_FNS}                                        # every W6 law function (contract-module ones are in CONTRACT_FNS)
 SNAPSHOT = Path(__file__).parent / "fixtures" / "charter_lawapi_snapshot.json"

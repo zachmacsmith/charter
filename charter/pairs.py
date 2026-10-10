@@ -140,6 +140,23 @@ def gestation_of(k, aid):
     return None
 
 
+def minors_view(k) -> list:
+    """S6, the law read minors(): every living minor, its parents and the round (as round() counts) it comes of age."""
+    if not on(k):
+        return []
+    return [{"agent": c, "parents": list(m["parents"]), "born": m["born"], "adult_at": m["until"]}
+            for c, m in sorted(state(k)["minors"].items()) if m.get("matured") is None and MO.alive(k, c)]
+
+
+def gestations_view(k) -> list:
+    """S6, the law read gestations(): every pending gestation (a pregnancy shows): its parents, the round it is due (born at that
+    round's end) and the polity named; never the goal it may carry."""
+    if not on(k):
+        return []
+    return [{"id": g["id"], "parents": [g["a"], g["b"]], "due": g["due"], "polity": g.get("polity")}
+            for g in sorted(state(k)["gestations"].values(), key=lambda g: g["id"]) if g["status"] == "pending"]
+
+
 def pending_children(k, aid) -> int:
     from charter import life as LF
     n = len(LF.children(k, aid))

@@ -47,6 +47,11 @@ def _binds_value(k, lid, key, value, inc=False):
         return J.binds(k, lid, value)
     if value == "reserve" or value.startswith("reserve:"):
         return J.reserve_key(k, jid) == value
+    if value.startswith(AC.STORE):                                     # review 15 S6: a food store binds its owner's laws
+        rec = AC.stores(k).get(value[len(AC.STORE):])
+        if rec is not None:
+            own = rec["owner"]
+            return J.binds(k, lid, own) if own in k.w["agents"] else own == jid
     return None
 
 
@@ -65,6 +70,8 @@ def bound_laws(k, P, payload, phase) -> list:
         keys = ((P.subject,) if P.subject else ()) if phase == "before" else tuple(P.parties)
         if P.name == "create_contract" and payload.get("under") is not None:   # W8e: the polity incorporated under sees its founding
             keys = keys + ("under",)
+        if P.name == "conceive" and phase == "before":                  # review 15 §4.2: both parents' laws see a conception
+            keys = ("a", "b")
         inc, parents = False, set()
         if assoc or "contracts" in k.w:
             from charter import incorporation as INC

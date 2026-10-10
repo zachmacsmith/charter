@@ -417,6 +417,11 @@ def scope_api(k, lid, api: dict) -> dict:
             return x, bound(x.split(":", 1)[1])
         if isinstance(x, str) and x.startswith("fund:"):                # P4.4: the law's own funds only (contracts.open_fund)
             return x, x.startswith(f"fund:{lid}:")
+        if isinstance(x, str) and x.startswith("store:"):               # review 15 S6: a food store of this polity or of a member
+            rec = ((k.w.get("subsistence") or {}).get("stores") or {}).get(x[len("store:"):])   # (accounts.check_store_move)
+            if rec is None:
+                return x, True                                          # (the move refuses an unknown store itself)
+            return x, rec["owner"] == jid or (rec["owner"] in k.w["agents"] and bound(rec["owner"]))
         return x, bound(x)
 
     for name, specs in AGENT_ARGS.items():
