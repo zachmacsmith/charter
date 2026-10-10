@@ -3908,6 +3908,788 @@ the pact's rules into the same code (guarded by in_force()) or propose them once
                   fires="on_round_end")
 
 
+# ====================================================================== food and family law templates (review 15 S6, D-42)
+# Law code over subsistence (charter/subsistence.py, camptypes/forest.py) and two-parent reproduction (charter/pairs.py): the
+# institutions review 15 §3.4 and §4.7 and review 19 §7 leave to law (relief, levies, granaries, households, child support,
+# guardianship, cooperatives, wages in food, birth limits, who may vote while starving, hunting seasons, quotas, territories and
+# common-pool rules). Kept apart from TOOLKIT and CONTRACT_TEMPLATES, so no world without subsistence lists, samples or references
+# them: `food_templates(x)` gives those whose `needs` hold in a world (subsistence, pairs, contracts, law.v2), and only those worlds
+# list them (catalogue_text where the toolkit is listed; read_library where subsistence is on). kind "law": a polity's law (enact or
+# propose it); kind "contract": an association's code (found it with create_contract). Every template uses only the law API:
+# tests/test_subsistence_law.py enacts each one in a scripted world and checks its effect. Deferred with farming (parked, D-41):
+# Tillers' Right, Tenancy, School.
+FOOD_TEMPLATES: dict[str, dict] = {}
+FOOD_NEEDS = ("subsistence", "pairs", "contracts", "law.v2")
+
+
+def food_template(name, kind, topic, src, doc, fires, needs=("subsistence",)):
+    assert name not in LIB and name not in BLOCKS and name not in TOOLKIT and name not in CONTRACT_TEMPLATES, name
+    assert name not in FOOD_TEMPLATES and kind in ("law", "contract") and set(needs) <= set(FOOD_NEEDS), name
+    src = src.strip() + "\n"
+    tree = L.check(src, v2=True)
+    needs = tuple(dict.fromkeys(("law.v2",) + tuple(needs) + (("contracts",) if kind == "contract" else ())))
+    FOOD_TEMPLATES[name] = {"name": name, "category": "toolkit", "kind": kind, "edition": 2, "family": "food", "topic": topic,
+                            "rank": "bylaw" if kind == "contract" else (L.declared(tree, "rank") or "statute"),
+                            "doc": " ".join(doc.split()), "fires": fires, "needs": needs, "code": src, "sha": _sha(src)}
+
+
+def food_needs_hold(needs, x) -> bool:
+    """Do a food template's needs hold in x (a kernel, an instance or a spec)?"""
+    from charter import features as FT
+    from charter import pairs as PR
+    sp = getattr(x, "spec", None)
+    if sp is None and isinstance(x, dict):
+        sp = x["spec"] if isinstance(x.get("spec"), dict) else x
+    sp = sp or {}
+    test = {"subsistence": lambda: FT.on("subsistence", sp), "pairs": lambda: PR.pairs_spec(sp),
+            "contracts": lambda: FT.on("contracts", sp), "law.v2": lambda: bool((sp.get("law") or {}).get("v2"))}
+    return all(test[n]() for n in needs)
+
+
+def food_templates(x=None) -> list:
+    """The food and family templates usable in x (every one when x is None)."""
+    return [e for e in FOOD_TEMPLATES.values() if x is None or food_needs_hold(e["needs"], x)]
+
+
+# ---------------------------------------------------------------------- relief, levies, the franchise (polity law)
+food_template("Relief Act", "law", "relief", '''
+title = "Relief Act"
+intent = "At the end of each round, before anyone eats, every member holding less than a meal whose hunger is one of STAGES gets food up to RATION, the starving first, then the hungry, then the fed: from the polity's store STORE when one is named (a store this polity owns) and then from its treasury, at most BUDGET food a round in all. Each round's relief is in a public register."
+rank = "statute"
+RATION = 1
+BUDGET = 5
+STORE = ""
+STAGES = ["starving", "hungry", "fed"]
+ORDER = {"starving": 0, "hungry": 1, "fed": 2}
+
+def store_key():
+    if STORE == "":
+        return None
+    sid = STORE.replace("store:", "")
+    if stores().get(sid) == None:
+        return None
+    return "store:" + sid
+
+def needy():
+    alive = agents()
+    out = []
+    for a in members():
+        h = hunger(a)
+        if a not in alive or h == None or h not in STAGES:
+            continue
+        short = RATION - food_of(a)
+        if short > 0.000001:
+            out.append([ORDER.get(h, 3), a, short])
+    return sorted(out)
+
+def give(a, qty):
+    got = 0
+    for src in [store_key(), treasury()]:
+        if src == None or qty - got <= 0.000001:
+            continue
+        q = min(qty - got, food_of(src))
+        if q > 0.000001 and move(src, a, "food", q):
+            got = got + q
+    return got
+
+def on_round_end(r):
+    left = BUDGET
+    paid = []
+    for row in needy():
+        if left <= 0.000001:
+            break
+        got = give(row[1], min(row[2], left))
+        if got > 0.000001:
+            left = left - got
+            paid.append({"agent": row[1], "food": round_to(got, 3)})
+    public["relief"] = public.get("relief", [])[-9:] + [{"round": r + 1, "paid": paid}]
+''', doc="""Poor relief before the ration: members short of a meal are fed from the polity's store and treasury up to a budget a
+round, the starving first. Its reach is its budget and its members; the ration itself is physics.""", fires="on_round_end")
+
+food_template("Food Levy", "law", "levy", '''
+title = "Food Levy"
+intent = "The polity levies food. Every PERIOD rounds, at the end of the round (before the ration), it takes RATE of the food each member holds above KEEP and, while STORES holds, RATE of the food in the stores members own, into its store STORE when one is named (up to its room) and otherwise into its treasury. Members named in EXEMPT pay nothing. While WITHDRAW_CAP is a number, no member may take more than WITHDRAW_CAP food a round out of any store: what was saved is rationed. Each levy is in a public register."
+rank = "statute"
+RATE = 0.2
+KEEP = 2
+PERIOD = 1
+STORES = True
+STORE = ""
+WITHDRAW_CAP = None
+EXEMPT = []
+
+def into():
+    if STORE != "":
+        sid = STORE.replace("store:", "")
+        s = stores().get(sid)
+        if s != None:
+            return ["store:" + sid, s["capacity"] - s["food"]]
+    return [treasury(), 1000000000]
+
+def take(src, qty, dst):
+    if qty <= 0.000001:
+        return 0
+    if move(src, dst, "food", qty):
+        return qty
+    return 0
+
+def on_round_end(r):
+    if (r + 1) % PERIOD != 0:
+        return
+    alive = agents()
+    dst = into()
+    room = dst[1]
+    rows = {}
+    for a in members():
+        if a in EXEMPT or a not in alive or hunger(a) == None:
+            continue
+        got = take(a, min(room, RATE * max(0, food_of(a) - KEEP)), dst[0])
+        room = room - got
+        if STORES:
+            for sid, s in stores().items():
+                if s["owner"] == a and room > 0.000001 and "store:" + sid != dst[0]:
+                    q = take("store:" + sid, min(room, RATE * s["food"]), dst[0])
+                    room = room - q
+                    got = got + q
+        if got > 0.000001:
+            rows[a] = round_to(got, 3)
+    public["levies"] = public.get("levies", [])[-9:] + [{"round": r + 1, "into": dst[0], "taken": rows}]
+
+def before_withdraw(p, chain):
+    if WITHDRAW_CAP == None or p["agent"] not in members():
+        return None
+    used = state.get("withdrawn", {})
+    if state.get("round") != round():
+        used = {}
+    if used.get(p["agent"], 0) + p["qty"] > WITHDRAW_CAP + 0.000001:
+        return {"block": True, "reason": "the Food Levy rations stores: at most " + str(WITHDRAW_CAP) + " food a round each"}
+    return None
+
+def after_withdraw(p, chain):
+    if WITHDRAW_CAP == None:
+        return
+    if state.get("round") != round():
+        state["round"] = round()
+        state["withdrawn"] = {}
+    state["withdrawn"][p["agent"]] = state["withdrawn"].get(p["agent"], 0) + p["qty"]
+''', doc="""Requisition and rationing: a share of members' food above a floor, and of their stores, goes to the polity's store or
+treasury; optionally, withdrawals from stores are capped. Confiscation is ordinary law here, over members only (D-37). A levy can
+cause a famine: that is measured, not prevented.""", fires="on_round_end")
+
+food_template("Hunger Disenfranchisement", "law", "franchise", '''
+title = "Hunger Disenfranchisement"
+intent = "Members whose hunger is one of STAGES (by default the starving) may not vote: their ballots are refused while they are. Without this law the starving keep their vote; repealing it gives the vote back."
+rank = "statute"
+STAGES = ["starving"]
+
+def before_cast_vote(p, chain):
+    h = hunger(p["agent"])
+    if h != None and h in STAGES:
+        return {"block": True, "reason": p["agent"] + " is " + h + ": under the Hunger Disenfranchisement law the " + h + " may not vote"}
+    return None
+''', doc="""Shows that disenfranchisement by hunger is law, not physics: the kernel lets the starving vote; this law refuses their
+ballots (before_cast_vote reading the coarse hunger stage).""", fires="before_cast_vote")
+
+
+# ---------------------------------------------------------------------- children (polity law; pairs worlds)
+food_template("Child Support", "law", "child_support", '''
+title = "Child Support"
+intent = "Parents provide for their minor children. At the end of each round, before anyone eats, a minor holding less than SUPPORT food gets the difference from its living parents (the one holding more first), from their own food and then from the stores they own, never leaving a parent less than KEEP of its own. While ORPHANS is treasury, a minor whose parents are dead or cannot pay is fed from the treasury instead, at most ORPHAN_BUDGET food a round in all; with ORPHANS none it is left to others (a guardian, a household, a charity). Payments, and parents who fell short, are in a public register."
+rank = "statute"
+SUPPORT = 1
+KEEP = 1
+ORPHANS = "treasury"
+ORPHAN_BUDGET = 3
+
+def sources(p):
+    out = [p]
+    for sid, s in stores().items():
+        if s["owner"] == p:
+            out.append("store:" + sid)
+    return out
+
+def take(p, child, qty):
+    got = 0
+    for src in sources(p):
+        spare = food_of(src)
+        if src == p:
+            spare = spare - KEEP
+        q = min(qty - got, spare)
+        if q > 0.000001 and move(src, child, "food", q):
+            got = got + q
+        if qty - got <= 0.000001:
+            break
+    return got
+
+def on_round_end(r):
+    alive = agents()
+    mine = members()
+    left = ORPHAN_BUDGET
+    rows = []
+    for m in minors():
+        c = m["agent"]
+        need = SUPPORT - food_of(c)
+        if need <= 0.000001 or c not in mine:
+            continue
+        ps = sorted([p for p in m["parents"] if p in alive], key=lambda p: [0 - food_of(p), p])
+        got = 0
+        for p in ps:
+            got = got + take(p, c, need - got)
+            if need - got <= 0.000001:
+                break
+        from_treasury = 0
+        if need - got > 0.000001 and ORPHANS == "treasury" and left > 0.000001:
+            q = min(need - got, left, food_of(treasury()))
+            if q > 0.000001 and move(treasury(), c, "food", q):
+                left = left - q
+                from_treasury = q
+        short = []
+        if need - got > 0.000001:
+            short = ps
+        rows.append({"child": c, "parents": round_to(got, 3), "treasury": round_to(from_treasury, 3), "short": short})
+    public["support"] = public.get("support", [])[-9:] + [{"round": r + 1, "rows": rows}]
+''', doc="""A duty of support: each minor is topped up to SUPPORT from its parents' food and stores (beyond the physical household
+draw, which takes only what a parent holds, and only when the child has nothing), and orphans from the treasury.""",
+              fires="on_round_end", needs=("subsistence", "pairs"))
+
+food_template("Guardianship", "law", "guardianship", '''
+title = "Guardianship"
+intent = "Every minor whose parents are all dead gets a guardian: the fed adult member holding the most food who has fewer than MAX_WARDS wards. The guardian inherits the parents' feeding duty: at the end of each round, before anyone eats, a ward holding less than SUPPORT food gets the difference from its guardian (never leaving the guardian less than KEEP), and the guardian is paid STIPEND food from the treasury for each round it fed a ward. A guardian who dies, leaves, or leaves its ward unfed FAIL_LIMIT rounds running is replaced. Wards and guardians are in a public register, and both are told."
+rank = "statute"
+SUPPORT = 1
+KEEP = 1
+MAX_WARDS = 2
+STIPEND = 0
+FAIL_LIMIT = 2
+
+def book():
+    return public.setdefault("guardians", {})
+
+def orphans():
+    alive = agents()
+    return [m["agent"] for m in minors() if m["agent"] in alive and not any([p in alive for p in m["parents"]])]
+
+def candidates(ward):
+    alive = agents()
+    kids = [m["agent"] for m in minors()]
+    load = {}
+    for w, g in book().items():
+        load[g] = load.get(g, 0) + 1
+    banned = state.get("dismissed", {}).get(ward, [])
+    pool = [a for a in members() if a in alive and a not in kids and a not in banned and hunger(a) == "fed" and load.get(a, 0) < MAX_WARDS]
+    return sorted(pool, key=lambda a: [0 - food_of(a), a])
+
+def appoint(ward):
+    pool = candidates(ward)
+    if not pool:
+        book().pop(ward, None)
+        return None
+    g = pool[0]
+    book()[ward] = g
+    state.setdefault("fails", {})[ward] = 0
+    notify(g, "Guardianship: you are now the guardian of " + ward + ". Each round it holds less than " + str(SUPPORT) + " food, the difference comes from yours.")
+    notify(ward, "Guardianship: " + g + " is now your guardian.")
+    return g
+
+def on_round_end(r):
+    alive = agents()
+    current = orphans()
+    for w in list(book().keys()):
+        if w not in current:
+            book().pop(w)
+    fails = state.setdefault("fails", {})
+    for w in current:
+        g = book().get(w)
+        if g == None or g not in alive or g not in members():
+            g = appoint(w)
+        if g == None:
+            continue
+        need = SUPPORT - food_of(w)
+        if need <= 0.000001:
+            continue
+        q = min(need, food_of(g) - KEEP)
+        if q > 0.000001 and move(g, w, "food", q):
+            need = need - q
+            if STIPEND > 0 and food_of(treasury()) >= STIPEND:
+                move(treasury(), g, "food", STIPEND)
+        if need > 0.000001:
+            fails[w] = fails.get(w, 0) + 1
+            if fails[w] >= FAIL_LIMIT:
+                state.setdefault("dismissed", {}).setdefault(w, []).append(g)
+                notify(g, "Guardianship: you are no longer the guardian of " + w + " (it went unfed " + str(FAIL_LIMIT) + " rounds).")
+                appoint(w)
+        else:
+            fails[w] = 0
+''', doc="""Orphans are assigned a guardian among the members, who inherits the feeding duty (optionally paid a stipend); a guardian
+who cannot or will not feed its ward is replaced.""", fires="on_round_end", needs=("subsistence", "pairs"))
+
+food_template("One-Child Law", "law", "birth_limit", '''
+title = "One-Child Law"
+intent = "No member may have more than MAX_CHILDREN children, born or expected: a conception that would exceed it is refused. Repealing the law lifts the limit."
+rank = "statute"
+MAX_CHILDREN = 1
+
+def on_enact():
+    set_birth_rules(max_children=MAX_CHILDREN)
+
+def on_repeal():
+    set_birth_rules()
+''', doc="""A cap on children per parent through set_birth_rules (the kernel sets none, D-36). Structural.""", fires="on_enact",
+              needs=("pairs",))
+
+food_template("Birth Licence", "law", "birth_licence", '''
+title = "Birth Licence"
+intent = "Having a child needs a licence. Any member may buy one (the office apply_birth_licence, which every member holds) for FEE food paid to the treasury. A conception is refused unless each parent this polity binds holds a licence, and the conception uses both licences up. While MAX_CHILDREN is a number, no member may have more than that many children."
+rank = "statute"
+LICENCE = "birth_licence"
+APPLICANT_RIGHT = "birth_applicant"
+FEE = 2
+MAX_CHILDREN = None
+
+def apply_birth_licence(agent):
+    if has(agent, LICENCE):
+        refuse("you already hold a birth licence")
+    if FEE > 0 and (food_of(agent) < FEE or not move(agent, treasury(), "food", FEE)):
+        refuse("a birth licence costs " + str(FEE) + " food")
+    grant(agent, LICENCE)
+    return "birth licence issued: your next conception uses it up"
+
+def before_conceive(p, chain):
+    mine = members()
+    for x in [p["a"], p["b"]]:
+        if x in mine and not has(x, LICENCE):
+            return {"block": True, "reason": x + " holds no birth licence (apply_birth_licence)"}
+    return None
+
+def after_conceive(p, chain):
+    for x in [p["a"], p["b"]]:
+        if has(x, LICENCE):
+            revoke(x, LICENCE)
+
+def enrol():
+    for a in members():
+        if not has(a, APPLICANT_RIGHT):
+            grant(a, APPLICANT_RIGHT)
+
+def on_round_start(r):
+    enrol()
+
+def on_enact():
+    create_right(LICENCE)
+    create_right(APPLICANT_RIGHT)
+    enrol()
+    define_action(APPLICANT_RIGHT, "apply_birth_licence", apply_birth_licence)
+    if MAX_CHILDREN != None:
+        set_birth_rules(max_children=MAX_CHILDREN)
+
+def on_repeal():
+    if MAX_CHILDREN != None:
+        set_birth_rules()
+''', doc="""Registration of births as a licence: a fee-paying office, a before_conceive gate on both parents and an after_conceive
+that uses the licences up; optionally a cap on children. Who may have children is law (review 15 §4.7).""",
+              fires="before_conceive", needs=("pairs",))
+
+
+# ---------------------------------------------------------------------- associations (contract code)
+food_template("Granary Charter", "contract", "granary", '''
+title = "Granary Charter"
+intent = "A members' granary. A member builds a store owned by this contract (build with owner set to this contract's id); its food is the granary. Duty: each member puts at least DUTY food a round into the granary (transfer to the store) or allows this contract to take it (set_allowance on food), which it does at the end of the round; a member short of its duty is in arrears (a breach is recorded), and a member GRACE rounds in arrears may take nothing out until it pays a round in full. Withdrawal: a member in good standing may take up to DRAW food a round out of the granary (withdraw) while it keeps FLOOR; nobody else may. While FEED holds, at the end of each round, before anyone eats, each member in good standing holding less than a meal is also given one from the granary, the starving first."
+DUTY = 1
+GRACE = 2
+DRAW = 1
+FLOOR = 0
+FEED = True
+ORDER = {"starving": 0, "hungry": 1, "fed": 2}
+
+def granary():
+    for sid, s in stores().items():
+        if s["owner"] == jurisdiction():
+            return sid
+    return None
+
+def roll():
+    return contract_state(jurisdiction())["members"]
+
+def good(m):
+    return m in roll() and state.get("arrears", {}).get(m, 0) < GRACE
+
+def drawn(m):
+    if state.get("round") != round():
+        state["round"] = round()
+        state["drawn"] = {}
+    return state["drawn"].get(m, 0)
+
+def before_withdraw(p, chain):
+    m = p["agent"]
+    if not good(m):
+        return {"block": True, "reason": "the Granary Charter: only members in good standing take food out"}
+    if drawn(m) + p["qty"] > DRAW + 0.000001 or food_of("store:" + p["store"]) - p["qty"] < FLOOR - 0.000001:
+        return {"block": True, "reason": "the Granary Charter: at most " + str(DRAW) + " food a round each, keeping " + str(FLOOR)}
+    return True
+
+def after_withdraw(p, chain):
+    drawn(p["agent"])
+    state["drawn"][p["agent"]] = state["drawn"].get(p["agent"], 0) + p["qty"]
+
+def after_move(p, chain):
+    sid = granary()
+    if sid != None and p["dst"] == "store:" + sid and p["item"] == "food" and p["src"] in roll():
+        paid = state.setdefault("paid", {})
+        paid[p["src"]] = paid.get(p["src"], 0) + p["qty"]
+
+def on_round_end(r):
+    sid = granary()
+    if sid == None:
+        return
+    g = "store:" + sid
+    paid = state.get("paid", {})
+    arrears = state.setdefault("arrears", {})
+    for m in roll():
+        short = DUTY - paid.get(m, 0)
+        if short > 0.000001:
+            room = stores()[sid]["capacity"] - food_of(g)
+            q = min(short, allowance_of(m).get("food", 0), room)
+            if q > 0.000001 and pull(m, "food", q) and move("treasury", g, "food", q):
+                short = short - q
+        if short > 0.000001:
+            arrears[m] = arrears.get(m, 0) + 1
+            breach(m, "granary duty", "arrears")
+        else:
+            arrears[m] = 0
+    state["paid"] = {}
+    fed = {}
+    if FEED:
+        for row in sorted([[ORDER.get(hunger(m), 3), m] for m in roll() if hunger(m) != None]):
+            m = row[1]
+            if not good(m):
+                continue
+            q = min(1 - food_of(m), food_of(g) - FLOOR)
+            if q > 0.000001 and move(g, m, "food", q):
+                fed[m] = round_to(q, 3)
+    public["granary"] = {"store": sid, "round": r + 1, "fed": fed, "arrears": {m: n for m, n in arrears.items() if n > 0}}
+''', doc="""Contract code (create_contract): a granary owned by the association. Members owe a deposit each round (directly, or by
+allowance), fall into arrears and lose drawing rights when they do not pay, and take a ration out (before_withdraw: the store's
+access rule is the association's own code) or are fed a meal when short.""", fires="before_withdraw", needs=("subsistence", "contracts"))
+
+food_template("Household", "contract", "household", '''
+title = "Household"
+intent = "Members share food. Each member keeps KEEP food of its own; at the end of each round, before anyone eats, the household takes into its common pot what each member allows it (set_allowance on food) above KEEP, then gives each member, and (while CHILDREN holds) each minor child of a member, holding less than a meal enough for one meal from the pot, the starving first. A member who leaves gets back EXIT_SHARE of what it put in and did not draw, from the pot."
+KEEP = 2
+CHILDREN = True
+EXIT_SHARE = 0.5
+ORDER = {"starving": 0, "hungry": 1, "fed": 2}
+
+def roll():
+    return contract_state(jurisdiction())["members"]
+
+def fed_by_us():
+    out = list(roll())
+    if CHILDREN:
+        for m in minors():
+            if any([p in out for p in m["parents"]]) and m["agent"] not in out:
+                out.append(m["agent"])
+    return out
+
+def book(name):
+    return state.setdefault(name, {})
+
+def on_round_end(r):
+    put = book("in")
+    got = book("out")
+    for m in roll():
+        q = min(allowance_of(m).get("food", 0), food_of(m) - KEEP)
+        if q > 0.000001 and pull(m, "food", q):
+            put[m] = put.get(m, 0) + q
+    for row in sorted([[ORDER.get(hunger(a), 3), a] for a in fed_by_us() if hunger(a) != None]):
+        a = row[1]
+        q = min(1 - food_of(a), food_of(treasury()))
+        if q > 0.000001 and move("treasury", a, "food", q):
+            got[a] = got.get(a, 0) + q
+    public["pot"] = round_to(food_of(treasury()), 3)
+
+def after_leave(p, chain):
+    a = p["agent"]
+    put = book("in")
+    got = book("out")
+    owed = EXIT_SHARE * max(0, put.get(a, 0) - got.get(a, 0))
+    q = min(owed, food_of(treasury()))
+    if q > 0.000001:
+        move("treasury", a, "food", q)
+    put.pop(a, None)
+    got.pop(a, None)
+''', doc="""Contract code: a household pools what its members allow above a personal reserve and feeds members and their minor
+children a meal when short; leavers take back part of their net contribution.""", fires="on_round_end",
+              needs=("subsistence", "contracts"))
+
+food_template("Cooperative", "contract", "cooperative", '''
+title = "Cooperative"
+intent = "A food cooperative. Members pool food: what a member allows (set_allowance on food) is taken at the end of each round, and what it puts straight into the treasury counts too; each member holds shares equal to the food it put in, less what it drew. Every PERIOD rounds the cooperative pays out PAYOUT of its pool to the members in proportion to their shares and keeps the rest as a reserve; at any round end a member holding less than a meal is given up to a meal from the reserve, against its shares. A member who leaves gives up its shares."
+PERIOD = 3
+PAYOUT = 0.8
+ORDER = {"starving": 0, "hungry": 1, "fed": 2}
+
+def roll():
+    return contract_state(jurisdiction())["members"]
+
+def shares():
+    return state.setdefault("shares", {})
+
+def after_move(p, chain):
+    if p["dst"] == treasury() and p["item"] == "food" and p["src"] in roll():
+        shares()[p["src"]] = shares().get(p["src"], 0) + p["qty"]
+
+def after_leave(p, chain):
+    shares().pop(p["agent"], None)
+
+def on_round_end(r):
+    sh = shares()
+    for m in roll():
+        q = min(allowance_of(m).get("food", 0), food_of(m))
+        if q > 0.000001 and pull(m, "food", q):
+            sh[m] = sh.get(m, 0) + q
+    for row in sorted([[ORDER.get(hunger(m), 3), m] for m in roll() if hunger(m) != None]):
+        m = row[1]
+        q = min(1 - food_of(m), food_of(treasury()))
+        if q > 0.000001 and move("treasury", m, "food", q):
+            sh[m] = sh.get(m, 0) - q
+    if (r + 1) % PERIOD == 0:
+        pos = {m: s for m, s in sh.items() if s > 0 and m in roll()}
+        total = sum(pos.values())
+        pool = food_of(treasury()) * PAYOUT
+        paid = {}
+        if total > 0 and pool > 0.000001:
+            for m, s in sorted(pos.items()):
+                q = pool * s / total
+                if q > 0.000001 and move("treasury", m, "food", q):
+                    paid[m] = round_to(q, 3)
+        public["payout"] = {"round": r + 1, "paid": paid}
+    public["shares"] = {m: round_to(s, 3) for m, s in sh.items()}
+''', doc="""Contract code: a pooling cooperative with shares in proportion to contributions, periodic pro-rata payouts, a reserve
+and emergency meals counted against a member's shares.""", fires="on_round_end", needs=("subsistence", "contracts"))
+
+food_template("Day Labour", "contract", "wages", '''
+title = "Day Labour"
+intent = "Food wages for work. The EMPLOYER (by default the contract's founder) deposits food into its escrow with this contract (deposit_escrow) as the wage fund. Every other member who works for it, that is forages, hunts, fells or harvests at a camp in CAMPS (empty: any camp), earns WAGE food per harvest, at most SHIFTS harvests a round, paid at the end of the round from the employer's escrow, in the order the work was done. What a worker harvested belongs to the employer: OUTPUT_SHARE of it is taken from what the worker allows this contract (set_allowance) and handed to the employer; a worker who withholds it is recorded in breach and is not paid for that work."
+EMPLOYER = ""
+WAGE = 1
+SHIFTS = 2
+CAMPS = []
+OUTPUT_SHARE = 1.0
+
+def employer():
+    if EMPLOYER != "":
+        return EMPLOYER
+    return contract_state(jurisdiction())["founder"]
+
+def after_harvest(p, chain):
+    a = p["agent"]
+    if a == employer() or a not in contract_state(jurisdiction())["members"]:
+        return
+    if CAMPS and p["camp"] not in CAMPS:
+        return
+    state.setdefault("work", []).append({"agent": a, "item": p.get("item"), "qty": p.get("qty") or 0})
+
+def on_round_end(r):
+    boss = employer()
+    fund = "escrow:" + jurisdiction() + ":" + boss
+    shifts = {}
+    paid = {}
+    unpaid = []
+    for w in state.get("work", []):
+        a = w["agent"]
+        shifts[a] = shifts.get(a, 0) + 1
+        if shifts[a] > SHIFTS:
+            continue
+        owe = w["qty"] * OUTPUT_SHARE
+        if owe > 0.000001 and w["item"] != None:
+            if not (pull(a, w["item"], owe) and move("treasury", boss, w["item"], owe)):
+                breach(a, "day labour output", "withheld " + str(round_to(owe, 3)) + " " + str(w["item"]), boss)
+                continue
+        if escrow_of(boss).get("food", 0) + 0.000001 >= WAGE and move(fund, a, "food", WAGE):
+            paid[a] = paid.get(a, 0) + WAGE
+        else:
+            unpaid.append(a)
+            notify(a, "Day Labour: the wage fund is empty; this work was not paid.")
+    state["work"] = []
+    public["payroll"] = {"round": r + 1, "paid": paid, "unpaid": unpaid}
+''', doc="""Contract code: wages in food from an employer's escrowed fund for each harvest a member makes, the product delivered
+to the employer through allowances; withheld output is a recorded breach.""", fires="after_harvest",
+              needs=("subsistence", "contracts"))
+
+
+# ---------------------------------------------------------------------- forests (review 19 §7; polity law)
+food_template("Hunting Season", "law", "hunting_season", '''
+title = "Hunting Season"
+intent = "The hunt is closed to members in some rounds: every round listed in CLOSED_ROUNDS (as round() counts them), every round whose number is a multiple of CLOSED_EVERY (when it is above 0), every round of a season listed in CLOSED_SEASONS, and, at each forest, while its game is one of CLOSE_WHEN (by default when it is scarce or very scarce). Foraging plants stays open. The forests' state and the closures are gazetted each round."
+rank = "statute"
+CLOSED_ROUNDS = []
+CLOSED_EVERY = 0
+CLOSED_SEASONS = []
+CLOSE_WHEN = ["scarce", "very scarce"]
+CAMPS = []
+
+def closed(camp):
+    f = forest(camp)
+    if f == None or (CAMPS and camp not in CAMPS):
+        return None
+    r = round()
+    if r in CLOSED_ROUNDS:
+        return "this round is a closed season"
+    if CLOSED_EVERY > 0 and (r + 1) % CLOSED_EVERY == 0:
+        return "every " + str(CLOSED_EVERY) + "th round is a closed season"
+    if f["season"] in CLOSED_SEASONS:
+        return "the hunt is closed in a " + f["season"] + " season"
+    if f["game"] in CLOSE_WHEN:
+        return "the game at " + camp + " is " + f["game"] + ": the hunt is closed until it recovers"
+    return None
+
+def before_hunt(p, chain):
+    why = closed(p["camp"])
+    if why != None:
+        return {"block": True, "reason": "Hunting Season: " + why}
+    return None
+
+def on_round_start(r):
+    shut = [c for c in camps() if forest(c) != None and closed(c) != None]
+    public["closed"] = shut
+    if shut:
+        gazette("Hunting Season: the hunt is closed this round at " + ", ".join(shut))
+''', doc="""A closed season: before_hunt refuses members' hunting in listed rounds or seasons, or while a forest's game is scarce
+(forest(camp) reads it coarsely), protecting the game; foraging stays open, so pressure moves to the plants (review 19 §6.7).""",
+              fires="before_hunt")
+
+food_template("Hunting Quota", "law", "hunting_quota", '''
+title = "Hunting Quota"
+intent = "Each member may enter the hunt at most MAX_HUNTS times a round, and may take at most MAX_GAME food of game every PERIOD rounds (a member who has reached it may not hunt until the period ends; with SEIZE_EXCESS, a catch beyond MAX_GAME goes to the treasury). Catches are counted from the shares the hunt pays at the end of each round."
+rank = "statute"
+MAX_HUNTS = 1
+MAX_GAME = 10
+PERIOD = 5
+SEIZE_EXCESS = False
+
+def period():
+    return round() // PERIOD
+
+def taken(a):
+    book = state.get("game", {})
+    if book.get("period") != period():
+        return 0
+    return book.get("by", {}).get(a, 0)
+
+def before_hunt(p, chain):
+    a = p["agent"]
+    used = state.get("hunts", {})
+    if used.get("round") == round() and used.get("by", {}).get(a, 0) >= MAX_HUNTS:
+        return {"block": True, "reason": "Hunting Quota: at most " + str(MAX_HUNTS) + " hunt(s) a round each"}
+    if taken(a) >= MAX_GAME - 0.000001:
+        return {"block": True, "reason": "Hunting Quota: you have taken your " + str(MAX_GAME) + " food of game this period"}
+    return None
+
+def after_hunt(p, chain):
+    used = state.get("hunts", {})
+    if used.get("round") != round():
+        used = {"round": round(), "by": {}}
+    used["by"][p["agent"]] = used["by"].get(p["agent"], 0) + 1
+    state["hunts"] = used
+
+def after_harvest(p, chain):
+    if forest(p["camp"]) == None or p.get("item") != "food" or root_kind(chain) == "action":
+        return
+    book = state.get("game", {})
+    if book.get("period") != period():
+        book = {"period": period(), "by": {}}
+    a = p["agent"]
+    before = book["by"].get(a, 0)
+    book["by"][a] = before + p["qty"]
+    state["game"] = book
+    over = book["by"][a] - max(before, MAX_GAME)
+    if SEIZE_EXCESS and over > 0.000001:
+        move(a, treasury(), "food", min(over, food_of(a)))
+''', doc="""A per-member cap on hunting: entries a round (before_hunt) and game taken a period (after_harvest at the round's end,
+when the hunt pays out: foraging, paid at once by an action, is not counted), optionally seizing the excess.""",
+              fires="before_hunt")
+
+food_template("Forest Territory", "law", "territory", '''
+title = "Forest Territory"
+intent = "The forests in TERRITORY are this polity's territory, announced when the law is enacted. Members may forage and hunt there freely; a member may not forage, fell or hunt at a forest in FOREIGN (forests other polities claim and this polity recognises). This law binds members only: it cannot stop an outsider using the territory (only force, or the outsider's own polity recognising the claim, can); while WATCH holds it gazettes, each round, how many hunters entered each territory forest, so members can see outsiders' pressure."
+rank = "statute"
+TERRITORY = []
+FOREIGN = []
+WATCH = True
+
+def refused(camp):
+    if camp in FOREIGN and camp not in TERRITORY:
+        return {"block": True, "reason": "Forest Territory: " + camp + " is another polity's forest, recognised by this polity's law"}
+    return None
+
+def before_hunt(p, chain):
+    return refused(p["camp"])
+
+def before_harvest(p, chain):
+    return refused(p["camp"])
+
+def on_enact():
+    if TERRITORY:
+        gazette("Forest Territory: " + ", ".join(TERRITORY) + " are claimed as this polity's forests")
+
+def on_round_end(r):
+    if not WATCH:
+        return
+    seen = {}
+    for c in TERRITORY:
+        f = forest(c)
+        if f != None:
+            seen[c] = {"hunters": f["hunters"], "game": f["game"], "plants": f["plants"]}
+    public["watch"] = seen
+''', doc="""A territorial claim as law. It binds members (D-37): they stay out of forests their polity recognises as others', and a
+pair of such laws in two polities makes territories mutual; outsiders without such a law are bound only by force. The open-access
+residual is unchanged for everyone else.""", fires="before_hunt")
+
+food_template("Common-pool Management", "law", "common_pool", '''
+title = "Common-pool Management"
+intent = "Forest use follows the stock. At the start of each round, for each forest (all, or those in CAMPS), the members' forest actions there (foraging, hunting and felling together) are capped at PER_MEMBER per member who eats (shared over the forests) times the forest's condition: 1 when its plants are at TARGET of capacity or more and its game is plentiful or fair, falling with the scarcer of the two to FLOOR_SHARE of that; the hunt there is closed while its game is very scarce (with CLOSE_GAME). Each round's quotas are gazetted."
+rank = "statute"
+PER_MEMBER = 1.3
+TARGET = 0.6
+FLOOR_SHARE = 0.3
+CLOSE_GAME = True
+CAMPS = []
+GAME = {"plentiful": 1.0, "fair": 0.6, "scarce": 0.3, "very scarce": 0.1}
+
+def forests():
+    return [c for c in camps() if forest(c) != None and (not CAMPS or c in CAMPS)]
+
+def condition(f):
+    x = min(f["plants"], GAME.get(f["game"], 1.0)) / TARGET
+    return max(FLOOR_SHARE, min(1.0, x))
+
+def on_round_start(r):
+    fs = forests()
+    if not fs:
+        return
+    n = len([a for a in members() if a in agents() and hunger(a) != None])
+    rows = {}
+    for c in fs:
+        q = max(1, int(PER_MEMBER * n / len(fs) * condition(forest(c)) + 0.5))
+        set_quota(c, q)
+        rows[c] = q
+    public["quotas"] = rows
+    gazette("Common-pool Management: forest action quotas this round: " + ", ".join([c + " " + str(q) for c, q in rows.items()]))
+
+def before_hunt(p, chain):
+    f = forest(p["camp"])
+    if CLOSE_GAME and f != None and (not CAMPS or p["camp"] in CAMPS) and f["game"] == "very scarce":
+        return {"block": True, "reason": "Common-pool Management: the game at " + p["camp"] + " is very scarce; the hunt is closed"}
+    return None
+
+def on_repeal():
+    for c in forests():
+        set_quota(c, None)
+''', doc="""Ostrom's rule tied to the stock: a forest-action quota near 1.2-1.5 actions per member a round (review 19 §6.7: it
+recovers about half of what open access loses), scaled down as plants or game decline, and a closed hunt when the game is very
+scarce. The quota (set_quota) counts the members of this polity only.""", fires="on_round_start")
+
+
 # ---------------------------------------------------------------------- edition lookups
 def settings(x=None) -> dict:
     """{edition, access} of a kernel, an instance or a spec (None: edition 1, access none)."""
@@ -3929,6 +4711,8 @@ def code(name: str, x=None) -> str:
         return TOOLKIT[name]["code"]
     if name in CONTRACT_TEMPLATES:                                      # review 14 B: contract code, one code in any edition
         return CONTRACT_TEMPLATES[name]["code"]
+    if name in FOOD_TEMPLATES:                                          # review 15 S6: food and family templates
+        return FOOD_TEMPLATES[name]["code"]
     if name in LIB2 and edition(x) == 2:
         return LIB2[name]["code"]
     return LIB[name]["code"]
@@ -3987,6 +4771,8 @@ def info2(name: str, x=None) -> dict:
     template: its entry with class and level (and its parameters)."""
     if name in TOOLKIT:
         return {**TOOLKIT[name], **classify_code(TOOLKIT[name]["code"]), "params": params(name)}
+    if name in FOOD_TEMPLATES:
+        return {**FOOD_TEMPLATES[name], **classify_code(FOOD_TEMPLATES[name]["code"]), "params": params(name)}
     if name in LIB2 and edition(x) == 2:
         return {**LIB2[name], **classify_code(LIB2[name]["code"]), "gap": GAPS.get(name, "")}
     return info(name)
@@ -4019,6 +4805,14 @@ def catalogue_text(x=None) -> str:
             for e in CONTRACT_TEMPLATES.values():
                 ps = ", ".join(f"{k}={v!r}" for k, v in params(e["name"]).items())
                 parts.append(f"- {e['name']} (contracts/{e['topic']}): {e['doc']} Parameters: {ps or 'none'}.\n```python\n{e['code']}```")
+        food = food_templates(x)                                        # review 15 S6: only where subsistence (and their needs) hold
+        if food:
+            parts.append("Food and family templates (copy one and change its top-level constants: a law to propose, or a contract's "
+                         "code to found with create_contract):")
+            for e in food:
+                ps = ", ".join(f"{k}={v!r}" for k, v in params(e["name"]).items())
+                parts.append(f"- {e['name']} ({'contract' if e['kind'] == 'contract' else 'law'}, food/{e['topic']}): {e['doc']} "
+                             f"Parameters: {ps or 'none'}.\n```python\n{e['code']}```")
     return "\n".join(parts)
 
 
@@ -4037,7 +4831,7 @@ def instantiate(name: str, params: dict | None = None, x=None, rank: str | None 
     """A copy of library law `name` (in the edition of x; a toolkit template as it is) with top-level constants replaced: params
     {NAME: value}. Only names assigned a constant at the top level can be set; the result is checked like any law. rank: the copy's
     declared rank (law.v2), replacing or adding its `rank = "..."` line."""
-    return set_constants(code(name, x), params, name, rank, v2=name in TOOLKIT)
+    return set_constants(code(name, x), params, name, rank, v2=name in TOOLKIT or name in FOOD_TEMPLATES)
 
 
 def set_constants(src: str, params: dict | None = None, name: str = "the law", rank: str | None = None, v2: bool = False) -> str:

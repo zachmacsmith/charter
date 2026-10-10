@@ -1231,6 +1231,8 @@ def library_index(inst) -> dict:
     out.update({e["name"]: e["doc"] for e in LB.TOOLKIT.values() if e["family"] in fams})
     if "contracts" in fams or FT.on("contracts", inst["spec"]):         # review 14 B: library contract templates (Assurance
         out.update({e["name"]: e["doc"] for e in LB.CONTRACT_TEMPLATES.values()})   # Founding) wherever contracts can be founded
+    if FT.on("subsistence", inst["spec"]):                              # review 15 S6: the food and family templates whose needs hold
+        out.update({e["name"]: e["doc"] for e in LB.food_templates(inst)})
     if LB.settings(inst)["access"] != "none" and LB.edition(inst) == 2:
         out.update({b: GR.intent(LB.BLOCKS[b]["code"]) or "a building block" for b in LB.BLOCKS})
     return out

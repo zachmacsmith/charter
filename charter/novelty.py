@@ -123,6 +123,7 @@ def references() -> dict:
     out.update({f"block:{n}": e["code"] for n, e in LB.BLOCKS.items()})
     out.update({f"toolkit:{n}": e["code"] for n, e in LB.TOOLKIT.items()})
     out.update({f"toolkit:{n}": e["code"] for n, e in LB.CONTRACT_TEMPLATES.items()})     # review 14 B: Assurance Founding
+    out.update({f"toolkit:{n}": e["code"] for n, e in LB.FOOD_TEMPLATES.items()})         # review 15 S6: food and family templates
     out.update({f"template:{n}": C.instantiate(t["code"], {}) for n, t in C.TEMPLATES.items()})
     out.update({f"constitution:{n}": c for n, c in LB.CONSTITUTIONS.items()})
     out.update({f"constitution:{n}": c for n, c in getattr(RG, "CONSTITUTIONS", {}).items() if isinstance(c, str)})

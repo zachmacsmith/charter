@@ -745,7 +745,7 @@ def law_rng(seed: int) -> random.Random:
 
 def template_code(name: str, params: dict | None, sp: dict | None = None, rank: str | None = None) -> str:
     """A law made from a template: a toolkit or library law (library.instantiate) or a regimes.STATUTES law, with its constants set."""
-    if name in LB.TOOLKIT or name in LB.LIB:
+    if name in LB.TOOLKIT or name in LB.LIB or name in LB.FOOD_TEMPLATES:    # review 15 S6: food and family templates too
         return LB.instantiate(name, params, sp, rank=rank)
     if name in STATUTES:
         return LB.set_constants(statute_code(name), params, name, rank)
