@@ -142,10 +142,13 @@ def test_requirements_refused_with_a_reason(case):
             A.act(k, a, "conceive", {"partner": fx})
         return
     A.act(k, a, "conceive", {"partner": b})
-    if case == "hungry":
+    if case == "hungry":                                                 # no "must be fed" gate: the food cost is the limit
         k.w["subsistence"]["stage"][a] = -1
-        with pytest.raises(A.ActionError, match="hungry"):
-            A.act(k, b, "conceive", {"partner": a})
+        k.w["subsistence"]["stage"][b] = -1
+        assert PR.why_not(k, a, "you") is None
+        A.act(k, b, "conceive", {"partner": a})
+        assert len(PR.state(k)["gestations"]) == 1
+        return
     elif case == "poor":
         set_food(k, a, 3)
         with pytest.raises(A.ActionError, match="cannot pay 6 food"):

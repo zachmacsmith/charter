@@ -3,7 +3,7 @@ by default: nothing here writes state, draws a number or adds a word to a prompt
 
 Conception (S4, §4.2). One action, used by both sides: conceive {"partner": "Ada", "inherit": "Wealth" | null, "polity": null}.
 A call to a partner who has an open offer to the caller (made this round or within `offer_lapse` rounds) is a match; otherwise it
-records an offer (it costs nothing) and tells the partner. At the match both parents must be alive, adults, fed, not the Board,
+records an offer (it costs nothing) and tells the partner. At the match both parents must be alive, adults (hunger does not bar it: the food cost is the limit), not the Board,
 Fixer or observer, not already in a gestation, under `max_children` (born or pending), and able to pay `provisions` (held for the
 child: its starting food, which does not spoil while held) and `fee` (destroyed) each, from their own food and then their own
 stores. The routed `conceive` primitive (tier L: laws see the pair and whether a goal is inherited, never which: before_conceive
@@ -209,13 +209,6 @@ def can_pay(k, aid, need) -> float:
     return have
 
 
-def _stage(k, aid) -> int:
-    if "subsistence" not in k.w:
-        return 0
-    from charter import subsistence as SB
-    return SB.stage(k, aid)
-
-
 def _exempt(k, aid) -> bool:
     cls = (k.w["agents"].get(aid) or {}).get("cls")
     if "subsistence" in k.w:
@@ -239,8 +232,6 @@ def why_not(k, aid, who, full=True):
         return f"{who} {'are' if you else 'is'} already expecting a child (one at a time)"
     if c.get("max_children") is not None and pending_children(k, aid) >= int(c["max_children"]):
         return f"{who} {'have' if you else 'has'} {int(c['max_children'])} children already (born or expected), the most anyone may have"
-    if full and _stage(k, aid) < 0:
-        return f"{who} {'are' if you else 'is'} hungry: only the fed can conceive"
     if full:
         need = float(c["provisions"]) + float(c["fee"])
         have = can_pay(k, aid, need)
@@ -783,7 +774,7 @@ def rules_text(spec) -> str:
     c = cfg(spec)
     need = float(c["provisions"]) + float(c["fee"])
     return (f"Children come from two parents who both agree (conceive {{\"partner\": ...}}: an offer, which the partner accepts by "
-            f"naming you within {int(c['offer_lapse'])} rounds). Both must be fed adults, not already expecting; each pays "
+            f"naming you within {int(c['offer_lapse'])} rounds). Both must be adults, not already expecting; each pays "
             f"{need:g} {c['item']} ({float(c['provisions']):g} held as the child's first {c['item']}, {float(c['fee']):g} used up), "
             f"from their own {c['item']} and stores. The child is born {int(c['gestation'])} rounds later, mixes its parents' "
             "temperaments, and has a goal of its own drawn at random. A goal both parents name (\"inherit\") becomes its secondary "

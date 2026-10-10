@@ -1018,7 +1018,7 @@ if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
 # Refused while hungry (fed only), and allowed while starving (default: hungry allowed, starving refused). Vote stays open to the
 # starving (user decision U14: a polity may restrict it by law, with the hunger(agent) read).
 HUNGRY_REFUSED = ("attack", "join_attack", "contract", "found", "create_contract", "create_channel", "open_channel", "propose", "amend",
-                  "commission", "build", "fortify", "forge", "invest", "contribute", "buy_initiative", "conceive")
+                  "commission", "build", "fortify", "forge", "invest", "contribute", "buy_initiative")
 STARVING_OK = ("transfer", "reply", "dm", "post", "channel_post", "send", "harvest", "hunt", "farm", "withdraw", "join", "leave",
                "join_contract", "leave_contract", "authorize", "revoke_authorization", "standing_order", "bequest", "vote",
                "accept_loan", "repay_loan", "write_scratchpad")
