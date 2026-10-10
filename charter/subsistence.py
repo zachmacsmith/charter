@@ -1016,6 +1016,35 @@ def owner_laws(k, P, payload, laws) -> list:
 
 
 # ---------------------------------------------------------------------- the scripted bot (dry runs; own stream)
+HARVEST_LAW_MARKS = ("def on_harvest", "def before_harvest", "set_quota(", "set_harvest_limit(")
+LAW_ACTIONS = ("propose", "amend", "create_contract", "propose_contract_change", "found")
+
+
+def _bot_code(x) -> str:
+    """The law code a scripted action carries: its code, or its contract template's code ("" when none)."""
+    try:
+        a = json.loads(x.get("args_json") or "{}")
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(a, dict):
+        return ""
+    code = a.get("code") or ""
+    if not code and a.get("template"):
+        from charter import contracts as KC
+        code = (KC.TEMPLATES.get(str(a["template"])) or {}).get("code") or ""
+    return str(code)
+
+
+def bot_filter(k, acts) -> list:
+    """agents.ScriptedPolicy, subsistence on only: the scripted bots never propose, enact or found with a harvest levy or a
+    harvest quota (generic laws that skim or cap harvests: on_harvest, before_harvest, set_quota, set_harvest_limit), so a dry
+    run's food economy is not taxed or capped by an accident of the bots' law library."""
+    if not on(k):
+        return acts
+    return [x for x in acts if x.get("action") not in LAW_ACTIONS
+            or not any(m in _bot_code(x) for m in HARVEST_LAW_MARKS)]
+
+
 def scripted_actions(k, aid, n) -> list:
     """The scripted food bot (dry runs, own stream "{seed}|subsistence-bot|<aid>|<round>"). Eating is automatic; bot `idle` does
     nothing about food. Bot `basic`: reap its own ripe crops and sow a fallow plot when it holds food to spare (fields only), with

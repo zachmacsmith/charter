@@ -1010,3 +1010,29 @@ def test_a_blocked_forage_takes_no_fee(monkeypatch):
             A.act(k, a, "harvest", {"camp": f})
             assert k.bal(b, "food") == pytest.approx(1)                     # the fee, paid once the forage went through
         monkeypatch.undo()
+
+
+def test_scripted_bots_propose_no_harvest_levies_or_quotas():
+    import json
+    from charter import library as LB
+    from charter.agents import ScriptedPolicy
+    inst, k = small()
+    a = eaters(k)[0]
+    act = lambda _a, **kw: {"action": _a, "args_json": json.dumps(kw)}
+    levy, quotas = LB.code("Harvest Levy", inst), LB.code("Harvest Quotas", inst)
+    harmless = 'title = "Gazette"\nintent = "x"\ndef on_round_start(r):\n    pass\n'
+    acts = [act("propose", code=levy), act("propose", code=quotas), act("create_contract", name="c", template="company"),
+            act("create_contract", name="d", template="cartel"), act("propose", code=harmless), act("hunt", camp="x")]
+    assert [json.loads(x["args_json"]).get("code", x["action"]) for x in SB.bot_filter(k, acts)] == [harmless, "hunt"]
+    off_inst, off = world("nature_design", [SMALL])
+    assert SB.bot_filter(off, acts) == acts                                   # subsistence off: untouched
+    from charter import context as CX
+    inst, k = world("society", ["subsistence.enabled=true"], constitution=True)
+    a = eaters(k)[0]
+    k.inst["library"] = ["Harvest Levy", "Harvest Quotas"]                    # a legislator bot drawing from the library
+    k.w["agents"][a]["cls"] = "legislator"
+    k.w["agents"][a]["rights"].append("propose")
+    pol = ScriptedPolicy(1)
+    acts = [x["action"] for _ in range(20)
+            for x in pol.act(k, {**k.w["agents"][a], "id": a}, "", CX.FETCHED_HEADER, 6, False)[0]["actions"]]
+    assert "hunt" in acts and "propose" not in acts                          # (86 proposals in these 20 turns without the filter)

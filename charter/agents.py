@@ -784,6 +784,9 @@ class ScriptedPolicy:
         from charter import directories as DR
         if DR.enabled(k):                                                # directories: an owner's bot keeps it (no RNG; off: nothing)
             acts[:0] = DR.scripted_actions(k, a, n_actions)
+        if "subsistence" in k.w:                                         # review 15: no harvest levies or quotas from the bots
+            from charter import subsistence as SB
+            acts = SB.bot_filter(k, acts)
         gone = AR.hidden(k.spec) if AR.core_only(k.spec) else ()      # review 14 A: the core surface's bots use only its actions
         if gone:
             acts = [x for x in acts if x.get("action") not in gone]
