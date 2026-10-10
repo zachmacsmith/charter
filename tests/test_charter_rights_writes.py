@@ -23,7 +23,7 @@ EXCEPTIONS = {
                                   "today's depart did; recorded in the departure event, not a law's grant or revocation",
     ("lawpreview.py", "_procedure"): "the previewer lends the propose right for one call inside a transaction that is undone (P3.5)",
     # world generation: instance dicts before any kernel exists (no k.w, nothing to log)
-    ("generator.py", "generate"): "generation: the instance's agents (no kernel yet)",
+    ("generator.py", "_generate"): "generation: the instance's agents (no kernel yet)",
     ("generator.py", "validate"): "generation: the instance's repairs (no kernel yet)",
     ("regimes.py", "_grant"): "generation: a regime's rights on the instance's agents (no kernel yet)",
     ("regimes.py", "_revoke"): "generation: a regime's rights on the instance's agents (no kernel yet)",
@@ -101,7 +101,7 @@ def rights_writes() -> list:
 
 def test_the_scanner_finds_writes():
     found = {(f, q) for f, q, _ in rights_writes()}
-    assert ("generator.py", "generate") in found or ("generator.py", "_assign_rights") in found
+    assert ("generator.py", "_generate") in found or ("generator.py", "_assign_rights") in found
 
 
 def test_rights_are_written_only_through_the_kernel():

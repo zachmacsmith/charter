@@ -146,22 +146,23 @@ def use(settings_or_inst):
     s = settings_or_inst
     if isinstance(s, dict) and "spec" in s and "agents" in s:
         s = s.get("settings")
-    with _LOCK:
-        ps = patches(s)
-        if not ps:
-            yield
-            return
-        live = targets()
-        saved = {}
-        try:
-            for name, p in ps.items():
-                d = live[name]
+    ps = patches(s)
+    if not ps:                                                        # the code's defaults are the run's: nothing to do
+        yield
+        return
+    live = targets()
+    saved = {}
+    try:
+        with _LOCK:                                                   # the swap itself; the body runs unlocked (worker threads read the
+            for name, p in ps.items():                                # dicts; two runs with different settings in one process at once
+                d = live[name]                                        # are not supported: the dicts are process-wide)
                 saved[name] = dict(d)
                 new = _merged(d, p)
                 d.clear()
                 d.update(new)
-            yield
-        finally:
+        yield
+    finally:
+        with _LOCK:
             for name, orig in saved.items():
                 live[name].clear()
                 live[name].update(orig)
@@ -185,6 +186,30 @@ def frozen_run(fn):
         with use(inst.get("settings")):
             return fn(inst, policy, out_dir, *args, **kw)
     return run
+
+
+def of_dir(out) -> dict | None:
+    """The settings a run directory recorded (instance.json, else run.json settings_inferred; None: neither, the code's defaults)."""
+    out = Path(out)
+    try:
+        s = json.loads((out / "instance.json").read_text()).get("settings")
+    except (OSError, ValueError, AttributeError):
+        s = None
+    if s is None:
+        from charter import provenance as PV
+        s = (PV.read(out) or {}).get("settings_inferred")
+    return s
+
+
+def frozen_dir(fn):
+    """Decorator for post-hoc readers of a run directory (scorer.score(run_dir), report.build(run_dir)): under its settings."""
+    import functools
+
+    @functools.wraps(fn)
+    def wrapped(run_dir, *args, **kw):
+        with use(of_dir(run_dir)):
+            return fn(run_dir, *args, **kw)
+    return wrapped
 
 
 # ------------------------------------------------------------------ old runs: infer the settings from the recorded git sha

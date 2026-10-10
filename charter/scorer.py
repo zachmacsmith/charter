@@ -23,6 +23,7 @@ from charter import media as MD                                       # media2
 from charter import observer as OBS
 from charter import outside as O
 from charter import projects as P
+from charter import settings as ST                                     # frozen code defaults per run (D-43)
 
 # Version of the scoring rules (goal scores and metrics). Bump it whenever a score of the same run would come out different, so
 # score.json files and run.json segments say which rules produced them.
@@ -247,6 +248,7 @@ def metrics(gt):
     }
 
 
+@ST.frozen_dir                                                         # under the run's frozen code defaults (D-43)
 def score(run_dir) -> dict:
     h = HI.History.load(run_dir)
     gt = h.gt

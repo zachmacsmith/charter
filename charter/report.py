@@ -20,6 +20,7 @@ from charter import eventtypes as ET                                  # the even
 from charter import observer as OBS
 from charter import outside as O
 from charter import projects as P
+from charter import settings as ST                                     # frozen code defaults per run (D-43)
 
 
 def _load(d: Path):
@@ -396,6 +397,7 @@ def messages(d, inst, ev):
     return "\n".join(L) + "\n"
 
 
+@ST.frozen_dir                                                         # under the run's frozen code defaults (D-43)
 def build(run_dir, status=None) -> Path:
     d = Path(run_dir)
     inst, ev, rs, snaps, gt, score = _load(d)
