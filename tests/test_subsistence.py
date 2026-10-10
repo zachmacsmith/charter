@@ -359,7 +359,7 @@ def test_the_composer_appends_forests_and_draws_nothing_else():
     fo = [c for c in inst["camps"] if c.get("role") == "subsistence"]
     assert [c["type"] for c in fo] == ["forest"] * 4
     assert sum(c["K"] for c in fo) == pytest.approx(700) and sum(c["game"]["K"] for c in fo) == pytest.approx(1000)
-    assert all(c["S"] == pytest.approx(0.8 * c["K"]) and c["game"]["G"] == pytest.approx(0.9 * c["game"]["K"]) for c in fo)
+    assert all(c["S"] == pytest.approx(0.95 * c["K"]) and c["game"]["G"] == pytest.approx(0.95 * c["game"]["K"]) for c in fo)   # near capacity
     inst = generator.generate(S.apply_overrides(S.load("nature_subsistence"), [
         "shared_archive.enabled=false", "agents={worker: 100, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}", FIELDS]), 1)
     types = [c["type"] for c in inst["camps"] if c.get("role") == "subsistence"]
@@ -683,7 +683,7 @@ def test_agents_see_plants_coarse_game_and_the_season():
     f, cm = forest(k)
     a = eaters(k)[0]
     line = CT.view(k, f, fresh=False).state_line(k, a)
-    assert line.startswith("plants 80% of capacity") and "game plentiful" in line and "season " in line
+    assert line.startswith("plants 95% of capacity") and "game plentiful" in line and "season " in line
     cm["game"]["G"] = 0.05 * cm["game"]["K"]
     assert "game very scarce" in CT.view(k, f, fresh=False).state_line(k, a)
     assert str(round(cm["game"]["G"], 1)) not in line

@@ -81,8 +81,8 @@ DEFAULTS = {
     # review 19 (the forest ecosystem): forests hold plants (forage) and game (hunt), separate stocks with their own regrowth
     "forest": {"per_agent": 30, "capacity_per_agent": 7.0, "regrowth": 0.6, "yield": 3.0, "refuge": 0.10,
                "forage_per_round": 2, "fell_timber": 3.0, "fell_cost_k": 0.01, "fell_floor": 0.5, "clearing": 5,
-               "start_stock": 0.8},     # plants: one forest per per_agent agents; K = capacity_per_agent x N / forests
-    "game": {"capacity_per_agent": 10.0, "regrowth": 0.2, "inflow": 0.01, "allee": 0.0, "theta": 1.0, "start_stock": 0.9,
+               "start_stock": 0.95},    # plants: one forest per per_agent agents; K = capacity_per_agent x N / forests
+    "game": {"capacity_per_agent": 10.0, "regrowth": 0.2, "inflow": 0.01, "allee": 0.0, "theta": 1.0, "start_stock": 0.95,
              "large": {"food": 20.0, "scale": 5.0, "shape": 3.0, "catch": 0.7},
              "medium": {"food": 5.0, "scale": 2.5, "shape": 2.0, "catch": 0.4},
              "small": {"food": 1.0, "catch": 0.8}},   # game: K = capacity_per_agent x N / forests; the hunt's classes (forest.py)

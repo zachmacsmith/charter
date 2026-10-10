@@ -278,30 +278,30 @@
   "snapshots.json": "b09d8fb5334d49bf"
  },
  "pairs_small": {
-  "events.jsonl": "4d2b21585032f2c3",
-  "instance.json": "cfb5297d5b4c151d",
+  "events.jsonl": "82cdcb6caef0b37c",
+  "instance.json": "e25e85714b7831c0",
   "score": {
-   "activity_mix": "45b84cbc072cd5e5",
-   "agents": "a76ea954138f28cd",
+   "activity_mix": "eec317937e065fe6",
+   "agents": "51b9fe26a256d86b",
    "goal_scores": {
     "Aksel": 0.6926,
-    "Asta": 0.0358,
-    "Bjorn": 0.0,
-    "Elin": 0.0693,
+    "Asta": 0.0217,
+    "Bjorn": 0.0088,
+    "Elin": 0.0668,
     "Gry": 0.7,
-    "Jory": 0.3153,
-    "Kasper": 0.1447,
-    "Nadia": 0.15,
-    "Odette": 0.2443,
+    "Jory": 0.2721,
+    "Kasper": 0.1456,
+    "Nadia": 0.125,
+    "Odette": 0.2369,
     "Per": 0.0,
-    "Sena": 0.4981,
+    "Sena": 0.4845,
     "Ulf": 0.0
    },
-   "goals": "06159abc21bd9faa",
-   "lineage": "038d1868f268bdae",
-   "summary": "f23f64b847438aff"
+   "goals": "1e9eab89df1a4ad3",
+   "lineage": "543faffbc6db961a",
+   "summary": "5c6f3d7c6b7d164e"
   },
-  "snapshots.json": "e3d5589a198b5fff"
+  "snapshots.json": "c4cb2f08c1ce872a"
  },
  "prompts_E4_1": {
   "Abel": {
@@ -569,30 +569,30 @@
   "snapshots.json": "3ce5be68c19e75d9"
  },
  "subsistence_small": {
-  "events.jsonl": "1c1ee2edabbe39bf",
-  "instance.json": "a89755ead98cdcaa",
+  "events.jsonl": "e172e3c53f28f614",
+  "instance.json": "ed1b260bc165e7bb",
   "score": {
    "activity_mix": "1bfc46b15a00a878",
-   "agents": "32f144e5c53b9d79",
+   "agents": "c2a53edd828c3239",
    "goal_scores": {
-    "Bruna": 0.281,
-    "Felix": 0.1237,
+    "Bruna": 0.2813,
+    "Felix": 0.1246,
     "Iris": 0.1667,
-    "Jarl": 0.7,
-    "Maya": 0.3067,
-    "Oda": 0.2032,
-    "Rakel": 0.5781,
-    "Siv": 0.3681,
+    "Jarl": 0.7041,
+    "Maya": 0.3043,
+    "Oda": 0.204,
+    "Rakel": 0.5776,
+    "Siv": 0.368,
     "Valter": 1.0,
     "Vidar": 0.0846,
-    "Wanda": 0.1756,
-    "Yuri": 0.2449,
-    "Zeno": 0.4202
+    "Wanda": 0.1758,
+    "Yuri": 0.2464,
+    "Zeno": 0.423
    },
-   "goals": "b182dc5f06b0caa4",
-   "lineage": "dc3ce1a522cf56c6",
-   "summary": "e7b494f9a8a8b975"
+   "goals": "2c49fba12972c8d4",
+   "lineage": "c8ca345227cb228e",
+   "summary": "21e686d00121ba6f"
   },
-  "snapshots.json": "e776314b02696463"
+  "snapshots.json": "7bfc890256a324cc"
  }
 }
