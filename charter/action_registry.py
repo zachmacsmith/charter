@@ -937,7 +937,18 @@ def core_surface(spec) -> tuple:
     """The actions that exist under actions.core_only: CORE_SURFACE, plus NATURE_SURFACE in a world that starts in a state of
     nature."""
     from charter import jurisdictions as J
-    return CORE_SURFACE + NATURE_SURFACE if J.nature_start(spec) else CORE_SURFACE
+    out = CORE_SURFACE + NATURE_SURFACE if J.nature_start(spec) else CORE_SURFACE
+    if ((spec or {}).get("channels") or {}).get("v2"):                 # channels v2 is the communication fabric: its verbs are core
+        out = out + CHANNELS_SURFACE
+    from charter import directories as DR
+    if DR.enabled(spec):                                               # a world with directories (a chronicle): their verbs
+        out = out + tuple(a for a in DR.ACTIONS if a not in out)
+    if ((spec or {}).get("institutions") or {}).get("succession"):     # D-38: office holders name successors
+        out = out + ("name_successor",)
+    return out
+
+
+CHANNELS_SURFACE = ("send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")
 
 
 def hidden(spec) -> set:
