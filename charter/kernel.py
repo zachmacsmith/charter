@@ -228,7 +228,7 @@ class Kernel:
 
     def _dm_law_caps(self, aid) -> list:
         """The caps law imposes on this agent under dm_step.capacity natural: the one set for it, the one set for everyone, and
-        the Communications Act's LIMIT (plus its drawn extra, as the Act reads) when the Act is in force; [] when none applies."""
+        the Communications Act's LIMIT when the Act is in force (a cap: user, 10 Oct); [] when none applies."""
         lim, caps = self.w["dm_limit"], []
         if aid in lim["agents"]:
             caps.append(int(lim["agents"][aid]))
@@ -237,7 +237,7 @@ class Kernel:
         else:
             act = DC.rule(self, DC.root(self), "Communications Act", "limit", int((self.spec.get("dm_step") or {}).get("dms_per_round", 5)))
             if act is not None:
-                caps.append(int(act) + int((self.w.get("dm_extra") or {}).get(aid, 0)))
+                caps.append(int(act))
         return caps
 
     def dm_limit_source(self, aid) -> str | None:

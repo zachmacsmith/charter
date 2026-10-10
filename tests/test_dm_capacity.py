@@ -93,7 +93,7 @@ def test_communications_act_limit_only_caps_under_natural():
                         (9, ['code.select={"Communications Act": {"LIMIT": 9}}'])):
         inst, k = _code_world("natural", sets)
         for a in _workers(inst):
-            assert k.dm_limit(a["id"]) == min(k.dm_capacity(a["id"]), limit + a["dm_extra"])
+            assert k.dm_limit(a["id"]) == min(k.dm_capacity(a["id"]), limit)          # the Act caps at its LIMIT (user, 10 Oct)
         inst, k = _code_world("legacy", sets)
         for a in _workers(inst):
             assert k.dm_limit(a["id"]) == min(k.dm_cap(), limit + a["dm_extra"])   # legacy: the Act can raise it
