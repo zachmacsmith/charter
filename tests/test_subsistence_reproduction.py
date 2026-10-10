@@ -472,3 +472,8 @@ def test_a_promotion_splits_the_childs_scoring_into_segments():
     segs = h.segments(ch)
     assert segs is not None and len(segs) == 2 and segs[1][0] == bounds[0]["round"]
     assert segs[0][2]["primary"] == bounds[0]["old"]["primary"] and segs[1][2]["primary"] == bounds[0]["new"]["primary"]
+
+
+def test_no_kernel_cap_on_children_by_default():
+    from charter import pairs as PR2
+    assert PR2.cfg({})["max_children"] is None                            # D-36: no kernel cap; a law may set one

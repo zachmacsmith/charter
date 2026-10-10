@@ -106,7 +106,7 @@ DEFAULTS = {
         "offer_lapse": 2,               # rounds an offer stands (the round it is made and the next)
         "gestation": 2,                 # rounds from the match to the birth (born at the end of round match + gestation)
         "maturity": 6,                  # rounds a child is a minor (2 actions; no conceiving, attacking, founding, proposing, voting)
-        "max_children": 4,              # per parent, born or pending
+        "max_children": None,           # per parent, born or pending; None: no kernel cap (D-36; a law may set one with set_birth_rules)
         "model": "weak",                # the child's model: a tier (weak, mid, strong), a model id, or "parents" (a random parent's)
         "minor_actions": 2,             # a minor's actions per turn (at most)
         "household": True,              # a minor short of food eats from its parents' food after they eat (U3)

@@ -404,6 +404,7 @@ def _ann():
         "life.reproduction.model": dict(types=("str",)),
         "life.reproduction.provisions": dict(range=NONNEG),
         "life.reproduction.fee": dict(range=NONNEG),
+        "life.reproduction.max_children": dict(types=("int", "null"), range=NONNEG),
         "life.reproduction.gestation": dict(types=("int",), range=(1, None)),
         "life.reproduction.maturity": dict(types=("int",), range=(1, None)),
         "life.reproduction.promotion.p_lo": dict(range=PROB),

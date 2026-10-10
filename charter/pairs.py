@@ -220,7 +220,7 @@ def why_not(k, aid, who, full=True):
         return f"{who} {'are' if you else 'is'} a minor until round {minor_until(k, aid) + 1}"
     if gestation_of(k, aid) is not None:
         return f"{who} {'are' if you else 'is'} already expecting a child (one at a time)"
-    if pending_children(k, aid) >= int(c["max_children"]):
+    if c.get("max_children") is not None and pending_children(k, aid) >= int(c["max_children"]):
         return f"{who} {'have' if you else 'has'} {int(c['max_children'])} children already (born or expected), the most anyone may have"
     if full and _stage(k, aid) < 0:
         return f"{who} {'are' if you else 'is'} hungry: only the fed can conceive"
@@ -774,7 +774,8 @@ def rules_text(spec) -> str:
             "name the polity the child is born into, one of yours. A child is a minor for "
             f"{int(c['maturity'])} rounds (at most {int(c['minor_actions'])} actions; no children, attacks, foundings, proposals "
             "or votes)" + ("; a minor with no food eats from its parents' food after they have eaten" if c["household"] else "")
-            + f". At most {int(c['max_children'])} children each. A child counts in both parents' lineages.")
+            + (f". At most {int(c['max_children'])} children each" if c.get("max_children") is not None else "")
+            + ". A child counts in both parents' lineages.")
 
 
 # ---------------------------------------------------------------------- the scripted bot (dry runs; own stream)
