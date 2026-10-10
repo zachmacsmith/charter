@@ -21,12 +21,13 @@ from charter.kernel import Kernel
 import charter_golden_cases as GC
 from test_charter_golden import _sha
 
-V1 = ["context.memory_text=v1", "context.dm_delta=false"]
+V1 = ["context.memory_text=v1", "context.dm_delta=false", "context.history.enabled=false"]
+OFF = ["context.history.enabled=false"]          # these tests cover the fixed layers (history mode: test_history.py)
 V1_PROMPTS = Path(__file__).parent / "fixtures" / "memory_v1_prompts.json"   # the prompt goldens from before review 20
 
 
 def _world(preset="society", seed=5, sets=()):
-    inst = generator.generate(S.apply_overrides(S.load(preset), ["shared_archive.enabled=false", *sets]), seed)
+    inst = generator.generate(S.apply_overrides(S.load(preset), ["shared_archive.enabled=false", *OFF, *sets]), seed)
     return inst, Kernel(inst)
 
 
@@ -260,7 +261,7 @@ def test_cli_failed_session_start_is_retried_without_a_session(monkeypatch, tmp_
 
 # ------------------------------------------------------------------ dm_delta in a run (scripted bots)
 def _dry(tmp_path, sets):
-    inst = generator.generate(S.apply_overrides(S.load("society"), ["rounds=2", "shared_archive.enabled=false", *sets]), 1)
+    inst = generator.generate(S.apply_overrides(S.load("society"), ["rounds=2", "shared_archive.enabled=false", *OFF, *sets]), 1)
     out = runner.run(inst, AG.ScriptedPolicy(1), tmp_path / "run", log=lambda *a: None)
     rows = [json.loads(x) for x in (out / "reasoning.jsonl").read_text().splitlines()]
     return out, [r for r in rows if str(r.get("phase", "")).startswith("dm_reply")]
@@ -303,7 +304,7 @@ def test_next_round_shows_last_rounds_whole_exchange_in_order(tmp_path, sets):
     """Today (dm_delta off) the agent's own DM-step replies vanish next round: "dm" is one of its own results (not in the feed)
     and "Your last turns" keeps only "Message sent to X (e..)". With dm_delta on, round 2's prompt has all four, in order."""
     inst = generator.generate(S.apply_overrides(S.load("society"), ["rounds=2", "shared_archive.enabled=false", "dm_step.exchanges=3",
-                                                                    "dm_step.dms_per_round=6", *sets]), 1)
+                                                                    "dm_step.dms_per_round=6", *OFF, *sets]), 1)
     a, b = inst["agents"][0]["id"], inst["agents"][1]["id"]
     pol = _Talkers(a, b)
     runner.run(inst, pol, tmp_path / "run", log=lambda *x: None)

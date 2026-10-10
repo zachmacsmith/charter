@@ -13,7 +13,8 @@ from charter import generator, runner
 from charter import spec as S
 from charter.kernel import Kernel
 
-BASE = ["shared_archive.enabled=false", "context.lookups_in_dm_step=false"]   # these tests cover the free-lookup mode
+BASE = ["shared_archive.enabled=false", "context.lookups_in_dm_step=false",   # these tests cover the free-lookup mode
+        "context.history.enabled=false"]                                  # and the fixed layers (history mode: test_history.py)
 
 
 def world(sets=(), seed=1):

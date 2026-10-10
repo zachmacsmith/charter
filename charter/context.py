@@ -69,7 +69,7 @@ DEFAULTS = {
     "dm_delta": True,                 # review 20 §4.5: a DM reply continues the agent's decide conversation (a short "since you acted"
                                       # message) instead of resending the whole turn prompt; false: the full DM prompt, as before
     "history": {                      # review 20 §4 (charter/memory.py): one conversation per agent, restarted every `chunk` rounds,
-        "enabled": False,             # with the past on a gradient (full, one line, recall); false: the fixed layers above, unchanged
+        "enabled": True,              # with the past on a gradient (full, one line, recall); false: the fixed layers above, unchanged
         "chunk": 3,                   # rounds per conversation; the bands move only when one restarts
         "stagger": True,              # restarts staggered across agents (a stable per-agent offset)
         "summary_rounds": 12,         # rounds shown as one line each, before the rounds in full (the agent's memory_turns)
@@ -84,7 +84,7 @@ DEFAULTS = {
             "kin": None,              # a birth the agent is named in
             "deal": 10,               # loans, contracts and transfers to it
             "law": 10,                # laws enacted or repealed, jurisdictions declared
-            "close_messages": 6,
+            "close_messages": 6,      # messages exchanged (any time before) that make a contact close
         },
     },
 }

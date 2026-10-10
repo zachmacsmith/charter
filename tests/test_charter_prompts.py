@@ -222,7 +222,7 @@ def test_manual_agrees_with_the_core_prompt_on_turn_mechanics(world):
         aid, p, m = a["id"], CX.core_prompt(inst, a, k), _manual(inst, k, a["id"])
         turn = m["How your turn works"]
         mem = CX.memory_turns(k, aid)
-        assert f"shown for your last {mem} turns" in p and f"your own last {mem} turns" in turn, aid   # memory_text v2
+        assert f"The last {mem} to {mem + 2} rounds in full" in p and f"the last {mem} rounds in full" in turn, aid   # history mode
         assert f"your scratchpad ({CX.scratchpad_size(k, aid)} tokens" in turn, aid
         assert "private-message slots" in turn and "this round" in turn, aid                 # the DM-step lookup mechanism
         assert '"actions" empty' not in turn and "free lookups" not in turn, aid             # not the lookup-phase one
@@ -317,7 +317,8 @@ PERTURB = [
 # Worlds: every context layer (society); the legacy prompt with conflict, media, the DM step and the observer; a context world with
 # free lookups and no per-agent memory draw (its own overrides and phrases).
 PERTURB_WORLDS = {
-    "society": ("society", 5, [], []),
+    "society": ("society", 5, [], [("context.history.chunk=4", ["restarts every 3 rounds"], "restarts every 4 rounds"),   # review 20
+                                   ("context.history.summary_rounds=9", ["The 12 rounds before", "(12 of them)"], "The 9 rounds before")]),
     "legacy": ("conflict_pilot", 1, ["media2.enabled=true", "observer.enabled=true", "turns=simultaneous", "dm_step.enabled=true"], []),
     "free_lookups": ("context_pilot", 1, ["context.lookups_in_dm_step=false", "conflict.enabled=true", "media2.enabled=true"],
                      [("context.free_lookups=5", ["up to 3 free lookups"], "up to 5 free lookups"),

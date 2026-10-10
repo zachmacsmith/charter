@@ -868,7 +868,7 @@ ACTION_PRIMITIVES = {
     # talk and trade
     "dm": ("dm",), "reply": ("dm", "move"), "post": ("post",), "transfer": ("move",),
     # information
-    "manual": LOOKUP, "manual_search": LOOKUP, "recent": LOOKUP, "search_board": LOOKUP, "search_dms": LOOKUP, "read_law": LOOKUP,
+    "manual": LOOKUP, "manual_search": LOOKUP, "recent": LOOKUP, "search_board": LOOKUP, "search_dms": LOOKUP, "recall": LOOKUP, "read_law": LOOKUP,
     "preview_law": LOOKUP,                                            # P3.5: a transaction, undone (charter/lawpreview.py)
     "legal_position": LOOKUP,                                         # law.v2 with law.digest (charter/digest.py)
     "read_file": LOOKUP, "read_archive": LOOKUP, "search_archive": LOOKUP, "run_python": LOOKUP,

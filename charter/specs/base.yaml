@@ -221,6 +221,11 @@ outside_power:                    # an outside power demanding tribute (charter/
 #   free_scratchpad_writes: 1     # write_scratchpad actions per turn that use no action
 #   memory_text: v2               # review 20: v2 the accurate memory text and the notebook scratchpad text; v1 the earlier text
 #   dm_delta: true                # review 20: DM replies continue the decide conversation; false: the full DM prompt as before
+#   history:                      # review 20 §4 (charter/memory.py): one conversation per agent, restarted every chunk rounds
+#     enabled: true               # false: the fixed layers above, every prompt unchanged
+#     chunk: 3
+#     summary_rounds: 12          # one-line rounds before the agent's memory_turns rounds in full; summary_spread draws it per agent
+#     recall: true                # recall {"round": N}: a past round in full (a pre-action using a DM slot, or an action)
 llm:
   max_tokens: 6000
   thinking_budget: 2000           # native thinking budget. Through Claude Code the thinking text comes back for Haiku; for Sonnet/Opus
