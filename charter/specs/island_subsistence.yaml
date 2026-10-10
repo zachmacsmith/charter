@@ -1,0 +1,7 @@
+# The island arm (review 19 §6.5, open question 7): nature_subsistence on an island. The game can go extinct: a strong Allee
+# threshold (game.allee 0.2: below 20% of capacity the herd shrinks on its own, even if hunting stops) and no animals walking in
+# from the land around (game.inflow 0), so overhunting can wipe a forest's game out for good. Plants, seasons, stores and the rest
+# as nature_subsistence.
+extends: [nature_subsistence]
+subsistence:
+  game: {allee: 0.2, inflow: 0.0}

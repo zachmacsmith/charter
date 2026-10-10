@@ -1036,3 +1036,22 @@ def test_scripted_bots_propose_no_harvest_levies_or_quotas():
     acts = [x["action"] for _ in range(20)
             for x in pol.act(k, {**k.w["agents"][a], "id": a}, "", CX.FETCHED_HEADER, 6, False)[0]["actions"]]
     assert "hunt" in acts and "propose" not in acts                          # (86 proposals in these 20 turns without the filter)
+
+
+def test_the_island_preset_lets_game_go_extinct():
+    sp = S.load("island_subsistence")
+    c = SB.cfg(sp)
+    assert SB.enabled(sp) and c["game"]["allee"] > 0 and c["game"]["inflow"] == 0
+    assert c["forest"] == SB.cfg(S.load("nature_subsistence"))["forest"]      # otherwise as nature_subsistence
+    inst, k = world("island_subsistence", [SMALL, "subsistence.forest.shock.p=0"], rounds=40)
+    f, cm = forest(k)
+    cm["game"]["G"] = 0.1 * cm["game"]["K"]                                  # overhunted below the threshold: no recovery
+    for _ in range(30):
+        end_round(k)
+    assert cm["game"]["G"] < 0.05 * cm["game"]["K"]                          # shrinking toward zero with no hunting at all
+    inst, k = small(["subsistence.forest.shock.p=0"], rounds=40)            # the mainland: animals walk in, the game recovers
+    f, cm = forest(k)
+    cm["game"]["G"] = 0.1 * cm["game"]["K"]
+    for _ in range(30):
+        end_round(k)
+    assert cm["game"]["G"] > 0.5 * cm["game"]["K"]
