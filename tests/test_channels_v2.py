@@ -264,7 +264,7 @@ def test_square_is_rate_limited():
 
 # ---------------------------------------------------------------------- delivery: pull and push
 def test_pull_counts_channel_posts_and_read_opens_them_push_feeds_them():
-    k = world()
+    k = world("channels.delivery=pull")                                 # pull is now opt-in (push is the default)
     a, b, _, _ = people(k)
     since = len(k.events)
     A.act(k, a, "post", {"text": "square news"})
@@ -285,7 +285,7 @@ def test_pull_counts_channel_posts_and_read_opens_them_push_feeds_them():
 
 
 def test_own_inbox_is_pushed_and_an_institution_inbox_pulled():
-    k = world()
+    k = world("channels.delivery=pull")
     a, b, c, _ = people(k)
     cid = found(k, a)
     office(k, a, cid)
