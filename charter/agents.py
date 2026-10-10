@@ -699,6 +699,8 @@ def dm_prompt(k, a: dict, turn_prompt_text: str, first: dict, plan: list, new_dm
                 if wave >= waves else "Anyone you message now is shown it at once and can reply in turn."),
              "Your notes from your last turn are in the turn prompt below; \"notes\" in this reply replaces them.",
              "The turn prompt you saw at the start of this round, for reference:\n" + turn_prompt_text]
+    if CX.enabled(k.inst) and CX.v2(k.inst):                        # review 20 §1.5: with the context module there is no "notes"
+        parts.pop(-2)                                                   # field (the scratchpad replaced it)
     if final:
         parts.append("This is the final round: fill in goal_guesses_json as described.")
     return "\n\n".join(parts)

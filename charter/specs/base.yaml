@@ -219,6 +219,7 @@ outside_power:                    # an outside power demanding tribute (charter/
 #   pin_slots: 0                  # starting pin slots (max_pin_slots: 2)
 #   max_pin_slots: 2
 #   free_scratchpad_writes: 1     # write_scratchpad actions per turn that use no action
+#   memory_text: v2               # review 20: v2 the accurate memory text and the notebook scratchpad text; v1 the earlier text
 llm:
   max_tokens: 6000
   thinking_budget: 2000           # native thinking budget. Through Claude Code the thinking text comes back for Haiku; for Sonnet/Opus

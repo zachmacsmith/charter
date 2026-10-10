@@ -116,7 +116,7 @@ def _media(inst):
 
 
 @piece("context", ("lookup_mode", "free_lookups", "search_hits", "memory_turns", "scratchpad", "file_tokens", "pin_slots",
-                   "max_pin_slots", "text_when", "output_when", "manual_when"))
+                   "max_pin_slots", "text_when", "output_when", "manual_when", "memory_text"))
 def _context(inst):
     """Memory and lookups (the agent's own memory_turns, scratchpad and pin_slots override these: agent_facts)."""
     from charter import context as CX
@@ -125,7 +125,8 @@ def _context(inst):
     return {"lookup_mode": mode, "free_lookups": int(cx["free_lookups"]) if mode == "free" else 0,
             "search_hits": int(cx["search_hits"]), "memory_turns": int(cx["recent_turns"]),
             "scratchpad": int(cx["budgets"]["scratchpad"]), "file_tokens": int(cx["file_tokens"]),
-            "pin_slots": int(cx["pin_slots"]), "max_pin_slots": int(cx["max_pin_slots"])} | _when(mode)
+            "pin_slots": int(cx["pin_slots"]), "max_pin_slots": int(cx["max_pin_slots"]),
+            "memory_text": str(cx["memory_text"])} | _when(mode)
 
 
 def facts(inst: dict, a: dict | None = None, k=None) -> dict:

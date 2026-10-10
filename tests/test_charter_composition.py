@@ -69,4 +69,4 @@ def test_planner_profile_adds_memory_tips_once():
     inst, k = _world({"assign": [{"profile": "planner", "agents": ["Kasper"]}, {"profile": "planner", "classes": ["worker"]}]})
     kas = next(a for a in inst["agents"] if a["id"] == "Kasper")
     p = CX.core_prompt(inst, kas, k)
-    assert p.count("Use your memory as your plan") == 1 and p.index("Use your memory as your plan") > p.index("Memory: every turn")
+    assert p.count("Use your memory as your plan") == 1 and p.index("Use your memory as your plan") > p.index("Memory: you remember nothing")   # memory_text v2

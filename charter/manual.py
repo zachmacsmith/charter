@@ -60,10 +60,17 @@ def turn_text(f: dict, lookups: list) -> str:
              "search_dms": f"only your own private messages, {f['search_hits']} best matches", "read_archive": "documents you hold",
              "run_python": "your sandbox"}
     names = ", ".join(n + (f" ({notes[n]})" if n in notes else "") for n in lookups)
-    text = (f"Each turn is built fresh from fixed parts: your state, what changed since your last turn (trimmed to a budget: the most important "
-            f"first, then counts and pointers such as \"(14 older posts not shown: search_board)\"), your own last {f['memory_turns']} turns, "
-            f"your scratchpad ({f['scratchpad']} tokens, shown every turn), the media you read, pinned files and what you look up. "
-            "Nothing else is remembered.\n")
+    if f.get("memory_text") == "v2":                                     # review 20 §6.1: what is shown once, what for N turns
+        text = ("Each turn is built fresh: your state; what happened since your last turn, shown once (trimmed to a budget: the most "
+                "important first, then counts and pointers such as \"(14 older posts not shown: search_board)\"); your own last "
+                f"{f['memory_turns']} turns with their results; your scratchpad ({f['scratchpad']} tokens, every turn); the media you "
+                "read, pinned files and what you look up. A message you do not answer or note down this turn is not shown again; "
+                "search_dms finds it.\n")
+    else:
+        text = (f"Each turn is built fresh from fixed parts: your state, what changed since your last turn (trimmed to a budget: the most important "
+                f"first, then counts and pointers such as \"(14 older posts not shown: search_board)\"), your own last {f['memory_turns']} turns, "
+                f"your scratchpad ({f['scratchpad']} tokens, shown every turn), the media you read, pinned files and what you look up. "
+                "Nothing else is remembered.\n")
     if f["lookup_mode"] == "dm_step":
         text += ("Lookups (pre-actions): list them in your reply's \"lookups\" field (each {\"lookup\": \"<name>\", \"args_json\": \"<JSON "
                  "object>\"}). They are answered this round, in the private-message step before anyone acts: each uses one of your "

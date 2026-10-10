@@ -64,7 +64,10 @@ DEFAULTS = {
     "pin_slots": 0,                   # pin slots each agent starts with
     "max_pin_slots": 2,               # hard ceiling on pin slots
     "free_scratchpad_writes": 1,      # write_scratchpad actions per turn that use no action
+    "memory_text": "v2",              # review 20 §6.1: v2 says accurately what the agent will remember and asks for a planning notebook;
+                                      # v1: the text before review 20 (byte-identical, to reproduce older runs)
 }
+MEMORY_TEXTS = ("v1", "v2")
 LOOKUPS = ("manual", "manual_search", "search_board", "search_dms", "recent", "read_law", "read_file", "read_archive", "search_archive",
            "run_python", "preview_law", "legal_position")
 DM_ONLY_LOOKUPS = ("search_archive", "run_python")                    # usable as lookups in the DM step (as actions they are actions)
@@ -1076,9 +1079,36 @@ def _temperament(v):
 
 @_SC.section("memory", layers=("core",), sep="\n\n")
 def _memory(v):
+    if v2(v.inst):
+        return memory_v2(v.inst, v.facts)
     return f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {v.facts['memory_turns']} turns, your
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
 first write each turn is free) or can find it again by search."""
+
+
+def v2(x) -> bool:
+    """context.memory_text is v2 (review 20 §6.1): the accurate memory text and the notebook scratchpad text."""
+    return str(cfg(x).get("memory_text", "v1")) == "v2"
+
+
+def _free_write(x) -> str:
+    return " The first write each turn is free (write_scratchpad; mode \"replace\" rewrites it, \"append\" adds to the end)." \
+        if int(cfg(x)["free_scratchpad_writes"]) > 0 else " (write_scratchpad; mode \"replace\" rewrites it, \"append\" adds to the end)."
+
+
+def memory_v2(inst, f) -> str:
+    """The core prompt's Memory section under memory_text v2 (review 20 §6.1). N and S are the agent's own facts (charter.facts:
+    memory_turns, scratchpad), the same ones the recent layer and the scratchpad clip use."""
+    alive = ", who is alive" if cfg(inst).get("roster") else ""
+    return (f"Memory: you remember nothing between turns except what this prompt shows. What happened since your last turn (messages to "
+            f"you, posts, events) is shown once, this turn only. Your own actions and their results are shown for your last "
+            f"{f['memory_turns']} turns. Your state (holdings, rights, laws{alive}) is always current. search_dms and search_board can "
+            "find an old message or post if you know what to look for. Everything else you saw, and all of your reasoning, is gone "
+            "next turn.\n\n"
+            f"Your scratchpad ({f['scratchpad']} tokens, shown every turn) is your only lasting memory, so use it as a notebook for "
+            "thinking, not a log: your goal and your current strategy for it, your plan for the next few rounds and why, what others "
+            "promised you and what you promised them, who you trust or distrust and why, and what you have learned works or fails. "
+            "Rewrite it whenever your thinking changes, and keep it short enough to reread every turn." + _free_write(inst))
 
 
 @_SC.section("lookups", layers=("core",))
@@ -1326,13 +1356,15 @@ def turn_prompt(k, a: dict, order: list, since: int, n_actions: int, final: bool
     return text, cursor
 
 
-def _short_goal(a) -> str:
+def _short_goal(a, whole_words=False) -> str:
     """The agent's goal in a sentence or two (the full text is in the system prompt)."""
     g = a.get("goal") or {}
     if g.get("fixed"):
         return (g.get("text") or "see your role").split(". ")[0] + "."
     t = re.sub(r"\s+", " ", str(g.get("text") or ""))
     parts = re.findall(r"(Primary goal[^:]*:[^.]*\.|Secondary goal[^:]*:[^.]*\.|Third goal[^:]*:[^.]*\.)", t)
+    if not parts and whole_words and len(t) > 300:                     # memory_text v2: never cut a word (review 20 §1.5)
+        return t[:300].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
     out = " ".join(parts) if parts else t[:300]
     return out if out.endswith(".") else out + "."
 
@@ -1382,17 +1414,27 @@ def closing_block(k, a, n_actions, final) -> str:
     mem = memory_turns(k, aid)
     sit = "## Your situation\n" + "\n".join(situation_lines(k, a, n_actions))
     scholar = bool((k.w.get("roles") or {}).get("scholar"))
-    nudge = (f"## Before you act\nYour goal: {_short_goal(a)}\n"
+    nudge = (f"## Before you act\nYour goal: {_short_goal(a, v2(k))}\n"
              f"Use this turn for it. Any of your {n_actions} actions you do not use are wasted, and so are unused messages. Think "
              "strategically: what would move your score most from here? If you have no plan, make one and write it down. If you don't "
              "know what to do, explore: actions you have not tried (your edge first), your manual, the world and other agents "
              "(Scientists hold knowledge), better routes to your goal; coordinate, bargain and trade.\n"
-             f"Memory: you see only your last {mem} turns. Anything you do not write down (write_scratchpad, a file"
-             + (", or memory bought from the Scholar" if scholar else "") + f") is forgotten within {mem} rounds: plans, deals, promises, "
-             "who owes you what.")
+             + (memory_reminder(mem, scholar) if v2(k) else
+                f"Memory: you see only your last {mem} turns. Anything you do not write down (write_scratchpad, a file"
+                + (", or memory bought from the Scholar" if scholar else "") + f") is forgotten within {mem} rounds: plans, deals, promises, "
+                "who owes you what."))
     if final:
         nudge += "\nThis is the final round: whatever you leave undone now will not count."
     return sit + "\n\n" + nudge
+
+
+def memory_reminder(mem, scholar=False) -> str:
+    """The closing's memory line under memory_text v2 (review 20 §6.1). A turn's own row stays in "Your last turns" for the next
+    `mem` turns (record_turn keeps the last mem rows), so it is gone after them, not "in mem turns"."""
+    return ("Memory: next turn you will not see this turn's messages and events, and after your next "
+            f"{mem} turns you will not see what you did now. Before you finish, update your scratchpad"
+            + (" (or a file, or memory bought from the Scholar)" if scholar else "")
+            + " with what you will need: your plan and the reasoning behind it, deals and promises, who matters to you and why.")
 
 
 def memory_turns(k, aid) -> int:

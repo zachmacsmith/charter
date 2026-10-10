@@ -376,6 +376,7 @@ def _ann():
         # ------------------------------------------------------------ feature blocks
         "context.memory_turns": dict(types=("int", "null"), range=(0, None)),
         "context.strategy_prompt": dict(types=("number", "bool"), range=PROB),
+        "context.memory_text": dict(types=("str",), enum=("v1", "v2")),   # review 20 §6.1 (v1: the text before it)
         "conflict.timing": dict(types=("str",), enum=("end_of_round", "immediate")),
         "conflict.visibility.failure": dict(types=("str",), enum=("target", "public", "none")),
         "conflict.start.*": dict(types=("number", "list")),

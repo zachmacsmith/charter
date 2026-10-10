@@ -222,7 +222,7 @@ def test_manual_agrees_with_the_core_prompt_on_turn_mechanics(world):
         aid, p, m = a["id"], CX.core_prompt(inst, a, k), _manual(inst, k, a["id"])
         turn = m["How your turn works"]
         mem = CX.memory_turns(k, aid)
-        assert f"your own last {mem} turns" in p and f"your own last {mem} turns" in turn, aid
+        assert f"shown for your last {mem} turns" in p and f"your own last {mem} turns" in turn, aid   # memory_text v2
         assert f"your scratchpad ({CX.scratchpad_size(k, aid)} tokens" in turn, aid
         assert "private-message slots" in turn and "this round" in turn, aid                 # the DM-step lookup mechanism
         assert '"actions" empty' not in turn and "free lookups" not in turn, aid             # not the lookup-phase one
