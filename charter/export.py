@@ -30,8 +30,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCHEMA_VERSION = 2           # major: a column removed, renamed, or changed in type or meaning (docs/data_format.md)
-SCHEMA_MINOR = 2             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
-                             # 2: review 20 (runs.memory_text, runs.dm_delta, turns.dm_mode)
+SCHEMA_MINOR = 3             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
+                             # 2: review 20 (runs.memory_text, runs.dm_delta, turns.dm_mode); 3: history mode (runs.history_chunk,
+                             # runs.history_restarts, turns.history_*)
 TYPES = ("str", "int", "float", "bool", "json")
 
 
@@ -82,6 +83,8 @@ SCHEMA: dict[str, tuple] = {
         ("rng_version", "int", "1: one shared kernel stream; 2: named substreams (P5.3)"),
         ("memory_text", "str", "context.memory_text of the run (v1, v2; run.json; null before review 20, which ran v1)"),
         ("dm_delta", "bool", "context.dm_delta: DM replies continue the decide conversation (run.json; null before review 20: off)"),
+        ("history_chunk", "int", "context.history: rounds per conversation in history mode (run.json; null when history mode is off)"),
+        ("history_restarts", "str", "history mode: the rounds (1-based, joined by ',') at which a resume or fork restarted every conversation"),
         ("n_segments", "int", "segments in run.json (start, resume, rewind, fork)"),
         ("segment_kinds", "str", "the segments' kinds joined by '>' (e.g. start>fork>resume)"),
         ("code_changed", "bool", "some segment ran under code whose module hashes differ from the previous segment's"),
@@ -379,6 +382,14 @@ SCHEMA: dict[str, tuple] = {
         ("prompt_sha", "str", "sha of the turn's prompt (16 hex digits; joins blobs.blob_sha)"),
         ("prompt_chars", "int", "prompt length (system + user) as recorded"),
         ("dm_mode", "str", "a DM reply under context.dm_delta: delta (continued the conversation), fallback (continuing failed: the full prompt), full (nothing to continue); null otherwise"),
+        ("history_message", "str", "history mode: the round's turn message: start (opened the agent's conversation, with its memory), continue (appended to it), lookups (the lookup phase's second message); null when off"),
+        ("history_transport", "str", "history mode, model calls: cached-session (a claude -p session), api-messages (API messages with cache breakpoints), flattened (the whole conversation as one prompt, uncached); null for scripted bots and when off"),
+        ("history_chunk_start", "int", "history mode: the round (1-based) the agent's conversation started"),
+        ("history_full", "int", "history mode: past rounds in full in the conversation at this round (the agent's memory_turns at a start, growing by one per round)"),
+        ("history_summary", "int", "history mode: past rounds shown as one line each"),
+        ("history_beyond", "int", "history mode: the oldest rounds left to recall (rounds 1..this)"),
+        ("history_long", "int", "history mode: lines in the Long memories list"),
+        ("history_tokens", "int", "history mode: the round's turn message (len // 4); the conversation's whole prompt is longer"),
         ("tokens_in", "int", "input tokens (usage.input)"),
         ("tokens_out", "int", "output tokens (usage.output)"),
         ("error", "str", "turn-level error, if any"),
@@ -842,6 +853,8 @@ def run_tables(run, run_id: str | None = None, running_scores: bool = False, *, 
         "code_sha": _sha(code.get("modules")) if code.get("modules") else None, "code_modules_json": code.get("modules"),
         "state_schema": code.get("state_schema"), "law_api": code.get("law_api"), "scoring_version": code.get("scoring"),
         "rng_version": int(spec.get("rng_version") or 1), "memory_text": meta.get("memory_text"), "dm_delta": meta.get("dm_delta"),
+        "history_chunk": (meta.get("history") or {}).get("chunk"),
+        "history_restarts": ",".join(str(int(x) + 1) for x in meta.get("history_restarts") or []) or None,
         "n_segments": len(segs),
         "segment_kinds": ">".join(str(s.get("kind")) for s in segs) or None,
         "code_changed": any(s.get("changed_modules") or s.get("changed_versions") for s in segs),
@@ -1049,9 +1062,17 @@ def _turn_rows(run: Path, meta, h, events, inh, with_prompts) -> tuple[list, lis
                      "reasoning": t.get("reasoning"), "stated_reasoning": t.get("stated_reasoning"), "notes": t.get("notes"),
                      "actions_json": acts, "results_json": res, "n_actions": len(acts) if isinstance(acts, list) else None,
                      "n_failed": sum(1 for x in res if isinstance(x, str) and ERROR_RESULT.match(x)) if isinstance(res, list) else None,
-                     "prompt_sha": psha, "prompt_chars": t.get("prompt_chars"), "dm_mode": t.get("dm_mode"), "tokens_in": u.get("input"),
-                     "tokens_out": u.get("output"), "error": _s(t.get("error"))})
+                     "prompt_sha": psha, "prompt_chars": t.get("prompt_chars"), "dm_mode": t.get("dm_mode"), **_history_cols(t, u),
+                     "tokens_in": u.get("input"), "tokens_out": u.get("output"), "error": _s(t.get("error"))})
     return rows, blobs
+
+
+def _history_cols(t, u) -> dict:
+    """turns.history_*: history mode's message and band sizes (the context record) and the transport (the call's usage)."""
+    hr = ((t.get("context") or {}).get("history") or {}) if isinstance(t.get("context"), dict) else {}
+    return {"history_message": hr.get("message"), "history_transport": u.get("history"), "history_chunk_start": hr.get("chunk_start"),
+            "history_full": hr.get("full"), "history_summary": hr.get("summary"), "history_beyond": hr.get("beyond"),
+            "history_long": hr.get("long"), "history_tokens": hr.get("tokens")}
 
 
 def _document_rows(run: Path, meta, inst, turn_rows) -> list[dict]:

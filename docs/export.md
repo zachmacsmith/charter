@@ -70,7 +70,7 @@ Not yet exported: `state_deltas` (per-round snapshot diffs) and `observer_assess
 
 ## Tables
 
-Dataset schema version **2.2** (`schema_version` 2, `schema_minor` 2). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
+Dataset schema version **2.3** (`schema_version` 2, `schema_minor` 3). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
 
 ### `runs`
 
@@ -104,6 +104,8 @@ Dataset schema version **2.2** (`schema_version` 2, `schema_minor` 2). Types: `s
 | `rng_version` | int | 1: one shared kernel stream; 2: named substreams (P5.3) |
 | `memory_text` | str | context.memory_text of the run (v1, v2; run.json; null before review 20, which ran v1) |
 | `dm_delta` | bool | context.dm_delta: DM replies continue the decide conversation (run.json; null before review 20: off) |
+| `history_chunk` | int | context.history: rounds per conversation in history mode (run.json; null when history mode is off) |
+| `history_restarts` | str | history mode: the rounds (1-based, joined by ',') at which a resume or fork restarted every conversation |
 | `n_segments` | int | segments in run.json (start, resume, rewind, fork) |
 | `segment_kinds` | str | the segments' kinds joined by '>' (e.g. start>fork>resume) |
 | `code_changed` | bool | some segment ran under code whose module hashes differ from the previous segment's |
@@ -437,6 +439,14 @@ Dataset schema version **2.2** (`schema_version` 2, `schema_minor` 2). Types: `s
 | `prompt_sha` | str | sha of the turn's prompt (16 hex digits; joins blobs.blob_sha) |
 | `prompt_chars` | int | prompt length (system + user) as recorded |
 | `dm_mode` | str | a DM reply under context.dm_delta: delta (continued the conversation), fallback (continuing failed: the full prompt), full (nothing to continue); null otherwise |
+| `history_message` | str | history mode: the round's turn message: start (opened the agent's conversation, with its memory), continue (appended to it), lookups (the lookup phase's second message); null when off |
+| `history_transport` | str | history mode, model calls: cached-session (a claude -p session), api-messages (API messages with cache breakpoints), flattened (the whole conversation as one prompt, uncached); null for scripted bots and when off |
+| `history_chunk_start` | int | history mode: the round (1-based) the agent's conversation started |
+| `history_full` | int | history mode: past rounds in full in the conversation at this round (the agent's memory_turns at a start, growing by one per round) |
+| `history_summary` | int | history mode: past rounds shown as one line each |
+| `history_beyond` | int | history mode: the oldest rounds left to recall (rounds 1..this) |
+| `history_long` | int | history mode: lines in the Long memories list |
+| `history_tokens` | int | history mode: the round's turn message (len // 4); the conversation's whole prompt is longer |
 | `tokens_in` | int | input tokens (usage.input) |
 | `tokens_out` | int | output tokens (usage.output) |
 | `error` | str | turn-level error, if any |
