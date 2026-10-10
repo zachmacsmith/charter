@@ -201,6 +201,8 @@ def replay(run, out=None, to: int | None = None, sandbox=None, log=print, check_
     from charter import runner
     run = Path(run)
     inst = json.loads((run / "instance.json").read_text())             # the saved world is authoritative
+    from charter import settings as ST                                  # and its code defaults (frozen, else inferred; D-50): a replay
+    inst["settings"] = ST.resolve(run, inst, allow_code_drift=True, record=False)   # under other defaults diverges, never hides it
     meta = PV.read(run) or {}
     dry = bool(meta["dry"]) if meta.get("dry") is not None else "_dry" in run.name
     if out is None:
@@ -401,7 +403,7 @@ def replicate_seed(seed, at: int, i: int) -> int:
 
 
 def fork(run, at: int, schedule=None, out=None, replicates: int | None = None, replay_mode: str = "strict",
-         policy_factory=None, sandbox=None, log=print, fresh_schedule: bool = False) -> list[Path]:
+         policy_factory=None, sandbox=None, log=print, fresh_schedule: bool = False, allow_code_drift: bool = False) -> list[Path]:
     """Branches of `run` from round `at` (0-based: the first round played anew; `at` complete rounds are kept): each a new run
     directory restored from the latest checkpoint at or before `at`, with the schedule applied (merged by id into the parent's
     pending schedule, unless fresh_schedule) and played to the end with ForkPolicy (the parent's recorded replies before `at`, the
@@ -420,6 +422,8 @@ def fork(run, at: int, schedule=None, out=None, replicates: int | None = None, r
     if base is None:
         raise SystemExit(f"{run} has no checkpoint at or before round {at} (per-round checkpoints: {', '.join(map(str, have)) or 'none'})")
     inst0 = json.loads((run / "instance.json").read_text())
+    from charter import settings as ST                                  # the parent's code defaults (D-50); refuse before any copy
+    settings = ST.resolve(run, inst0, allow_code_drift, record=False)
     if not 0 <= at < int(inst0["rounds"]):
         raise SystemExit(f"--at {at}: the run has rounds 0..{int(inst0['rounds']) - 1} (fork at N plays round N onwards)")
     sched = IV.load_schedule(schedule if schedule is not None else [])
@@ -455,6 +459,9 @@ def fork(run, at: int, schedule=None, out=None, replicates: int | None = None, r
             runner._atomic(d / "checkpoint.pkl", blob)
             runner._atomic(d / runner.CKPT_DIR / runner.ckpt_name(base), blob)
         inst = json.loads((d / "instance.json").read_text())
+        if "settings" not in inst:                                      # an older parent: the branch keeps what it was given
+            inst["settings"] = settings
+            PV.annotate(d, settings_inferred=settings)
         live = policy_factory(inst["spec"], dry, live_seed)
         pol = ForkPolicy(calls, legacy, live, until=at, mode=replay_mode, skip_rng_restore=i is not None)
         if log:
@@ -562,7 +569,8 @@ def cmd_fork(a) -> None:
     for f in a.apply or []:
         sched = IV.merge(sched, IV.load_schedule(f))
     try:
-        dirs = fork(run, a.at, sched, a.out, a.replicates, a.replay, M.policy_for, sandbox, fresh_schedule=a.fresh_schedule)
+        dirs = fork(run, a.at, sched, a.out, a.replicates, a.replay, M.policy_for, sandbox, fresh_schedule=a.fresh_schedule,
+                    allow_code_drift=a.allow_code_drift)
     except (ReplayMiss, ReplayDivergence, IV.InterventionError) as e:
         print(f"fork FAILED: {type(e).__name__}: {e}")
         raise SystemExit(1)
@@ -607,6 +615,8 @@ def add_commands(sub) -> None:
     p.add_argument("--replay", choices=["strict", "prompt-match", "none"], default="strict",
                    help="strict: recorded replies before N, live from N; prompt-match: also after N while prompts match")
     p.add_argument("--fresh-schedule", action="store_true", help="drop the parent's pending interventions")
+    p.add_argument("--allow-code-drift", action="store_true", help="a parent without frozen settings whose code defaults cannot be "
+                   "inferred: play the branch under the current defaults (recorded) instead of refusing")
     p.add_argument("--sandbox", choices=["docker", "off"], default=None, help="default: off for dry runs, docker for model runs")
     p.set_defaults(fn=cmd_fork)
     p = sub.add_parser("branches", help="the lineage of a run: ancestors and the branches made from them")

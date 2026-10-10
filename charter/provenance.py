@@ -48,6 +48,28 @@ SECRET = re.compile(r"key|token|secret|password|credential|auth", re.I)
 # charter/export.py able to read every format ever written (docs/data_format.md). 0: before the field existed; 1: export schema 2.
 LOG_FORMAT = 1
 
+# The engine version (docs/engine_versions.md): bump it whenever a code default flips or the simulation's behaviour changes on purpose,
+# and list the flips in ENGINE_FLIPS. run.json `engine_version` (the code's) and inst["settings"]["engine_version"] (the defaults a
+# run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
+# ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
+# new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
+ENGINE_VERSION = 5
+ENGINE_FLIPS = {
+    2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
+        "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
+        "note": "channels v2: push delivery by default"},
+    3: {"commits": ["55d11fb785f1b859193d3b301fd8a7276f1fbbde", "97631829d31ce90bf9775a48a297e93babcf62a2"],
+        "flips": [],
+        "note": "dm_step.capacity natural (opt-in key, set by nature_subsistence and ashwood); the Communications Act caps at LIMIT "
+                "under natural (behaviour, not a default)"},
+    4: {"commits": ["6a69002946d066769d9a6b25f68b8cf5e8b3e4f6"],
+        "flips": [("charter.context.DEFAULTS", ("memory_text",), "v1", "v2")],
+        "note": "context.memory_text v2 by default"},
+    5: {"commits": ["23c948aaefc9e12fa7cb1ee1e0bc0837d024a808", "b629aa09a0e9b132fed5e10ce52f4df65b3bda75"],
+        "flips": [("charter.context.DEFAULTS", ("dm_delta",), False, True)],
+        "note": "context.dm_delta on by default; the next round shows last round's DM exchange whole (under dm_delta)"},
+}
+
 
 def sha(text) -> str:
     b = text if isinstance(text, bytes) else str(text).encode()
@@ -149,7 +171,8 @@ def module_hashes() -> dict:
 
 def versions() -> dict:
     from charter import kernel, lawlang, scorer
-    return {"state_schema": kernel.STATE_SCHEMA, "law_api": lawlang.LAW_API_VERSION, "scoring": scorer.SCORING_VERSION}
+    return {"state_schema": kernel.STATE_SCHEMA, "law_api": lawlang.LAW_API_VERSION, "scoring": scorer.SCORING_VERSION,
+            "engine": ENGINE_VERSION}
 
 
 def code_block() -> dict:
@@ -239,9 +262,14 @@ def begin(out, inst: dict, policy, kind: str, first_round: int, dry: bool | None
         seg["checkpoint_version"] = checkpoint_version
     if instance_source is not None:
         seg["instance"] = instance_source
+    from charter import settings as ST
+    st = ST.describe(inst)
+    if st is not None:
+        seg["settings"] = st                                           # the engine version of the defaults it played under
     if prev is None:
         spec = inst.get("spec") or {}
         data = {"run_id": inst.get("run_id") or out.name, "created": seg["started"], "log_format": LOG_FORMAT,
+                "engine_version": ENGINE_VERSION,
                 "seed": inst.get("seed"),
                 "spec_sha": sha(json.dumps(spec, sort_keys=True, default=str)),
                 "instance_sha": sha(json.dumps(inst, sort_keys=True, default=str)),
@@ -254,7 +282,8 @@ def begin(out, inst: dict, policy, kind: str, first_round: int, dry: bool | None
         last = (data.get("segments") or [{}])[-1].get("code") or data.get("code") or {}
         old, new = last.get("modules") or {}, code["modules"]
         seg["changed_modules"] = sorted(m for m in set(old) | set(new) if old.get(m) != new.get(m))
-        seg["changed_versions"] = {v: [last.get(v), code[v]] for v in ("state_schema", "law_api", "scoring") if last.get(v) != code[v]}
+        seg["changed_versions"] = {v: [last.get(v), code[v]] for v in ("state_schema", "law_api", "scoring", "engine")
+                                  if last.get(v) != code[v]}
         if pol["dry"] != data.get("dry"):
             seg["dry_changed"] = [data.get("dry"), pol["dry"]]
     data.setdefault("segments", []).append(seg)

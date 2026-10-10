@@ -45,13 +45,13 @@ EVENTS = ET.rendered_by("credit")                                    # this modu
 
 
 # ---------------------------------------------------------------------- config and state
+DEFAULTS = {"run_suspend_rounds": 1, "max_rate": 1.0, "sanction_actions": 2, "sanction_rounds": 3, "offer_lapse": 2}
+
+
 def cfg(k) -> dict:
     c = dict(k.spec.get("credit") or {})
-    c.setdefault("run_suspend_rounds", 1)
-    c.setdefault("max_rate", 1.0)
-    c.setdefault("sanction_actions", 2)
-    c.setdefault("sanction_rounds", 3)
-    c.setdefault("offer_lapse", 2)
+    for key, v in DEFAULTS.items():                                   # frozen per run (charter/settings.py)
+        c.setdefault(key, v)
     return c
 
 

@@ -41,6 +41,7 @@ same text. scorer.py scores its goal guesses against ground truth and computes w
 """
 from __future__ import annotations
 
+import copy
 import json
 import random
 import re
@@ -80,12 +81,15 @@ SCHEMA = {
 }
 
 
+DEFAULTS = {"enabled": False, "name": None, "reads_per_round": 3, "reads_reasoning": True, "history_rounds": 1, "disposition": None,
+            "disposition_weights": {"benevolent": 1, "manipulative": 1, "self_interested": 1}, "outcome": None, "model": None,
+            "actions_per_turn": 3, "actions": ["dm", "forge_dm", "reply", "post", "transfer"],
+            "endowment": {"timber": 20, "stone": 10, "copper": 5}, "forge_cost": {"copper": 1}, "dm_step": True, "step_actions": 2,
+            "max_chars_per_agent": 12000}       # frozen per run (charter/settings.py)
+
+
 def cfg(sp: dict) -> dict:
-    c = {"enabled": False, "name": None, "reads_per_round": 3, "reads_reasoning": True, "history_rounds": 1, "disposition": None,
-         "disposition_weights": {"benevolent": 1, "manipulative": 1, "self_interested": 1}, "outcome": None, "model": None,
-         "actions_per_turn": 3, "actions": ["dm", "forge_dm", "reply", "post", "transfer"],
-         "endowment": {"timber": 20, "stone": 10, "copper": 5}, "forge_cost": {"copper": 1}, "dm_step": True, "step_actions": 2,
-         "max_chars_per_agent": 12000}
+    c = copy.deepcopy(DEFAULTS)
     c.update(sp.get("observer") or {})
     return c
 
