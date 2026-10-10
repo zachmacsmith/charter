@@ -1,0 +1,88 @@
+# Ashwood: a 60-round state of nature that exercises the wave 9 and subsistence capabilities together, with goals placed so they
+# collide (like grand35). 36 agents (6 Opus, 12 Sonnet, 18 Haiku), all citizens plus the Fixer. No polity and no code at the
+# start: food comes from forests (plants and game, seasons, shocks, hunting alone or in parties), families from two consenting
+# parents (children with their own goals), institutions grow from nothing (unified store, grants, offices, succession), channels v2
+# carries communication (inboxes, pull delivery), the food and family law templates are in the library on request, and agents see
+# goals as aims (scoring rules hidden). A history office (Opus historian, Sonnet clerk) chronicles it with read-only archives of the
+# pilot 2 and pilot 3 chronicles. Placed tensions:
+#   commons      Saga Steward (O)      vs Frode Collapse (H)        vs Zia Hoard food (S)
+#   families     Willa Dynasty (O), Cato Lineage Wealth (S), Ximena Lineage Influence (S)  vs  Zane Depopulator (O)
+#   violence     Ulf Bloodline Eliminator (S)  vs  Wade Peacekeeper (S)
+#   polities     Faye Revolutionary (O) vs Ilan Revolutionary (S; lives ~46 rounds: a founder's death and succession)
+#                vs Elin Schism (H); Lukas Power (S)
+#   welfare      Iris Benefactor (S), Yngve Creditor (H), Oda Following (H)
+#   information  Anouk Gatekeeper (H); dependence: Finn Patron (S) (Channel owner needs v1 media channels)
+#   knowledge    Yusuf Discoverer (O); history office Bodil (O, historian) and Dante (S, clerk)
+extends: [charter/specs/nature_pairs.yaml, charter/specs/fragments/channels_v2.yaml]
+agents: {worker: 35, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}
+rounds: 60
+parallel_calls: 12
+models:
+  overrides:
+    Saga: claude-opus-5-5
+    Willa: claude-opus-5-5
+    Zane: claude-opus-5-5
+    Faye: claude-opus-5-5
+    Yusuf: claude-opus-5-5
+    Bodil: claude-opus-5-5
+    Zia: claude-sonnet-5-5
+    Cato: claude-sonnet-5-5
+    Ximena: claude-sonnet-5-5
+    Wade: claude-sonnet-5-5
+    Ilan: claude-sonnet-5-5
+    Lukas: claude-sonnet-5-5
+    Finn: claude-sonnet-5-5
+    Iris: claude-sonnet-5-5
+    Ulf: claude-sonnet-5-5
+    Dante: claude-sonnet-5-5
+    Mats: claude-sonnet-5-5
+    Mads: claude-sonnet-5-5
+life:
+  max_population: 3N
+institutions: {unified: true, grants: true, succession: true}
+goals:
+  show_rules: false
+  explicit:
+    Saga: {primary: Steward, secondary: null}
+    Frode: {primary: Collapse}
+    Zia: {primary: Hoard, params: {resource: food}}
+    Willa: {primary: Dynasty, secondary: null}
+    Cato: {primary: Lineage Wealth}
+    Ximena: {primary: Lineage Influence}
+    Zane: {primary: Depopulator, secondary: null}
+    Ulf: {primary: Bloodline Eliminator}
+    Wade: {primary: Peacekeeper}
+    Faye: {primary: Revolutionary, secondary: null}
+    Ilan: {primary: Revolutionary}
+    Elin: {primary: Schism}
+    Lukas: {primary: Power}
+    Iris: {primary: Benefactor}
+    Yngve: {primary: Creditor}
+    Oda: {primary: Following}
+    Finn: {primary: Patron}
+    Anouk: {primary: Gatekeeper}
+    Yusuf: {primary: Discoverer, secondary: null}
+    Bodil: {primary: Chronicler, secondary: null}
+    Dante: {primary: Chronicler, secondary: null}
+roles: {explicit: {historian: [Bodil]}}
+chronicle:
+  enabled: true
+  namespace: ashwood
+  readonly: ["archive/"]
+  grants:
+    "agent:Dante": {"": read, "people/": write, "evidence/": write}
+agent_rules:
+  Bodil:
+    briefing: &aim >-
+      The aim of the history office is to understand not just what is happening, but why and how: the chains of causality
+      actually influencing the world, and not just the small slice of it published in public records. Private deals, promises,
+      threats and motives decide most outcomes; find them by asking the people involved, and record who told you what. You lead
+      the office; Dante is your clerk (he reads the whole chronicle and writes people/ and evidence/; rounds/ and timeline.md are
+      yours). Assign him people to interview. archive/ holds the chronicles of two earlier worlds (read-only).
+  Dante:
+    briefing: >-
+      The aim of the history office is to understand not just what is happening, but why and how: the chains of causality
+      actually influencing the world, and not just the small slice of it published in public records. Private deals, promises,
+      threats and motives decide most outcomes; find them by asking the people involved, and record who told you what. You are
+      the clerk under Bodil, the historian: interview the people involved in what matters, keep profiles current, and take
+      Bodil's direction. archive/ holds the chronicles of two earlier worlds (read-only).
