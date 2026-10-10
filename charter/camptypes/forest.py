@@ -37,6 +37,8 @@ from __future__ import annotations
 import math
 import random
 
+from charter import dispatch as D
+from charter import jurisdictions as J
 from charter.camptypes import CampType, register
 
 GAME_LEVELS = ((0.6, "plentiful"), (0.3, "fair"), (0.1, "scarce"), (0.0, "very scarce"))
@@ -121,12 +123,13 @@ class Forest(CampType):
         if int(SB.state(k)["forage"].get(aid, 0)) >= int(p["per_round"]):
             raise CT._err(f"you have used your {p['per_round']} forest actions this round")
         key = f"{aid}|{cid}"
-        if c["harvest_limit"] is not None and k.w["harvest_count"].get(key, 0) >= int(c["harvest_limit"]):
-            raise CT._err(f"harvest limit reached at {cid} this round ({c['harvest_limit']})")
-        if c["quota"] is not None and k.w["quota_used"].get(cid, 0) >= c["quota"]:
-            raise CT._err(f"the quota for {cid} is used up this round ({c['quota']})")
-        if c.get("fee") and k.bal(aid, c["fee"]["item"]) + 1e-9 < float(c["fee"]["qty"]):
-            raise CT._err(f"cannot pay the harvest fee ({c['fee']['qty']} {c['fee']['item']})")
+        cr = J.camp_rules(k, aid, cid)                                  # S6: the forager's polity's rules (D-37: members only;
+        if cr["harvest_limit"] is not None and k.w["harvest_count"].get(key, 0) >= int(cr["harvest_limit"]):   # off/J0: the camp's)
+            raise CT._err(f"harvest limit reached at {cid} this round ({cr['harvest_limit']})")
+        if cr["quota"] is not None and k.w["quota_used"].get(cr["qkey"], 0) >= cr["quota"]:
+            raise CT._err(f"the quota for {cid} is used up this round ({cr['quota']})")
+        if cr["fee"] and k.bal(aid, cr["fee"]["item"]) + 1e-9 < float(cr["fee"]["qty"]):
+            raise CT._err(f"cannot pay the harvest fee ({cr['fee']['qty']} {cr['fee']['item']})")
 
     def use(self, k, aid) -> None:
         """One forest action by aid (checked first): the fee is paid and the action counted."""
@@ -135,14 +138,33 @@ class Forest(CampType):
         c = self.camp
         cid = c["id"]
         self.check(k, aid)
-        if c.get("fee"):
-            if not k.move(aid, "reserve", c["fee"]["item"], c["fee"]["qty"], why="harvest_fee", by=aid):
-                raise CT._err(f"cannot pay the harvest fee ({c['fee']['qty']} {c['fee']['item']})")
+        cr = J.camp_rules(k, aid, cid)
+        if cr["fee"]:
+            if not k.move(aid, cr["reserve"], cr["fee"]["item"], cr["fee"]["qty"], why="harvest_fee", by=aid):
+                raise CT._err(f"cannot pay the harvest fee ({cr['fee']['qty']} {cr['fee']['item']})")
         st = SB.state(k)
         key = f"{aid}|{cid}"
         st["forage"][aid] = int(st["forage"].get(aid, 0)) + 1
         k.w["harvest_count"][key] = k.w["harvest_count"].get(key, 0) + 1
-        k.w["quota_used"][cid] = k.w["quota_used"].get(cid, 0) + 1
+        k.w["quota_used"][cr["qkey"]] = k.w["quota_used"].get(cr["qkey"], 0) + 1
+
+    def _counters(self, k, aid) -> tuple:
+        from charter import subsistence as SB
+        cid = self.camp["id"]
+        qkey = J.camp_rules(k, aid, cid)["qkey"]
+        return (SB.state(k)["forage"].get(aid), k.w["harvest_count"].get(f"{aid}|{cid}"), qkey, k.w["quota_used"].get(qkey),
+                self.camp["harvested_this_round"])
+
+    def _restore(self, k, aid, undo) -> None:
+        from charter import subsistence as SB
+        cid = self.camp["id"]
+        for d, key, v in ((SB.state(k)["forage"], aid, undo[0]), (k.w["harvest_count"], f"{aid}|{cid}", undo[1]),
+                          (k.w["quota_used"], undo[2], undo[3])):
+            if v is None:
+                d.pop(key, None)
+            else:
+                d[key] = v
+        self.camp["harvested_this_round"] = undo[4]
 
     def act(self, k, aid, x, extra) -> str:
         from charter import subsistence as SB
@@ -158,13 +180,18 @@ class Forest(CampType):
             raise CT._err(f"{cid} takes only \"fell\": true (to fell) or nothing (to forage); not {', '.join(sorted(extra))}")
         if x not in (None, [], 0):
             raise CT._err(f"{cid} takes no x: harvest {{\"camp\": \"{cid}\"}} forages, with \"fell\": true it fells")
-        self.use(k, aid)
-        if fell:
-            return self._fell(k, aid)
-        left = max(0.0, c["S"] - c["harvested_this_round"])
-        y = float(p["yield"]) * left / c["K"] * SB.yield_mult(k, aid)
-        y = round(max(0.0, min(y, left - float(p["refuge"]) * c["K"])), 3)
-        got, ded = CT.pay_yield(k, aid, cid, [], y, eff=y / float(p["yield"]) if p["yield"] else 0.0)
+        undo = self._counters(k, aid)                                   # S6: a law's before_harvest may refuse the harvest; then
+        self.use(k, aid)                                                # the action is not counted and the stock is untouched
+        try:
+            if fell:
+                return self._fell(k, aid)
+            left = max(0.0, c["S"] - c["harvested_this_round"])
+            y = float(p["yield"]) * left / c["K"] * SB.yield_mult(k, aid)
+            y = round(max(0.0, min(y, left - float(p["refuge"]) * c["K"])), 3)
+            got, ded = CT.pay_yield(k, aid, cid, [], y, eff=y / float(p["yield"]) if p["yield"] else 0.0)
+        except D.Blocked:
+            self._restore(k, aid, undo)
+            raise
         hungry = "" if SB.stage(k, aid) == 0 else " (you are hungry: you gather less)"
         return (f"Foraged {got - ded:.3g} food at {cid}" + (f" ({ded:.3g} deducted by law)" if ded else "") + hungry
                 + f"; the plants are at {c['S'] / c['K']:.0%} of capacity before this round's regrowth.")

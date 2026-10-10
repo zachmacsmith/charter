@@ -427,7 +427,8 @@ def test_forage_yield_refuge_and_the_round_cap():
 
 
 def test_a_law_quota_applies_to_foraging_and_hunting():
-    inst, k = small()
+    inst, k = world("society", ["subsistence.enabled=true", SMALL])         # S6: a forest reads the forager's polity's camp rules
+    # (as every camp does, D-37); in J0 they are the camp's own
     a, b = eaters(k)[:2]
     f = food_camps(k, "forest")[0]
     k.w["camps"][f]["quota"] = 1
