@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 7
+ENGINE_VERSION = 8
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -77,6 +77,10 @@ ENGINE_FLIPS = {
         "flips": [],
         "note": "llm.cache_ttl 5m in base.yaml (a spec key, so each run's saved spec records it; absent = auto, the backend's choice, "
                 "which was 1h on the CLI subscription); a run flags rounds averaging longer than the lifetime"},
+    8: {"commits": ["de0c39cc94c3283a98d4025396e00afc4f372deb"],
+        "flips": [("charter.goals.SCORING_DEFAULTS", ("fixes",), False, True)],
+        "note": "review 23 scoring fixes: Wealth, Hoard, Lineage Wealth count food in own stores; Rank and Kingmaker rank the "
+                "living only; Dynasty against the largest line, Populator against the start (and their texts drop the cap)"},
 }
 
 
