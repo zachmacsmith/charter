@@ -81,7 +81,7 @@ ENGINE_FLIPS = {
         "flips": [("charter.conflict.DEFAULTS", ("model",), "disable", "auto")],
         "note": "conflict.model auto: the harm combat model (kill, wound or repelled; one weapon per fighter, food per attack, "
                 "fighting back, watch and craft; docs/review/21_combat.md) in worlds with subsistence; disable elsewhere, as before"},
-    9: {"commits": [],
+    9: {"commits": ["f196b62ac0322c32aae3600a8d0679060d812f00"],
         "flips": [("charter.jurisdictions.DEFAULTS", ("admission_rounds",), 0, 1)],
         "note": "jurisdiction admission ballots stay open one round so members can vote (they closed in the round they opened, "
                 "with no votes, so every application failed)"},
