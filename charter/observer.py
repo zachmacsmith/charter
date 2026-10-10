@@ -336,7 +336,7 @@ class Observer:
         parts = [f"Round {k.r + 1} of {k.inst['rounds']}: the start of the round, before anyone acts (the DM step). Private messages you "
                  f"send now (dm, forge_dm, reply) are delivered first and their recipients can answer within the round. You may also post or "
                  f"transfer (at most {o['step_actions']}; they run right after the messages). Private messages this round: at most "
-                 f"{k.dm_limit(self.id)}, replies and forged ones included.",
+                 f"{k.dm_limit(self.id)}{AG.dm_source(k, self.id)}, replies and forged ones included.",
                  AG.state_view(k, self.id),
                  "Results of your last turn:\n" + ("\n".join(self.results) if self.results else "(none)"),
                  "What you can see that changed since your last turn (the public record and messages to you):\n" + f,

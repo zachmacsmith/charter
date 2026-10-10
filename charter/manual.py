@@ -147,7 +147,9 @@ def _dms(v):
     mine = v.k.dm_limit(v.aid) if v.k is not None else None
     txt = (f"Each agent may send a limited number of private messages per round (from {f['dms_per_round']} up, different for each "
            f"agent, never above {f['max_dms_per_round']})" + (f"; yours is {mine}" if mine is not None else "") + ", new messages and "
-           "replies together. Holders of dm_rules set the limit for everyone or one agent; laws can set it too. reply {\"message\": "
+           "replies together. " + ("It is each agent's own capacity: holders of dm_rules and laws can cap it, for everyone or one agent, but "
+           "never raise it. " if dmc.get("capacity") == "natural" else "Holders of dm_rules set the limit for everyone or one agent; "
+           "laws can set it too. ") + "reply {\"message\": "
            "\"e42\", \"text\": \"...\", \"item\", \"qty\"} answers a message and can pay in the same action.")
     if sp.get("turns") == "simultaneous" and dmc.get("enabled"):
         txt += (f"\nThe DM step: messages in your plan are delivered before anyone's other actions and do not use actions. Whoever receives "

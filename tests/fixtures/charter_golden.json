@@ -279,7 +279,7 @@
  },
  "pairs_small": {
   "events.jsonl": "84f3465c41e729dd",
-  "instance.json": "497e99a66c171537",
+  "instance.json": "9bc463556730cb7d",
   "score": {
    "activity_mix": "60c3e2e36366444f",
    "agents": "f75260777ca2e9ed",
@@ -301,7 +301,7 @@
    "lineage": "8f4d537ae62ebbff",
    "summary": "d521cd2c170ae59b"
   },
-  "snapshots.json": "60742cf5a328add5"
+  "snapshots.json": "ddf662eb84d7d051"
  },
  "prompts_E4_1": {
   "Abel": {
@@ -570,7 +570,7 @@
  },
  "subsistence_small": {
   "events.jsonl": "bc21bf33768dafee",
-  "instance.json": "2d6bdad4a2bd221e",
+  "instance.json": "f26e319e11ccc9ad",
   "score": {
    "activity_mix": "a4251a73f07d44fd",
    "agents": "42fa16fa1f2e5508",
@@ -593,6 +593,6 @@
    "lineage": "8b86dd543c5e61f9",
    "summary": "a2a78f45852d3426"
   },
-  "snapshots.json": "0b09503dcda6c1ae"
+  "snapshots.json": "efdabb4bb5ed37cb"
  }
 }
