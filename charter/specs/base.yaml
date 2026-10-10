@@ -232,6 +232,8 @@ llm:
                                   # the CLI withholds it (counted as usage.thinking_withheld). The API returns summarised text for all.
                                   # Every reply also carries a stated "reasoning" field, for every model.
   backend_overrides: {}           # per model, e.g. {claude-sonnet-5-5: api}: those calls use that backend (API: their thinking is saved)
+  cache_ttl: 5m                    # prompt-cache lifetime: 5m (writes 1.25x base input) | 1h (writes 2x) | auto (the backend's own
+                                  # choice: the CLI picks 1h on a subscription). The run flags (never stops) if rounds average longer.
   memory_chars: 4000              # agents carry a private notes field between turns, capped at this length
   fail_stop_fraction: 0.5         # abandon the round and stop (resumable) once this share of its model calls failed (DM-step replies
                                   # included); null: only when every call fails; above 1: never (charter/failstop.py)

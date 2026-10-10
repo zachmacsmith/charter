@@ -248,6 +248,35 @@ def _continue(backend_name, model, system, user, schema, thinking_budget, max_to
     return out, reasoning, {**(usage or {}), "turn": "fallback"}
 
 
+# Prompt-cache lifetime (spec llm.cache_ttl, set by the runner): "5m" or "1h". A 1-hour write costs 2x base input, a 5-minute one
+# 1.25x; reads cost the same either way. None ("auto", and runs from before the key existed): the backend's own choice (the CLI picks
+# 1 hour on a subscription, the API 5 minutes).
+CACHE_TTL: str | None = None
+TTL_SECONDS = {"5m": 300, "1h": 3600}
+
+
+def set_cache_ttl(v) -> None:
+    global CACHE_TTL
+    CACHE_TTL = v if v in TTL_SECONDS else None
+
+
+def cache_marker() -> dict:
+    return {"type": "ephemeral", **({"ttl": CACHE_TTL} if CACHE_TTL == "1h" else {})}
+
+
+def cache_ttl_flag(round_seconds) -> str | None:
+    """A warning (never an error) when rounds average longer than the cache lifetime: an agent's next-round call then usually finds
+    its conversation gone from the cache and writes it again. None while fewer than 2 rounds are timed or the lifetime is not set."""
+    ttl = TTL_SECONDS.get(CACHE_TTL)
+    if ttl is None or len(round_seconds) < 2:
+        return None
+    mean = sum(round_seconds) / len(round_seconds)
+    if mean <= ttl:
+        return None
+    return (f"rounds average {mean:.0f}s over {len(round_seconds)} rounds, longer than the {CACHE_TTL} prompt cache ({ttl}s): "
+            f"next-round calls will mostly miss the cache. Consider llm.cache_ttl: 1h for this world.")
+
+
 def messages(user) -> list:
     """The API messages of a user message: one plain user message for a str; for a Turn, its history (alternating user and
     assistant) then the new message, with a cache breakpoint at the end of the new message so the next continuation reads all of
@@ -256,8 +285,8 @@ def messages(user) -> list:
         return [{"role": "user", "content": user}]
     out = [{"role": ("user", "assistant")[i % 2], "content": str(t)} for i, t in enumerate(user.history)]
     if user.mark_previous and out:                               # history mode: the previous call's end is read back whole
-        out[-1] = {**out[-1], "content": [{"type": "text", "text": str(user.history[-1]), "cache_control": {"type": "ephemeral"}}]}
-    return out + [{"role": "user", "content": [{"type": "text", "text": str(user), "cache_control": {"type": "ephemeral"}}]}]
+        out[-1] = {**out[-1], "content": [{"type": "text", "text": str(user.history[-1]), "cache_control": cache_marker()}]}
+    return out + [{"role": "user", "content": [{"type": "text", "text": str(user), "cache_control": cache_marker()}]}]
 
 
 def _api(model, system, user, schema, thinking_budget, max_tokens):
@@ -265,7 +294,7 @@ def _api(model, system, user, schema, thinking_budget, max_tokens):
     import anthropic
     _client = _client or anthropic.Anthropic()
     kw = dict(model=model, max_tokens=max_tokens + (thinking_budget or 0),
-              system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+              system=[{"type": "text", "text": system, "cache_control": cache_marker()}],
               messages=messages(user),
               output_config={"format": {"type": "json_schema", "schema": schema}})
     if "haiku-4" in model:                                       # Haiku 4.5: fixed budget only (no adaptive thinking); Haiku 5.5
@@ -332,6 +361,8 @@ def cli_command(model, system, user, schema, thinking_budget=0) -> tuple[list, d
     env.pop("ANTHROPIC_API_KEY", None)                           # bill the subscription, not the API key
     if thinking_budget:
         env["MAX_THINKING_TOKENS"] = str(thinking_budget)
+    if CACHE_TTL is not None:                                    # the CLI's own setting (unset: 1 hour on a subscription)
+        env["CLAUDE_CODE_PROMPT_CACHE_TTL"] = CACHE_TTL
     if turn:
         env.update(user.sessions.env())
     return cmd, env

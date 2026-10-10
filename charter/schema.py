@@ -359,6 +359,7 @@ def _ann():
         "llm.max_tokens": dict(types=("int",), range=(1, None)),
         "llm.thinking_budget": dict(types=("int",), range=NONNEG),
         "llm.memory_chars": dict(types=("int",), range=NONNEG),
+        "llm.cache_ttl": dict(types=("str",), enum=("5m", "1h", "auto")),
         # ------------------------------------------------------------ events
         "events.subset_frac": dict(range=PROB),
         "events.delay": dict(range=NONNEG),
@@ -616,6 +617,7 @@ DOCS = {
     "archive_reading": "free archive reads",
     "llm": "model call settings",
     "llm.max_tokens": "output token limit per call",
+    "llm.cache_ttl": "prompt-cache lifetime: 5m | 1h | auto (the backend's choice); a run flags rounds averaging longer than it",
     "dm_step.enabled": "the DM step runs in simultaneous mode",
     "dm_step.capacity": "how an agent's DM limit is computed. legacy: the limit set for it (law, dm_rules) or the general limit "
                         "(set for all, else the Communications Act's LIMIT, else the hard cap) plus its drawn extra. natural: its "

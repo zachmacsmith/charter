@@ -399,8 +399,13 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         raise RunStopped(msg)
 
     last_round = inst["rounds"] if until is None else max(first_round, min(inst["rounds"], int(until)))
+    from charter import llm as LLM
+    LLM.set_cache_ttl(inst["spec"].get("llm", {}).get("cache_ttl"))    # absent (runs from before the key): the backend's choice
+    PV.annotate(out, cache_ttl=LLM.CACHE_TTL or "auto")
+    round_secs, ttl_flagged = [], False
     for r in range(first_round, last_round):
         stop_if_over_budget(r)
+        t_round = time.time()
         if rs.schedule and IV.pending(k, rs, "setup", r):               # setup entries of a later (re)start, e.g. in a replay
             k.begin_round_cause(phase="setup")
             due("setup", r=r)
@@ -696,6 +701,12 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         if dz is not None and r + 1 < inst["rounds"]:                   # directories: written back at each checkpoint (the last: below)
             dz.write_back(k)
         _live(out, f"round {r + 1} of {inst['rounds']} complete", full=True)
+        round_secs.append(time.time() - t_round)
+        flag = None if ttl_flagged else LLM.cache_ttl_flag(round_secs)
+        if flag:                                                        # a flag, never an error: the run goes on
+            ttl_flagged = True
+            log(f"  FLAG: {flag}")
+            PV.annotate(out, flags=((PV.read(out) or {}).get("flags") or []) + [{"kind": "cache_ttl", "round": r, "message": flag}])
         log(f"  round {r + 1}/{inst['rounds']} done ({time.time() - t0:.0f}s): laws {len(k.active_laws())}, "
             f"currencies {list(k.w['currencies'])}, decisive set {len(k.snapshots[-1]['decisive_set'])}")
     reason_f.close()
