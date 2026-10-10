@@ -30,8 +30,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCHEMA_VERSION = 2           # major: a column removed, renamed, or changed in type or meaning (docs/data_format.md)
-SCHEMA_MINOR = 2             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
-                             # 2: review 20 (runs.memory_text, runs.dm_delta, turns.dm_mode)
+SCHEMA_MINOR = 3             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
+                             # 2: review 20 (runs.memory_text, runs.dm_delta, turns.dm_mode); 3: runs.engine_version (D-50)
 TYPES = ("str", "int", "float", "bool", "json")
 
 
@@ -80,6 +80,9 @@ SCHEMA: dict[str, tuple] = {
         ("law_api", "int", "law API version"),
         ("scoring_version", "int", "scoring rules version (scorer.SCORING_VERSION) the run started under"),
         ("rng_version", "int", "1: one shared kernel stream; 2: named substreams (P5.3)"),
+        ("engine_version", "int", "engine version of the code defaults the run played under (docs/engine_versions.md): instance.json "
+         "settings, else as inferred from its git sha on a resume (run.json settings_inferred), else run.json engine_version; "
+         "null for runs from before engine versions that were never resumed"),
         ("memory_text", "str", "context.memory_text of the run (v1, v2; run.json; null before review 20, which ran v1)"),
         ("dm_delta", "bool", "context.dm_delta: DM replies continue the decide conversation (run.json; null before review 20: off)"),
         ("n_segments", "int", "segments in run.json (start, resume, rewind, fork)"),
@@ -841,7 +844,9 @@ def run_tables(run, run_id: str | None = None, running_scores: bool = False, *, 
         "git_dirty": git.get("dirty"), "git_diff_sha": git.get("diff_sha"), "python": meta.get("python"),
         "code_sha": _sha(code.get("modules")) if code.get("modules") else None, "code_modules_json": code.get("modules"),
         "state_schema": code.get("state_schema"), "law_api": code.get("law_api"), "scoring_version": code.get("scoring"),
-        "rng_version": int(spec.get("rng_version") or 1), "memory_text": meta.get("memory_text"), "dm_delta": meta.get("dm_delta"),
+        "rng_version": int(spec.get("rng_version") or 1),
+        "engine_version": ((inst.get("settings") or meta.get("settings_inferred") or {}).get("engine_version")
+                           or meta.get("engine_version")), "memory_text": meta.get("memory_text"), "dm_delta": meta.get("dm_delta"),
         "n_segments": len(segs),
         "segment_kinds": ">".join(str(s.get("kind")) for s in segs) or None,
         "code_changed": any(s.get("changed_modules") or s.get("changed_versions") for s in segs),

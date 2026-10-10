@@ -70,7 +70,7 @@ Not yet exported: `state_deltas` (per-round snapshot diffs) and `observer_assess
 
 ## Tables
 
-Dataset schema version **2.2** (`schema_version` 2, `schema_minor` 2). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
+Dataset schema version **2.3** (`schema_version` 2, `schema_minor` 3). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
 
 ### `runs`
 
@@ -102,6 +102,7 @@ Dataset schema version **2.2** (`schema_version` 2, `schema_minor` 2). Types: `s
 | `law_api` | int | law API version |
 | `scoring_version` | int | scoring rules version (scorer.SCORING_VERSION) the run started under |
 | `rng_version` | int | 1: one shared kernel stream; 2: named substreams (P5.3) |
+| `engine_version` | int | engine version of the code defaults the run played under (docs/engine_versions.md): instance.json settings, else as inferred from its git sha on a resume (run.json settings_inferred), else run.json engine_version; null for runs from before engine versions that were never resumed |
 | `memory_text` | str | context.memory_text of the run (v1, v2; run.json; null before review 20, which ran v1) |
 | `dm_delta` | bool | context.dm_delta: DM replies continue the decide conversation (run.json; null before review 20: off) |
 | `n_segments` | int | segments in run.json (start, resume, rewind, fork) |

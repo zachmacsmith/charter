@@ -161,3 +161,12 @@ def test_old_run_resumes_under_the_defaults_of_its_git_sha(tmp_path, monkeypatch
     assert _prompts(old) == _prompts(old_ref)
     meta = PV.read(old)
     assert meta["settings_inferred"]["engine_version"] == 3 and meta["segments"][-1]["settings"]["engine_version"] == 3
+
+
+def test_export_has_the_engine_version(reference, tmp_path):
+    from charter import export as X
+    ref, _ = reference
+    X.export([ref], tmp_path / "ds", fmt="csv")
+    runs = X.load(tmp_path / "ds")["runs"]
+    assert [int(r["engine_version"]) for r in runs] == [PV.ENGINE_VERSION]
+    assert PV.read(ref)["engine_version"] == PV.ENGINE_VERSION
