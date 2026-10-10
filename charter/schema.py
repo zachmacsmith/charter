@@ -455,7 +455,17 @@ def _ann():
         "law.library.visibility": dict(types=("str",), enum=("prompt", "on_request", "none")),
         "goals.outcome_only": dict(types=("bool",)),
         "goals.show_rules": dict(types=("bool",)),
+        "goals.score_at_end": dict(types=("bool",)),
+        "goals.aims": dict(types=("bool",)),                           # review 24: aims (time structure) instead of texts
+        "goals.deadline": dict(types=("int", "null"), range=(1, None)),
+        "goals.survival_goals": dict(types=("bool",)),
+        "goals.a_slot": dict(kind="leaf", types=("dict", "null"), check=_check_a_slot),
+        "goals.survival": dict(kind="leaf", types=("dict", "null"), check=_check_survival),
+        "life.reproduction.child_goals.fixed": dict(types=("str", "null"), check=_check_child_fixed),
+        "life.reproduction.child_goals.a_slot": dict(types=("bool",)),
+        "life.reproduction.child_goals.inherit": dict(types=("bool",)),
         "actions.core_only": dict(types=("bool",)),
+        "actions.unlisted": dict(types=("list",)),
         "institutions.unified": dict(types=("bool",)),                  # review 14 WP-D (P4.6): one institution store
         "institutions.grants": dict(types=("bool",)),                   # review 14 WP-E: powers from grants (charter/grants.py)
         "institutions.succession": dict(types=("bool",)),               # review 14 §7.2: vacancies and succession (succession.py)
@@ -544,7 +554,15 @@ EXTRA = {
     "law.library.visibility": "prompt",
     "goals.outcome_only": False,
     "goals.show_rules": True,
+    "goals.score_at_end": True,                                        # life: lineage override and departures (scorer.score)
     "actions.core_only": False,
+    "actions.unlisted": [],                                            # review 24: actions left out of the core prompt's list
+    # review 24 (docs/review/24_survival_experiments.md): survival experiments' goal arms; all off by default
+    "goals.aims": False,
+    "goals.deadline": None,
+    "goals.survival_goals": False,
+    "goals.a_slot": None,
+    "goals.survival": None,
     "institutions.unified": False,                                     # review 14 WP-D: off = the two stores, byte-identical
     "institutions.grants": False,                                      # review 14 WP-E: off = the power table's kinds column
     "institutions.succession": False,                                  # review 14 §7.2: off = no vacancies, byte-identical
@@ -555,6 +573,19 @@ EXTRA = {
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
 DOCS = {
+    "goals.aims": "review 24: agents see each goal's aim (with its time structure: at the end, the most ever, or by a deadline) "
+                  "instead of its text, and no slot percentages",
+    "goals.score_at_end": "with Life: a goal about own holdings or offices may be scored on the living lineage when that is "
+                          "higher, and an agent who departs is scored on the final world; false: neither (review 24 arms)",
+    "goals.deadline": "review 24: every goal is scored on the state after this round (1-based; a goal's own params.deadline wins); "
+                      "null: the whole run",
+    "goals.survival_goals": "true: review 24's goals (Survive, Living Lineage, Endure, Peak Wealth, Knowledge, Learning, Martyr) "
+                            "can be drawn where goals.weights names them",
+    "goals.a_slot": "review 24: {slot: primary|secondary, deal: [{goal, n, params, label}]}: the A goals dealt to the founders from "
+                    "their own stream, the same in every arm of a seed",
+    "goals.survival": "review 24: {goal, params}: a goal every founder holds as primary (Endure); with goals.a_slot slot secondary, "
+                      "the A goal is its secondary",
+    "actions.unlisted": "review 24 salience control: actions not listed in the core prompt (they still exist and are in the manual)",
     "agent_rules": "per-agent scenario rules: {Name: {briefing: text shown in every call as \"Your situation\"}} "
                    "(charter/agent_rules.py)",
     "agent_rules.*": "{briefing: \"...\"}",
@@ -1244,6 +1275,40 @@ def _explicit_goal_names():
 def _check_agent_rules(path, v) -> list:
     from charter import agent_rules as AGR
     return AGR.check_spec(path, v)
+
+
+def _check_a_slot(path, v) -> list:
+    if v is None:
+        return []
+    from charter import goals as G
+    errs = [f"{path}: unknown key {x!r}" for x in v if x not in ("slot", "deal", "stream")]
+    if v.get("slot", "primary") not in ("primary", "secondary"):
+        errs.append(f"{path}.slot: primary or secondary, not {v.get('slot')!r}")
+    for i, e in enumerate(v.get("deal") or []):
+        if not isinstance(e, dict) or e.get("goal") not in G.CATALOGUE:
+            errs.append(f"{path}.deal[{i}]: needs a catalogue goal, not {e!r}")
+            continue
+        errs += [f"{path}.deal[{i}]: unknown key {x!r}" for x in e if x not in ("goal", "n", "params", "label", "stratum")]
+    if not (v.get("deal") or []):
+        errs.append(f"{path}.deal: at least one entry")
+    return errs
+
+
+def _check_survival(path, v) -> list:
+    if v is None:
+        return []
+    from charter import goals as G
+    errs = [f"{path}: unknown key {x!r}" for x in v if x not in ("goal", "params", "slot")]
+    if v.get("goal") not in G.CATALOGUE:
+        errs.append(f"{path}.goal: a catalogue goal, not {v.get('goal')!r}")
+    if v.get("slot", "primary") != "primary":
+        errs.append(f"{path}.slot: only primary")
+    return errs
+
+
+def _check_child_fixed(path, v) -> list:
+    from charter import goals as G
+    return [] if v is None or v in G.CATALOGUE else [f"{path}: a catalogue goal, not {v!r}"]
 
 
 def _check_explicit_goal(path, v) -> list:

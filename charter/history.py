@@ -791,7 +791,20 @@ def score_goal(h, name, agent, params, ctx=None):
     fn = _scorer(name)
     if fn is None:
         raise KeyError(name)
+    dl = deadline_of(h, params)
+    if dl is not None and h.states and h.rounds[-1] > dl and h.rounds[0] <= dl:
+        h = h.window(h.rounds[0], dl)                                     # review 24: scored on the state after the deadline round
+        ctx = Ctx(h)
     return fn(h, agent, params, ctx)
+
+
+def deadline_of(h, params) -> int | None:
+    """The last round (0-based) a goal is scored on: its params' `deadline` (a 1-based round number, as agents see rounds), else the
+    spec's goals.deadline; None: the whole run."""
+    dl = (params or {}).get("deadline")
+    if dl is None:
+        dl = (((h.gt.get("instance") or {}).get("spec") or {}).get("goals") or {}).get("deadline")
+    return None if dl is None else int(dl) - 1
 
 
 def by_rounds(parts) -> float | None:

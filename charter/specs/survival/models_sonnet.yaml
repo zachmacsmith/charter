@@ -1,0 +1,8 @@
+# Review 24 model condition: every founder and every child on Claude Sonnet 5.5. Put after an arm: extends: [survival/arm_*.yaml, this].
+models:
+  mix: all_weak
+  pool: {strong: claude-sonnet-5-5, weak: claude-sonnet-5-5, strongest: claude-sonnet-5-5}
+  overrides: {}
+life:
+  tier_models: {weak: claude-sonnet-5-5, mid: claude-sonnet-5-5, strong: claude-sonnet-5-5}
+  reproduction: {model: claude-sonnet-5-5}

@@ -54,6 +54,7 @@ def test_history_off_reproduces_every_prompt_from_before(name, tmp_path, monkeyp
     """context.history.enabled false: every call's system and user prompt is byte-identical to the recording made before history
     mode existed (both scripted runs), and the renderer is never called."""
     monkeypatch.setattr(HM, "turn", lambda *a, **kw: pytest.fail("history renderer called with history off"))
+    monkeypatch.setitem(__import__("charter.goals").goals.SCORING_DEFAULTS, "fixes", False)   # engine 10 rewords Dynasty's text
     assert _call_prompts(name, OFF, tmp_path) == json.loads(OFF_PROMPTS.read_text())[name]
 
 

@@ -170,7 +170,8 @@ def test_scores_equal_score_json(ds, runs):
                        [(r["score"], r["from_round"], r["goal"]) for r in seg]
             elif "primary" in g:
                 [p] = [r for r in rows if r["agent"] == a and r["part"] == "primary"]
-                assert p["score"] == g["primary"] and p["goal"] == g["goal"] and p["goal_version"] == 1
+                assert p["score"] == g["primary"] and p["goal"] == g["goal"] and \
+                    p["goal_version"] == __import__("charter.goal_registry").goal_registry.get(g["goal"]).version   # engine 10: 2 for the fixed goals
         assert {r["score_source"] for r in rows} == {"score.json"}
         r = _by(data["runs"], rid)[0]
         assert r["mean_goal_score"] == sc["summary"]["mean_goal_score"]

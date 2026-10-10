@@ -149,7 +149,8 @@ CORE_RNG = ("archetypes", "prompts", "dm_extra", "memory_turns", "conditional_go
             "archive_required", "explicit2", "archive_sample",
             "law", "intervention",                                      # rng_version 2: each law's rng() (kernel); an intervention's own draws
             "regime_laws",                                             # W6d: a regime's sampled law set (regimes.py)
-            "succession")                                              # institutions.succession: the lot rule's draw
+            "succession",                                              # institutions.succession: the lot rule's draw
+            "goals")                                                   # review 24: goals.a_slot's deal ("{seed}|goals|a_slot")
 
 
 def get(name: str) -> Feature:

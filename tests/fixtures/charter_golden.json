@@ -1,7 +1,7 @@
 {
  "E2_library2_6": {
   "events.jsonl": "f72ec8035adf7a02",
-  "instance.json": "5da8710e3c7a9574",
+  "instance.json": "a22daa93f342482f",
   "score": {
    "activity_mix": "3c100a18e670cde0",
    "agents": "cc2212d12640d3d0",
@@ -25,7 +25,7 @@
  },
  "E2_rng2_drift_5": {
   "events.jsonl": "0421a67ee62680a5",
-  "instance.json": "a4e9b03bf4a2c52e",
+  "instance.json": "249439545fdac0ab",
   "score": {
    "activity_mix": "24e8ec5c4e3f5d79",
    "agents": "a68c3aae9d70881a",
@@ -49,7 +49,7 @@
  },
  "E2_seq_6": {
   "events.jsonl": "b22cb7f96088261d",
-  "instance.json": "5ef6f3474fec1784",
+  "instance.json": "cdbecb866d28c76d",
   "score": {
    "activity_mix": "0ff6778b254daa57",
    "agents": "4987414e340113ef",
@@ -73,7 +73,7 @@
  },
  "E4_fast_4": {
   "events.jsonl": "e75cfc3e4d6277bd",
-  "instance.json": "9e45e56e31100c7f",
+  "instance.json": "2fc1234431db52a1",
   "score": {
    "activity_mix": "1cca04c20bae3233",
    "agents": "67401b2f4a9dadf6",
@@ -105,7 +105,7 @@
  },
  "E4_observer_hidden_4": {
   "events.jsonl": "a6ee9236088e8a85",
-  "instance.json": "f2304c74a94054d4",
+  "instance.json": "24df40250b7c6521",
   "score": {
    "activity_mix": "8a73c4ca89d98b91",
    "agents": "56198ac9337befa2",
@@ -137,7 +137,7 @@
  },
  "E6_seq_3": {
   "events.jsonl": "a453e44a29542489",
-  "instance.json": "4d56012ae763f2bd",
+  "instance.json": "96e71c9f652529b0",
   "score": {
    "activity_mix": "caec9688929cfe9d",
    "agents": "b671c00e831937c8",
@@ -180,7 +180,7 @@
  },
  "E7_events_3": {
   "events.jsonl": "3657ad989b149005",
-  "instance.json": "3d77f8248e3eebed",
+  "instance.json": "5c945f91e42aa477",
   "score": {
    "activity_mix": "c86cb33c43ed7671",
    "agents": "4df10dd9dce803a6",
@@ -255,7 +255,7 @@
  },
  "contracts_small": {
   "events.jsonl": "785e44f65f333f60",
-  "instance.json": "42b3eca2af5ff19c",
+  "instance.json": "3a26c177212b38f2",
   "score": {
    "activity_mix": "081f20e989281a5f",
    "agents": "871f2df460801e26",
@@ -279,10 +279,10 @@
  },
  "pairs_small": {
   "events.jsonl": "820450df23ab31af",
-  "instance.json": "eb1828738f9bffba",
+  "instance.json": "deb52562f7a1cd9d",
   "score": {
    "activity_mix": "203fe11ce9cafd33",
-   "agents": "286d68f948d57a3f",
+   "agents": "7e1e6f2a58390856",
    "goal_scores": {
     "Aksel": 0.7265,
     "Asta": 0.0,
@@ -293,13 +293,13 @@
     "Kasper": 0.0254,
     "Nadia": 0.175,
     "Odette": 0.2947,
-    "Per": 0.0306,
+    "Per": 0.0,
     "Sena": 0.6028,
     "Ulf": 0.0
    },
-   "goals": "5c5ef2be315c8f3b",
-   "lineage": "c2f5cb92d1fd18dc",
-   "summary": "e223311b72060686"
+   "goals": "6f23bfb4cc2a7ce9",
+   "lineage": "2fe15ddedc183f7f",
+   "summary": "bd99e9d4fa5842df"
   },
   "snapshots.json": "518bdfa82b2f98a9"
  },
@@ -518,8 +518,8 @@
   }
  },
  "society_law_v2": {
-  "events.jsonl": "6f1fcd5ef9159b46",
-  "instance.json": "b8dcda3fcb802b96",
+  "events.jsonl": "22c1e36ae3d63272",
+  "instance.json": "55435eaa890a38ff",
   "score": {
    "activity_mix": "0d7447567b6170cc",
    "agents": "09986d88c5feda81",
@@ -543,8 +543,8 @@
   "snapshots.json": "73d853b961f1d683"
  },
  "society_small_4": {
-  "events.jsonl": "9029d7cf1220b694",
-  "instance.json": "263b5b8bcf00bec0",
+  "events.jsonl": "b214918ac513d572",
+  "instance.json": "f8331e6f96802530",
   "score": {
    "activity_mix": "4fb1eeda1f4db33e",
    "agents": "6b03fcfde72a4cc9",
@@ -569,28 +569,28 @@
   "snapshots.json": "3ce5be68c19e75d9"
  },
  "subsistence_small": {
-  "events.jsonl": "c9a99193851aa8c4",
-  "instance.json": "51827912b47ab585",
+  "events.jsonl": "ec47c6c3af196a63",
+  "instance.json": "795805c1bc3f196e",
   "score": {
    "activity_mix": "61e239a17a7ff343",
-   "agents": "8bd8f0c04c592d8f",
+   "agents": "e39e930f670dfad6",
    "goal_scores": {
     "Bruna": 0.072,
     "Felix": 0.0,
     "Iris": 0.2,
     "Jarl": 0.7194,
-    "Maya": 0.43,
+    "Maya": 0.4783,
     "Oda": 0.4861,
     "Rakel": 0.0,
-    "Siv": 0.1214,
+    "Siv": 0.0357,
     "Valter": 0.5341,
     "Wanda": 0.1871,
     "Yuri": 0.2492,
     "Zeno": 0.4962
    },
-   "goals": "c310ae7c250282a2",
-   "lineage": "405f25fcac4aeba7",
-   "summary": "24af8ea979bc9648"
+   "goals": "d19752d2dcfbb2b2",
+   "lineage": "adc30463d20876ce",
+   "summary": "b41631a5a6c03f15"
   },
   "snapshots.json": "14d04513f05efd9c"
  }

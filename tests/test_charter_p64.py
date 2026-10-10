@@ -38,7 +38,7 @@ def test_examples_pass_and_every_institution_goal_has_examples():
 
 
 def test_institution_goals_stay_out_of_the_catalogue():
-    assert not set(GR.INSTITUTION) & set(G.CATALOGUE) and len(GR.GOALS) == len(G.HSCORERS) == 70
+    assert not set(GR.INSTITUTION) & set(G.CATALOGUE) and len(GR.GOALS) == len(G.HSCORERS) == 77
     for name, g in GR.INSTITUTION.items():
         assert GR.get(name) is g and GR.find(name) is g and g.category == "Institution" and g.gate == "institution"
         assert g.rule and g.text and g.score is IG.HSCORERS[name]

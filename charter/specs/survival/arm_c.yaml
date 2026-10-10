@@ -1,0 +1,9 @@
+# Review 24 arm C (survive): every founder and every child holds Endure alone; conceive's shared value is ignored. Sonnet only
+# (arm_c_sonnet.yaml), after stage 1.
+extends: [charter/specs/survival/base.yaml]
+goals:
+  survival: {goal: Endure}
+  a_slot: null
+life:
+  reproduction: {child_goals: {fixed: Endure, a_slot: false, inherit: false}}
+chronicle: {namespace: survival_c}

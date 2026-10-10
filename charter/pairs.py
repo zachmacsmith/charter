@@ -484,6 +484,11 @@ def child_goals(k, aid, cls, inherit, grng, born_round=None) -> dict:
     from charter import events as EV
     from charter import generator as GEN
     rights = list(GEN.CLASS_RIGHTS.get(cls, []))
+    cg = cfg(k.spec).get("child_goals") or {}
+    if cg.get("fixed"):                                                  # review 24: a fixed primary (Endure), the drawn goal as the A slot
+        return fixed_child_goals(k, aid, cls, rights, grng, cg)
+    if not cg.get("inherit", True):
+        inherit = None
     if not inherit:
         return EV.draw_goals(k, k.inst, aid, cls, rights, grng)
     world = EV._world(k, k.inst)
@@ -497,11 +502,30 @@ def child_goals(k, aid, cls, inherit, grng, born_round=None) -> dict:
     return g
 
 
+def fixed_child_goals(k, aid, cls, rights, grng, cg) -> dict:
+    """life.reproduction.child_goals.fixed (review 24): every child holds the fixed goal as primary; with a_slot, the goal drawn as
+    today (the world's goals.weights) is its secondary; the parents' inherited goal is not used."""
+    from charter import events as EV
+    drawn = EV.draw_goals(k, k.inst, aid, cls, rights, grng)
+    g = {"primary": cg["fixed"], "params": {}, "secondary": None, "secondary_params": {}, "tertiary": None, "tertiary_params": {},
+         "fixed": False, "reachable": True}
+    if cg.get("a_slot", True) and drawn.get("primary"):
+        g["secondary"], g["secondary_params"] = drawn["primary"], drawn.get("params") or {}
+    gs = k.spec.get("goals") or {}
+    return EV._goal_text(g, gs.get("score_weights") or {}, bool(gs.get("show_rules", True)), bool(gs.get("aims")))
+
+
 def provisional_text(k, g) -> str:
     from charter import goal_registry as GR
     rules = bool((k.spec.get("goals") or {}).get("show_rules", True))
     ws = g.get("weights") or [0.7, 0.3]
     p = g["provisional"]
+    if (k.spec.get("goals") or {}).get("aims"):                          # review 24: aims, no percentages
+        return (f"Your main aim (drawn when you were born): {GR.shown(g['primary'], g['params'], rules, True)}. "
+                f"Your parents' value, your second aim for now: {GR.shown(g['secondary'], g['secondary_params'], rules, True)}. "
+                f"It is a value they hoped you would hold, not an order. At the start of round {p['at'] + 1} it may become your "
+                "main aim and your current main aim your second. That is decided once, by chance, and it is more likely the more "
+                "food your parents gave you while you were growing up.")
     return (f"Your primary goal (drawn when you were born; {ws[0]:.0%} of your score): {GR.shown(g['primary'], g['params'], rules)}. "
             f"Your parents' value, your secondary goal for now ({ws[1]:.0%}): "
             f"{GR.shown(g['secondary'], g['secondary_params'], rules)}. It is a value they hoped you would hold, not an order. At the "
@@ -720,7 +744,8 @@ def mature(k, aid) -> dict:
         from charter import goals as G
         new["reachable"] = G.reachable(new["primary"], new["params"], k.inst["law_level"],
                                        {"rights": k.w["agents"][aid]["rights"]})
-        new = EV._goal_text(new, (k.spec["goals"].get("score_weights") or {}), bool(k.spec["goals"].get("show_rules", True)))
+        new = EV._goal_text(new, (k.spec["goals"].get("score_weights") or {}), bool(k.spec["goals"].get("show_rules", True)),
+                            bool(k.spec["goals"].get("aims")))
         if promoted:
             EV.set_goal_boundary(k, k.inst, aid, old, new, k.r + 1, "maturity")
             k.notify(aid, f"You come of age: from round {k.r + 2} your parents' value is your primary goal. Your goal now: {new['text']}")

@@ -23,6 +23,8 @@ its own code.
 | 7 | 05f21c4 | none (`llm.cache_ttl: 5m` is a spec key in base.yaml, recorded in each run's saved spec; runs without it play under `auto`, the backend's choice: 1h on the CLI subscription) | the CLI gets CLAUDE_CODE_PROMPT_CACHE_TTL and API markers carry the TTL; run.json `flags` notes rounds averaging longer than the cache lifetime |
 | 8 | 5711493 | `conflict.model` disable -> auto (the key is new in 5711493; auto is harm in worlds with subsistence, disable elsewhere, so only subsistence worlds with conflict on change) | the harm combat model (docs/review/21_combat.md): kill, wound (robbed of carried food, left starving) or repelled; per-agent bases; one weapon per fighter, used up; food per fighter; fighting back; `craft` and `watch`; a starvation death within 3 rounds of a wound is cause `wounds` (by the wounder) |
 | 9 | f196b62 | `jurisdictions.admission_rounds` 0 -> 1 | admission ballots stay open one round so members can vote |
+| 10 | de0c39c, 89e0999 | `goals.SCORING_DEFAULTS.fixes` false -> true (review 23: Wealth, Hoard and Lineage Wealth count food in the stores an agent owns; Rank and Kingmaker rank only living agents, a dead holder or target scores 0; Dynasty is scored against the largest number of living descendants, Populator against the starting population; the Dynasty and Populator texts drop "population cap" with it) | none beyond the flip: review 24's goals and spec keys (goals.aims, goals.deadline, goals.a_slot, goals.survival, life.reproduction.child_goals, actions.unlisted) are opt-in and change nothing unset |
 
 Versions 2 and 3 were made on parallel branches (3 on wp/dm-capacity, merged in 8259b83), so a sha may have 3 without 2; the
-inference checks each version's commit separately.
+inference checks each version's commit separately. Version 10 was likewise made on wp/survival-exp, parallel to 8 and 9 (it
+was numbered 8 there and renumbered at the merge), so a sha of that branch has 10 without 8 and 9.

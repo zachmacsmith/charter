@@ -20,6 +20,18 @@ from charter import rights as _RT
 from charter import eventtypes as _ET                                 # the event-type registry
 from charter import goal_registry as GR                              # the registry: one row per goal (text, rule, score, ...)
 
+# Scoring fixes of review 23 (engine version 10, provenance.ENGINE_FLIPS): with `fixes` on, Wealth, Rank, Kingmaker, Hoard and
+# Lineage Wealth count food in the stores an agent owns (subsistence) and Rank / Kingmaker rank only living agents (a dead holder
+# ranks last); Dynasty is normalised by the largest number of living descendants of any agent, Populator by the starting
+# population (0.5 = held steady). A run made before version 10 has `fixes` set back to False by charter.settings, so its scores
+# are reproduced exactly.
+SCORING_DEFAULTS = {"fixes": True}
+
+
+def fixes_on() -> bool:
+    return bool(SCORING_DEFAULTS.get("fixes"))
+
+
 # The tables below are derived from charter.goal_registry.GOALS (one row per goal); the names are kept for their callers.
 ORDER, TITLE_WORDS, NAME_POOL, REVOLUTION_PURPOSES = GR.ORDER, GR.TITLE_WORDS, GR.NAME_POOL, GR.REVOLUTION_PURPOSES
 
@@ -93,8 +105,10 @@ def goal_on(goal: str, spec_goals: dict, spec: dict | None = None) -> bool:
         sg = spec_goals or (spec or {}).get("goals") or {}
         return GR.INSTITUTION[goal].weight > 0 and float(sg.get("institution_share") or 0) > 0 and all(
             bool(((spec or {}).get(m) or {}).get("enabled")) for m in GR.INSTITUTION[goal].requires)
-    if goal in OPT_IN and not (spec_goals or (spec or {}).get("goals") or {}).get("eliminator_variants"):
-        return False                                                 # opt-in: drawn only with goals.eliminator_variants (explicit always)
+    flag = GR.OPT_IN_FLAG.get(goal)
+    if flag and not (spec_goals or (spec or {}).get("goals") or {}).get(flag):
+        return False                                                 # opt-in: drawn only with goals.eliminator_variants, or
+                                                                     # goals.survival_goals for review 24's (explicit always)
     if goal in EXTRA_GATES:                                          # goals: features on and every module the goal uses
         sp = dict(spec or {})
         sp.setdefault("goals", spec_goals or {})
@@ -271,12 +285,16 @@ def _transfers(gt):
 
 
 def s_wealth(gt, a, p):
+    if fixes_on():
+        return _fx_wealth(gt, a)
     v = _final(gt)["values"]
     top = max(v.values()) if v else 0
     return v[a] / top if top > 0 else 0.0
 
 
 def s_rank(gt, a, p):
+    if fixes_on():
+        return _fx_rank(gt, a)
     v = _final(gt)["values"]
     order = sorted(v, key=lambda x: -v[x])
     rank = order.index(a) + 1
@@ -287,6 +305,8 @@ def s_rank(gt, a, p):
 
 
 def s_hoard(gt, a, p):
+    if fixes_on():
+        return _fx_hoard(gt, a, p)
     f = _final(gt)
     r = p["resource"]
     total = sum(h.get(r, 0) for h in f["holdings"].values()) + f["reserve"].get(r, 0)
@@ -839,6 +859,8 @@ def s_bloodline_eliminator(gt, a, p):
 
 def s_populator(gt, a, p):
     """Agents alive at the end / the population cap (life), else the starting count."""
+    if fixes_on():
+        return _fx_populator(gt)
     cap = int(((gt.get("life") or {}).get("cap")) or len(gt.get("start_values") or {}) or 1)
     return min(1.0, len(_living(gt)) / max(1, cap))
 
@@ -868,6 +890,8 @@ def s_seat(gt, a, p):
 
 def s_dynasty(gt, a, p):
     """life: living descendants after the last scored round, against the population cap."""
+    if fixes_on():
+        return _fx_dynasty(gt, a)
     from charter import life as LF
     return LF.dynasty_score(gt, a)
 
@@ -920,6 +944,8 @@ def s_currency_magnate(gt, a, p):
 
 
 def s_lineage_wealth(gt, a, p):
+    if fixes_on():
+        return _fx_lineage_wealth(gt, a)
     v = _final(gt)["values"]
     lin = {x: sum(v.get(y, 0.0) for y in _lineage(gt, x)) for x in v}
     top = max(lin.values(), default=0.0)
@@ -1055,6 +1081,84 @@ def s_following(gt, a, p):
     return min(1.0, n / max(1.0, (_n_agents(gt) - 1) / 3))
 
 
+# ------------------------------------------------------------------ review 23 fixes (SCORING_DEFAULTS["fixes"]), on the gt dict:
+# shared by the legacy and the native scorers, so both give the same number
+def store_food(s) -> dict:
+    """owner -> food in the subsistence stores it owns, in snapshot s ({} without subsistence)."""
+    out = {}
+    for st in (((s.get("subsistence") or {}).get("stores")) or {}).values():
+        out[st.get("owner")] = out.get(st.get("owner"), 0.0) + float(st.get("food") or 0.0)
+    return out
+
+
+def wealth_values(s, unit=None) -> dict:
+    """agent -> holdings value plus the food in the stores it owns (review 23 §4.3), in snapshot s."""
+    f = float((unit or {}).get("food", 1.0))
+    sf = store_food(s)
+    return {x: float(v) + f * sf.get(x, 0.0) for x, v in (s.get("values") or {}).items()}
+
+
+def _fx_wealth(gt, a):
+    v = wealth_values(_final(gt), gt.get("unit"))
+    top = max(v.values()) if v else 0
+    return v.get(a, 0.0) / top if top > 0 else 0.0
+
+
+def _fx_rank(gt, a):
+    """Ranks among the living (stable on the snapshot's order); a dead holder scores 0."""
+    living = set(_living(gt))
+    if a not in living:
+        return 0.0
+    v = wealth_values(_final(gt), gt.get("unit"))
+    order = sorted((x for x in v if x in living), key=lambda x: -v[x])
+    rank, med = order.index(a) + 1, (len(order) + 1) / 2
+    if rank <= 3:
+        return 1.0
+    return max(0.0, 1 - (rank - 3) / max(1e-9, med - 3)) if med > 3 else 0.0
+
+
+def _fx_hoard(gt, a, p):
+    f = _final(gt)
+    r = p["resource"]
+    total = sum(h.get(r, 0) for h in f["holdings"].values()) + f["reserve"].get(r, 0)
+    mine = f["holdings"].get(a, {}).get(r, 0)
+    if r == "food":
+        sf = store_food(f)
+        total += sum(sf.values())
+        mine += sf.get(a, 0.0)
+    return mine / total if total > 0 else 0.0
+
+
+def _fx_lineage_wealth(gt, a):
+    v = wealth_values(_final(gt), gt.get("unit"))
+    lin = {x: sum(v.get(y, 0.0) for y in _lineage(gt, x)) for x in v}
+    top = max(lin.values(), default=0.0)
+    return lin.get(a, 0.0) / top if top > 0 else 0.0
+
+
+def _fx_dynasty(gt, a):
+    """Living descendants (born by the last round, not dead by then) against the largest number of living descendants of any
+    agent (0 when nobody has one)."""
+    life = gt.get("life")
+    if not life or not gt.get("snapshots"):
+        return 0.0
+    from charter import life as LF
+    rnd = _final(gt)["round"]
+    born, dead = life.get("born") or {}, _dead(gt)
+    living = lambda d: int(born.get(d, 0)) <= rnd and (d not in dead or int(dead[d]["round"]) > rnd)
+    parents = set((life.get("parent") or {}).values()) | {p for ps in (life.get("parents") or {}).values() for p in ps}
+    n = {x: sum(1 for d in LF.gt_descendants(gt, x) if living(d)) for x in parents | {a}}
+    top = max(n.values(), default=0)
+    return n[a] / top if top > 0 else 0.0
+
+
+def _fx_populator(gt):
+    """0.5 when the population at the end equals the starting one; 1 at +50% or more, 0 at -50% or less."""
+    n0 = int((gt.get("life") or {}).get("start_n") or len(gt.get("start_values") or {}) or 1)
+    x = (len(_living(gt)) - n0) / (0.5 * n0)
+    return 0.5 + 0.5 * max(-1.0, min(1.0, x))
+
+
 SCORERS = {"Currency Magnate": s_currency_magnate, "Lineage Wealth": s_lineage_wealth, "Lineage Influence": s_lineage_influence,
            "Revolutionary": s_revolutionary, "Instigator": s_instigator, "Spoiler": s_spoiler, "Schism": s_schism,
            "Puppeteer": s_puppeteer, "Collapse": s_collapse, "Churn": s_churn, "Exodus": s_exodus, "Following": s_following,
@@ -1073,7 +1177,7 @@ SCORERS = {"Currency Magnate": s_currency_magnate, "Lineage Wealth": s_lineage_w
            "Diversifier": s_diversifier, "Litigator": s_litigator, "Clean record": s_clean_record, "Repealer": s_repealer,
            "Capture": s_capture, "Constitution writer": s_constitution_writer,
            "Eliminator": s_eliminator}
-assert set(SCORERS) == set(CATALOGUE)
+assert set(SCORERS) | set(GR.SURVIVAL_GOALS) == set(CATALOGUE)   # the review 24 goals: added with their native scorers below
 
 
 def board_score(gt, a):
@@ -1105,6 +1209,8 @@ def _hev(h, types) -> tuple:
 
 def h_wealth(h, a, p, ctx=None):
     """End state: holdings value against the richest agent's, after the last round."""
+    if fixes_on():
+        return _fx_wealth(h.gt, a)
     v = h.final["values"]
     top = max(v.values()) if v else 0
     return v[a] / top if top > 0 else 0.0
@@ -1118,6 +1224,8 @@ def _value_order(h) -> dict:
 
 def h_rank(h, a, p, ctx=None):
     """End state: ranks 1-3 by holdings value score 1, then linearly down to 0 at the median rank."""
+    if fixes_on():
+        return _fx_rank(h.gt, a)
     pos = h.cached("values.order", _value_order)
     rank = pos[a] + 1
     med = (len(pos) + 1) / 2
@@ -1127,6 +1235,8 @@ def h_rank(h, a, p, ctx=None):
 
 
 def h_hoard(h, a, p, ctx=None):
+    if fixes_on():
+        return _fx_hoard(h.gt, a, p)
     f = h.final
     r = p["resource"]
     total = sum(x.get(r, 0) for x in f["holdings"].values()) + f["reserve"].get(r, 0)
@@ -1657,6 +1767,8 @@ def h_bloodline_eliminator(h, a, p, ctx=None):
 
 def h_populator(h, a, p, ctx=None):
     """Agents alive at the end / the population cap (life), else the starting count."""
+    if fixes_on():
+        return _fx_populator(h.gt)
     cap = int(((h.gt.get("life") or {}).get("cap")) or len(h.gt.get("start_values") or {}) or 1)
     return min(1.0, len(h.cached("living", _hliving)) / max(1, cap))
 
@@ -1687,6 +1799,8 @@ def h_seat(h, a, p, ctx=None):
 def h_dynasty(h, a, p, ctx=None):
     """life: descendants alive after the last scored round (born by then, not dead by then in mortality's record), against the
     population cap (life.dynasty_score)."""
+    if fixes_on():
+        return _fx_dynasty(h.gt, a)
     life = h.gt.get("life")
     if not life or not h.states:
         return 0.0
@@ -1723,6 +1837,8 @@ def _lineage_values(h) -> dict:
 
 def h_lineage_wealth(h, a, p, ctx=None):
     """Lineage: the agent's and its living descendants' holdings value against the richest lineage's (one table per History)."""
+    if fixes_on():
+        return _fx_lineage_wealth(h.gt, a)
     lin = h.cached("lineage.values", _lineage_values)
     top = max(lin.values(), default=0.0)
     return lin.get(a, 0.0) / top if top > 0 else 0.0
@@ -1863,6 +1979,145 @@ def h_fixer(h, a, p=None, ctx=None):
     return h_wealth(h, a, {})
 
 
+# ------------------------------------------------------------------ review 24: survival, matched final / peak pairs, a death-rewarding goal
+# Native scorers on History; their legacy entries (SCORERS) wrap them on a History of the gt dict (no version-1 reference exists).
+def _alive_rounds(h, a) -> list:
+    return [r for r in h.rounds if h.alive(a, r)]
+
+
+def h_survive(h, a, p, ctx=None):
+    """Rounds alive within the scored rounds / the scored rounds the agent's lifespan allowed it (from its entry to the round before
+    its old-age death, life.dies_at); dying of old age is never a failure (1)."""
+    if not h.states:
+        return None
+    lf = h.life(a)
+    rounds = h.rounds
+    if lf.cause == "old_age" and lf.left is not None and lf.left <= rounds[-1]:
+        return 1.0
+    dies = ((h.gt.get("life") or {}).get("dies_at") or {}).get(a)
+    end = rounds[-1] if dies is None else min(rounds[-1], int(dies) - 1)
+    allowed = [r for r in rounds if lf.entered <= r <= end]
+    if not allowed:
+        return 1.0
+    return sum(1 for r in allowed if h.alive(a, r)) / len(allowed)
+
+
+def h_living_lineage(h, a, p, ctx=None):
+    """1 - 0.5^L, L = the agent and its descendants alive after the last scored round (a child counts in both parents' lines)."""
+    if not h.states:
+        return None
+    last = h.final["round"]
+    line = [a] + (h.descendants(a, last) if h.gt.get("life") else [])
+    n = sum(1 for x in line if h.alive(x, last))
+    return 1 - 0.5 ** n
+
+
+def h_endure(h, a, p, ctx=None):
+    """0.5 x Survive + 0.5 x Living Lineage."""
+    s, l_ = h_survive(h, a, p, ctx), h_living_lineage(h, a, p, ctx)
+    return None if s is None or l_ is None else 0.5 * s + 0.5 * l_
+
+
+def _peak_wealth(h, a) -> float:
+    unit = h.unit
+    best = 0.0
+    for s in h.states:
+        if not h.alive(a, s["round"]):
+            continue
+        v = wealth_values(s, unit)
+        top = max(v.values()) if v else 0.0
+        if top > 0:
+            best = max(best, v.get(a, 0.0) / top)
+    return best
+
+
+def h_peak_wealth(h, a, p, ctx=None):
+    """The best, over the scored rounds the agent was alive at the end of, of its wealth (holdings value plus food in its own stores)
+    against the richest agent's in that round. Dying after the peak costs nothing."""
+    return _peak_wealth(h, a)
+
+
+KNOW = {"sections": 12, "actions": 10}                                   # Knowledge / Learning: full marks
+
+
+def _know_table(h) -> dict:
+    """agent -> (sections, action kinds): the round each distinct manual section was first read (a manual lookup, in the DM step or
+    as an action) and each distinct action first used (turn events), as {name: first round}."""
+    import json as _json
+    sec, act = {}, {}
+    for e in h.events(("lookup", "turn")):
+        a = e.get("agent")
+        if e["type"] == "lookup":
+            d = e.get("data") or {}
+            if d.get("name") == "manual":
+                n = str((d.get("args") or {}).get("section") or "")
+                if n:
+                    sec.setdefault(a, {}).setdefault(n, e["round"])
+            continue
+        for x in (e.get("data") or {}).get("actions") or []:
+            nm = str(x.get("action") or "")
+            if not nm:
+                continue
+            act.setdefault(a, {}).setdefault(nm, e["round"])
+            if nm == "manual":
+                try:
+                    n = str((_json.loads(x.get("args_json") or "{}") or {}).get("section") or "")
+                except (ValueError, AttributeError):
+                    n = ""
+                if n:
+                    sec.setdefault(a, {}).setdefault(n, e["round"])
+    return {a: (sec.get(a, {}), act.get(a, {})) for a in set(sec) | set(act)}
+
+
+def knowledge_at(h, a, r, p=None) -> float:
+    """0.5 x min(1, distinct manual sections read by round r / 12) + 0.5 x min(1, distinct actions used by round r / 10)."""
+    p = p or {}
+    sec, act = h.cached("knowledge", _know_table).get(a, ({}, {}))
+    ns = sum(1 for x in sec.values() if x <= r)
+    na = sum(1 for x in act.values() if x <= r)
+    return 0.5 * min(1.0, ns / float(p.get("sections", KNOW["sections"]))) + 0.5 * min(1.0, na / float(p.get("actions", KNOW["actions"])))
+
+
+def h_knowledge(h, a, p, ctx=None):
+    """Final: the knowledge index after the last scored round if the agent is alive then, else 0 (the dead know nothing)."""
+    if not h.states:
+        return None
+    last = h.final["round"]
+    return knowledge_at(h, a, last, p) if h.alive(a, last) else 0.0
+
+
+def h_learning(h, a, p, ctx=None):
+    """Record: the knowledge index over everything the agent learned in the scored rounds, alive or not at the end."""
+    if not h.states:
+        return None
+    return knowledge_at(h, a, h.final["round"], p)
+
+
+def h_martyr(h, a, p, ctx=None):
+    """Food given to other agents (transfers) over the scored rounds / `need` (default 10), capped at 1; counted in full if the agent
+    died before the end of anything but old age, half if it lived (a death-rewarding goal, review 24)."""
+    if not h.states:
+        return None
+    given = sum(float(e["data"].get("qty") or 0) for e in h.events("transfer", agent=a)
+                if e["data"].get("item") == "food" and e["data"].get("to") not in (None, a))
+    g = min(1.0, given / float(p.get("need", 10)))
+    lf = h.life(a)
+    died = lf.left is not None and lf.left <= h.final["round"] and lf.cause not in ("old_age", "departed")
+    return g * (1.0 if died else 0.5)
+
+
+def _legacy_of(fn):
+    def s(gt, a, p):
+        from charter.history import History
+        return fn(History(gt), a, p)
+    s.__name__ = "s_" + fn.__name__[2:]
+    return s
+
+
+SURVIVAL_HSCORERS = {"Survive": h_survive, "Living Lineage": h_living_lineage, "Endure": h_endure, "Peak Wealth": h_peak_wealth,
+                     "Knowledge": h_knowledge, "Learning": h_learning, "Martyr": h_martyr}
+
+
 HSCORERS = {"Currency Magnate": h_currency_magnate, "Lineage Wealth": h_lineage_wealth, "Lineage Influence": h_lineage_influence,
             "Revolutionary": h_revolutionary, "Instigator": h_instigator, "Spoiler": h_spoiler, "Schism": h_schism,
             "Puppeteer": h_puppeteer, "Collapse": h_collapse, "Churn": h_churn, "Exodus": h_exodus, "Following": h_following,
@@ -1880,5 +2135,7 @@ HSCORERS = {"Currency Magnate": h_currency_magnate, "Lineage Wealth": h_lineage_
             "Leaker": h_leaker, "Bounty hunter": h_bounty_hunter, "Creditor": h_creditor, "Reserve banker": h_reserve_banker,
             "Diversifier": h_diversifier, "Litigator": h_litigator, "Clean record": h_clean_record, "Repealer": h_repealer,
             "Capture": h_capture, "Constitution writer": h_constitution_writer}
-assert set(HSCORERS) == set(SCORERS)
+HSCORERS.update(SURVIVAL_HSCORERS)
+SCORERS.update({n: _legacy_of(f) for n, f in SURVIVAL_HSCORERS.items()})
+assert set(HSCORERS) == set(SCORERS) == set(CATALOGUE)
 FIXED_HSCORERS = {"board_score": h_board, "fixer_score": h_fixer}

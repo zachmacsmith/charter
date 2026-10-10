@@ -1,0 +1,2 @@
+# Review 24 stage 1: arm A deadline variant, all Sonnet (founders and children).
+extends: [charter/specs/survival/arm_a_deadline.yaml, charter/specs/survival/models_sonnet.yaml]
