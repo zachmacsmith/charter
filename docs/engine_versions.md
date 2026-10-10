@@ -19,6 +19,7 @@ its own code.
 | 3 | 55d11fb, 9763182 | none (`dm_step.capacity: natural` is opt-in; nature_subsistence and ashwood set it, and their runs' specs record it) | under `capacity: natural` the Communications Act caps at its LIMIT with no per-agent extra (9763182; not a default, reproducible only by `rerun`) |
 | 4 | 6a69002 | `context.memory_text` v1 -> v2 | |
 | 5 | 23c948a, b629aa0 | `context.dm_delta` false -> true | under dm_delta the next round's prompt shows last round's DM exchange whole (b629aa0) |
+| 6 | b04001c, b8e4b73 | `context.history.enabled` false -> true (history mode, review 20 §4; the key is new in b8e4b73, where it defaulted to false) | `recall` added to the lookups and actions (history mode only); in history mode DM replies are always deltas and the system prompt is frozen per conversation |
 
 Versions 2 and 3 were made on parallel branches (3 on wp/dm-capacity, merged in 8259b83), so a sha may have 3 without 2; the
 inference checks each version's commit separately.

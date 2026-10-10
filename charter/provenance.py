@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 5
+ENGINE_VERSION = 6
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -69,6 +69,10 @@ ENGINE_FLIPS = {
     5: {"commits": ["23c948aaefc9e12fa7cb1ee1e0bc0837d024a808", "b629aa09a0e9b132fed5e10ce52f4df65b3bda75"],
         "flips": [("charter.context.DEFAULTS", ("dm_delta",), False, True)],
         "note": "context.dm_delta on by default; the next round shows last round's DM exchange whole (under dm_delta)"},
+    6: {"commits": ["b04001c96682f890f5089b4c0f0e8251db7918c0", "b8e4b73ca847cbbfbbe40b0001baef7a987dd070"],
+        "flips": [("charter.context.DEFAULTS", ("history", "enabled"), False, True)],
+        "note": "history mode on by default (review 20 §4: chunked conversations, the memory gradient, recall); recall added to "
+                "the lookups and actions (only in history mode)"},
 }
 
 

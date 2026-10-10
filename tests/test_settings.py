@@ -16,7 +16,8 @@ from charter import settings as ST
 from charter import spec as S
 
 QUIET = dict(log=lambda *a: None)
-SETS = ["rounds=3", "shared_archive.enabled=false"]
+SETS = ["rounds=3", "shared_archive.enabled=false",
+        "context.history.enabled=false"]   # history mode restarts its conversations at a resume (by design): compared with it off
 
 
 def _inst():
@@ -37,6 +38,7 @@ def _flip(monkeypatch):
     """Today's code with the review 20 defaults flipped back (as a later commit might flip any default)."""
     monkeypatch.setitem(CX.DEFAULTS, "memory_text", "v1")
     monkeypatch.setitem(CX.DEFAULTS, "dm_delta", False)
+    monkeypatch.setitem(CX.DEFAULTS["history"], "enabled", False)
 
 
 def _resume(out, *extra):
@@ -130,19 +132,21 @@ def test_infer_version_from_git_history():
     s = ST.infer(PV.ENGINE_FLIPS[3]["commits"][0])                       # version 3 without version 2's flip
     assert s["engine_version"] == 3 and s["defaults"] == {"charter.channels.DEFAULTS": {"delivery": "pull"}}
     assert ST.patches(s) == {"charter.channels.DEFAULTS": {"delivery": "pull"},
-                             "charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False}}
+                             "charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}}}
     assert ST.infer_version("HEAD") == PV.ENGINE_VERSION
     assert ST.infer_version("0" * 40) is None
 
 
 def test_patches_revert_later_flips_only_where_the_snapshot_is_silent():
     p = ST.patches({"engine_version": 3, "defaults": {}})
-    assert p == {"charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False}}
+    assert p == {"charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}}}
     p = ST.patches({"engine_version": 1, "defaults": {"charter.context.DEFAULTS": {"memory_text": "v2"}}})
-    assert p == {"charter.channels.DEFAULTS": {"delivery": "pull"}, "charter.context.DEFAULTS": {"dm_delta": False}}
+    assert p == {"charter.channels.DEFAULTS": {"delivery": "pull"},
+                 "charter.context.DEFAULTS": {"dm_delta": False, "history": {"enabled": False}}}
     with ST.use({"engine_version": 1, "defaults": {}}):
         assert CX.DEFAULTS["memory_text"] == "v1" and CX.cfg({})["dm_delta"] is False
-    assert CX.DEFAULTS["memory_text"] == "v2" and CX.cfg({})["dm_delta"] is True
+        assert CX.DEFAULTS["history"]["enabled"] is False and CX.DEFAULTS["history"]["chunk"] == 3   # the rest of the block kept
+    assert CX.DEFAULTS["memory_text"] == "v2" and CX.cfg({})["dm_delta"] is True and CX.DEFAULTS["history"]["enabled"] is True
 
 
 @pytest.mark.skipif(not _have(PV.ENGINE_FLIPS[3]["commits"][0]), reason="needs the git history")
