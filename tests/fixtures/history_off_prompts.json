@@ -227,35 +227,35 @@
 },
 "subsistence_small": {
 "r0:decide:0:Bruna:0": [
-"a6bdabeeca28bfa2",
+"42cfc1ca16c4c2d4",
 "582f38c8da23cf55"
 ],
 "r0:decide:0:Iris:0": [
-"561db80915eab69f",
+"439b0d481c086eee",
 "40916cea1825dd8a"
 ],
 "r0:decide:0:Jarl:0": [
-"b8e9e235cd5c7b21",
+"699e29e50eb29b0d",
 "f6403ee9b84bab0a"
 ],
 "r0:decide:0:Maya:0": [
-"ea53274a1a6e62f1",
+"337d2c959784073f",
 "d0edf2b718bc5157"
 ],
 "r0:decide:0:Oda:0": [
-"584ff28eb51469fd",
+"ea8360375facbbcc",
 "2e4c0378a79079bc"
 ],
 "r0:decide:0:Rakel:0": [
-"911683ce7e95fa48",
+"d7b674386d26ccce",
 "7946c3d9545ddd4c"
 ],
 "r0:decide:0:Siv:0": [
-"08d6ce353d117e64",
+"395407727a46b82a",
 "a7945174b2527605"
 ],
 "r0:decide:0:Valter:0": [
-"ff6983988baba850",
+"753f7571d4f6d5da",
 "1b33fda1ee8ac4dd"
 ],
 "r0:decide:0:Wanda:0": [
@@ -263,67 +263,67 @@
 "e8e8ee493037ffd7"
 ],
 "r0:decide:0:Yuri:0": [
-"74cdaf3744cd93b6",
+"85f5b97624f162e6",
 "91c4fbff2db63d6e"
 ],
 "r0:decide:0:Zeno:0": [
-"c7395bbe5fcab0af",
+"fab94c4efb4f878e",
 "d2f09542243c42a4"
 ],
 "r0:dm_reply:1:Iris:0": [
-"561db80915eab69f",
+"439b0d481c086eee",
 "1dd9aaace08b0d59"
 ],
 "r0:dm_reply:1:Maya:0": [
-"ea53274a1a6e62f1",
+"337d2c959784073f",
 "b95adcdcbea57bd5"
 ],
 "r0:dm_reply:1:Oda:0": [
-"584ff28eb51469fd",
+"ea8360375facbbcc",
 "707895be593eee0d"
 ],
 "r0:dm_reply:1:Rakel:0": [
-"911683ce7e95fa48",
+"d7b674386d26ccce",
 "c85f242a21f7bf07"
 ],
 "r0:dm_reply:1:Yuri:0": [
-"74cdaf3744cd93b6",
+"85f5b97624f162e6",
 "c17a1bbf7aa516c3"
 ],
 "r0:dm_reply:1:Zeno:0": [
-"c7395bbe5fcab0af",
+"fab94c4efb4f878e",
 "4c8b4cc31e46172c"
 ],
 "r1:decide:0:Bruna:0": [
-"16aa29d5e9c8c2e9",
+"561ee928c954fb8c",
 "9b08af3904ad5d15"
 ],
 "r1:decide:0:Iris:0": [
-"728603757921f7bb",
+"5a5e16dc3b0c343e",
 "5f80902ad04bdaeb"
 ],
 "r1:decide:0:Jarl:0": [
-"b8e9e235cd5c7b21",
+"699e29e50eb29b0d",
 "76164be8f3f5fd28"
 ],
 "r1:decide:0:Maya:0": [
-"19f215e3ca778dba",
+"1d0ee6b7d40adbe5",
 "01c3f232671603ee"
 ],
 "r1:decide:0:Oda:0": [
-"60370aabc341ac23",
+"0c7ff84d3380a856",
 "6a906afe4be9280b"
 ],
 "r1:decide:0:Rakel:0": [
-"b842198e3e45e6c2",
+"c09b68ad575829ff",
 "f1bf488d6e9dc2d0"
 ],
 "r1:decide:0:Siv:0": [
-"505a4ab49eebfb59",
+"3854163e02339337",
 "91dfc86f71dfa9ff"
 ],
 "r1:decide:0:Valter:0": [
-"3d7d98bba5225ad1",
+"d3a0617b8fd09c22",
 "7f4660fa5fe6e439"
 ],
 "r1:decide:0:Wanda:0": [
@@ -331,67 +331,67 @@
 "65827ce8095129c7"
 ],
 "r1:decide:0:Yuri:0": [
-"050fd6f59fddabb2",
+"003be74bea8b324b",
 "9f9377cb16090480"
 ],
 "r1:decide:0:Zeno:0": [
-"70599465808f9f8a",
+"c39d517f651491f0",
 "be3c42353c8a4990"
 ],
 "r1:dm_reply:1:Iris:0": [
-"728603757921f7bb",
+"5a5e16dc3b0c343e",
 "1ae83128dd59ed08"
 ],
 "r1:dm_reply:1:Jarl:0": [
-"b8e9e235cd5c7b21",
+"699e29e50eb29b0d",
 "94eaa8ac5ffcaf4f"
 ],
 "r1:dm_reply:1:Maya:0": [
-"19f215e3ca778dba",
+"1d0ee6b7d40adbe5",
 "ebea28e1a3207aee"
 ],
 "r1:dm_reply:1:Oda:0": [
-"60370aabc341ac23",
+"0c7ff84d3380a856",
 "f02e0ee6a6c7f4b2"
 ],
 "r1:dm_reply:1:Rakel:0": [
-"b842198e3e45e6c2",
+"c09b68ad575829ff",
 "1c7666c2ce9269a8"
 ],
 "r1:dm_reply:1:Siv:0": [
-"505a4ab49eebfb59",
-"87cd5e4d7aebf6c7"
+"3854163e02339337",
+"ad7d598edb8f93a3"
 ],
 "r2:decide:0:Bruna:0": [
-"16aa29d5e9c8c2e9",
+"561ee928c954fb8c",
 "4dd77d6ad2b8efd0"
 ],
 "r2:decide:0:Iris:0": [
-"c3b288aa2ed0b308",
+"824f9bc61aab50c5",
 "d7c25d81075ff324"
 ],
 "r2:decide:0:Jarl:0": [
-"8080ad71c92b8304",
+"d21f5d897d67a17d",
 "7f400cff550631b2"
 ],
 "r2:decide:0:Maya:0": [
-"cbcade9c70f64793",
+"72f0275e97939d1a",
 "f36984fbeea70571"
 ],
 "r2:decide:0:Oda:0": [
-"6a50f718aed4c528",
+"239fc6e60ec3dca9",
 "23e44819bf3596d2"
 ],
 "r2:decide:0:Rakel:0": [
-"b842198e3e45e6c2",
+"c09b68ad575829ff",
 "609117a54d40ffa2"
 ],
 "r2:decide:0:Siv:0": [
-"d434a888672818ce",
+"52ff69a40fe4dfa3",
 "53d91710228318a9"
 ],
 "r2:decide:0:Valter:0": [
-"3d7d98bba5225ad1",
+"d3a0617b8fd09c22",
 "ef690b6dabd4e32a"
 ],
 "r2:decide:0:Wanda:0": [
@@ -399,67 +399,67 @@
 "93d2302d4347221f"
 ],
 "r2:decide:0:Yuri:0": [
-"050fd6f59fddabb2",
+"003be74bea8b324b",
 "19716aafc15f0aac"
 ],
 "r2:decide:0:Zeno:0": [
-"70599465808f9f8a",
+"c39d517f651491f0",
 "883c10612e90ab13"
 ],
 "r2:dm_reply:1:Iris:0": [
-"c3b288aa2ed0b308",
+"824f9bc61aab50c5",
 "5b495c3485f9aa76"
 ],
 "r2:dm_reply:1:Maya:0": [
-"cbcade9c70f64793",
+"72f0275e97939d1a",
 "025462c8ef5bde20"
 ],
 "r2:dm_reply:1:Siv:0": [
-"d434a888672818ce",
+"52ff69a40fe4dfa3",
 "f5986aaae34cbe06"
 ],
 "r2:dm_reply:1:Valter:0": [
-"3d7d98bba5225ad1",
+"d3a0617b8fd09c22",
 "e6fe37a653e70ff1"
 ],
 "r2:dm_reply:1:Yuri:0": [
-"050fd6f59fddabb2",
+"003be74bea8b324b",
 "8931a8edbf94ee7e"
 ],
 "r3:decide:0:Bruna:0": [
-"8e11fefb1d4f462c",
+"cb45a01698f55fb0",
 "acb8c9f4946bde6e"
 ],
 "r3:decide:0:Felix:0": [
-"a566f395552dd8fe",
+"4f40ed1c5171e855",
 "1ad29a3e57b7d2e4"
 ],
 "r3:decide:0:Iris:0": [
-"88553704e2ead40e",
+"a247f96e9836ac3b",
 "0b8ee6b43b0e006a"
 ],
 "r3:decide:0:Jarl:0": [
-"8623d929b2ee1525",
+"d6b02cb005ec8f6f",
 "24ca0fdd756990d1"
 ],
 "r3:decide:0:Maya:0": [
-"c5fb9731cc114d3f",
+"c237d82a884dec90",
 "d754ee448316787c"
 ],
 "r3:decide:0:Oda:0": [
-"bd0e1d94d716a57f",
+"33379d974956c73d",
 "7631d087e7aee0f6"
 ],
 "r3:decide:0:Rakel:0": [
-"2c611e28469f2389",
+"709c3d179b078850",
 "71020375e0eef26e"
 ],
 "r3:decide:0:Siv:0": [
-"d04ea8cecffe6a6b",
+"042f3b76b73d7973",
 "b056fcc8ab0ead7a"
 ],
 "r3:decide:0:Valter:0": [
-"5f1b823994ee437a",
+"35c665752b459691",
 "58c620373c76c2ea"
 ],
 "r3:decide:0:Wanda:0": [
@@ -467,63 +467,63 @@
 "54183e5010407076"
 ],
 "r3:decide:0:Yuri:0": [
-"8a49c65840428b98",
+"3a4030be0b719423",
 "c337b99549a16f47"
 ],
 "r3:decide:0:Zeno:0": [
-"411c7a5972401eb3",
+"048a6d3f3bf1efe3",
 "4a753ddebbf821a5"
 ],
 "r3:dm_reply:1:Jarl:0": [
-"8623d929b2ee1525",
+"d6b02cb005ec8f6f",
 "500cfed9f7e3e6b0"
 ],
 "r3:dm_reply:1:Maya:0": [
-"c5fb9731cc114d3f",
+"c237d82a884dec90",
 "85f350bff736778b"
 ],
 "r3:dm_reply:1:Valter:0": [
-"5f1b823994ee437a",
+"35c665752b459691",
 "13150e70843451ac"
 ],
 "r3:dm_reply:1:Zeno:0": [
-"411c7a5972401eb3",
+"048a6d3f3bf1efe3",
 "07407d16e682ce99"
 ],
 "r4:decide:0:Bruna:0": [
-"8e11fefb1d4f462c",
+"cb45a01698f55fb0",
 "6519c5359cf5bb11"
 ],
 "r4:decide:0:Felix:0": [
-"a566f395552dd8fe",
+"4f40ed1c5171e855",
 "c53b29efd03c80ef"
 ],
 "r4:decide:0:Iris:0": [
-"88553704e2ead40e",
+"a247f96e9836ac3b",
 "ca070f7ec3be0338"
 ],
 "r4:decide:0:Jarl:0": [
-"c9d763cd923978b0",
+"bfba02ad9e279451",
 "a57b44b6777e8d6b"
 ],
 "r4:decide:0:Maya:0": [
-"0fc52314611f9bb9",
+"78c36e050ad34591",
 "3bb4bc07fbc35391"
 ],
 "r4:decide:0:Oda:0": [
-"4fa5ecb33b0e00be",
+"f32092bd7229365b",
 "a956024507af667e"
 ],
 "r4:decide:0:Rakel:0": [
-"2c611e28469f2389",
+"709c3d179b078850",
 "ecdf9a375d318326"
 ],
 "r4:decide:0:Siv:0": [
-"d04ea8cecffe6a6b",
+"042f3b76b73d7973",
 "61653618c8059205"
 ],
 "r4:decide:0:Valter:0": [
-"d7e4f2d9d1769c72",
+"f880f86ef2c36524",
 "a9792c7f343de3c3"
 ],
 "r4:decide:0:Wanda:0": [
@@ -531,67 +531,67 @@
 "aabc98ebe9bfeb13"
 ],
 "r4:decide:0:Yuri:0": [
-"8a49c65840428b98",
+"3a4030be0b719423",
 "97e7c6ae1a426158"
 ],
 "r4:decide:0:Zeno:0": [
-"fa3ee18cb65d6946",
+"edd5fb506c9eb388",
 "377a1de34697c187"
 ],
 "r4:dm_reply:1:Bruna:0": [
-"8e11fefb1d4f462c",
+"cb45a01698f55fb0",
 "a958617c446fcaf7"
 ],
 "r4:dm_reply:1:Oda:0": [
-"4fa5ecb33b0e00be",
+"f32092bd7229365b",
 "145731c26490eb10"
 ],
 "r4:dm_reply:1:Siv:0": [
-"d04ea8cecffe6a6b",
+"042f3b76b73d7973",
 "da11b2ce7423dd7f"
 ],
 "r4:dm_reply:1:Yuri:0": [
-"8a49c65840428b98",
+"3a4030be0b719423",
 "8cc2151bdbc873f9"
 ],
 "r5:decide:0:Bruna:0": [
-"8fea9731a9e65bb5",
+"0d2e71672861030d",
 "b58ca2d8bb27fc88"
 ],
 "r5:decide:0:Felix:0": [
-"fa65396b79bab377",
+"b50a05d9aad5f9f5",
 "8b8dab8c217000d6"
 ],
 "r5:decide:0:Iris:0": [
-"280748b9d2f27a6c",
+"94557ce0bba3bc91",
 "f89b896c46ad8795"
 ],
 "r5:decide:0:Jarl:0": [
-"4f9d3accc9515341",
+"811a962d6a160622",
 "26e5dad648e5d69f"
 ],
 "r5:decide:0:Maya:0": [
-"401a0f9dbad2226b",
+"0674ba7c91de41cb",
 "106244b5394ae01b"
 ],
 "r5:decide:0:Oda:0": [
-"43676c08c5cce528",
+"8b63e27a6694e2db",
 "8ff8cdb9b3dca3df"
 ],
 "r5:decide:0:Rakel:0": [
-"ad020f7aaad0c6ee",
+"035f4561d07844a1",
 "b8bb9f4a06d8b545"
 ],
 "r5:decide:0:Siv:0": [
-"6aa857e4aee8d3f8",
+"dbabc6a1c1dcfff6",
 "991e7a95eadacb34"
 ],
 "r5:decide:0:Valter:0": [
-"a61bb75633274a96",
+"93c732647a963ce6",
 "a57430d55c035d10"
 ],
 "r5:decide:0:Vidar:0": [
-"0058df4dc7868871",
+"d6a569def8489c30",
 "0fa98cdd1b07643f"
 ],
 "r5:decide:0:Wanda:0": [
@@ -599,35 +599,35 @@
 "5d523ec514456b9e"
 ],
 "r5:decide:0:Yuri:0": [
-"9900a9cbad04fcdb",
+"64b36928c7a9f973",
 "2829e90c68c94362"
 ],
 "r5:decide:0:Zeno:0": [
-"83aad16ad55ec7c3",
+"64f3c82af06e6577",
 "de7231374b7c0dfd"
 ],
 "r5:dm_reply:1:Felix:0": [
-"fa65396b79bab377",
+"b50a05d9aad5f9f5",
 "e849562a0f29f6c3"
 ],
 "r5:dm_reply:1:Iris:0": [
-"280748b9d2f27a6c",
+"94557ce0bba3bc91",
 "c0656a07e00b3983"
 ],
 "r5:dm_reply:1:Jarl:0": [
-"4f9d3accc9515341",
+"811a962d6a160622",
 "be5b23d3e537be03"
 ],
 "r5:dm_reply:1:Maya:0": [
-"401a0f9dbad2226b",
+"0674ba7c91de41cb",
 "2e0777bfcd78971c"
 ],
 "r5:dm_reply:1:Oda:0": [
-"43676c08c5cce528",
+"8b63e27a6694e2db",
 "b9304501fac3b046"
 ],
 "r5:dm_reply:1:Vidar:0": [
-"0058df4dc7868871",
+"d6a569def8489c30",
 "58c1c8501fd0cf98"
 ],
 "r5:dm_reply:1:Wanda:0": [
@@ -635,7 +635,7 @@
 "502422aace709a2c"
 ],
 "r5:dm_reply:1:Zeno:0": [
-"83aad16ad55ec7c3",
+"64f3c82af06e6577",
 "72f3112ce806ee9e"
 ]
 }

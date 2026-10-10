@@ -241,12 +241,26 @@ def phrase(kind, spec=None) -> str:
 
 def purpose_overrides(spec) -> dict:
     """{action: purpose} where this world's wording differs from the registry's (the design arm: no template names)."""
-    return {} if templates_offered(spec) else dict(NO_TEMPLATE_PURPOSE)
+    out = {} if templates_offered(spec) else dict(NO_TEMPLATE_PURPOSE)
+    from charter import subsistence as SB
+    if SB.enabled(spec):                                                # forests are camps too: harvest is how plants are foraged
+        out["harvest"] = HARVEST_SUBSISTENCE_PURPOSE
+    return out
+
+
+HARVEST_SUBSISTENCE_PURPOSE = "forage plants in a forest, or work a camp you hold rights for"
+HARVEST_SUBSISTENCE_DOC = ('harvest {"camp": "forest1"}: forage plants in a forest (open to all; yield falls as the plants are '
+                           'depleted); {"camp": "forest1", "fell": true} fells timber instead; at a camp you hold harvest:<camp> '
+                           'for, {"camp": "camp1", "x": [dial values]} queries it and you receive the yield')
 
 
 def doc_for(name, spec) -> str | None:
     """An action's doc template in this world's wording, or None for the registry's (agents.action_doc)."""
     out = None
+    if name == "harvest":
+        from charter import subsistence as SB
+        if SB.enabled(spec):
+            out = HARVEST_SUBSISTENCE_DOC
     if name in NO_TEMPLATE_DOC and not templates_offered(spec):
         out = NO_TEMPLATE_DOC[name]
     elif name in CHANNEL_DOC and channels_v2(spec):                     # wave 9 C: post and standing_order with channels

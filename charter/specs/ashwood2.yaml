@@ -1,0 +1,10 @@
+# Ashwood II: Ashwood (same spec, seed and placed goals) under engine 7's memory: history mode (3-5 rounds in full with their DM
+# threads, 12 summary lines, long memories, recall), DM replies as conversation deltas, the notebook scratchpad text, and a 5-minute
+# prompt cache. The question is what changes when agents remember: do they know who has died, respond to a killer, keep promises
+# and plans across rounds, use recall. The roster is off, as it was in Ashwood, so awareness of deaths has to come from memory.
+# Not a clean A/B with Ashwood: since that run, channels deliver by push, DM capacity under `natural` caps at the Communications
+# Act's LIMIT alone, guard/join_attack are in every agent's core actions, and a store with no heir no longer goes to a phantom J0.
+extends: [charter/specs/ashwood.yaml]
+context: {roster: false}
+chronicle:
+  namespace: ashwood2
