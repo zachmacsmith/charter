@@ -6,6 +6,6 @@
 # channel posts are counted in the state and opened with read, DMs and your own inbox are pushed.
 channels:
   v2: true
-  delivery: pull
+  delivery: push                # user, 10 Oct: posts land in the feed (pull left most agents unaware of public speech)
   square: one
   square_rate: 2

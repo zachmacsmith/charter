@@ -527,7 +527,7 @@ EXTRA = {
     "institutions.grants": False,                                      # review 14 WP-E: off = the power table's kinds column
     "institutions.succession": False,                                  # review 14 §7.2: off = no vacancies, byte-identical
     # wave 9 C, channels v2 (charter/channels.py; review 14 §4.6, D-37): off = byte-identical
-    "channels.v2": False, "channels.delivery": "pull", "channels.square": "one", "channels.square_rate": 2,
+    "channels.v2": False, "channels.delivery": "push", "channels.square": "one", "channels.square_rate": 2,
     "channels.found_right": None, "channels.headlines": 8,
 }
 
@@ -578,8 +578,8 @@ DOCS = {
                    "selectors, listing, sender identity, retention); every agent and institution has an inbox; send, read, "
                    "open_channel, set_channel, join_channel, leave_channel; anyone may open a channel (the Press Act gates it where "
                    "seeded). Off (default): nothing changes",
-    "channels.delivery": "channels.v2: pull (default: channel posts are counted in the state and opened with read; DMs and your "
-                         "own inbox are pushed) | push (every post reaches the feed)",
+    "channels.delivery": "channels.v2: push (default; every post reaches the feed) | pull (channel posts are counted in the state and "
+                         "opened with read; DMs and your own inbox are pushed)",
     "channels.square": "channels.v2: the world's square(s): one (default) | per_camp (one per camp, for the agents present there: "
                        "a harvest right or an open typed camp) | none",
     "channels.square_rate": "channels.v2: posts per agent per round in a square (0: no limit)",

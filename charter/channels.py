@@ -50,7 +50,7 @@ SQUARES = ("one", "per_camp", "none")
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-.]{0,39}$")
 WORLD = "world"
 SQUARE = "square"
-DEFAULTS = {"v2": False, "delivery": "pull", "square": "one", "square_rate": 2, "found_right": None, "headlines": 8}
+DEFAULTS = {"v2": False, "delivery": "push", "square": "one", "square_rate": 2, "found_right": None, "headlines": 8}
 ACTIONS = ("send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")
 OLD_ACTIONS = ("create_channel", "channel_post")                       # replaced by open_channel and send/post under v2
 # Actions whose handler differs under channels.v2 (actions._act): the same verbs, with channels.
