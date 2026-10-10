@@ -868,20 +868,70 @@ class LLMPolicy:
             self._sessions.drop(c["session"])
 
     def _message(self, k, a, system, user, backend):
-        """context.dm_delta: what to send. A DM reply (DMDelta) continues the agent's latest conversation of this round when there
-        is one (same system prompt, backend and model; on the CLI, a session); otherwise its full prompt. Any other call starts a
-        conversation (on the CLI, a session in the run folder when sessions are usable)."""
+        """context.dm_delta and history mode: what to send. A history-mode turn (memory.HistoryTurn) starts or continues the agent's
+        conversation for its chunk (_history). A DM reply (DMDelta) continues the agent's latest conversation of this round when
+        there is one (same system prompt, backend and model; on the CLI, a session); otherwise its full prompt. Any other call
+        starts a conversation (on the CLI, a session in the run folder when sessions are usable), unless the agent is in a history
+        conversation, which a call outside it (an editorial) leaves alone."""
         llm = self.llm
+        from charter import memory as HM
+        if isinstance(user, HM.HistoryTurn):
+            return self._history(k, a, system, user, backend)
+        c = self._conv.get(a["id"])
         if isinstance(user, DMDelta):
-            c = self._conv.get(a["id"])
-            if c and c["round"] == k.r and c["system"] == system and c["backend"] == backend and c["model"] == a["model"] \
-                    and (backend != "claude_code" or c["session"]):
+            same = c and c["round"] == k.r and c["system"] == system and c["backend"] == backend and c["model"] == a["model"]
+            if same and c.get("chunk"):
+                return self._send(k, c, str(user), backend)
+            if same and (backend != "claude_code" or c["session"]):
                 return llm.Turn(str(user), history=c["messages"], fallback=user.full, sessions=self._sessions, session=c["session"]), c
             llm._warn_once("no_conversation", f"a DM reply had no conversation to continue ({a['id']}, round {k.r + 1}); the full "
                                               "DM prompt is sent instead (this warning is shown once)")
             return user.full, None
+        if c and c.get("chunk"):
+            return str(user), "keep"
         s = self._sessions if backend == "claude_code" and self._sessions is not None and self._sessions.usable else None
         return llm.Turn(user, fallback=user, sessions=s, session=s.new_id() if s else None), None
+
+    def _history(self, k, a, system, user, backend):
+        """History mode: continue the agent's conversation for this chunk, or start one (the turn's opening; or, when the policy has
+        no matching conversation, e.g. after a failed call, the turn's self-contained restart text)."""
+        aid = a["id"]
+        c = self._conv.get(aid)
+        same = c and c.get("chunk") == user.chunk and c["system"] == system and c["backend"] == backend and c["model"] == a["model"]
+        if user.starts or not same:
+            self._end(aid)
+            c = {"chunk": user.chunk, "round": k.r, "system": system, "backend": backend, "model": a["model"], "messages": [],
+                 "session": None, "restarted": not user.starts}
+            text = str(user) if user.starts else user.restart
+        else:
+            text = str(user)
+        c["round"] = k.r
+        return self._send(k, c, text, backend)
+
+    def _send(self, k, c, text, backend):
+        """History mode's transport for the next message of conversation c: API messages with breakpoints (api-messages); a CLI
+        session (cached-session: --session-id on its first message, --resume with only the new one after); else the whole
+        conversation as one prompt (flattened, uncached; logged once per run). Returns (what to send, the call's context)."""
+        llm = self.llm
+        msgs = c["messages"]
+        flat = llm.flatten(msgs + [text])
+        ctx = {"conv": c, "text": text}
+        if backend == "api":
+            ctx["transport"] = "api-messages"
+            return llm.Turn(text, history=msgs, fallback=flat, mark_previous=True), ctx
+        if backend == "claude_code" and self._sessions is not None and self._sessions.usable:
+            ctx["transport"] = "cached-session"
+            if c["session"]:
+                return llm.Turn(text, history=msgs, fallback=flat, sessions=self._sessions, session=c["session"]), ctx
+            return llm.Turn(flat, fallback=flat, sessions=self._sessions, session=self._sessions.new_id()), ctx   # (re)seeds a session
+        ctx["transport"] = "flattened"
+        if not getattr(self, "_uncached_warned", False):
+            self._uncached_warned = True
+            import logging
+            logging.getLogger("charter.llm").warning(
+                "history mode is uncached in this run: %s; every call sends the agent's whole conversation as one prompt",
+                "claude -p sessions are not available (llm.sessions_available)" if backend == "claude_code" else f"backend {backend}")
+        return flat, ctx
 
     def act_recorded(self, k, a, system, user, n_actions, final):
         """act, plus every attempt's record (raw reply text, error, latency, backend) for provenance.Recorder (calls.jsonl)."""
@@ -891,7 +941,8 @@ class LLMPolicy:
         schema = R.schema_for(k, a, schema)                             # roles: a member Spy also returns next_reads, assessments
         backend = (self.cfg.get("backend_overrides") or {}).get(a["model"], self.backend)   # e.g. one model through the API
         attempts = []
-        on = self._delta_on(k)
+        from charter import memory as HM
+        on = self._delta_on(k) or isinstance(user, HM.HistoryTurn)
         sent, conv = self._message(k, a, system, user, backend) if on else (user, None)
         out, reasoning, usage = self.llm.call(backend, a["model"], system, sent, schema, thinking_budget=self.cfg.get("thinking_budget", 0),
                                               max_tokens=self.cfg.get("max_tokens", 6000), attempts=attempts)
@@ -901,10 +952,29 @@ class LLMPolicy:
 
     def _after(self, k, a, system, user, backend, conv, out, usage, attempts) -> dict:
         """context.dm_delta: extend or start the agent's conversation; a DM reply's usage records how it was sent (dm_mode:
-        delta, fallback when continuing failed, full when there was nothing to continue)."""
+        delta, fallback when continuing failed, full when there was nothing to continue). History mode: usage["history"] is the
+        transport (cached-session, api-messages, flattened; flattened too when continuing failed and the whole conversation was
+        sent instead)."""
         aid = a["id"]
         raw = attempts[-1].get("raw") if attempts and attempts[-1].get("ok") and not (out or {}).get("_error") else None
         turn = usage.get("turn")
+        if conv == "keep":                                              # a call outside the agent's history conversation
+            return usage
+        if isinstance(conv, dict) and "transport" in conv:              # history mode
+            c = conv["conv"]
+            usage = {**usage, "history": "flattened" if turn == "fallback" else conv["transport"]}
+            if c.get("restarted"):
+                usage["history_restart"] = True
+                c["restarted"] = False
+            if isinstance(user, DMDelta):
+                usage["dm_mode"] = "delta"
+            if raw is None:                                             # the conversation would miss this exchange: drop it
+                self._end(aid)
+                return usage
+            c["messages"] += [conv["text"], raw]
+            c["session"] = None if turn == "fallback" else (usage.get("session") or c["session"])
+            self._conv[aid] = c
+            return usage
         if isinstance(user, DMDelta):
             usage = {**usage, "dm_mode": "delta" if turn == "continued" else "fallback" if turn == "fallback" else "full"}
             if turn == "continued" and raw is not None and conv is not None:
@@ -913,6 +983,11 @@ class LLMPolicy:
             else:
                 self._end(aid)                                          # the conversation no longer matches what the agent saw
             return usage
+        self._end(aid)
+        if raw is not None:
+            self._conv[aid] = {"round": k.r, "system": system, "backend": backend, "model": a["model"],
+                               "messages": [str(user), raw], "session": usage.get("session")}
+        return usage
         self._end(aid)
         if raw is not None:
             self._conv[aid] = {"round": k.r, "system": system, "backend": backend, "model": a["model"],
