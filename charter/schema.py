@@ -703,6 +703,8 @@ DOCS = {
     "subsistence.forest.clearing": "fells that clear one new plot on the paired fields",
     "subsistence.forest.start_stock": "a forest's starting stock as a share of its capacity",
     "subsistence.forest.shock": "rare forest shocks: chance p per forest per round; the plants or the game lose a share U[loss]",
+    "subsistence.forest.shock.p": "chance of a shock per forest per round (0: none)",
+    "subsistence.forest.shock.loss": "share of the struck stock (plants or game) lost, uniform [lo, hi]",
     "subsistence.fields.per_agent": "one fields camp per this many agents (at least one)",
     "subsistence.fields.plots_per_agent": "plots in all: this x agents (shared over the fields camps)",
     "subsistence.fields.plots_max_per_agent": "clearing adds plots up to this x agents",
