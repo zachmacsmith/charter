@@ -23,6 +23,7 @@ An entry:  register(name, purpose, section, core=False, pre=False, msg=False, ne
               "library:<v>"   spec law.library.visibility is v (review 14 A: "library:on_request")
               "any:<a>|<b>"   at least one of the requirements a, b, ... (e.g. "any:mod:hidden|level:4")
               "life:pairs"    two-parent reproduction is on (life.reproduction.mode pairs or both)
+              "combat:<m>"    conflict's combat model is m (conflict.model_of: "combat:harm")
               "dir:any"       directories are provisioned (charter/directories.py) and, without a kernel, the agent owns one
   edge      rights that make a core action part of the holder's edge though it does not require them ("harvest:*" any harvest
             right): open camps let anyone harvest, but the rights holders are the ones it is an edge for
@@ -180,6 +181,9 @@ def _need(inst, a, rights, n) -> bool:
     if kind == "history":                                               # review 20 §4.4: "history:recall" (context.history on, recall on)
         from charter import memory as HM
         return HM.on(inst) and bool(HM.hcfg(inst)[v])
+    if kind == "combat":                                                # "combat:harm": conflict's combat model (conflict.model_of)
+        from charter import conflict as CF
+        return CF.model_of(inst["spec"]) == v
     if kind == "camp":                                                  # review 15/19: "camp:<type>": the world has such a camp
         return any(c.get("type") == v for c in inst.get("camps") or [])
     raise ValueError(f"unknown requirement {n!r}")
@@ -245,7 +249,45 @@ def purpose_overrides(spec) -> dict:
     from charter import subsistence as SB
     if SB.enabled(spec):                                                # forests are camps too: harvest is how plants are foraged
         out["harvest"] = HARVEST_SUBSISTENCE_PURPOSE
+    from charter import conflict as CF
+    if CF.harm_spec(spec):                                              # the harm model: kill, wound or repelled
+        out.update(HARM_PURPOSE)
     return out
+
+
+HARM_DOC_NAMES = ("attack", "join_attack", "forge", "craft", "watch", "fortify", "guard")
+HARM_PURPOSE = {"attack": "attack someone: it may kill them, or wound and rob them", "forge": "forge a blade from copper and timber",
+                "fortify": "turn stone into a fort: defence at home", "join_attack": "fight beside someone in their attack"}
+
+
+def harm_doc(name, spec) -> str | None:
+    """An action's doc line under the harm model (numbers from the spec's conflict block), or None."""
+    from charter import conflict as CF
+    if not CF.harm_spec(spec):
+        return None
+    c = CF.config(spec)
+    fc, n = float(c["food_cost"]), float(c["craft_cost"])
+    docs = {
+        "attack": f'attack {{"target": "Name"}}: uses {int(c["attack_cost"])} actions, {fc:g} food and your best weapon (a blade, '
+                  'else a crude weapon, else bare hands), all spent whether it succeeds or not; it kills the target, wounds and '
+                  'robs them, or is driven off, and the target may fight back',
+        "join_attack": f'join_attack {{"attacker": "Name", "target": "Name"}}: fight in person in another agent\'s attack on a '
+                       f'target this round, with your own best weapon and {fc:g} food (used up if that attack happens, returned if '
+                       'it does not)',
+        "forge": f'forge {{}}: turn {float(c["forge_copper"]):g} copper and {float(c["forge_timber"]):g} timber into a blade, the '
+                 'strongest weapon (one per action)',
+        "craft": f'craft {{"from": "timber"}}: turn {n:g} timber (or {n:g} stone, with "from": "stone") into a crude weapon (a club '
+                 'or a spear)',
+        "watch": 'watch {}: stay on guard this round: you are harder to kill, likelier to fight back if attacked, and may strike '
+                 'an attacker first; only you know',
+        "fortify": f'fortify {{"qty": 4, "unlock": false}}: lock stone into your fort, which defends you at home (and whoever you '
+                   f'guard); with "unlock": true, stone comes back out after {c["fort_unlock_rounds"]} rounds (it keeps defending '
+                   'until then)',
+        "guard": 'guard {"agent": "Name", "item": null, "qty": null}: your fort also defends that agent against attacks (one at a '
+                 'time); with item and qty it is an offer at that fee per round, which they accept with guard {"accept": '
+                 '"YourName"}; guard {"stop": true} ends it',
+    }
+    return docs.get(name)
 
 
 HARVEST_SUBSISTENCE_PURPOSE = "forage plants in a forest, or work a camp you hold rights for"
@@ -256,7 +298,7 @@ HARVEST_SUBSISTENCE_DOC = ('harvest {"camp": "forest1"}: forage plants in a fore
 
 def doc_for(name, spec) -> str | None:
     """An action's doc template in this world's wording, or None for the registry's (agents.action_doc)."""
-    out = None
+    out = harm_doc(name, spec) if name in HARM_DOC_NAMES else None   # the harm combat model's wording
     if name == "harvest":
         from charter import subsistence as SB
         if SB.enabled(spec):
@@ -539,6 +581,13 @@ R("fortify", "turn stone into a fort: defence", "FORCE", core=True, needs=("mod:
 R("attack", "disable an agent for good", "FORCE", core=True, needs=("mod:conflict",),
   handler="conflict:act_attack", module="conflict", category="political", emits=("attack_order",),
   doc='attack {"target": "Name", "units": 3}: uses $attack_cost actions; commit weapons to disable the target (remove it from the game); the weapons are used up whether it succeeds or not')
+R("craft", "make a crude weapon from timber or stone", "FORCE", core=True, needs=("mod:conflict", "combat:harm"),
+  handler="conflict:act_craft", module="conflict", category="economic", emits=("arms",),
+  aliases={"material": "from", "item": "from", "src": "from", "source": "from", "with": "from"},
+  doc='craft {"from": "timber"}: make a crude weapon (a club or spear)')                # harm only; the doc is HARM_DOC's
+R("watch", "stay on guard this round", "FORCE", core=True, needs=("mod:conflict", "combat:harm"),
+  handler="conflict:act_watch", module="conflict", category="political", emits=("arms",),
+  doc='watch {}: stay on guard this round')                                              # harm only; the doc is HARM_DOC's
 R("forge_dm", "send a message that looks like someone else's", "FORCE", core=True, msg=True, needs=("right:impersonate", "mod:dm"),
   handler="actions:_forge_dm", module="roles", category="talk", emits=("forged_dm",),
   doc='forge_dm {"as": "Name", "to": "Name", "text": "..."}: a private message that appears to come from the agent "as" (who is not told); costs $forge_cost; if the recipient answers it with reply, the answer and any payment come to you')
@@ -974,6 +1023,9 @@ def core_surface(spec) -> tuple:
     out = CORE_SURFACE + NATURE_SURFACE if J.nature_start(spec) else CORE_SURFACE
     if ((spec or {}).get("conflict") or {}).get("enabled"):            # force: protecting others and acting together, not only attacking
         out = out + tuple(a for a in ("guard", "join_attack") if a not in out)
+        from charter import conflict as CF
+        if CF.harm_spec(spec):                                          # the harm model: crude weapons and keeping watch
+            out = out + tuple(a for a in CF.HARM_ACTIONS if a not in out)
     if ((spec or {}).get("channels") or {}).get("v2"):                 # channels v2 is the communication fabric: its verbs are core
         out = out + CHANNELS_SURFACE
     from charter import directories as DR
@@ -1026,7 +1078,8 @@ ACTIONS_ORDER = (
     "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel",   # wave 9 C (channels.v2)
     "farm", "build", "withdraw", "hunt",                                # review 15 (subsistence; hunt: review 19)
     "conceive",                                                         # review 15 S4 (pairs)
-    "recall")                                                           # review 20 (history mode)
+    "recall",                                                           # review 20 (history mode)
+    "craft", "watch")                                                   # the harm combat model (docs/review/21_combat.md)
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -1047,7 +1100,8 @@ DOC_ORDER = (
     "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel",   # wave 9 C (channels.v2)
     "farm", "build", "withdraw", "hunt",                                # review 15 (subsistence; hunt: review 19)
     "conceive",                                                         # review 15 S4 (pairs)
-    "recall")                                                           # review 20 (history mode)
+    "recall",                                                           # review 20 (history mode)
+    "craft", "watch")                                                   # the harm combat model (docs/review/21_combat.md)
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 

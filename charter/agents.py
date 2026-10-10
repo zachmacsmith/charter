@@ -177,7 +177,14 @@ def action_doc(name: str, inst: dict, a: dict, f: dict | None = None) -> str:
     if name == "rule" and (inst["spec"].get("law") or {}).get("v2"):  # courts v2: remedies, panels, appeals (law.v2 worlds only)
         doc += ('; law.v2: add "remedy": damages (a number) or a named remedy, which the clause\'s penalty receives. Your polity\'s '
                 "court rules (set by law) may make you one vote of a panel, require an office to judge, or allow an appeal")
-    if name == "attack":                                                # a nudge: disabling is a real option, not only for Eliminators
+    if name == "attack" and CF.harm(inst):                             # the harm model: factual, no nudge
+        secret = a.get("id") in ((inst.get("roles") or {}).get("holders") or {}).get("assassin", [])
+        vis = CF.config(inst["spec"])["visibility"]
+        doc += ((". As the assassin you may strike unseen once every few rounds with \"covert\": true: only then is a kill or wound "
+                 "announced without your name; an ordinary attack names you like anyone else's") if secret else
+                (". A kill is permanent" + ("; kills and wounds are announced with the attacker's name"
+                                            if vis["success_named"] and vis.get("wound", "public") == "public" else "")))
+    elif name == "attack":                                              # a nudge: disabling is a real option, not only for Eliminators
         secret = a.get("id") in ((inst.get("roles") or {}).get("holders") or {}).get("assassin", [])
         doc += ((". Disabling an agent is irreversible. As the assassin you may strike unseen once every few rounds with \"covert\": true: "
                  "only then is a success announced without your name; an ordinary attack names you like anyone else's. It can remove a "
@@ -752,6 +759,7 @@ class ScriptedPolicy:
             return MD.scripted_editorial(k, a)
         r, aid, cls = self.rng, a["id"], a["cls"]
         acts = CF.scripted(k, aid, n_actions) if CF.on(k) else []     # conflict: own RNG stream, so other dry runs are unchanged
+        harm_first, acts = (acts, []) if CF.harm(k) else ([], acts)   # harm: its move goes first (food moves fill the turn)
         mine = [x.split(":", 1)[1] for x in k.w["agents"][aid]["rights"] if x.startswith("harvest:")]
         for _ in range(n_actions):
             roll = r.random()
@@ -808,7 +816,8 @@ class ScriptedPolicy:
         if "pairs" in (k.w.get("life") or {}):                           # review 15 S4: offers, acceptances, feeding minors (own stream)
             from charter import pairs as PR
             acts = PR.scripted_actions(k, aid, n_actions) + acts
-        mail, replied = [], set()                                    # answer (and pay 1 timber with) the newest unanswered DM of the
+        acts = harm_first + acts
+        mail, replied = [], set()                                   # answer (and pay 1 timber with) the newest unanswered DM of the
         for e in reversed(k.events):                                 # last two rounds; no RNG draw, so runs without DMs are unchanged
             if e["round"] < k.r - 1:
                 break

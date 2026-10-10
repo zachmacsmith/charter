@@ -48,14 +48,15 @@ from charter import features as FT                                    # the one 
 from charter import eventtypes as ET                                  # the event-type registry
 from charter import lawlang as L
 
-CAUSES = ("attack", "assassin", "accident", "old_age", "law", "starvation")   # starvation: subsistence (review 15 S1)
+CAUSES = ("attack", "assassin", "accident", "old_age", "law", "starvation", "wounds")   # starvation: subsistence (review 15 S1); wounds: harm
 SWITCH_CAUSES = ("attack", "assassin", "law")                      # dead man's switch terms apply to these
 SECRET_ROLES = ("spy", "assassin")
 RIGHT_ROLES = ("scholar", "maker", "media")                       # roles that are rights: they lapse, and the Board cannot hold them
 HOSTILE = ("attack", "attack_result", "attack_failed", "disabled_truth", "accuse", "lawful_attack")
 CAUSE_TEXT = {"attack": "disabled in an attack", "assassin": "disabled by an unknown attacker", "accident": "removed from the game by an accident",
               "old_age": "removed from the game: their lifespan has ended", "law": "removed from the game by law",
-              "starvation": "removed from the game: they starved"}
+              "starvation": "removed from the game: they starved",
+              "wounds": "removed from the game: they died of wounds inflicted"}   # harm: starved soon after a wound (by the wounder)
 
 
 def active(spec) -> bool:
@@ -186,7 +187,7 @@ def _disable(k, aid, cause, by, public, named, v) -> dict:
 
     def announce():
         shown_by = by if (named and by) else None
-        text = f"{aid} has been {CAUSE_TEXT[cause]}" + (f" by {shown_by}" if shown_by and cause in ("attack", "law") else "") + "."
+        text = f"{aid} has been {CAUSE_TEXT[cause]}" + (f" by {shown_by}" if shown_by and cause in ("attack", "law", "wounds") else "") + "."
         with k.concealing(None if shown_by else by):                   # unnamed: neither "by" nor the cause chain names the attacker
             k.log("disabled", None, {"agent": aid, "cause": cause, **({"by": shown_by} if shown_by else {}), "text": text},   # unnamed: no "by" key
                   vis="public" if public else "monitor")

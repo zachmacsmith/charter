@@ -289,6 +289,20 @@ events:                           # world events (charter/events.py): a hidden s
 #   admission: ballot             # joining with no on_admission answer: ballot (members vote within the round) | open | closed
 #   j0_name: the Commonwealth
 #   scripted_founder: null        # dry runs: the scripted bot that founds, invites, legislates and declares (null: first citizen)
+# conflict:                       # (charter/conflict.py) OFF when absent; defaults in conflict.DEFAULTS. The harm combat model
+#   enabled: false                # (docs/review/21_combat.md), the default where subsistence is on:
+#   model: auto                   # disable | harm | auto (harm with subsistence, else disable)
+#   agent_base: {attack: {uniform: [0.5, 1.5]}, defense: {uniform: [0.5, 1.5]}}   # per agent, drawn at generation (never 0)
+#   weapon_quality: {weapons: 5, crude: 2}   # each fighter uses (and uses up) its one best weapon
+#   forge_copper: 25              # forge: copper + forge_timber timber -> 1 blade
+#   forge_timber: 1
+#   craft_cost: 2                 # craft: this much timber or stone -> 1 crude weapon
+#   food_cost: 2                  # food each fighter spends on an attack, win or lose
+#   contest: {r: 2, c: 2, wound_div: 2}   # p_kill = P^r / (P^r + X^r), X = c (D + 1); p_success with X / wound_div
+#   counter: {dying: 0.15, dying_watch: 2.0, wounded: 0.5, watch: 1.5, cap: 0.9, kill: 0.2, away: 1.0}   # fighting back
+#   watch: {defense: 2, first_strike: 0.1}   # watch {}: defence bonus this round, strike-first factor
+#   wound_credit_rounds: 3        # a starvation death this soon after a wound counts as a death by wounds (by the wounder)
+#   visibility: {wound: public}   # public | target | none
 # media2: the information economy (charter/media.py, charter/scholars.py). Off by default; its defaults live in media.DEFAULTS (not
 # here, so instance.json of worlds without it is unchanged). Turn it on in a spec with, e.g.:
 # media2:

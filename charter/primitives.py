@@ -881,7 +881,7 @@ ACTION_PRIMITIVES = {
     "amend": ("propose",),                                               # law.v2 (P3.4): the amend primitive applies when it passes
     "rule": ("rule",),
     # force
-    "forge": ("convert",), "fortify": ("fortify",), "attack": ("attack", "end_life"), "forge_dm": ("dm", "move"),
+    "forge": ("convert", "destroy"), "fortify": ("fortify",), "craft": ("convert",), "watch": ("fortify",), "attack": ("attack", "end_life"), "forge_dm": ("dm", "move"),
     # lineage
     "commission": ("commission", "move"), "copy_agent": ("begin_life",),
     # the press (own role)

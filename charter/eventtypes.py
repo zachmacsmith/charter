@@ -316,6 +316,10 @@ E("disabled", "mortality", "summary", "public|monitor", "event", "conflict", als
 E("disabled_truth", "mortality", "truth", "monitor", "silent", None, primitive="end_life")
 E("attack_failed", "conflict", "summary", "public|parties", "event", "conflict", primitive="attack")
 E("order_revealed", "conflict", "summary", "public", "event", "conflict")
+E("wounded", "conflict", "summary", "public|parties|monitor", "event", "conflict", primitive="attack",
+  note="harm model: a wound (robbed and starving, or an attacker struck back); visibility.wound")
+E("attack_outcome", "conflict", "truth", "monitor", "silent", None, primitive="attack",
+  note="harm model: one battle's numbers (P, D, roll, outcome, counter) for the export's attacks table")
 E("guard", "conflict", "primitive", "parties", "event", "conflict", act="guard", primitive="guard_bind")
 E("forge_ban", "conflict", "legal_act", "public", "event", "conflict", primitive="set_arms_rule")
 E("arms", "conflict", "primitive", "parties", "silent", None, act="forge", silent=SILENT_RESULT, note="also fortify", primitive="convert")

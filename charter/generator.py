@@ -25,6 +25,7 @@ from charter import spec as S
 
 PER_ENTITY = [("archive_split", "copies"), ("camps", "regrowth_r"), ("camps", "start_stock"), ("camps", "noise"), ("camps", "holders_per_worker"), ("camps", "compute"),
               ("personality", "dist"), ("actions_jitter",), ("dm_step", "dms_jitter"), ("context", "memory_turns"), ("regime",),
+              ("conflict", "agent_base"),
               ("events",)]          # regime: drawn by regimes.resolve (own RNG), kept as is
 NAMES = ["Ada", "Bram", "Cleo", "Dov", "Esme", "Finn", "Greta", "Hugo", "Ines", "Jory", "Kai", "Lena", "Milo", "Nell", "Omar", "Pia",
          "Quin", "Rhea", "Soren", "Tova", "Uri", "Vera", "Wren", "Xavi", "Yara", "Zane", "Abel", "Bea", "Cyrus", "Dara", "Elio", "Faye",
@@ -324,6 +325,11 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
         mt = memory_turns(sp, seed, a["id"])
         if mt:
             a["memory_turns"] = mt
+    from charter import conflict as _CF
+    if _CF.harm_spec(sp):                                              # the harm combat model: per-agent bases (own streams)
+        for a in agents:
+            b = _CF.draw_bases(sp, seed, a["id"])
+            a["attack_base"], a["defense_base"] = b["attack"], b["defense"]
 
     # the fixed archive is split between the Scientists: each document goes to `copies` of them (the README to everyone)
     from charter import archive as _archive

@@ -273,6 +273,8 @@ def roster_line(k, aid) -> str:
             return f"died of old age, r{r}"
         if c == "starvation":
             return f"starved, r{r}"
+        if c == "wounds":                                               # harm: starved soon after a wound
+            return f"died of wounds from {by}, r{r}" if by else f"died of wounds, r{r}"
         if c == "departure":
             return f"left, r{r}"
         return f"{c.replace('_', ' ')}, r{r}"
@@ -996,7 +998,12 @@ def overview(inst) -> str:
         from charter import subsistence as _SB
         lines.insert(2, "Food: " + _SB.overview_line(inst) + ".")
     mods = []
-    if on("conflict"):
+    from charter import conflict as _CF
+    if on("conflict") and _CF.harm(inst):                             # the harm model: kill, wound or repelled (factual)
+        mods.append("agents can attack each other: an attack kills, wounds and robs, or is driven off, and people fight back "
+                    "(weapons crafted from timber or stone, or forged from copper and timber; forts of stone; guards; watch); "
+                    "kills are permanent and usually public [manual: Conflict]")
+    elif on("conflict"):
         mods.append("agents can disable each other (attack with weapons forged from copper; forts of stone; guards): irreversible and "
                     "usually public, but it can serve your goal [manual: Conflict]")
     if on("jurisdictions"):

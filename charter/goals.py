@@ -873,7 +873,7 @@ def s_dynasty(gt, a, p):
 
 
 # ------------------------------------------------------------------ goals: new primaries and havoc (all from game state)
-VIOLENT = ("attack", "assassin", "law")                                 # disable causes that are another agent's doing
+VIOLENT = ("attack", "assassin", "law", "wounds")                               # disable causes that are another agent's doing
 
 
 def _dead(gt) -> dict:

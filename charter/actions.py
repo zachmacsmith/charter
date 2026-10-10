@@ -146,6 +146,9 @@ def _act(k, aid: str, name: str, args: dict) -> str:
         hidden_here.add("recall")
     if "pairs" not in (k.w.get("life") or {}):                          # review 15 S4: conceive only with two-parent reproduction
         hidden_here.add("conceive")
+    from charter import conflict as _CF
+    if not _CF.harm(k):                                                 # craft and watch only under the harm combat model
+        hidden_here |= set(_CF.HARM_ACTIONS)
     if sub and not any(c.get("type") == "fields" for c in k.w["camps"].values()):   # review 19: fields parked (off): no farm action
         hidden_here.add("farm")
     if name not in ACTIONS or name in hidden_here:

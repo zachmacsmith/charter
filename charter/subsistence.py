@@ -367,8 +367,10 @@ def _hazard(k, aid, c, rec) -> None:
     h = min(1.0, frailty(k, aid) + float(hz["step"]) * (n - 1))
     u = random.Random(f"{k.inst['seed']}|subsistence|hazard|{k.r}|{aid}").random()
     if u < h or n >= int(hz["max_rounds"]):
+        from charter import conflict as CF                             # harm: starving soon after a wound is a death by wounds
+        cause, by = CF.starvation_cause(k, aid)
         with k.cause("world", "starvation", agent=aid, root=True):
-            if MO.disable(k, aid, "starvation"):
+            if MO.disable(k, aid, cause, by=by):
                 rec["deaths"].append(aid)
 
 
