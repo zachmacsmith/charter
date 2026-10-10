@@ -331,6 +331,7 @@ LAWFNS = _fns(
         F("food_of", "read", ((0, "agent"),), scope="read", docs="requires", why="also a store or treasury key"),
         F("stores", "read", docs="requires"),
         F("plots", "read", docs="requires"),
+        F("forest", "read", docs="requires", why="coarse game, as agents see it"),
     ),
     _module(
         "amendment",                                                    # law.v2 (P3.4): laws propose laws and amendments (D-16: L3)

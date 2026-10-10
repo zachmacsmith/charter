@@ -75,11 +75,6 @@ class WeakLink(CampType):
     # ------------------------------------------------------------------ text
     def describe(self, inst=None) -> str:
         c, n = self.camp, self.p["shifts"]
-        if self.p.get("hunt"):                                         # review 15: the hunt (subsistence), open to every eater
-            return (f"A hunt, open to every agent who eats (no right needed). Join with x = [effort 0..{c['max']}]; entries are "
-                    "sealed until the end of the round, when the catch is shared out: a party's catch is set by its weakest "
-                    "member's effort, so a party of two or more at full effort catches far more than a lone hunter. The party's "
-                    "size and total catch are published.")
         return (f"A work site run in {n} shifts each round. Join one shift per round with x = [effort 0..{c['max']}] and \"shift\": "
                 f"1..{n} (default 1); entries are sealed until the end of the round, when you are paid. Each shift's head count and total "
                 "pay are published, but not who worked it.")

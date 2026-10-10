@@ -713,7 +713,32 @@ DOCS = {
     "subsistence.fields.fertility_floor": "lowest fertility",
     "subsistence.fields.blight": "chance a crop fails when it ripens",
     "subsistence.fields.rot": "share of a ripe, unreaped crop lost each round after its first ripe round",
-    "subsistence.hunt.party_food": "food per hunter per hunt action at full, matched effort in a party of two or more",
+    "subsistence.game.capacity_per_agent": "a forest's game capacity (food on the hoof): this x agents / forests (review 19)",
+    "subsistence.game.regrowth": "logistic regrowth rate r of a forest's game",
+    "subsistence.game.inflow": "share of the game's shortfall (K - G) that walks in from the land around each round",
+    "subsistence.game.allee": "Allee threshold as a share of K: below it the herd shrinks (0: none)",
+    "subsistence.game.theta": "catch ~ (game density)^theta: 1 proportional, below 1 hyperstable (catches hold up until collapse)",
+    "subsistence.game.start_stock": "a forest's starting game as a share of its capacity",
+    "subsistence.game.large.food": "food a large animal yields (shared by the party's effort)",
+    "subsistence.game.large.scale": "party effort at which a large kill becomes likely (the sigmoid's scale)",
+    "subsistence.game.large.shape": "how sharply large-game chances rise with party effort (the sigmoid's exponent)",
+    "subsistence.game.large.catch": "chance of a large kill for a big enough party at full game stock",
+    "subsistence.game.medium.food": "food a deer yields (shared by the party's effort)",
+    "subsistence.game.medium.scale": "party effort at which a deer becomes likely",
+    "subsistence.game.medium.shape": "how sharply deer chances rise with party effort",
+    "subsistence.game.medium.catch": "chance of a deer for a big enough party at full game stock",
+    "subsistence.game.small.food": "food per small game caught",
+    "subsistence.game.small.catch": "chance per effort unit of small game at full stock (when the party takes no big game)",
+    "subsistence.seasons.enabled": "a shared season each round multiplies the forests' regrowth",
+    "subsistence.seasons.lean": "plant regrowth multiplier in a lean season",
+    "subsistence.seasons.plenty": "plant regrowth multiplier in a plentiful season",
+    "subsistence.seasons.p_lean": "chance a new season is lean",
+    "subsistence.seasons.p_plenty": "chance a new season is plentiful",
+    "subsistence.seasons.persistence": "chance a season simply continues into the next round",
+    "subsistence.seasons.game": "how much of the season's effect the game feels (0: none, 1: as plants)",
+    "subsistence.fields.enabled": "fields and the farm action (parked: off by default, review 19)",
+    "subsistence.bot_hunt": "scripted bots: chance a bot hunts in a round (dry runs)",
+    "subsistence.bot_effort": "scripted bots: hunt actions a hunting bot spends in that round",
     "subsistence.store.cost": "a store's building cost (destroyed)",
     "subsistence.store.cost.*": "quantity of this resource",
     "subsistence.store.capacity": "food a store holds",
@@ -1450,7 +1475,7 @@ def validate(spec) -> list[str]:
             errs.append("subsistence.enabled: the ration replaces resources.upkeep; turn one of them off")
         camps = spec.get("camps") if isinstance(spec.get("camps"), dict) else {}
         if camps.get("model") != "types":
-            errs.append("subsistence.enabled: the food camps (forests, fields, the hunt) are typed camps, which need camps.model: types")
+            errs.append("subsistence.enabled: the food camps (forests; fields when on) are typed camps, which need camps.model: types")
     return errs
 
 

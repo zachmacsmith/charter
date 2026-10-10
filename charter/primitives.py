@@ -157,7 +157,7 @@ PARAM_SAMPLES = {
     "members": ["a1", "a2"],                                                                              # W8b: found
     "channel": "guild",                                                                                   # wave 9 C: set_channel
     "dir": "chronicle", "path": "people/", "access": "read",                                             # directories
-    "missed": 1, "plot": 2, "store_id": "S1",                                                            # subsistence (review 15)
+    "missed": 1, "plot": 2, "store_id": "S1", "party": "red", "effort": 1,                               # subsistence (review 15, 19)
 }
 
 
@@ -830,6 +830,15 @@ _ROWS = [
       notes="kind store: its materials (subsistence.store.cost) are used up; a new account store:<store_id> owned by the builder or "
             "an institution it is a member or officer of; anyone deposits (a move), only the owner takes food out "
             "(accounts.check_store_move)"),
+    # review 19: the hunt. Who may hunt where and when is law (closed seasons, territories, licences); the catch is paid at the
+    # round's end by the harvest primitive (laws' on_harvest see it)
+    P("hunt", "subsistence", "create", ("agent", "camp", "party", "effort"), "subsistence:change_hunt", routed=True,
+      subject="agent", parties=("agent",), agent_params=("agent",), event="hunt", causes=("agent",), reads=("forest",),
+      sites=("subsistence:change_hunt", "subsistence:act_hunt"),
+      why={"compel": _LNA, "gate": "law.v2: before_hunt gates it (closed seasons, territories, licences); the forest's camp "
+                                    "rules (quota, harvest limit, fee) count it as a forest action"},
+      notes="one unit of hunting effort at a forest this round, in a named party or alone; sealed until the round's end, when "
+            "the party's catch is drawn (camptypes/forest.py) and paid by the harvest primitive"),
     P("withdraw", "subsistence", "move", ("agent", "store", "owner", "qty"), "subsistence:change_withdraw", routed=True,
       subject="agent", parties=("agent", "owner"), agent_params=("agent",), event="store_withdrawal", causes=("agent",),
       reads=("stores", "food_of"), sites=("subsistence:change_withdraw", "subsistence:act_withdraw"),
@@ -921,7 +930,7 @@ ACTION_PRIMITIVES = {
     "dir_list": LOOKUP, "dir_read": LOOKUP, "dir_search": LOOKUP, "dir_write": ("dir_write",), "dir_edit": ("dir_write",),
     "dir_move": ("dir_write",), "dir_delete": ("dir_write",), "dir_grant": ("dir_grant",),
     # subsistence (review 15): farm sows or reaps (its first primitive depends on its arguments: ANY_FIRST)
-    "farm": ("sow", "reap"), "build": ("build",), "withdraw": ("withdraw", "move"),
+    "farm": ("sow", "reap"), "build": ("build",), "withdraw": ("withdraw", "move"), "hunt": ("hunt", "move"),
     "conceive": ("conceive",),                                          # review 15 S4: an offer changes nothing; a match conceives
 }
 
@@ -976,7 +985,7 @@ TIER_OF = {
           "dir_write", "dir_grant",                                    # directories
           "set_channel",                                               # wave 9 C (channels.v2)
           "sow", "reap",                                               # review 15 S2: who may sow or reap a plot is law (U1)
-          "build", "withdraw",                                         # review 15 S3: a store (a building permit is law); who
+          "build", "withdraw", "hunt",                                 # review 15 S3: a store (a building permit is law); who
                                                                          # takes food out of an institution's store (its code)
           "conceive"),                                                 # review 15 S4: who may have children with whom is law
     "L-route": (),

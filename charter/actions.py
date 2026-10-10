@@ -144,6 +144,8 @@ def _act(k, aid: str, name: str, args: dict) -> str:
         hidden_here |= set(SUBSISTENCE_ACTIONS)
     if "pairs" not in (k.w.get("life") or {}):                          # review 15 S4: conceive only with two-parent reproduction
         hidden_here.add("conceive")
+    if sub and not any(c.get("type") == "fields" for c in k.w["camps"].values()):   # review 19: fields parked (off): no farm action
+        hidden_here.add("farm")
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     if sub:                                                             # review 15 S1: hunger closes actions (Act.fed; agency: both)

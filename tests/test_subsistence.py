@@ -339,36 +339,62 @@ def food_camps(k, typ):
     return [cid for cid, c in sorted(k.w["camps"].items()) if c.get("role") == "subsistence" and c["type"] == typ]
 
 
-def test_the_composer_appends_food_camps_and_draws_nothing_else():
+FIELDS = "subsistence.fields.enabled=true"                                 # fields are parked (off by default): tests that farm
+
+
+def test_the_composer_appends_forests_and_draws_nothing_else():
     for seed in range(1, 21):
         sets = ["shared_archive.enabled=false", SMALL]
         off = generator.generate(S.apply_overrides(S.load("nature_design"), sets), seed)
         on = generator.generate(S.apply_overrides(S.load("nature_subsistence"), sets), seed)
         n = len(off["camps"])
         assert on["camps"][:n] == off["camps"] and all(c["type"] not in ("forest", "fields") for c in off["camps"])
-        assert [c["type"] for c in on["camps"][n:]] == ["forest", "fields", "weak_link"]
+        assert [c["type"] for c in on["camps"][n:]] == ["forest"]          # fields parked; no camp-style hunt (review 19)
         assert all(c["role"] == "subsistence" and c["resource"] == "food" and c["open"] for c in on["camps"][n:])
         assert on["spec"]["unit_values"]["food"] == 1.0 and "food" not in off["spec"]["unit_values"]
         assert [a["rights"] for a in on["agents"]] == [a["rights"] for a in off["agents"]]
     inst = generator.generate(S.apply_overrides(S.load("nature_subsistence"), [
         "shared_archive.enabled=false", "agents={worker: 100, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}"]), 1)
+    fo = [c for c in inst["camps"] if c.get("role") == "subsistence"]
+    assert [c["type"] for c in fo] == ["forest"] * 4
+    assert sum(c["K"] for c in fo) == pytest.approx(700) and sum(c["game"]["K"] for c in fo) == pytest.approx(1000)
+    assert all(c["S"] == pytest.approx(0.8 * c["K"]) and c["game"]["G"] == pytest.approx(0.9 * c["game"]["K"]) for c in fo)
+    inst = generator.generate(S.apply_overrides(S.load("nature_subsistence"), [
+        "shared_archive.enabled=false", "agents={worker: 100, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}", FIELDS]), 1)
     types = [c["type"] for c in inst["camps"] if c.get("role") == "subsistence"]
-    assert types.count("forest") == 4 and types.count("fields") == 3 and types.count("weak_link") == 1
+    assert types.count("forest") == 4 and types.count("fields") == 3 and "weak_link" not in types
     assert sum(len(c["plots"]) for c in inst["camps"] if c["type"] == "fields") == 40
 
 
+def test_fields_are_parked_out_of_the_prompt_and_the_actions():
+    from charter import context as CX
+    inst, k = small()
+    a = next(x for x in inst["agents"] if x["cls"] != "fixer")
+    assert not food_camps(k, "fields") and "farm" not in [x.name for x in AR.available(inst, k, a)]
+    with pytest.raises(A.ActionError, match="unknown action 'farm'"):
+        A.act(k, a["id"], "farm", {"camp": "camp7", "sow": 1})
+    core = CX.core_prompt(inst, a, k)
+    assert "farm" not in core and "fields" not in SB.rules_text(inst) and "plot" not in SB.rules_text(inst)
+    inst, k = small([FIELDS])
+    a = next(x for x in inst["agents"] if x["cls"] != "fixer")
+    assert "farm" in [x.name for x in AR.available(inst, k, a)] and "fields" in SB.rules_text(inst)
+
+
 def test_food_camps_ignore_open_classes():
-    inst, k = world("society", ["subsistence.enabled=true"])
+    inst, k = world("society", ["subsistence.enabled=true", FIELDS])
     assert k.spec["camps"]["typed"]["open_classes"] == ["worker"]
     leg = next(a for a in eaters(k) if k.w["agents"][a]["cls"] == "legislator")
     social = next(cid for cid, c in k.w["camps"].items() if c.get("role") == "social")
     with pytest.raises(A.ActionError, match="Workers only"):
         A.act(k, leg, "harvest", {"camp": social, "x": [1]})
     assert A.act(k, leg, "harvest", {"camp": food_camps(k, "forest")[0]}).startswith("Foraged")
+    assert A.act(k, leg, "hunt", {"camp": food_camps(k, "forest")[0]}).startswith("You hunt")
     assert A.act(k, leg, "farm", {"camp": food_camps(k, "fields")[0], "sow": 1}).startswith("Sowed 1 food")
     board = next(a for a, v in k.w["agents"].items() if v["cls"] == "board")
     with pytest.raises(A.ActionError):
         A.act(k, board, "harvest", {"camp": food_camps(k, "forest")[0]})
+    with pytest.raises(A.ActionError):
+        A.act(k, board, "hunt", {"camp": food_camps(k, "forest")[0]})
 
 
 def test_forage_yield_refuge_and_the_round_cap():
@@ -383,6 +409,8 @@ def test_forage_yield_refuge_and_the_round_cap():
     A.act(k, a, "harvest", {"camp": f})
     with pytest.raises(A.ActionError, match="used your 2 forest actions"):
         A.act(k, a, "harvest", {"camp": f})
+    with pytest.raises(A.ActionError, match="used your 2 forest actions"):
+        A.act(k, a, "hunt", {"camp": f})                                   # hunting is a forest action too
     c["S"], c["harvested_this_round"] = c["K"] * 0.11, 0.0                  # just above the refuge (0.10 K)
     c["fn"]["yield"] = 100.0                                                # (a yield that would take far more)
     f0 = k.bal(b, "food")
@@ -398,7 +426,7 @@ def test_forage_yield_refuge_and_the_round_cap():
     assert k.bal(b, "food") - f0 == pytest.approx(3.0 * 0.75, abs=1e-3)    # hungry: x0.75
 
 
-def test_a_law_quota_applies_to_foraging():
+def test_a_law_quota_applies_to_foraging_and_hunting():
     inst, k = small()
     a, b = eaters(k)[:2]
     f = food_camps(k, "forest")[0]
@@ -406,10 +434,13 @@ def test_a_law_quota_applies_to_foraging():
     A.act(k, a, "harvest", {"camp": f})
     with pytest.raises(A.ActionError, match="quota"):
         A.act(k, b, "harvest", {"camp": f})
+    with pytest.raises(A.ActionError, match="quota"):
+        A.act(k, b, "hunt", {"camp": f})
+    assert b not in (k.w["camps"][f].get("hunts") or {})                  # a refused hunt enters nothing
 
 
 def test_felling_shrinks_the_forest_and_clears_a_plot():
-    inst, k = small()
+    inst, k = small([FIELDS])
     f = food_camps(k, "forest")[0]
     c = k.w["camps"][f]
     fl = c["fn"]["pair"]
@@ -421,10 +452,16 @@ def test_felling_shrinks_the_forest_and_clears_a_plot():
         assert k.bal(a[i], "timber") - t0 == pytest.approx(3.0)
     assert c["K"] == pytest.approx(K0 * 0.95, abs=1e-3) and len(k.w["camps"][fl]["plots"]) == plots0 + 1
     assert any(e["type"] == "plot_cleared" for e in k.events)
+    inst, k = small()                                                      # fields off: felling clears nothing
+    f = food_camps(k, "forest")[0]
+    assert k.w["camps"][f]["fn"]["pair"] is None
+    for x in eaters(k)[:5]:
+        assert "Felled 3 timber" in A.act(k, x, "harvest", {"camp": f, "fell": True})
+    assert not any(e["type"] == "plot_cleared" for e in k.events)
 
 
 def test_sow_ripen_reap_by_another_and_the_sower_is_told():
-    inst, k = small(["subsistence.spoil=0", "subsistence.fields={blight: 0, noise: 0}"])
+    inst, k = small(["subsistence.spoil=0", "subsistence.fields={enabled: true, blight: 0, noise: 0}"])
     a, b = eaters(k)[:2]
     fl = food_camps(k, "fields")[0]
     set_food(k, a, 6)
@@ -451,7 +488,7 @@ def test_sow_ripen_reap_by_another_and_the_sower_is_told():
 
 
 def test_sowing_from_one_food_and_its_limits():
-    inst, k = small()
+    inst, k = small([FIELDS])
     a = eaters(k)[0]
     fl = food_camps(k, "fields")[0]
     set_food(k, a, 1)
@@ -472,7 +509,7 @@ def test_sowing_from_one_food_and_its_limits():
 
 
 def test_rot_and_blight_are_deterministic():
-    inst, k = small(["subsistence.fields={blight: 0, noise: 0, grow: 1}"])
+    inst, k = small(["subsistence.fields={enabled: true, blight: 0, noise: 0, grow: 1}"])
     a = eaters(k)[0]
     fl = food_camps(k, "fields")[0]
     set_food(k, a, 3)
@@ -482,29 +519,13 @@ def test_rot_and_blight_are_deterministic():
     assert p["status"] == "ripe" and p["left"] == 1.0
     end_round(k)
     assert p["left"] == pytest.approx(0.5)                                  # unreaped through its first ripe round
-    inst, k = small(["subsistence.fields={blight: 1}"])
+    inst, k = small(["subsistence.fields={enabled: true, blight: 1}"])
     a = eaters(k)[0]
     fl = food_camps(k, "fields")[0]
     A.act(k, a, "farm", {"camp": fl, "sow": 1})
     for _ in range(3):
         end_round(k)
     assert k.w["camps"][fl]["plots"][0]["status"] == "fallow" and any(e["type"] == "crop_failed" for e in k.events)
-
-
-def test_the_hunt_pays_a_party_far_more_than_a_lone_hunter():
-    inst, k = small(["subsistence.spoil=0", "subsistence.ration=0"])
-    a, b, c = eaters(k)[:3]
-    h = food_camps(k, "weak_link")[0]
-    assert "hunt" in SB.rules_text(inst) and k.w["camps"][h]["open"]
-    f = {x: k.bal(x, "food") for x in (a, b, c)}
-    A.act(k, a, "harvest", {"camp": h, "x": [10]})
-    A.act(k, b, "harvest", {"camp": h, "x": [10]})
-    end_round(k)
-    assert k.bal(a, "food") - f[a] == pytest.approx(2.0) and k.bal(b, "food") - f[b] == pytest.approx(2.0)
-    f = {x: k.bal(x, "food") for x in (a, b, c)}
-    A.act(k, c, "harvest", {"camp": h, "x": [0]})
-    end_round(k)
-    assert k.bal(c, "food") - f[c] == pytest.approx(0.4)
 
 
 TILLERS = '''title = "Tillers' Right"
@@ -517,7 +538,7 @@ def before_reap(p, chain):
 
 
 def test_a_tillers_right_law_refuses_a_non_sower():
-    inst, k = world("society", ["subsistence.enabled=true", "law.v2=true", "subsistence.fields={grow: 1, blight: 0}"],
+    inst, k = world("society", ["subsistence.enabled=true", "law.v2=true", "subsistence.fields={enabled: true, grow: 1, blight: 0}"],
                     constitution=True)
     k.enact(k.new_law(TILLERS, "tillers"))
     a, b = eaters(k)[:2]
@@ -535,11 +556,175 @@ def test_food_camps_in_the_prompt_only_when_on():
     inst, k = small()
     a = next(x for x in inst["agents"] if x["cls"] != "fixer")
     core = CX.core_prompt(inst, a, k)
-    assert "camp6 food (open forest: forage food" in core and "[manual: Food]" in core and "farm (sow food" in core
+    assert "camp6 food (open forest: forage plants" in core and "[manual: Food]" in core and "hunt (hunt game" in core
     assert "Food. Every agent" in json.dumps(CX.build_manual(inst, k, a["id"]))
     inst, k = world("nature_design", [SMALL])
     core = CX.core_prompt(inst, next(x for x in inst["agents"] if x["cls"] != "fixer"), k)
-    assert "food" not in core.lower() and "farm (" not in core
+    assert "food" not in core.lower() and "farm (" not in core and "hunt (" not in core
+
+
+# ---------------------------------------------------------------------- review 19: the forest ecosystem (plants, game, the hunt)
+def forest(k):
+    f = food_camps(k, "forest")[0]
+    return f, k.w["camps"][f]
+
+
+def test_expected_catch_rises_with_the_party_then_thins():
+    from charter.camptypes import forest as FO
+    gp = SB.cfg({})["game"]
+    per = {E: FO.expected_catch(gp, E) / E for E in (1, 2, 3, 4, 6, 8, 12)}
+    assert per[1] == pytest.approx(1.15, abs=0.02) and per[6] == pytest.approx(2.26, abs=0.02)
+    assert per[1] < per[2] < per[3] < per[4] < per[6] and per[6] > per[8] > per[12]     # better together, diminishing returns
+    assert FO.expected_catch(gp, 4, 0.3) < 0.4 * FO.expected_catch(gp, 4, 1.0)          # fewer animals, fewer kills
+    pl1, _ = FO.kill_chances(gp, 1, 1.0)
+    pl6, _ = FO.kill_chances(gp, 6, 1.0)
+    assert pl1 < 0.02 < 0.5 < pl6                                                        # a lone hunter rarely takes big game
+
+
+def test_a_party_hunts_together_and_the_catch_is_shared_by_effort():
+    inst, k = small(["subsistence.spoil=0", "subsistence.ration=0", "subsistence.seasons.enabled=false"])
+    a, b, c, d, e = eaters(k)[:5]
+    f, cm = forest(k)
+    for x in (a, b, c):
+        A.act(k, x, "hunt", {"camp": f, "party": "red"})
+    A.act(k, a, "hunt", {"camp": f})                                         # a second unit, same party (effort 2)
+    A.act(k, d, "hunt", {"camp": f})                                         # alone
+    with pytest.raises(A.ActionError, match="already hunting"):
+        A.act(k, a, "hunt", {"camp": f, "party": "blue"})
+    assert cm["hunts"][a] == {"party": "red", "effort": 2} and cm["hunts"][d] == {"party": None, "effort": 1}
+    from charter.camptypes import framework as CT
+    assert "you are hunting here this round (2 effort, party red)" in CT.view(k, f, fresh=False).state_line(k, a)
+    f0 = {x: k.bal(x, "food") for x in (a, b, c, d, e)}
+    G0 = cm["game"]["G"]
+    end_round(k)
+    got = {x: round(k.bal(x, "food") - f0[x], 3) for x in (a, b, c, d, e)}
+    res = {ev["agent"]: ev["data"] for ev in k.events if ev["type"] == "hunt_result"}
+    assert set(res) == {a, b, c, d} and got[e] == 0
+    red = res[a]["catch"]
+    assert res[b]["catch"] == red and res[a]["hunters"] == sorted([a, b, c])
+    assert got[a] == pytest.approx(2 * got[b], abs=2e-3) and got[b] == pytest.approx(got[c])   # shared by effort
+    assert got[a] + got[b] + got[c] == pytest.approx(red, abs=2e-3)
+    total = red + res[d]["catch"]
+    regrown = cm["game"]["G"] - (G0 - total)
+    assert regrown >= 0                                                       # the catch left the game stock, then it regrew
+    assert any(ev["type"] == "camp_round" and "hunting:" in ev["data"]["text"] and ev["vis"] == "public" for ev in k.events)
+    assert not cm["hunts"]                                                    # entries are for one round
+    assert not [ev for ev in k.events if ev["type"] == "hunt" and k.can_see(e, ev)]   # sealed: only the hunter sees its entry
+
+
+def test_the_hunt_is_deterministic_and_draws_its_own_stream():
+    def run():
+        inst, k = small(["subsistence.spoil=0", "subsistence.ration=0"])
+        f, cm = forest(k)
+        out = []
+        for r in range(4):
+            for i, x in enumerate(eaters(k)[:6]):
+                A.act(k, x, "hunt", {"camp": f, "party": f"p{i % 2}"})
+            end_round(k)
+            out.append((round(cm["game"]["G"], 4), round(cm["S"], 4)))
+        return out
+    assert run() == run()
+
+
+def test_game_regrows_logistically_with_inflow_and_an_optional_allee_threshold():
+    inst, k = small(["subsistence.seasons.enabled=false"])
+    f, cm = forest(k)
+    K = cm["game"]["K"]
+    cm["game"]["G"] = 0.5 * K
+    end_round(k)
+    assert cm["game"]["G"] == pytest.approx(0.5 * K + 0.2 * 0.5 * K * 0.5 + 0.01 * 0.5 * K, abs=1e-3)
+    cm["game"]["G"] = 0.0
+    end_round(k)
+    assert cm["game"]["G"] == pytest.approx(0.01 * K, abs=1e-3)             # animals walk in from the land around
+    inst, k = small(["subsistence.seasons.enabled=false", "subsistence.game={allee: 0.2, inflow: 0}"])
+    f, cm = forest(k)
+    K = cm["game"]["K"]
+    cm["game"]["G"] = 0.1 * K
+    end_round(k)
+    assert cm["game"]["G"] < 0.1 * K                                         # below the threshold the herd shrinks
+    cm["game"]["G"] = 0.6 * K
+    end_round(k)
+    assert cm["game"]["G"] > 0.6 * K
+
+
+def test_plants_regrow_logistically_and_seasons_move_their_rate():
+    inst, k = small(["subsistence.seasons.enabled=false"])
+    f, cm = forest(k)
+    assert cm["r"] == pytest.approx(0.6) and SB.season_name(k) == "normal"
+    cm["S"] = 0.5 * cm["K"]
+    end_round(k)
+    assert cm["S"] == pytest.approx(0.5 * cm["K"] * (1 + 0.6 * 0.5), abs=1e-3)
+    inst, k = small()
+    f, cm = forest(k)
+    seen = []
+    for _ in range(30):
+        seen.append(SB.season_name(k))
+        want = {"lean": 0.6, "normal": 1.0, "plentiful": 1.3}[seen[-1]] * 0.6
+        assert cm["r"] == pytest.approx(want)
+        end_round(k)
+    assert set(seen) == {"lean", "normal", "plentiful"}
+    runs = sum(1 for x, y in zip(seen, seen[1:]) if x == y)
+    assert runs >= 10                                                         # persistence: seasons often last
+    inst2, k2 = small()
+    seen2 = []
+    for _ in range(30):
+        seen2.append(SB.season_name(k2))
+        end_round(k2)
+    assert seen2 == seen                                                      # its own stream: the same seed, the same seasons
+    log = SB.state(k)["log"][-1]
+    assert set(log["forests"]) == {f} and log["season"] in ("lean", "normal", "plentiful")
+
+
+def test_agents_see_plants_coarse_game_and_the_season():
+    from charter.camptypes import framework as CT
+    inst, k = small()
+    f, cm = forest(k)
+    a = eaters(k)[0]
+    line = CT.view(k, f, fresh=False).state_line(k, a)
+    assert line.startswith("plants 80% of capacity") and "game plentiful" in line and "season " in line
+    cm["game"]["G"] = 0.05 * cm["game"]["K"]
+    assert "game very scarce" in CT.view(k, f, fresh=False).state_line(k, a)
+    assert str(round(cm["game"]["G"], 1)) not in line
+    from charter.camptypes import forest as FO
+    assert [FO.game_level(x) for x in (0.9, 0.45, 0.2, 0.05)] == ["plentiful", "fair", "scarce", "very scarce"]
+
+
+CLOSED_SEASON = '''title = "Closed Season"
+intent = "No hunting while game is scarce."
+def before_hunt(p, chain):
+    if forest(p["camp"])["game"] in ("scarce", "very scarce"):
+        return False
+'''
+
+
+def test_a_law_closes_the_hunt_when_game_is_scarce():
+    inst, k = world("society", ["subsistence.enabled=true", "law.v2=true"], constitution=True)
+    k.enact(k.new_law(CLOSED_SEASON, "closed"))
+    a = eaters(k)[0]
+    f, cm = forest(k)
+    assert A.act(k, a, "hunt", {"camp": f}).startswith("You hunt")
+    cm["game"]["G"] = 0.2 * cm["game"]["K"]
+    b = eaters(k)[1]
+    with pytest.raises(A.ActionError, match="a law blocked this hunt"):
+        A.act(k, b, "hunt", {"camp": f})
+    assert b not in cm["hunts"] and SB.state(k)["forage"].get(b, 0) == 0     # nothing entered, no forest action used
+    api = k.api_for(next(iter(k.w["laws"])))
+    assert api["forest"](f)["game"] == "scarce" and api["forest"]("camp1") is None
+    p = PR.get("hunt")
+    assert p.tier == "L" and p.routed and p.before and PR.ACTION_PRIMITIVES["hunt"][0] == "hunt"
+
+
+def test_overhunting_empties_the_forest_and_restraint_keeps_it():
+    def game_after(hunters, rounds=12):
+        inst, k = small(["subsistence.seasons.enabled=false", "subsistence.ration=0"])
+        f, cm = forest(k)
+        for _ in range(rounds):
+            for i, x in enumerate(eaters(k)[:hunters]):
+                for _e in range(2):
+                    A.act(k, x, "hunt", {"camp": f, "party": f"p{i % 2}"})
+            end_round(k)
+        return cm["game"]["G"] / cm["game"]["K"]
+    assert game_after(8) < 0.35 < game_after(1)
 
 
 # ---------------------------------------------------------------------- S3: stores

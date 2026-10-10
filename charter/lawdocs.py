@@ -492,8 +492,12 @@ E += [
      "(p: agent, store, owner, qty; True admits, False refuses; when its code says nothing, only its officers may).", "prompt", "common"),
     ("plots", "reads", "Read", "plots(camp)", "a fields camp's plots: id, status (fallow, growing, ripe), sower, ripe round, fertility.",
      "prompt", "common"),
+    ("forest", "reads", "Read", "forest(camp)", "a forest: plants (share of capacity), game (\"plentiful\", \"fair\", \"scarce\" or "
+     "\"very scarce\", as hunters see it), the season and hunters entered this round (None if not a forest). A law can close the "
+     "hunt (before_hunt(p, chain) returning False; p: agent, camp, party, effort) or cap forest actions with set_quota.",
+     "prompt", "common"),
 ]
-REQUIRES.update({n: (lambda spec: bool((spec.get("subsistence") or {}).get("enabled"))) for n in ("hunger", "food_of", "stores", "plots")})
+REQUIRES.update({n: (lambda spec: bool((spec.get("subsistence") or {}).get("enabled"))) for n in ("hunger", "food_of", "stores", "plots", "forest")})
 # contracts (charter/contracts.py, P4.3): documented only in worlds with contracts on (OPTIONAL), for the code of a contract
 E += [
     ("pull", "contracts", "Contracts", "pull(member, item, qty)", "a contract's law only: takes qty of item from a member into its "

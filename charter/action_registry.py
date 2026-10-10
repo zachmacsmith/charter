@@ -177,6 +177,8 @@ def _need(inst, a, rights, n) -> bool:
     if kind == "life":                                                  # review 15 S4: "life:pairs" (life.reproduction.mode pairs or both)
         from charter import pairs as PR
         return PR.pairs_spec(inst["spec"]) if v == "pairs" else False
+    if kind == "camp":                                                  # review 15/19: "camp:<type>": the world has such a camp
+        return any(c.get("type") == v for c in inst.get("camps") or [])
     raise ValueError(f"unknown requirement {n!r}")
 
 
@@ -443,7 +445,15 @@ R("harvest", "produce resources at a camp", "PRODUCE", core=True, needs=("notcls
   edge=("harvest:*",),
   handler="actions:_harvest", module="core", category="productive", emits=("harvest", "factored", "camp_submit", "camp_input"), aliases={"values": "x", "settings": "x"},
   doc='harvest {"camp": "camp1", "x": [dial values]}: query a camp you hold harvest:<camp> for; you receive the yield')
-R("farm", "sow food on open fields, reap it rounds later", "PRODUCE", core=True, needs=("mod:subsistence", "notcls:board", "notcls:fixer"),
+R("hunt", "hunt game in a forest, alone or in a party", "PRODUCE", core=True,
+  needs=("mod:subsistence", "camp:forest", "notcls:board", "notcls:fixer"),
+  handler="subsistence:act_hunt", module="subsistence", category="productive", emits=("hunt",),
+  aliases={"forest": "camp", "group": "party", "band": "party", "with": "party", "team": "party"},
+  doc='hunt {"camp": "camp6", "party": "red"}: one unit of hunting effort at a forest this round (a forest action), paid at the '
+      'end of the round; everyone who names the same party there hunts with you (no party: alone). Alone you mostly catch small '
+      'game; a party of 3 to 6 has good chances of a deer or a large animal, shared by effort')
+R("farm", "sow food on open fields, reap it rounds later", "PRODUCE", core=True,
+  needs=("mod:subsistence", "camp:fields", "notcls:board", "notcls:fixer"),
   handler="subsistence:act_farm", module="subsistence", category="productive", emits=("sow", "reap"),
   aliases={"field": "camp", "fields": "camp", "seed": "sow", "qty": "sow", "amount": "sow", "harvest": "reap"},
   doc='farm {"camp": "camp8", "sow": 2, "plot": null}: sow that much of your food (1 or more) on a fallow plot of an open fields '
@@ -885,7 +895,7 @@ CORE_SURFACE = (
     "dm", "reply", "post", "transfer",                                  # talk and trade
     "manual", "manual_search", "recent", "read_law", "preview_law", "legal_position", "read_library", "read_file",   # look-ups
     "write_scratchpad", "write_file",                                   # memory
-    "harvest", "farm", "build", "withdraw",                             # produce (farm, build, withdraw: where subsistence is on)
+    "harvest", "hunt", "farm", "build", "withdraw",                     # produce (hunt, farm, build, withdraw: subsistence)
     "propose", "amend", "vote", "invoke",                               # law; invoke: offices a law or contract defines
     "create_contract", "join_contract", "leave_contract", "propose_contract_change", "deposit_escrow", "set_allowance",   # institutions
     "attack", "forge", "fortify",                                       # force (where conflict is on)
@@ -967,7 +977,7 @@ ACTIONS_ORDER = (
     "dir_list", "dir_read", "dir_search", "dir_write", "dir_edit", "dir_move", "dir_delete", "dir_grant",   # directories
     "read_library",                                                     # review 14 A
     "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel",   # wave 9 C (channels.v2)
-    "farm", "build", "withdraw",                                        # review 15 (subsistence)
+    "farm", "build", "withdraw", "hunt",                                # review 15 (subsistence; hunt: review 19)
     "conceive")                                                         # review 15 S4 (pairs)
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
@@ -987,7 +997,7 @@ DOC_ORDER = (
     "dir_list", "dir_read", "dir_search", "dir_write", "dir_edit", "dir_move", "dir_delete", "dir_grant",   # directories
     "read_library",                                                     # review 14 A
     "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel",   # wave 9 C (channels.v2)
-    "farm", "build", "withdraw",                                        # review 15 (subsistence)
+    "farm", "build", "withdraw", "hunt",                                # review 15 (subsistence; hunt: review 19)
     "conceive")                                                         # review 15 S4 (pairs)
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
@@ -998,7 +1008,7 @@ if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
 # starving (user decision U14: a polity may restrict it by law, with the hunger(agent) read).
 HUNGRY_REFUSED = ("attack", "join_attack", "contract", "found", "create_contract", "create_channel", "open_channel", "propose", "amend",
                   "commission", "build", "fortify", "forge", "invest", "contribute", "buy_initiative", "conceive")
-STARVING_OK = ("transfer", "reply", "dm", "post", "channel_post", "send", "harvest", "farm", "withdraw", "join", "leave",
+STARVING_OK = ("transfer", "reply", "dm", "post", "channel_post", "send", "harvest", "hunt", "farm", "withdraw", "join", "leave",
                "join_contract", "leave_contract", "authorize", "revoke_authorization", "standing_order", "bequest", "vote",
                "accept_loan", "repay_loan", "write_scratchpad")
 

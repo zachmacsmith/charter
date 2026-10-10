@@ -524,6 +524,10 @@ E("conceived_truth", "life", "truth", "monitor", "silent", None, primitive="conc
 E("maturity", "life", "record", "monitor", "silent", None, note="review 15 S4/S5: a minor comes of age (investment, promotion draw)")
 E("store_owner", "subsistence", "summary", "public", "event", "subsistence",
   note="a dead agent's store passes to its heir (living children, a co-parent, else its polity)")
+E("hunt", "subsistence", "primitive", "parties", "event", "subsistence", act="hunt", primitive="hunt",
+  note="a hunting entry (sealed until the round's end): the hunter only")
+E("hunt_result", "subsistence", "summary", "parties", "event", "subsistence",
+  note="a hunting party's catch and the hunter's share, to each member (the forest's public round line gives sizes and catches)")
 
 
 # ---------------------------------------------------------------------- natural audiences (review 12 WP2, §4.2)
