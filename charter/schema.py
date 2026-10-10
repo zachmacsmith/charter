@@ -926,6 +926,7 @@ DOCS = {
     "jurisdictions.board_scope": "whose laws the Board reviews: founding | all | none",
     "jurisdictions.admission": "joining with no on_admission answer: ballot | open | closed",
     "jurisdictions.scripted_founder": "dry runs: the scripted bot that founds a jurisdiction (null: first citizen)",
+    "jurisdictions.admission_rounds": "rounds an admission ballot stays open after it opens (0, before engine 9: it closed unvoted)",
     "outside_power.demand": "size of each demand",
     "outside_power.demand.value_frac": "share of all holdings + reserve, payable in any resource",
     "outside_power.demand.items": "or fixed items, e.g. {stone: 20, timber: 10}",

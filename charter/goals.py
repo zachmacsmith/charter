@@ -2109,7 +2109,11 @@ def h_martyr(h, a, p, ctx=None):
 def _legacy_of(fn):
     def s(gt, a, p):
         from charter.history import History
-        return fn(History(gt), a, p)
+        roster = gt.get("world_events") or {}
+        if not roster and gt.get("arrived_agents"):                      # a window (history.restrict empties world_events):
+            roster = {"arrivals": {x["id"]: x["arrived"] for x in gt["arrived_agents"]   # its arrivals, so an arrival is not
+                                   if isinstance(x, dict) and x.get("id") and x.get("arrived") is not None}}   # taken for a founder
+        return fn(History(gt, roster=roster), a, p)
     s.__name__ = "s_" + fn.__name__[2:]
     return s
 
