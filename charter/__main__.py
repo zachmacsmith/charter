@@ -19,6 +19,7 @@
   python -m charter preview society --seed 1 [--agent ID|--class C] [--layer core|manual|legacy|observer|all] [--rounds K]
                          [--out DIR] [--against REV]   what agents see (rendered sections, token counts; charter/preview.py)
   python -m charter spec check E3 [--set models.mix=balanced]                    validate a spec (unknown keys, bad values; did-you-mean hints)
+  python -m charter armdiff A.yaml B.yaml [--seed 1]                             arms that may differ only in goals (review 24 gate)
   python -m charter spec docs --out charter/docs/spec_reference.md              write the spec reference (every key, type, default, doc)
   python -m charter library list [--family F] | library show NAME [--set K=V]    the legal toolkit: templates, parameters, code
   python -m charter novelty RUN_DIR [RUN_DIR...] [--threshold 0.8]               copied vs adapted vs novel agent code (review 14)
@@ -389,6 +390,9 @@ def main(argv=None):
     p = sub.add_parser("novelty", help="novelty RUN_DIR.. [--threshold 0.8] [--json OUT]: copied vs novel law and contract code "
                        "(charter/novelty.py)")
     novelty.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(novelty.cmd(a)))
+    from charter import armdiff
+    p = sub.add_parser("armdiff", help="armdiff SPEC_A SPEC_B.. [--seed N]: worlds that differ only in goals? (review 24 gate)")
+    armdiff.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(armdiff.cmd(a)))
     from charter import schema
     p = sub.add_parser("spec", help="spec check SPEC.. [--set k=v] | spec docs [--out F] (charter/schema.py)")
     schema.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(schema.cmd(a)))

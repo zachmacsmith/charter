@@ -1,0 +1,2 @@
+# Review 24 arm B, all Sonnet.
+extends: [charter/specs/survival/arm_b.yaml, charter/specs/survival/models_sonnet.yaml]

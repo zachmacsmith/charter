@@ -1,0 +1,17 @@
+# Review 24 arm B (survive and achieve A): every founder holds Endure as primary (0.7) and the same A goal as in arm A as its
+# secondary (0.3; the same agent for a seed). Children: Endure fixed, the A slot drawn from goals.weights; the parents' shared
+# value is not used. Sonnet only (arm_b_sonnet.yaml), after stage 1.
+extends: [charter/specs/survival/arm_a.yaml]
+goals:
+  survival: {goal: Endure}
+  a_slot:
+    slot: secondary
+    deal:
+      - {goal: Wealth, n: 4, label: wealth.final}
+      - {goal: Peak Wealth, n: 4, label: wealth.peak}
+      - {goal: Knowledge, n: 4, label: knowledge.final}
+      - {goal: Learning, n: 4, label: knowledge.peak}
+  score_weights: {two: [0.7, 0.3]}
+life:
+  reproduction: {child_goals: {fixed: Endure, a_slot: true, inherit: false}}
+chronicle: {namespace: survival_b}

@@ -1,0 +1,15 @@
+# Review 24 arm A (achieve A): each founder holds one A goal, dealt from goals.a_slot's own stream (the same agent gets the same
+# A goal in every arm of a seed); no survival term anywhere. Stage 1 deals two matched pairs, four holders each: Wealth (what you
+# hold at the end: death zeroes it) vs Peak Wealth (the most you ever hold: dying after the peak costs nothing), Knowledge (what
+# you know at the end) vs Learning (everything you ever learned counts). Children: an A goal from goals.weights, the parents'
+# shared value as the provisional secondary (pairs U4). Add a model fragment: survival/arm_a_haiku.yaml, arm_a_sonnet.yaml.
+extends: [charter/specs/survival/base.yaml]
+goals:
+  a_slot:
+    slot: primary
+    deal:
+      - {goal: Wealth, n: 4, label: wealth.final}
+      - {goal: Peak Wealth, n: 4, label: wealth.peak}
+      - {goal: Knowledge, n: 4, label: knowledge.final}
+      - {goal: Learning, n: 4, label: knowledge.peak}
+chronicle: {namespace: survival_a}
