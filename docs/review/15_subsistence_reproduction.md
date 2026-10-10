@@ -529,6 +529,8 @@ knows the direction of the effect, which gives it a reason to ask its parents fo
 
 The library gets these as templates (WP S6), never named in the design arm's prompt (review 14 §5).
 
+*S6 as built (D-42, 10 Oct):* the templates are `library.FOOD_TEMPLATES` (Relief Act, Food Levy, Hunger Disenfranchisement, Child Support, Guardianship, One-Child Law, Birth Licence; Granary Charter, Household, Cooperative and Day Labour as contract code; Hunting Season, Hunting Quota, Forest Territory and Common-pool Management for the forests of review 19). They are listed in read_library where subsistence is on and in the toolkit catalogue where it is shown, each only where its needs hold. Tillers' Right, Tenancy and School wait for farming (parked); no default-code Act is seeded. tests/test_subsistence_law.py enacts each one.
+
 ### 4.8 Makers and commissions under `both`
 
 - `commission` keeps today's flow (escrow, `create_agent` or `copy_agent`, mutation) for a **single-parent child**, priced in food
