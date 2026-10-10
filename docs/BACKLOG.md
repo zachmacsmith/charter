@@ -50,3 +50,8 @@ command as an office with agency over members' `attack`/`guard`, desertion and l
 A world setting where institutions have no kernel-held treasury: a designated custodian agent physically holds the institution's
 goods and can abscond, so trust inside institutions is a real problem (as historically, before legal personhood). Today's kernel
 escrow and treasuries are smart-contract physics; this would be the alternative physics. After wave 9 E and succession.
+
+## Children's model upgrades (user, 10 Oct)
+
+Children get the model the spec sets (review 15 U8). Later: let parents or the child buy a better model (a costly upgrade, e.g.
+through a Maker or by investment), so model capability becomes something lineages can accumulate.
