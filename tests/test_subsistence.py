@@ -936,3 +936,15 @@ def test_stores_conserve_food():
     A.act(k, a, "withdraw", {"store": "S1", "qty": 1})
     end_round(k)
     assert AC.totals(k)["food"] == pytest.approx(t0)
+
+
+def test_a_minor_forages_and_hunts_at_half(monkeypatch):
+    from charter import pairs as PRS
+    inst, k = small()
+    a, b = eaters(k)[:2]
+    assert SB.yield_mult(k, a) == 1.0                                         # no pairs: no minors
+    k.w.setdefault("life", {}).setdefault("pairs", {})
+    monkeypatch.setattr(PRS, "is_minor", lambda k_, x: x == a)
+    assert SB.yield_mult(k, a) == 0.5 and SB.yield_mult(k, b) == 1.0
+    SB.state(k)["stage"][a] = -1
+    assert SB.yield_mult(k, a) == pytest.approx(0.375)                       # hungry minor: x0.75 x0.5

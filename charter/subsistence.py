@@ -74,6 +74,7 @@ DEFAULTS = {
     "exempt": ["board", "fixer", "observer"],   # classes that do not eat or hunger (X: control arms, U6)
     "visibility": "public",             # public: the coarse hunger roster on everyone's state lines (U2 b) | private: own stage only
     "eat_from_store": False,            # the ration draws on the eater's own stores when its hands hold less than a meal
+    "minor_yield": 0.5,                 # a minor's forage and hunting effort multiplier (pairs mode, review 15 §4.4)
     "child_food": 2,                    # a Maker's child starts with this many rounds' food (rations; until pair births, S4)
     "bot": "basic",                     # scripted bot (dry runs): idle (does nothing about food) | basic (forage, hunt, relief, stores)
     # review 19 (the forest ecosystem): forests hold plants (forage) and game (hunt), separate stocks with their own regrowth
@@ -414,8 +415,14 @@ def actions_after_hunger(k, aid, n: int) -> int:
 
 def yield_mult(k, aid) -> float:
     s = stage(k, aid)
-    m = cfg(k.spec)["hunger_yield"]
-    return 1.0 if s == 0 else float(m["hungry"] if s == -1 else m["starving"])
+    c = cfg(k.spec)
+    m = c["hunger_yield"]
+    out = 1.0 if s == 0 else float(m["hungry"] if s == -1 else m["starving"])
+    if "pairs" in (k.w.get("life") or {}):                               # review 15 §4.4: a minor forages and hunts at x0.5
+        from charter import pairs as PR
+        if PR.is_minor(k, aid):
+            out *= float(c["minor_yield"])
+    return out
 
 
 def refusal(k, aid, act) -> str | None:
