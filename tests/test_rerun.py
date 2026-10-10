@@ -80,4 +80,4 @@ def test_rerun_reproduces_the_run_in_a_worktree(made, tmp_path, argv):
         assert (out / f).read_bytes() == (made / f).read_bytes(), f
     meta = PV.read(out)
     assert meta["rerun_of"]["sha"] == HEAD and meta["git"]["sha"] == HEAD
-    assert not any(Path(x).name == "src" and "charter_rerun_" in x for x in (PV._git("worktree", "list") or "").split())
+    assert str(tmp_path) not in (PV._git("worktree", "list") or "")      # its worktree is gone (others may run in parallel)
