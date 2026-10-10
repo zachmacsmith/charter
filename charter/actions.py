@@ -142,11 +142,17 @@ def _act(k, aid: str, name: str, args: dict) -> str:
     sub = "subsistence" in k.w
     if not sub:                                                         # review 15: farm, withdraw, build only with subsistence on
         hidden_here |= set(SUBSISTENCE_ACTIONS)
+    if "pairs" not in (k.w.get("life") or {}):                          # review 15 S4: conceive only with two-parent reproduction
+        hidden_here.add("conceive")
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     if sub:                                                             # review 15 S1: hunger closes actions (Act.fed; agency: both)
         from charter import subsistence as SB
         SB.check_gate(k, aid, name, args)
+    if "pairs" in (k.w.get("life") or {}):                              # review 15 S4: what a minor may not do
+        from charter import pairs as PR
+        if name in PR.MINOR_REFUSED and PR.is_minor(k, aid):
+            raise ActionError(f"you are a minor until round {PR.minor_until(k, aid) + 1}: you cannot {name} yet")
     if name == "create_agent" and isinstance(args, dict) and str(args.get("commission") or "").lower() in ("", "self", "own", "me", aid.lower()):
         from charter import life as LF, roles as RO                       # a Maker making its own child directly
         if LF.enabled(k.spec) and "life" in k.w and RO.has_role(k, aid, "maker"):

@@ -1238,7 +1238,11 @@ def assign_newborn(k, child, parent):
     declared jurisdiction id (or False: none). Returns the jurisdiction (None: none). Off: "J0", nothing recorded."""
     if not enabled(k):
         return "J0"
-    return k.apply("join", agent=child, polity=member_of(k, parent), via="born", parent=parent).result["polity"]   # on_birth decides
+    polity = member_of(k, parent)
+    if "pairs" in (k.w.get("life") or {}):                               # review 15 S4 (U12): a pair's child, the polity they chose
+        from charter import pairs as PR
+        polity = PR.newborn_polity(k, child, parent, polity)
+    return k.apply("join", agent=child, polity=polity, via="born", parent=parent).result["polity"]   # on_birth decides
 
 
 def assign_arrival(k, aid):

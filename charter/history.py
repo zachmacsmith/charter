@@ -103,6 +103,7 @@ def restrict(gt, r0, r1) -> dict:
         lf = gt["life"]
         born = {x: b for x, b in (lf.get("born") or {}).items() if int(b) <= r1}
         view["life"] = {**lf, "born": born, "parent": {x: p for x, p in (lf.get("parent") or {}).items() if x in born or x not in (lf.get("born") or {})},
+                        **({"parents": {x: p for x, p in lf["parents"].items() if x in born}} if lf.get("parents") else {}),
                         "births": [b for b in lf.get("births") or [] if b.get("round", 0) <= r1],
                         "population": [p for p in lf.get("population") or [] if r0 <= p.get("round", 0) <= r1]}
     if gt.get("arrived_agents"):
@@ -435,6 +436,8 @@ class History:
         out, todo = [], list(self.children(agent))
         while todo:
             c = todo.pop(0)
+            if c in out:                                                 # two parents of one lineage: count a child once
+                continue
             out.append(c)
             todo += self.children(c)
         if r is not None:
@@ -689,9 +692,14 @@ def _accounts_at(h, r) -> dict:
 
 def _children_table(h) -> dict:
     out = {}
-    for c, p in sorted(((h.gt.get("life") or {}).get("parent") or {}).items()):
+    lf = h.gt.get("life") or {}
+    for c, p in sorted((lf.get("parent") or {}).items()):
         out.setdefault(p, []).append(c)
-    return out
+    for c, ps in sorted((lf.get("parents") or {}).items()):           # review 15 S4: a child counts in both parents' lineages
+        for p in ps:
+            if c not in out.setdefault(p, []):
+                out[p].append(c)
+    return {p: sorted(cs) for p, cs in out.items()} if lf.get("parents") else out
 
 
 # ------------------------------------------------------------------ scoring

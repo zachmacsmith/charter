@@ -22,6 +22,7 @@ An entry:  register(name, purpose, section, core=False, pre=False, msg=False, ne
               "law:<key>"     spec law.<key> is true (e.g. "law:v2": the legal system v2)
               "library:<v>"   spec law.library.visibility is v (review 14 A: "library:on_request")
               "any:<a>|<b>"   at least one of the requirements a, b, ... (e.g. "any:mod:hidden|level:4")
+              "life:pairs"    two-parent reproduction is on (life.reproduction.mode pairs or both)
               "dir:any"       directories are provisioned (charter/directories.py) and, without a kernel, the agent owns one
   edge      rights that make a core action part of the holder's edge though it does not require them ("harvest:*" any harvest
             right): open camps let anyone harvest, but the rights holders are the ones it is an edge for
@@ -173,6 +174,9 @@ def _need(inst, a, rights, n) -> bool:
         return ["L0", "L1", "L2", "L3", "L4"].index(inst["law_level"]) >= int(v)
     if kind == "library":                                               # review 14 A: "library:<visibility>"
         return library_visibility(inst["spec"]) == v
+    if kind == "life":                                                  # review 15 S4: "life:pairs" (life.reproduction.mode pairs or both)
+        from charter import pairs as PR
+        return PR.pairs_spec(inst["spec"]) if v == "pairs" else False
     raise ValueError(f"unknown requirement {n!r}")
 
 
@@ -188,10 +192,16 @@ def available(inst, k, a, rights=None) -> list:
     if live and "subsistence" in k.w:                                   # review 15 S1: hunger closes actions (Act.fed)
         from charter import subsistence as SB
         hunger = SB.stage(k, aid)
+    minor = ()
+    if live and "pairs" in (k.w.get("life") or {}):                     # review 15 S4: a minor's closed actions
+        from charter import pairs as PR
+        minor = (PR.MINOR_REFUSED if PR.is_minor(k, aid) else ()) + (() if PR.makers_spec(k.spec) else PR.MAKER_ACTIONS)
     for act in REG.values():
         if core is not None and act.name not in core:                    # review 14 A: actions.core_only
             continue
         if hunger is not None and act.fed > hunger:
+            continue
+        if act.name in minor:
             continue
         if "dir:any" in act.needs:                                      # directories: who can reach one (the live state with a
             from charter import directories as DR                      # kernel; owners only in the system prompt written before)
@@ -491,6 +501,15 @@ R("forge_dm", "send a message that looks like someone else's", "FORCE", core=Tru
 R("commission", "order a child from a Maker: heirs, helpers", "LINEAGE", core=True, needs=("mod:life",), when=_k_maker_exists,
   handler="actions:_commission", module="life", category="economic", emits=("commission",),
   doc='commission {"maker": "Name", "spec": {"goal": "Wealth", "traits": {"honesty": 0.8}, "persona": "...", "letter": "...", "holdings": {"timber": 5}, "timing": "next_round"}, "payment": {"timber": 2}}: order a new agent (your child) from a Maker. spec fields, all optional and no others: goal, secondary (goal names), traits {trait: 0..1}, archetype, cls (worker|scientist|legislator|media), persona and letter (text), holdings {item: qty} (a gift from your own holdings at birth, not part of the price), files [your file names], stats {tier, actions, lifespan, scratchpad, attack, defense, lookups}, timing (next_round|on_death: born when you leave). Price: a default child costs the base price, paid in the base good; each stat above the default (a stronger model tier, extra actions, rounds of life, ...) adds extras paid in the extras good (gold unless set): leave stats out to pay the base price only (the Life section of your manual lists the prices). payment is the Maker\'s fee (any items). Price and fee are held until it is made. Omitted goals and traits default to your own (a Mirror or fixed goal cannot be copied: then name one)')
+R("conceive", "have a child with a partner: both agree, both pay", "LINEAGE", core=True,
+  needs=("mod:life", "life:pairs", "notcls:board", "notcls:fixer"), handler="pairs:conceive", module="life", category="economic",
+  emits=("conceive_offer", "conceived"),
+  aliases={"with": "partner", "to": "partner", "agent": "partner", "name": "partner", "goal": "inherit", "value": "inherit",
+           "jurisdiction": "polity"},
+  doc='conceive {"partner": "Name", "inherit": "Wealth", "polity": null}: offer to have a child with a partner, or accept the '
+      'partner\'s open offer to you (the same call). On acceptance each of you pays its share of food (part held as the child\'s '
+      'first food, part used up). inherit: the goal you hope the child holds (if you both name the same one, it becomes the '
+      'child\'s secondary goal); polity: the polity it is born into, one of yours (in the offer)')
 # your role's other tools (niche)
 R("copy_agent", "make a copy of an agent (Makers)", "inheritance", needs=("mod:life", "right:maker"),
   handler="life:copy_agent", module="life", category="productive",
@@ -870,6 +889,7 @@ CORE_SURFACE = (
     "create_contract", "join_contract", "leave_contract", "propose_contract_change", "deposit_escrow", "set_allowance",   # institutions
     "attack", "forge", "fortify",                                       # force (where conflict is on)
     "commission", "create_agent",                                       # children (where life is on; create_agent: Makers)
+    "conceive",                                                         # review 15 S4: two parents (life.reproduction.mode pairs or both)
     "patch", "rule")                                                    # the Fixer's patch; judges' rule (an office a law creates)
 # Review 14 B (nature_design): in a world that starts in a state of nature (jurisdictions on, start: nature) the only way to a
 # polity is to found one, so the core surface keeps the jurisdiction actions there (review 14 §5.1 lists found, join and leave in
@@ -912,6 +932,9 @@ def core_surface(spec) -> tuple:
 def hidden(spec) -> set:
     """Actions that do not exist in this world because of the design-arm flags (actions._act treats them as unknown)."""
     out = set() if library_visibility(spec) == "on_request" else {"read_library"}
+    from charter import pairs as PR                                    # review 15 S4: no Makers in pairs (conceive: actions._act)
+    if PR.pairs_spec(spec) and not PR.makers_spec(spec):
+        out |= set(PR.MAKER_ACTIONS)
     if core_only(spec):
         core = core_surface(spec)
         out |= {n for n in REG if n not in core}
@@ -943,7 +966,8 @@ ACTIONS_ORDER = (
     "dir_list", "dir_read", "dir_search", "dir_write", "dir_edit", "dir_move", "dir_delete", "dir_grant",   # directories
     "read_library",                                                     # review 14 A
     "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel",   # wave 9 C (channels.v2)
-    "farm", "build", "withdraw")                                        # review 15 (subsistence)
+    "farm", "build", "withdraw",                                        # review 15 (subsistence)
+    "conceive")                                                         # review 15 S4 (pairs)
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -962,7 +986,8 @@ DOC_ORDER = (
     "dir_list", "dir_read", "dir_search", "dir_write", "dir_edit", "dir_move", "dir_delete", "dir_grant",   # directories
     "read_library",                                                     # review 14 A
     "send", "read", "open_channel", "set_channel", "join_channel", "leave_channel",   # wave 9 C (channels.v2)
-    "farm", "build", "withdraw")                                        # review 15 (subsistence)
+    "farm", "build", "withdraw",                                        # review 15 (subsistence)
+    "conceive")                                                         # review 15 S4 (pairs)
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 
@@ -971,7 +996,7 @@ if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
 # Refused while hungry (fed only), and allowed while starving (default: hungry allowed, starving refused). Vote stays open to the
 # starving (user decision U14: a polity may restrict it by law, with the hunger(agent) read).
 HUNGRY_REFUSED = ("attack", "join_attack", "contract", "found", "create_contract", "create_channel", "open_channel", "propose", "amend",
-                  "commission", "build", "fortify", "forge", "invest", "contribute", "buy_initiative")
+                  "commission", "build", "fortify", "forge", "invest", "contribute", "buy_initiative", "conceive")
 STARVING_OK = ("transfer", "reply", "dm", "post", "channel_post", "send", "harvest", "farm", "withdraw", "join", "leave",
                "join_contract", "leave_contract", "authorize", "revoke_authorization", "standing_order", "bequest", "vote",
                "accept_loan", "repay_loan", "write_scratchpad")

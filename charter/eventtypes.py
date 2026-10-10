@@ -516,6 +516,12 @@ E("store_built", "subsistence", "primitive", "public", "event", "subsistence", a
 E("store_deposit", "subsistence", "primitive", "parties", "event", "subsistence", primitive="move",
   note="food put in a store: the depositor and an agent owner")
 E("store_withdrawal", "subsistence", "primitive", "parties", "event", "subsistence", act="withdraw", primitive="move")
+E("conceive_offer", "life", "summary", "parties", "event", "life", act="conceive",
+  note="review 15 S4: an offer to have a child, told to the partner")
+E("conceived", "life", "primitive", "parties", "event", "life", act="conceive", primitive="conceive",
+  note="review 15 S4: the two parents learn the conception")
+E("conceived_truth", "life", "truth", "monitor", "silent", None, primitive="conceive", note="the inherited goal and the payments")
+E("maturity", "life", "record", "monitor", "silent", None, note="review 15 S4/S5: a minor comes of age (investment, promotion draw)")
 E("store_owner", "subsistence", "summary", "public", "event", "subsistence",
   note="a dead agent's store passes to its heir (living children, a co-parent, else its polity)")
 

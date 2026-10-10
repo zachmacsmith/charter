@@ -310,13 +310,15 @@ def _unborn(k, aid) -> list:
     """Children ordered to be born at this agent's death (life.on_death has just made them due): they count as its children, and what
     they are left goes with them at birth."""
     from charter import life as LF
+    from charter import pairs as PR
     if not LF.enabled(k.spec) or "life" not in k.w:
         return []
     if LF.fixes(LF.cfg(k.spec)):                                          # audit B4: every child still to be born whose share
         return [f"unborn:{c['id']}" for c in sorted(LF.state(k)["commissions"].values(), key=lambda c: c["id"])   # is held for it
-                if c["parent"] == aid and c["status"] in ("due", "open") and c.get("reserved") is not None]
+                if c["parent"] == aid and c["status"] in ("due", "open") and c.get("reserved") is not None] + PR.unborn(k, aid)
     return [f"unborn:{c['id']}" for c in sorted(LF.state(k)["commissions"].values(), key=lambda c: c["id"])
-            if c["parent"] == aid and c["status"] == "due" and c.get("due_round") == k.r and c.get("reserved") is not None]
+            if c["parent"] == aid and c["status"] == "due" and c.get("due_round") == k.r and c.get("reserved") is not None] \
+        + PR.unborn(k, aid)                                               # review 15 S4: children in gestation (B4)
 
 
 def default_heirs(k, aid) -> list:
@@ -391,9 +393,11 @@ def _run_bequest(k, aid, cause, by) -> dict:
     def hand(g, item, amt, why):
         if g.startswith("unborn:"):                                        # an heir still to be born: handed over at birth
             from charter import life as LF
-            c = LF.state(k)["commissions"][g.split(":", 1)[1]]
+            from charter import pairs as PR
             k._add(aid, item, -amt)
-            c["reserved"][item] = round(c["reserved"].get(item, 0.0) + amt, 6)
+            if not PR.reserve_for(k, g, item, amt):                         # review 15 S4: a child in gestation, else a commission
+                c = LF.state(k)["commissions"][g.split(":", 1)[1]]
+                c["reserved"][item] = round(c["reserved"].get(item, 0.0) + amt, 6)
         else:
             _give(k, aid, (res_dst if g == "reserve" else g), item, amt, why)
         given.setdefault(g, {})[item] = round(given.get(g, {}).get(item, 0.0) + amt, 6)

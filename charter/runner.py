@@ -496,6 +496,9 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
             if "subsistence" in k.w:                                    # review 15 S1: hunger costs actions (off: nothing)
                 from charter import subsistence as SB
                 n = SB.actions_after_hunger(k, aid, n)
+            if "pairs" in (k.w.get("life") or {}):                      # review 15 S4: a minor's actions
+                from charter import pairs as PR
+                n = PR.actions_of_minor(k, aid, n)
             user, cursor = AG.turn_prompt(k, a, order, cursors.get(aid, 0), notes.get(aid, ""), results.get(aid, []), n, final,
                                           simultaneous=(mode == "simultaneous"))
             user = R.turn_section(k, aid, user)                         # roles: the Spy's private "What you saw" section

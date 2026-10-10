@@ -63,7 +63,7 @@ OLD = {
 # The deliberate change: the twelve public types feeds dropped now have renderers (three of them in a module's renderer table).
 TWELVE = ("jur_joined", "jur_left", "jur_declared", "jur_join_accepted", "jur_join_refused", "jur_leave_pending", "jur_born_into",
           "birth_rules", "official_stream", "procedure_restored", "treasury_coins", "factored")
-ADDED = {"media.EVENT_TYPES": {"official_stream"}, "life.EVENT_TYPES": {"birth_rules"},
+ADDED = {"media.EVENT_TYPES": {"official_stream"}, "life.EVENT_TYPES": {"birth_rules", "conceive_offer", "conceived"},   # review 15 S4
          "jurisdictions.EVENT_TYPES": {"jur_joined", "jur_left", "jur_declared", "jur_join_accepted", "jur_join_refused",
                                        "jur_leave_pending", "jur_born_into"}}
 # Agent-visible (public at some call site) types still unrendered: may only shrink.

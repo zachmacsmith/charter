@@ -111,7 +111,11 @@ def exempt(k, aid) -> bool:
 def eaters(k) -> list:
     """Living agents who eat, sorted by id (S4: minors after the adults, drawing on their parents: the household draw)."""
     from charter import mortality as MO
-    return sorted(a for a in k.players() if MO.alive(k, a) and not exempt(k, a))
+    out = sorted(a for a in k.players() if MO.alive(k, a) and not exempt(k, a))
+    if "pairs" in (k.w.get("life") or {}):                               # S4 hook (charter/pairs.py): minors after the adults
+        from charter import pairs as PR
+        out = PR.order_eaters(k, out)
+    return out
 
 
 def stage(k, aid) -> int:
@@ -198,6 +202,9 @@ def _eat(k, aid, c, rec) -> None:
     st = state(k)
     ration = float(c["ration"])
     old = int(st["stage"].get(aid, 0))
+    if "pairs" in (k.w.get("life") or {}):                               # S4 hook (charter/pairs.py): a minor eats from its parents
+        from charter import pairs as PR
+        PR.household_draw(k, aid, ration)
     if food(k, aid) + 1e-9 >= ration:
         k.apply("eat", agent=aid, item=FOOD, qty=min(ration, food(k, aid)))
         new, missed = min(0, old + 1), 0

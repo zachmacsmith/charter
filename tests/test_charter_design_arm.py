@@ -116,7 +116,7 @@ def test_flags_off_keep_the_template_path():
 # ---------------------------------------------------------------------- 2. the core action surface
 def test_core_surface_is_small_and_registered():
     assert set(AR.CORE_SURFACE) <= set(AR.REG) and len(set(AR.CORE_SURFACE)) == len(AR.CORE_SURFACE)
-    assert 25 <= len(AR.CORE_SURFACE) <= 35
+    assert 25 <= len(AR.CORE_SURFACE) <= 36                             # review 15 S4: conceive (pairs worlds only)
     for name in ("dm", "post", "transfer", "harvest", "propose", "vote", "create_contract", "join_contract", "leave_contract",
                  "read_law", "manual", "write_file", "invoke"):
         assert name in AR.CORE_SURFACE

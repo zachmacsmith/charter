@@ -56,6 +56,10 @@ CASES = {
     # hunt) and stores, by the scripted food bot (subsistence.scripted_actions), 11 agents, 6 rounds
     "subsistence_small": ("nature_subsistence", 3, ["rounds=6", "agents={worker: 10, scientist: 0, legislator: 0, media: 0, board: 0, "
                                                     "fixer: 1}"]),
+    # review 15 (S4/S5): two-parent reproduction in the same world: offers, conceptions, gestations, births into both lineages,
+    # minors fed from their parents, coming of age (pairs.scripted_actions), 11 agents, 14 rounds, a 3-round childhood
+    "pairs_small": ("nature_pairs", 2, ["rounds=14", "life.reproduction.maturity=3",
+                                        "agents={worker: 10, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}"]),
 }
 V2_CASES = {"society_law_v2"}                          # their start laws are test fixtures: registered in library.LIB while they run
 

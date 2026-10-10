@@ -1,0 +1,8 @@
+# Review 15 S4/S5: nature_subsistence with two-parent reproduction (charter/pairs.py). Children come from two consenting parents who
+# each pay 5 + 1 food (life.reproduction.provisions, fee); no Makers. Gestation 2 rounds, childhood 6 (U7: presets may choose other
+# values for longer runs); the child's model is fixed by the spec (U8: the pool's weak model, for cost-capped batches). The child's
+# primary goal is random; a goal both parents name is its provisional secondary, promoted at maturity with a chance that rises
+# with the food its parents gave it (U4). For scripted dry runs and calibration (S7).
+extends: [nature_subsistence]
+life:
+  reproduction: {mode: pairs}

@@ -275,6 +275,7 @@ def test_routed_rows_name_dispatch_functions():
     want |= {"set_company_rule"}                                      # W8e: company law
     want |= {"set_channel"}                                           # wave 9 C: channels v2
     want |= {"eat", "hunger", "spoil", "sow", "reap", "build"}        # review 15 S1-S3: subsistence
+    want |= {"conceive"}                                              # review 15 S4: two-parent reproduction
     w8b = {"found", "invite", "declare", "set_charter", "dissolve", "invoke", "commission", "set_will", "name_successor", "licence",
            "set_price", "library_doc", "library_permit", "set_capacity", "share_note", "offer_lease", "set_initiative",
            "hire_assassin", "set_money_rule", "set_title", "rename", "set_arms_rule", "set_lease_rules", "set_birth_rules",
@@ -292,7 +293,7 @@ def test_routed_rows_name_dispatch_functions():
             assert qual == f"do_{n}", p.fn
             assert D._fn(p) is getattr(D, f"do_{n}") and callable(D._fn(p))                     # the package re-exports it
         else:                                                           # W8b: the owner module's change is the apply function
-            assert (n in w8b or mod in ("directories", "channels", "subsistence", "camptypes.fields")) and qual.startswith("change_") and callable(D._fn(p)), p.fn   # + directories, channels (wave 9 C), subsistence (review 15)
+            assert (n in w8b or mod in ("directories", "channels", "subsistence", "camptypes.fields", "pairs")) and qual.startswith("change_") and callable(D._fn(p)), p.fn   # + directories, channels (wave 9 C), subsistence, pairs (review 15)
         assert set(D.OPTIONS[n]).isdisjoint(p.params), n
     assert not any(p.routed for n, p in PR.PRIMITIVES.items() if n not in want)
 

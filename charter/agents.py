@@ -761,6 +761,9 @@ class ScriptedPolicy:
         if "subsistence" in k.w:                                         # review 15: food first (own RNG stream; nothing when off)
             from charter import subsistence as SB
             acts = SB.scripted_actions(k, aid, n_actions) + acts
+        if "pairs" in (k.w.get("life") or {}):                           # review 15 S4: offers, acceptances, feeding minors (own stream)
+            from charter import pairs as PR
+            acts = PR.scripted_actions(k, aid, n_actions) + acts
         mail, replied = [], set()                                    # answer (and pay 1 timber with) the newest unanswered DM of the
         for e in reversed(k.events):                                 # last two rounds; no RNG draw, so runs without DMs are unchanged
             if e["round"] < k.r - 1:

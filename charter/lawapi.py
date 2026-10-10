@@ -279,6 +279,7 @@ LAWFNS = _fns(
         F("commissions", "read", docs="life"),
         F("births", "read", docs="life"),
         F("children_of", "read", ((0, "agent"),), scope="read", docs="life"),
+        F("parents_of", "read", ((0, "agent"),), scope="read", docs="requires"),   # review 15 S4 (documented in pairs worlds)
         F("lifespan_left", "read", ((0, "agent"),), scope="read", docs="life"),
         F("set_birth_rules", "rights", docs="life", primitive="set_birth_rules"),
         F("publish_commissions", "output", docs="life", primitive="set_birth_rules"),

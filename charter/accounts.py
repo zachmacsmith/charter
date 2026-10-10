@@ -73,6 +73,7 @@ SOURCES_SINKS = {
     "eat": ("subsistence.change_eat",),                                 # review 15 S1: the ration (food eaten)
     "spoil": ("subsistence.change_spoil",),                             # review 15 S1: food spoiling in every account
     "sow": ("fields.change_sow",),                                      # review 15 S2: seed sown (the crop is a claim, not goods)
+    "conceive": ("pairs._burn_fee",),                                   # review 15 S4: the conception fee (destroyed)
 }
 
 
@@ -357,6 +358,9 @@ def escrows(k) -> list:
             out.append((f"escrow:commission:{cid}:reserved", c["reserved"]))
     for pid, p in sorted((k.w.get("projects") or {}).items()):
         out.append((f"escrow:project:{pid}", p.get("pooled") or {}))
+    if "pairs" in (k.w.get("life") or {}):                              # review 15 S4: food held for children in gestation
+        from charter import pairs as PR
+        out += PR.escrows(k)
     return out
 
 

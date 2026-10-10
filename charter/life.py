@@ -97,6 +97,23 @@ DEFAULTS = {
     "default_heirs": "reserve",         # where an estate's unbequeathed part goes: reserve (as before) | children (children, unborn
                                         # included, then co-parents, then the reserve)
     "audit_fixes": None,                # review 16 bugs B2-B5, B7; None: on with the absolute or stationary demography, else off
+    # Two-parent reproduction (review 15 §4, S4/S5; charter/pairs.py). makers: as before (no word of the rest is read).
+    "reproduction": {
+        "mode": "makers",               # makers (Makers only) | pairs (two consenting parents; no Makers) | both (pairs and Makers)
+        "item": "food",                 # what a conception costs (pairs needs subsistence on when food)
+        "provisions": 5.0,              # per parent, held for the child (its starting food; it does not spoil while held)
+        "fee": 1.0,                     # per parent, destroyed (the cost of birth)
+        "offer_lapse": 2,               # rounds an offer stands (the round it is made and the next)
+        "gestation": 2,                 # rounds from the match to the birth (born at the end of round match + gestation)
+        "maturity": 6,                  # rounds a child is a minor (2 actions; no conceiving, attacking, founding, proposing, voting)
+        "max_children": 4,              # per parent, born or pending
+        "model": "weak",                # the child's model: a tier (weak, mid, strong), a model id, or "parents" (a random parent's)
+        "minor_actions": 2,             # a minor's actions per turn (at most)
+        "household": True,              # a minor short of food eats from its parents' food after they eat (U3)
+        "split_polity": "auto",         # parents in different polities and none named: auto (none in a world that began in the state
+                                        # of nature, else the initiator's) | initiator | none
+        "promotion": {"p_lo": 0.25, "p_hi": 0.85},   # maturity: chance the inherited goal becomes primary, by parental food (S5)
+    },
 }
 # Lineage scoring per goal, from each goal's registry row (goal_registry.Goal.lineage / lineage_override):
 HISTORY = GR.LINEAGE_RECORD             # scored on the run's record: the best of the whole lineage, dead members included
@@ -381,6 +398,9 @@ def install(k) -> None:
             el = round(rng.randint(int(lo), int(hi)) * _scale(k))
             _set_lifespan(k, aid, span, el, rng)
     MO.state(k)
+    from charter import pairs as PR
+    if PR.pairs_spec(k.spec):                                            # review 15 S4: two-parent reproduction (pairs, both)
+        PR.install(k)
     ensure_maker(k, announce_all=True)
 
 
@@ -424,6 +444,9 @@ def maker_target(k) -> int:
 
 
 def ensure_maker(k, announce_all=False) -> None:
+    from charter import pairs as PR
+    if not PR.makers_spec(k.spec):                                       # pairs: no Makers (review 15 §4.8)
+        return
     makers = living_makers(k)
     pool = sorted(a for a in k.players() if k.w["agents"][a]["cls"] not in ("board", "fixer"))
     if not makers and cfg(k.spec)["ensure_maker"]:
@@ -453,8 +476,11 @@ def at_cap(k) -> bool:
 
 
 def children(k, aid) -> list:
+    """aid's children: those it made through a Maker (life.parent) and those it had with a partner (life.parents, review 15 S4)."""
     st = k.w.get("life") or {}
-    return sorted(c for c, p in (st.get("parent") or {}).items() if p == aid)
+    out = {c for c, p in (st.get("parent") or {}).items() if p == aid}
+    out |= {c for c, ps in (st.get("parents") or {}).items() if aid in ps}
+    return sorted(out)
 
 
 def coparents(k, aid) -> list:
@@ -472,6 +498,8 @@ def descendants(k, aid) -> list:
     out, todo = [], children(k, aid)
     while todo:
         c = todo.pop(0)
+        if c in out:                                                     # two parents of one lineage: count a child once
+            continue
         out.append(c)
         todo += children(k, c)
     return out
@@ -504,6 +532,9 @@ def end_of_round(k) -> None:
         if c["status"] == "open" and k.r >= c["expires"]:
             with k.cause("world", "commission_expiry", commission=c["id"], root=True):
                 _refund(k, c, "expired: the Maker did not make it in time")
+    if "pairs" in st:                                                    # review 15 S4: two-parent births, coming of age, offers
+        from charter import pairs as PR
+        PR.end_of_round(k)
     with k.cause("world", "maker", root=True):
         ensure_maker(k)
     st["population"].append({"round": k.r, "living": len(k.players()), "cap": st["cap"],
@@ -996,6 +1027,10 @@ def law_api(k, lid) -> dict:
     def lifespan_left(agent):
         return remaining(k, str(agent)) if _on() else None
 
+    def parents_of(agent):
+        from charter import pairs as PR
+        return PR.parents_of(k, str(agent)) if _on() else []
+
     def set_birth_rules(classes=None, models=None, max_children=None, max_stats=None, banned_goals=None):
         """What may be made for parents this law binds: allowed classes and models, a cap on children per parent, caps on stats,
         banned goals. All None: this law's rules are lifted."""
@@ -1016,7 +1051,7 @@ def law_api(k, lid) -> dict:
         return True
 
     return {"makers": makers, "commissions": commissions, "births": births, "children_of": children_of,
-            "lifespan_left": lifespan_left, "set_birth_rules": set_birth_rules,
+            "lifespan_left": lifespan_left, "parents_of": parents_of, "set_birth_rules": set_birth_rules,
             "publish_commissions": lambda on=True: _flag("commissions", on), "publish_births": lambda on=True: _flag("births", on)}
 
 
@@ -1297,9 +1332,11 @@ def _birth(k, c) -> str | None:
 def state_lines(k, aid) -> list:
     if not enabled(k.spec) or "life" not in k.w:
         return []
+    from charter import pairs as PR
     from charter import roles as RO
     st = state(k)
     out = []
+    pairs = "pairs" in st
     rem = remaining(k, aid)
     if rem is not None:
         if cfg(k.spec)["lifespan_known"] == "approximate":
@@ -1313,11 +1350,15 @@ def state_lines(k, aid) -> list:
                    "game: arrange now what will keep them true after you leave (heirs, allies, laws, bequests); goals about your own holdings "
                    "or offices count only through living descendants. "
                    + (f"Your living children: {', '.join(heirs)}." if heirs else
+                      "You have no heir yet: consider having a child with a partner now (conceive), with a value you share."
+                      if pairs and not PR.makers_spec(k.spec) else
                       "You have no heir yet: consider commissioning one from a Maker now (commission), with a goal that carries yours on."))
     out.append(f"Population: {len(k.players())}" + (" (no cap)" if st.get("uncapped") else f" of a cap of {st['cap']}")
-               + f". Maker(s): {', '.join(living_makers(k)) or 'none now'}.")
+               + (f". Maker(s): {', '.join(living_makers(k)) or 'none now'}." if PR.makers_spec(k.spec) else "."))
     o = _inst_agent(k, aid).get("origin")
-    if o:
+    if o and o.get("parents"):                                          # review 15 S4: a child of two parents
+        out.append(f"Your origin: child of {' and '.join(o['parents'])}, born before round {o['born_round'] + 1}.")
+    elif o:
         out.append(f"Your origin: child of {o['parent']}, made by {o['maker']}, born before round {o['born_round'] + 1}.")
     kids = children(k, aid)
     if kids:
@@ -1336,6 +1377,8 @@ def state_lines(k, aid) -> list:
         out.append(f"Your named successor: {mst.get('successors', {}).get(aid) or 'none (your seat stays empty if you leave the game)'}.")
     if aid in (mst.get("bequests") or {}):
         out.append("You have a bequest on record.")
+    if pairs:
+        out += PR.state_lines(k, aid)
     return out
 
 
@@ -1362,7 +1405,14 @@ def rules_text(inst, maker=True) -> str:
                      "else, unannounced. A Board member names a successor (name_successor, private unless a law makes namings public), who "
                      "takes the seat when the member leaves and gives up every right except veto; with no living successor the seat stays "
                      "empty. The veto needs a majority of the remaining members; no law can add or remove members.")
-    if enabled(sp):
+    from charter import pairs as PR
+    if enabled(sp) and PR.pairs_spec(sp):                               # review 15 S4: two parents (and Makers too under `both`)
+        parts.append("Every agent but the Fixer has a lifespan and sees how many rounds it has left. " + PR.rules_text(sp)
+                     + (" There is no population cap." if is_uncapped(sp) else
+                        f" The population is capped at {cfg(sp)['cap_mult']:g} times the starting count; births wait beyond it.")
+                     + " Goals about your own holdings or offices also count through your living descendants: you score your own "
+                     "result or your lineage's (you and your descendants), whichever is higher.")
+    if enabled(sp) and PR.makers_spec(sp):
         c = cfg(sp)
         parts.append(f"Every agent but the Fixer has a lifespan and sees how many rounds it has left. Any agent can commission a new agent "
                      f"(a child: a full agent with its own turns) from a Maker (commission), choosing its goals, temperament (archetype), a persona "
@@ -1394,6 +1444,9 @@ def prompt_section(inst, a) -> str:
     o = a.get("origin")
     if not o:
         return ""
+    if o.get("parents"):                                                # review 15 S4: a child of two parents
+        return (f"Your origin: you are the child of {' and '.join(o['parents'])}, born before round {o['born_round'] + 1}. You know "
+                "your own goal and temperament.")
     out = (f"Your origin: you are a child of {o['parent']}, made by the Maker {o['maker']}, and born before round {o['born_round'] + 1}. "
            "You know your own goal and temperament; you do not know what was ordered for you.")
     if a.get("persona"):
@@ -1408,9 +1461,14 @@ def successor_brief(inst, a) -> str:
 
 
 def absent_actions(inst, a) -> set:
+    from charter import pairs as PR
     sp = inst["spec"]
     out = set()
     if not enabled(sp):
+        out |= set(ACTIONS)
+    if not PR.pairs_spec(sp):                                           # review 15 S4: conceive only with pairs or both
+        out.add("conceive")
+    elif not PR.makers_spec(sp):                                        # pairs: no Makers
         out |= set(ACTIONS)
     if not MO.active(sp):
         out |= {"bequest", "name_successor"}
@@ -1476,21 +1534,28 @@ def truth(k, inst=None) -> dict:
     st = k.w.get("life")
     if st is None:
         return {}
+    from charter import pairs as PR
     return {"life": {"start_n": st["start_n"], "cap": st["cap"], "parent": st["parent"], "maker_of": st["maker_of"], "born": st["born"],
                      "dies_at": st["dies_at"], "lifespan": st["lifespan"], "elapsed": st["elapsed"], "stats": st["stats"],
                      "jurisdiction": st["jurisdiction"], "births": st["births"], "population": st["population"],
                      "commissions": st["commissions"],
-                     **({"uncapped": True} if st.get("uncapped") else {})}}
+                     **({"uncapped": True} if st.get("uncapped") else {}),
+                     **({"parents": st["parents"]} if st.get("parents") else {}),       # review 15 S4: two-parent children
+                     **PR.truth(k)}}
 
 
 def _gt_children(gt, aid) -> list:
-    return sorted(c for c, p in gt["life"]["parent"].items() if p == aid)
+    out = {c for c, p in gt["life"]["parent"].items() if p == aid}
+    out |= {c for c, ps in (gt["life"].get("parents") or {}).items() if aid in ps}   # review 15 S4: both parents' lineages (U9)
+    return sorted(out)
 
 
 def gt_descendants(gt, aid) -> list:
     out, todo = [], _gt_children(gt, aid)
     while todo:
         c = todo.pop(0)
+        if c in out:
+            continue
         out.append(c)
         todo += _gt_children(gt, c)
     return out

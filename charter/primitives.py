@@ -130,7 +130,7 @@ DRAFT_SAMPLE = {"id": "L5", "title": "t", "intent": "i", "code": 'title = "t"\ni
 
 # Every payload key, with a sample value: the payload vocabulary (a new key needs a sample, so payloads stay JSON-able).
 PARAM_SAMPLES = {
-    "src": "a1", "dst": "a2", "item": "grain", "qty": 2.0, "why": "transfer", "memo": "wage", "agent": "a1", "camp": "camp1", "x": [3, 4],
+    "inherit": "Wealth", "src": "a1", "dst": "a2", "item": "grain", "qty": 2.0, "why": "transfer", "memo": "wage", "agent": "a1", "camp": "camp1", "x": [3, 4],
     "currency": "coin", "to": "a2", "frm": "a1", "name": "coin", "backed": True, "reserve": "reserve", "src_item": "copper",
     "dst_item": "weapons", "via": "forge", "owner": "a1", "cause": "attack", "key": "quota", "value": 3, "right": "press",
     "rounds": 2, "n": 3, "text": "hello", "entity": "agent:a1", "role": "editor", "office": "official_editor:J1", "how": "born",
@@ -825,6 +825,14 @@ _ROWS = [
       notes="kind store: its materials (subsistence.store.cost) are used up; a new account store:<store_id> owned by the builder or "
             "an institution it is a member or officer of; anyone deposits (a move), only the owner takes food out "
             "(accounts.check_store_move)"),
+    # review 15 S4: two consenting parents conceive (charter/pairs.py). Who may have children with whom, and at what charge, is law.
+    P("conceive", "life", "relation", ("a", "b", "inherit", "polity"), "pairs:change_conceive", routed=True, subject="a",
+      parties=("a", "b"), agent_params=("a", "b"), event="conceived", causes=("agent",), gates=("set_birth_rules",),
+      reads=("children_of", "parents_of", "births"), redact="pairs:redact_inherit",
+      sites=("pairs:change_conceive", "pairs:conceive"),
+      why={"compel": _LNA, "gate": "law.v2: before_conceive refuses or charges it (registration, licences, kinship rules, birth taxes)"},
+      notes="a: the parent whose offer was accepted, b: the accepting parent; each pays provisions (held for the child) and a fee "
+            "(destroyed); a gestation due in life.reproduction.gestation rounds. Laws see whether a goal is inherited, never which"),
 ]
 
 # ---------------------------------------------------------------------- actions -> primitives
@@ -900,6 +908,7 @@ ACTION_PRIMITIVES = {
     "dir_move": ("dir_write",), "dir_delete": ("dir_write",), "dir_grant": ("dir_grant",),
     # subsistence (review 15): farm sows or reaps (its first primitive depends on its arguments: ANY_FIRST)
     "farm": ("sow", "reap"), "build": ("build",), "withdraw": ("move",),
+    "conceive": ("conceive",),                                          # review 15 S4: an offer changes nothing; a match conceives
 }
 
 # Actions whose first primitive depends on their arguments (any primitive they list may be the one the action is "for": a block of
@@ -953,7 +962,8 @@ TIER_OF = {
           "dir_write", "dir_grant",                                    # directories
           "set_channel",                                               # wave 9 C (channels.v2)
           "sow", "reap",                                               # review 15 S2: who may sow or reap a plot is law (U1)
-          "build"),                                                    # review 15 S3: a store (a building permit is law)
+          "build",                                                     # review 15 S3: a store (a building permit is law)
+          "conceive"),                                                 # review 15 S4: who may have children with whom is law
     "L-route": (),
 }
 

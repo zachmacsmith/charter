@@ -399,6 +399,15 @@ def _ann():
         "life.default_heirs": dict(types=("str",), enum=("reserve", "children")),
         "life.audit_fixes": dict(types=("bool", "null")),
         "life.cap_mult": dict(types=("number", "null"), range=(0, None)),
+        "life.reproduction.mode": dict(types=("str",), enum=("makers", "pairs", "both")),     # review 15 S4 (charter/pairs.py)
+        "life.reproduction.split_polity": dict(types=("str",), enum=("auto", "initiator", "none")),
+        "life.reproduction.model": dict(types=("str",)),
+        "life.reproduction.provisions": dict(range=NONNEG),
+        "life.reproduction.fee": dict(range=NONNEG),
+        "life.reproduction.gestation": dict(types=("int",), range=(1, None)),
+        "life.reproduction.maturity": dict(types=("int",), range=(1, None)),
+        "life.reproduction.promotion.p_lo": dict(range=PROB),
+        "life.reproduction.promotion.p_hi": dict(range=PROB),
         "roles.maker_refill": dict(types=("bool",)),
         "life.tier_models": dict(kind="map", keys=("weak", "mid", "strong")),
         "life.tier_models.*": dict(types=("str",)),
@@ -705,6 +714,11 @@ DOCS = {
     "subsistence.store.cost": "a store's building cost (destroyed)",
     "subsistence.store.cost.*": "quantity of this resource",
     "subsistence.store.capacity": "food a store holds",
+    # ---- two-parent reproduction (review 15 S4/S5, charter/pairs.py)
+    "life.reproduction": "two-parent reproduction (mode pairs or both; makers: Makers only, as before)",
+    "life.reproduction.promotion": "the chance, at maturity, that the goal both parents named becomes the child's primary goal",
+    "life.reproduction.promotion.p_lo": "the chance with no food from the parents beyond the provisions",
+    "life.reproduction.promotion.p_hi": "the chance once the parents gave maturity x ration food beyond the provisions",
     # ---- life
     "life.lifespan": "rounds each agent lives at full scale: [lo, hi] or {mean, sd, min, max}",
     "life.elapsed": "rounds already behind starting agents at full scale, [lo, hi]",

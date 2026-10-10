@@ -303,6 +303,19 @@ E += [
      "model, timing, stats, payment); return False to refuse it. With move(...) it can charge a fee.", "prompt", "common"),
 ]
 OPTIONAL.update({e[0]: "life" for e in E if e[1] == "life"})
+# two-parent reproduction (charter/pairs.py, review 15 S4): documented only where life.reproduction.mode is pairs or both
+E += [
+    ("parents_of", "life", "Life", "parents_of(agent)", "an agent's parents ([] for a founder or arrival; one for a Maker's child, "
+     "two for a child of two parents). on_birth(child, parent) names the initiating parent; this read gives both.", "prompt", "common"),
+]
+
+
+def _pairs_on(spec) -> bool:
+    from charter import pairs as PR
+    return PR.pairs_spec(spec)
+
+
+REQUIRES["parents_of"] = _pairs_on
 # linker (charter/linker.py, P3.3): documented only in law.v2 worlds (REQUIRES), so every other world's prompt and codex are unchanged
 E += [
     ("use", "linker", "Meta", "use(ref)", "links another law's exports into this law, as a read-only mapping: at the top level only, "
