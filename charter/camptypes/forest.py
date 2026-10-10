@@ -29,8 +29,9 @@ hunter's units x its hunger multiplier) and game density g = G/K before its draw
     whole effort units catches food_S (1) with chance min(.95, catch_S) x g^theta x E / units
 The catch (never more than G) leaves the game stock and is shared by effort (the harvest primitive pays each hunter; laws'
 on_harvest see it). Expected food per unit of effort at full stock: alone 1.15; 2: 1.5; 3: 1.8; 4: 2.1; 6: 2.3 (the peak); 8: 1.9;
-12: 1.4 (one quarry per party: bigger parties share it more thinly). Each party's members learn its catch; the forest's round line
-(public) gives each party's size and catch.
+12: 1.4 (one quarry per party: bigger parties share it more thinly). Each party's members learn its catch (hunt_result); nobody
+else does: the forest's public round line says nothing of the hunt. A monitor-only `hunt_round` record (each party's hunters,
+effort, quarry and catch, and the game left) is what a law could later publish.
 """
 from __future__ import annotations
 
@@ -219,7 +220,8 @@ class Forest(CampType):
 
     # ------------------------------------------------------------------ the hunt (camps end of round, step 2)
     def end_of_round(self, k) -> list:
-        """Resolve this round's hunting parties (see the module docstring). Returns the public round line."""
+        """Resolve this round's hunting parties (see the module docstring). Private: each member learns its party's catch; the
+        round's record (hunt_round) is monitor-only. Returns no public line."""
         from charter import mortality as MO
         from charter import subsistence as SB
         c, gp = self.camp, self.p.get("game")
@@ -233,7 +235,7 @@ class Forest(CampType):
                 continue
             h = hunts[aid]
             parties.setdefault(h["party"] or f"@{aid}", []).append(aid)
-        lines = []
+        rec = []
         for label in sorted(parties):
             members = parties[label]
             eff = {a: int(hunts[a]["effort"]) * SB.yield_mult(k, a) for a in members}
@@ -269,5 +271,11 @@ class Forest(CampType):
             st = c.setdefault("stats", {"yield": 0.0, "value": 0.0, "actions": 0, "rounds": 0})
             st["yield"] = round(st["yield"] + food, 6)
             st["actions"] += units
-            lines.append(f"{len(members)} hunter(s) took {kind}" + (f" ({food:g} food)" if food else ""))
-        return [{"public": f"hunting: {'; '.join(lines)}; game is {game_level(c['game']['G'] / c['game']['K'])}"}] if lines else []
+            rec.append({"party": None if label.startswith("@") else label, "hunters": members, "effort": round(E, 3),
+                        "kind": kind, "catch": food})
+        if rec:
+            g = c["game"]
+            k.log("hunt_round", None, {"camp": cid, "round": k.r, "parties": rec, "game": round(g["G"] / g["K"], 4) if g["K"] > 0
+                                       else 0.0, "level": game_level(g["G"] / g["K"]) if g["K"] > 0 else game_level(0.0)},
+                  vis="monitor")
+        return []

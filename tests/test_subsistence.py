@@ -609,7 +609,11 @@ def test_a_party_hunts_together_and_the_catch_is_shared_by_effort():
     total = red + res[d]["catch"]
     regrown = cm["game"]["G"] - (G0 - total)
     assert regrown >= 0                                                       # the catch left the game stock, then it regrew
-    assert any(ev["type"] == "camp_round" and "hunting:" in ev["data"]["text"] and ev["vis"] == "public" for ev in k.events)
+    assert not any(ev["type"] == "camp_round" and "hunt" in ev["data"]["text"] for ev in k.events)   # results are private
+    hr = [ev for ev in k.events if ev["type"] == "hunt_round"]
+    assert len(hr) == 1 and hr[0]["vis"] == "monitor" and not k.can_see(e, hr[0])
+    assert {(p["party"], tuple(p["hunters"]), p["catch"]) for p in hr[0]["data"]["parties"]} == \
+        {("red", tuple(sorted([a, b, c])), red), (None, (d,), res[d]["catch"])}
     assert not cm["hunts"]                                                    # entries are for one round
     assert not [ev for ev in k.events if ev["type"] == "hunt" and k.can_see(e, ev)]   # sealed: only the hunter sees its entry
 

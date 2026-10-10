@@ -527,7 +527,9 @@ E("store_owner", "subsistence", "summary", "public", "event", "subsistence",
 E("hunt", "subsistence", "primitive", "parties", "event", "subsistence", act="hunt", primitive="hunt",
   note="a hunting entry (sealed until the round's end): the hunter only")
 E("hunt_result", "subsistence", "summary", "parties", "event", "subsistence",
-  note="a hunting party's catch and the hunter's share, to each member (the forest's public round line gives sizes and catches)")
+  note="a hunting party's catch and the hunter's share, to each member only (hunt results are private)")
+E("hunt_round", "subsistence", "record", "monitor", "silent", None, primitive="hunt",
+  note="a forest's hunting round: each party's hunters, effort, quarry and catch, and the game left (monitor-only; a law may publish it)")
 
 
 # ---------------------------------------------------------------------- natural audiences (review 12 WP2, §4.2)
