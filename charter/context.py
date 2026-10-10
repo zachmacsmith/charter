@@ -845,6 +845,9 @@ def action_sections(allowed, rights, overrides=None, pre=(), spec=None) -> str:
     pur = lambda n: (overrides or {}).get(n) or AR.purpose(n)
     tag = lambda n: f"{n} {AR.REG[n].args}" if n in pre and AR.REG[n].args else n
     fmt = lambda ns: "; ".join(f"{tag(n)} ({pur(n)})" + (" (pre-action)" if n in pre else "") for n in ns)
+    hide = set(((spec or {}).get("actions") or {}).get("unlisted") or ())   # review 24 salience control: in the manual only
+    if hide:
+        allowed = [n for n in allowed if n not in hide]
     edge, groups, kinds = action_layout(allowed, rights, spec)
     lines = []
     if edge:

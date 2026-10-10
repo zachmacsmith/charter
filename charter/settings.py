@@ -36,7 +36,7 @@ TARGETS = (
     "charter.media.DEFAULTS", "charter.observer.DEFAULTS", "charter.outside.DEFAULTS", "charter.projects.DEFAULTS",
     "charter.resources.UPKEEP_DEFAULTS", "charter.roles.DEFAULTS", "charter.subsistence.DEFAULTS",
     "charter.camptypes.framework.DEFAULTS", "charter.camptypes.leases.DEFAULTS", "charter.camptypes.modifiers.DEFAULTS",
-    "charter.schema.EXTRA",
+    "charter.schema.EXTRA", "charter.goals.SCORING_DEFAULTS",
 )
 EVENTS = "charter.events.REGISTRY"          # each event type's defaults: "charter.events.REGISTRY.<name>"
 

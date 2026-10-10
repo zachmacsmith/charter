@@ -105,6 +105,49 @@ def _relational_targets(agents, rng):
                 a["goal"]["params" if slot == "primary" else f"{slot}_params"] = {"target": None, "slot": "primary", "impossible": True}
 
 
+def a_slot_deal(gspec: dict) -> list:
+    """goals.a_slot.deal expanded: one {goal, params, label} per entry and count, in the spec's order."""
+    out = []
+    for e in ((gspec.get("a_slot") or {}).get("deal") or []):
+        for _ in range(int(e.get("n", 1))):
+            out.append({"goal": e["goal"], "params": dict(e.get("params") or {}), "label": e.get("label") or e["goal"]})
+    return out
+
+
+def deal_goals(agents, gspec: dict, seed, world: dict) -> None:
+    """Review 24's goal arms, after the ordinary draws (which stay put, so every other stream is the same in every arm):
+      goals.a_slot {slot, deal}: the deal's entries are shuffled from their own stream, "{seed}|goals|a_slot", and handed to the
+        non-fixed founders in roster order (the deal repeats if it is shorter than the roster): the same agent gets the same A goal
+        in every arm of a seed. slot primary (arm A) or secondary (arm B, under goals.survival).
+      goals.survival {goal, slot: primary}: a fixed goal every founder holds as primary (Endure); with no a_slot, alone (arm C).
+    Each founder's goal is replaced whole: no third goal; the A goal's params are its sampler's (own stream) updated by the entry's."""
+    aslot, surv = gspec.get("a_slot") or None, gspec.get("survival") or None
+    if not aslot and not surv:
+        return
+    pool = [a for a in agents if not a["goal"].get("fixed")]
+    deal = a_slot_deal(gspec) if aslot else []
+    rng = random.Random(f"{seed}|goals|a_slot")
+    rng.shuffle(deal)
+    for i, a in enumerate(pool):
+        g = {"primary": None, "params": {}, "secondary": None, "secondary_params": {}, "tertiary": None, "tertiary_params": {},
+             "fixed": False, "reachable": True}
+        if deal:
+            e = deal[i % len(deal)]
+            params = G.sample_params(e["goal"], rng, world, a["id"])
+            params.update(e["params"])
+            a_goal = (e["goal"], params)
+            g["a_slot"] = e["label"]
+        else:
+            a_goal = None
+        if surv:
+            g["primary"], g["params"] = surv["goal"], dict(surv.get("params") or {})
+            if a_goal and (aslot.get("slot") or "secondary") == "secondary":
+                g["secondary"], g["secondary_params"] = a_goal
+        elif a_goal:
+            g["primary"], g["params"] = a_goal
+        a["goal"] = g
+
+
 def conditional_goals(agents, gspec: dict, seed, law_level: str) -> list[dict]:
     """Counter-goals (goals.COUNTER_GOALS), handed out after every other goal is drawn: each trigger, with probability
     goals.conditional.prob, gives another agent the counter as their secondary goal (replacing the drawn one, or added).
@@ -426,6 +469,7 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
             p_ = {"law": l["name"], "intent": G._intent(l["code"]), "law_level": l["level"]}
             x["goal"].update({"primary": "Enact", "params": dict(p_), "reachable": G.reachable("Enact", p_, sp["law_level"], x)})
             y["goal"].update({"primary": "Block", "params": dict(p_), "reachable": G.reachable("Block", p_, sp["law_level"], y)})
+    deal_goals(agents, gspec, seed, world)                              # review 24: goals.a_slot / goals.survival (own stream; no-op unset)
     _relational_targets(agents, rng)
     counters = conditional_goals(agents, gspec, seed, sp["law_level"])
     sw = gspec.get("score_weights") or {}
@@ -434,7 +478,7 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
         if not g["fixed"]:
             ws = score_weights(g, sw)
             g["weights"] = ws
-            g["text"] = GR.slot_text(g, ws, bool(gspec.get("show_rules", True)))
+            g["text"] = GR.slot_text(g, ws, bool(gspec.get("show_rules", True)), bool(gspec.get("aims")))
 
     # personalities
     pspec = sp["personality"]

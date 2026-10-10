@@ -113,6 +113,11 @@ DEFAULTS = {
         "split_polity": "auto",         # parents in different polities and none named: auto (none in a world that began in the state
                                         # of nature, else the initiator's) | initiator | none
         "promotion": {"p_lo": 0.25, "p_hi": 0.85},   # maturity: chance the inherited goal becomes primary, by parental food (S5)
+        "child_goals": {                # review 24: the arm's goal structure for children (defaults: today's draw, unchanged)
+            "fixed": None,              # a goal every child holds as primary (e.g. Endure); None: the primary is drawn as today
+            "a_slot": True,             # with fixed: the drawn goal becomes the secondary (the A slot); false: the fixed goal alone
+            "inherit": True,            # false: the parents' shared goal (conceive's inherit) is ignored; with fixed it is always
+        },
     },
 }
 # Lineage scoring per goal, from each goal's registry row (goal_registry.Goal.lineage / lineage_override):

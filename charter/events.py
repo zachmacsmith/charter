@@ -247,11 +247,11 @@ def _world(k, inst):
             "has_scientists": any(v["cls"] == "scientist" for v in k.w["agents"].values())}
 
 
-def _goal_text(g, sw, rules=True):
+def _goal_text(g, sw, rules=True, aims=False):
     from charter import generator as GEN
     ws = GEN.score_weights(g, sw)
     g["weights"] = ws
-    g["text"] = GR.slot_text(g, ws, rules)
+    g["text"] = GR.slot_text(g, ws, rules, aims)
     return g
 
 
@@ -300,7 +300,7 @@ def draw_goals(k, inst, aid, cls, rights, rng, slots=None, keep=None):
         g[s] = name
         g["params" if s == "primary" else f"{s}_params"] = _relational(k, inst, aid, name, rng, world)
     g["reachable"] = G.reachable(g["primary"], g["params"], sp["law_level"], {"rights": rights})
-    return _goal_text(g, gspec.get("score_weights") or {}, bool(gspec.get("show_rules", True)))
+    return _goal_text(g, gspec.get("score_weights") or {}, bool(gspec.get("show_rules", True)), bool(gspec.get("aims")))
 
 
 def _model(sp, cls, aid, rng):

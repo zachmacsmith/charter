@@ -408,7 +408,7 @@ def test_lineage_scores():
     lin = LF.lineage_scores(gt)
     assert lin["B"]["score"] == 1.0                                           # Office: a descendant holds vote
     assert lin["A"]["score"] == 0.4 and lin["C"]["score"] == 0.8              # Wealth: against the richest lineage (B + C = 25)
-    assert G.s_dynasty(gt, "B", {}) == pytest.approx(1 / 6) and G.s_dynasty(gt, "A", {}) == 0
+    assert G.s_dynasty(gt, "B", {}) == 1.0 and G.s_dynasty(gt, "A", {}) == 0   # engine 8: against the largest line (B's)
     assert G.s_seat(gt, "C", {}) == 1.0 and G.s_seat(gt, "A", {}) == 0.0
     gt2 = _gt(dead={"B": {"round": 3, "cause": "old_age", "by": None}})
     lin2 = LF.lineage_scores(gt2)
