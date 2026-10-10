@@ -976,7 +976,7 @@ def owner_laws(k, P, payload, laws) -> list:
 def scripted_actions(k, aid, n) -> list:
     """The scripted food bot (dry runs, own stream "{seed}|subsistence-bot|<aid>|<round>"). Eating is automatic; bot `idle` does
     nothing about food. Bot `basic`: reap its own ripe crops and sow a fallow plot when it holds food to spare (fields only), with
-    chance bot_hunt hunt bot_effort times in a band of about four (bands by roster order, each at one forest), forage when low;
+    chance bot_hunt hunt bot_effort times in a band of about four at its home forest (by roster order), forage there when low;
     when short of a meal, both forest actions on the better source (forage now, or hunt in a band), share a meal with a starving
     or hungry agent when it has plenty, and (stores) build one when it holds the materials, keep its surplus there and take food
     out before a missed meal. Not a model of behaviour."""
@@ -1002,32 +1002,31 @@ def scripted_actions(k, aid, n) -> list:
     if fallow and growing < 2 and f >= 3 and r.random() < 0.8:
         cid = fallow[r.randrange(len(fallow))][0]                        # (no plot named: the lowest fallow one when it runs)
         out.append(act("farm", camp=cid, sow=round(min(float(fi["seed_max"]), f - 2), 1)))
-    forests = sorted(forest_camps(k), key=lambda x: -k.w["camps"][x]["S"] / k.w["camps"][x]["K"])
+    everyone = eaters(k)
+    pos = everyone.index(aid) if aid in everyone else 0
+    forests = sorted(forest_camps(k))                                    # a home forest by roster order (bots spread out), then
+    if forests:                                                          # the others by plant share
+        home = forests[pos % len(forests)]
+        forests = [home] + sorted((x for x in forests if x != home), key=lambda x: -k.w["camps"][x]["S"] / k.w["camps"][x]["K"])
     budget = int(c["forest"]["forage_per_round"])
     hunt = []
-    if forests and r.random() < float(c["bot_hunt"]):                    # hunt in a band of about four (bands by roster order)
-        game = sorted(forests, key=lambda x: -k.w["camps"][x]["game"]["G"] / k.w["camps"][x]["game"]["K"])
-        everyone = eaters(k)
+    if forests and r.random() < float(c["bot_hunt"]):                    # hunt at home in a band of about four (roster order)
         nb = max(1, round(len(everyone) * float(c["bot_hunt"]) / 4))
-        band = f"band{everyone.index(aid) % nb}" if aid in everyone else None
+        band = f"band{pos % nb}"
         e = max(1, min(budget, int(c["bot_effort"])))
-        idx = everyone.index(aid) % nb if aid in everyone else 0
-        hunt = [act("hunt", camp=game[idx % len(game)], party=band)] * e
+        hunt = [act("hunt", camp=forests[0], party=band)] * e
     forage = 0
     if forests and (f < 4 or stage(k, aid) < 0):
         forage = min(2, budget) if f < 2 else max(0, min(1, budget - len(hunt)))   # short of a meal: all on the better source
         if f < 2:
             from charter.camptypes import forest as FO
-            best = max(forests, key=lambda x: k.w["camps"][x]["game"]["G"] / k.w["camps"][x]["game"]["K"])
-            g = k.w["camps"][best]["game"]
-            cm = k.w["camps"][forests[0]]
+            cm = k.w["camps"][forests[0]]                                # at home: forage now, or hunt in a band
+            g = cm["game"]
             per_hunt = FO.expected_catch(cm["fn"]["game"], 4, g["G"] / g["K"]) / 4      # in a band of about four
             per_forage = float(cm["fn"]["yield"]) * max(0.0, cm["S"] - float(cm["fn"]["refuge"]) * cm["K"]) / cm["K"]
             if per_hunt > per_forage:
-                everyone = eaters(k)
                 nb = max(1, round(len(everyone) / 8))
-                idx = everyone.index(aid) % nb if aid in everyone else 0
-                hunt, forage = [act("hunt", camp=best, party=f"band{idx}")] * budget, 0
+                hunt, forage = [act("hunt", camp=forests[0], party=f"band{pos % nb}")] * budget, 0
         hunt = hunt[:max(0, budget - forage)]
     gather = [act("harvest", camp=forests[0])] * forage if forests else []
     out += gather if f < 2 else []

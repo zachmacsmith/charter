@@ -278,31 +278,30 @@
   "snapshots.json": "b09d8fb5334d49bf"
  },
  "pairs_small": {
-  "events.jsonl": "c777d0f4c7bbf5f2",
-  "instance.json": "134b69ec0aaa29ca",
+  "events.jsonl": "4d0b76f226ebe15c",
+  "instance.json": "cfb5297d5b4c151d",
   "score": {
-   "activity_mix": "77b43ea825abfea7",
-   "agents": "2b6760ddc33469a8",
+   "activity_mix": "45b84cbc072cd5e5",
+   "agents": "a76ea954138f28cd",
    "goal_scores": {
-    "Aksel": 0.6871,
-    "Bjorn": 0.0085,
-    "Celia": 0.0555,
-    "Elin": 0.0589,
+    "Aksel": 0.6926,
+    "Asta": 0.0358,
+    "Bjorn": 0.0,
+    "Elin": 0.0693,
     "Gry": 0.7,
-    "Jory": 0.1452,
-    "Kasper": 0.1582,
-    "Nadia": 0.1385,
-    "Odette": 0.3029,
+    "Jory": 0.3153,
+    "Kasper": 0.1447,
+    "Nadia": 0.15,
+    "Odette": 0.2443,
     "Per": 0.0,
-    "Rhea": 0.0101,
-    "Sena": 0.5211,
+    "Sena": 0.4981,
     "Ulf": 0.0
    },
-   "goals": "05906e0d02390259",
-   "lineage": "26fc953b82aa45a1",
-   "summary": "8debcb1e52491668"
+   "goals": "06159abc21bd9faa",
+   "lineage": "038d1868f268bdae",
+   "summary": "f23f64b847438aff"
   },
-  "snapshots.json": "f4c67a087c0eea8d"
+  "snapshots.json": "e3d5589a198b5fff"
  },
  "prompts_E4_1": {
   "Abel": {
