@@ -20,11 +20,33 @@ log = logging.getLogger("charter.llm")
 
 
 # ------------------------------------------------------------------ conversations (review 20 §4.5, §4.7)
+def sessions_available() -> bool:
+    """Whether `claude -p` sessions in a run-local config directory can authenticate: the one gate for every session user (the DM
+    delta, history mode). Today: CLAUDE_CODE_OAUTH_TOKEN is set (a fresh CLAUDE_CONFIG_DIR holds no login). Change it here when the
+    CLI is known to authenticate another way."""
+    return bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
+
+
+REPLY_MARK = "[Your reply]"
+NEXT_MARK = "[Next message]"
+
+
+def flatten(texts) -> str:
+    """A conversation as one prompt (history mode without sessions): the user and assistant texts in order, the agent's replies
+    marked. One message is itself, so a conversation's first call is the same either way."""
+    texts = [str(t) for t in texts]
+    out = [texts[0]] if texts else []
+    for i in range(1, len(texts)):
+        out.append(f"{REPLY_MARK}\n{texts[i]}" if i % 2 else f"{NEXT_MARK}\n{texts[i]}")
+    return "\n\n".join(out)
+
+
 class Sessions:
     """Run-local `claude -p` sessions: CLAUDE_CONFIG_DIR points at a directory inside the run folder, so session files are kept
     there and never in the user's ~/.claude. A first call starts a session with `--session-id <uuid>`; a later call continues it
     with `--resume <uuid>` (a new user message, everything before it served from the session). Authentication must come from the
-    environment (CLAUDE_CODE_OAUTH_TOKEN), since a fresh config directory holds no login; without it sessions are not used.
+    environment (sessions_available: CLAUDE_CODE_OAUTH_TOKEN), since a fresh config directory holds no login; without it sessions
+    are not used.
     Reusable by any conversation-shaped caller (the DM delta now, history mode later)."""
     DIRNAME = "claude_sessions"
     GIVE_UP = 3                                                       # session starts that failed while a plain retry worked
@@ -36,7 +58,7 @@ class Sessions:
 
     @property
     def usable(self) -> bool:
-        return bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")) and self.failures < self.GIVE_UP
+        return sessions_available() and self.failures < self.GIVE_UP
 
     def env(self) -> dict:
         """Environment entries for a `claude -p` call that keeps or resumes a session here."""
@@ -70,9 +92,10 @@ class Turn(str):
     non-empty, start otherwise; None: no session). Being a str, it passes through every policy wrapper and mock backend as the new
     message itself, so records and replays stay deterministic."""
 
-    def __new__(cls, text, history=(), fallback=None, sessions=None, session=None):
+    def __new__(cls, text, history=(), fallback=None, sessions=None, session=None, mark_previous=False):
         s = super().__new__(cls, text)
         s.history, s.fallback, s.sessions, s.session = list(history), fallback, sessions, session
+        s.mark_previous = mark_previous                          # API: a cache breakpoint on the previous turn's last block too
         return s
 
     @property
@@ -185,6 +208,8 @@ def messages(user) -> list:
     if not isinstance(user, Turn):
         return [{"role": "user", "content": user}]
     out = [{"role": ("user", "assistant")[i % 2], "content": str(t)} for i, t in enumerate(user.history)]
+    if user.mark_previous and out:                               # history mode: the previous call's end is read back whole
+        out[-1] = {**out[-1], "content": [{"type": "text", "text": str(user.history[-1]), "cache_control": {"type": "ephemeral"}}]}
     return out + [{"role": "user", "content": [{"type": "text", "text": str(user), "cache_control": {"type": "ephemeral"}}]}]
 
 
