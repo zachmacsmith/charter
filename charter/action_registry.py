@@ -348,7 +348,7 @@ def _k_lease_offer(inst, k, a, r):
     return True if not ls else any(o.get("to") in (a["id"], None) for o in ls.values())
 def _k_store(inst, k, a, r):                                           # review 15 S3: a store this agent may take food out of
     from charter import subsistence as SB
-    return "subsistence" in k.w and bool(SB.stores_of(k, a["id"]))
+    return "subsistence" in k.w and SB.may_try_withdraw(k, a["id"])
 def _k_files(inst, k, a, r): return bool((k.w.get("files") or {}).get(a["id"]))
 def _k_pinned(inst, k, a, r): return any(f.get("pinned") for f in ((k.w.get("files") or {}).get(a["id"]) or {}).values())
 def _k_pin_slots(inst, k, a, r): return int((k.w.get("pin_slots") or {}).get(a["id"], 0)) > 0
@@ -454,10 +454,11 @@ R("build", "build a food store: food keeps there", "PRODUCE", core=True, needs=(
   doc='build {"kind": "store", "owner": null}: a food store (costs timber and stone, used up) holding food that spoils far more '
       'slowly; owner: you (default) or an institution you are a member or officer of. Anyone puts food in with transfer to '
       '"store:<id>"')
-R("withdraw", "take food out of a store you own", "PRODUCE", core=True, needs=("mod:subsistence",), when=_k_store,
+R("withdraw", "take food out of a store (yours, or an institution's that lets you)", "PRODUCE", core=True, needs=("mod:subsistence",), when=_k_store,
   handler="subsistence:act_withdraw", module="subsistence", category="economic", emits=("store_withdrawal",),
   aliases={"id": "store", "from": "store", "amount": "qty", "quantity": "qty"},
-  doc='withdraw {"store": "S1", "qty": 3}: take food out of a store you own (or one of an institution whose office you hold)')
+  doc='withdraw {"store": "S1", "qty": 3}: take food out of a store you own, or one an institution owns if its code lets you (when '
+      'its code says nothing, its officers may)')
 # right:maker agrees with life.is_maker (the role): the right is carried by the role and no law can grant, revoke or suspend it
 R("create_agent", "make a new agent (Makers): to order, or your own", "PRODUCE", core=True, needs=("mod:life", "right:maker"),
   handler="life:create_agent", module="life", category="productive", emits=("maker_created",),

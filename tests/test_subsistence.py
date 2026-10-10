@@ -637,14 +637,69 @@ def test_an_institution_owns_a_store_and_its_law_moves_food_out():
         A.act(k, c, "build", {"kind": "store", "owner": cid})
     assert A.act(k, a, "build", {"kind": "store", "owner": cid}).startswith("Built store S1")
     assert SB.state(k)["stores"]["S1"]["owner"] == cid
-    with pytest.raises(A.ActionError, match="only its owner"):
+    k._add("store:S1", "food", 1)
+    with pytest.raises(A.ActionError, match="only its officers may"):
         A.act(k, a, "withdraw", {"store": "S1", "qty": 1})                 # the founder is not an officer: only its code takes out
     set_food(k, c, 20)
     A.act(k, c, "transfer", {"to": "store:S1", "item": "food", "qty": 10})  # anyone deposits
     set_food(k, b, 0)
     end_round(k)
     assert SB.stage(k, b) == 0                                             # fed from the granary before the ration
-    assert k.bal("store:S1", "food") < 9 * 0.98 + 1e-6                     # (and spoiled at 2%)
+    assert k.bal("store:S1", "food") < 10 * 0.98 + 1e-6                    # (and spoiled at 2%)
+
+
+MEMBERS_TAKE = '''title = "Members' Granary"
+intent = "Any member may take food out of the club's store; nobody else."
+def before_withdraw(p, chain):
+    return p["agent"] in members()
+'''
+
+
+def granary(code, monkeypatch=None, officers=()):
+    inst, k = world("society", ["subsistence.enabled=true", "law.v2=true", "contracts.enabled=true"], constitution=True)
+    a, b, c = eaters(k)[:3]
+    A.act(k, a, "create_contract", {"name": "Granary", "code": code})
+    cid = next(iter(AC.assocs(k)))
+    A.act(k, b, "join_contract", {"contract": cid})
+    builder(k, a)
+    A.act(k, a, "build", {"kind": "store", "owner": cid})
+    k._add("store:S1", "food", 10)
+    if monkeypatch is not None:
+        from charter import institutions as I
+        monkeypatch.setattr(I, "officers", lambda k_, iid: list(officers) if iid == cid else [])
+    return inst, k, cid, (a, b, c)
+
+
+def test_withdrawal_from_an_institution_store_is_the_institutions_to_decide(monkeypatch):
+    inst, k, cid, (a, b, c) = granary(ASSOC_CODE, monkeypatch, officers=("__nobody__",))
+    for x in (a, b, c):                                                   # its code says nothing: officers only (the residual)
+        with pytest.raises(A.ActionError, match="only its officers may"):
+            A.act(k, x, "withdraw", {"store": "S1", "qty": 1})
+    monkeypatch.setattr(__import__("charter.institutions", fromlist=["x"]), "officers", lambda k_, iid: [c] if iid == cid else [])
+    assert A.act(k, c, "withdraw", {"store": "S1", "qty": 1}).startswith("Took 1 food")   # an officer, even a non-member
+    assert any(e["type"] == "store_withdrawal" and e["data"]["owner"] == cid for e in k.events)
+    inst, k, cid, (a, b, c) = granary(MEMBERS_TAKE, monkeypatch, officers=(c,))
+    assert A.act(k, b, "withdraw", {"store": "S1", "qty": 2}).startswith("Took 2 food")   # the code admits a member
+    with pytest.raises(A.ActionError, match="a law blocked this withdrawal"):
+        A.act(k, c, "withdraw", {"store": "S1", "qty": 1})                 # ...and refuses everyone else, its officer too
+    assert k.bal("store:S1", "food") == pytest.approx(8)
+    names = [x.name for x in AR.available(inst, k, k.agent(b))]
+    assert "withdraw" in names                                             # members are offered withdraw (their code may let them)
+    p = PR.get("withdraw")
+    assert p.tier == "L" and p.routed and p.before and p.blockable and PR.ACTION_PRIMITIVES["withdraw"][0] == "withdraw"
+
+
+def test_an_agents_store_is_its_owners_without_law():
+    inst, k = small()                                                      # no law.v2: the residual alone decides
+    a, b = eaters(k)[:2]
+    builder(k, a)
+    A.act(k, a, "build", {"kind": "store"})
+    k._add("store:S1", "food", 4)
+    with pytest.raises(A.ActionError, match="only its owner"):
+        A.act(k, b, "withdraw", {"store": "S1", "qty": 1})
+    with pytest.raises(__import__("charter.dispatch", fromlist=["x"]).Blocked, match="only its owner"):
+        k.apply("withdraw", agent=b, store="S1", owner=a, qty=1)           # the primitive's residual, called directly
+    assert A.act(k, a, "withdraw", {"store": "S1", "qty": 1}).startswith("Took 1 food")
 
 
 def test_a_dead_owners_store_passes_on():

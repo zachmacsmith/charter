@@ -84,6 +84,9 @@ def bound_laws(k, P, payload, phase) -> list:
     if "channels_v2" in k.w:                                            # wave 9 C: the owning institution's laws see its channels
         from charter import channels as CH
         laws = laws + [l for l in CH.owner_laws(k, P, payload, allv) if l not in laws]
+    if P.name == "withdraw" and "subsistence" in k.w:                 # review 15 S3: the owning institution's code sees withdrawals
+        from charter import subsistence as SB                          # from its stores (it decides who may make one)
+        laws = laws + [l for l in SB.owner_laws(k, P, payload, allv) if l not in laws]
     secret = SECRET.get(P.name)
     if secret is not None and secret(k, payload):                       # W8b: a hidden jurisdiction's own doings: its laws only
         laws = [l for l in laws if J.law_jur(k, l["id"]) == payload.get("polity")]

@@ -830,6 +830,15 @@ _ROWS = [
       notes="kind store: its materials (subsistence.store.cost) are used up; a new account store:<store_id> owned by the builder or "
             "an institution it is a member or officer of; anyone deposits (a move), only the owner takes food out "
             "(accounts.check_store_move)"),
+    P("withdraw", "subsistence", "move", ("agent", "store", "owner", "qty"), "subsistence:change_withdraw", routed=True,
+      subject="agent", parties=("agent", "owner"), agent_params=("agent",), event="store_withdrawal", causes=("agent",),
+      reads=("stores", "food_of"), sites=("subsistence:change_withdraw", "subsistence:act_withdraw"),
+      why={"compel": _LNA + "; a law moves food out of its institution's store with move",
+           "gate": "law.v2: before_withdraw, bound to the owning institution's laws whoever acts (dispatch.hooks.bound_laws): an "
+                   "explicit True admits the agent, False refuses; when its code says nothing, only its officers "
+                   "(dispatch.routing.RESIDUALS)"},
+      notes="qty food from store:<store> to the agent (a nested move, why withdraw). An agent's store: its owner only. An "
+            "institution's store: its code decides (user, 10 Oct); the residual is its officers"),
     # review 15 S4: two consenting parents conceive (charter/pairs.py). Who may have children with whom, and at what charge, is law.
     P("conceive", "life", "relation", ("a", "b", "inherit", "polity"), "pairs:change_conceive", routed=True, subject="a",
       parties=("a", "b"), agent_params=("a", "b"), event="conceived", causes=("agent",), gates=("set_birth_rules",),
@@ -912,7 +921,7 @@ ACTION_PRIMITIVES = {
     "dir_list": LOOKUP, "dir_read": LOOKUP, "dir_search": LOOKUP, "dir_write": ("dir_write",), "dir_edit": ("dir_write",),
     "dir_move": ("dir_write",), "dir_delete": ("dir_write",), "dir_grant": ("dir_grant",),
     # subsistence (review 15): farm sows or reaps (its first primitive depends on its arguments: ANY_FIRST)
-    "farm": ("sow", "reap"), "build": ("build",), "withdraw": ("move",),
+    "farm": ("sow", "reap"), "build": ("build",), "withdraw": ("withdraw", "move"),
     "conceive": ("conceive",),                                          # review 15 S4: an offer changes nothing; a match conceives
 }
 
@@ -967,7 +976,8 @@ TIER_OF = {
           "dir_write", "dir_grant",                                    # directories
           "set_channel",                                               # wave 9 C (channels.v2)
           "sow", "reap",                                               # review 15 S2: who may sow or reap a plot is law (U1)
-          "build",                                                     # review 15 S3: a store (a building permit is law)
+          "build", "withdraw",                                         # review 15 S3: a store (a building permit is law); who
+                                                                         # takes food out of an institution's store (its code)
           "conceive"),                                                 # review 15 S4: who may have children with whom is law
     "L-route": (),
 }

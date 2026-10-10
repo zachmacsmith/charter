@@ -426,8 +426,8 @@ def rules_text(inst) -> str:
     if src:
         lines.append("Food comes from " + "; ".join(src) + ".")
     lines.append(f"A store (build {{\"kind\": \"store\"}}: {', '.join(f'{q:g} {i}' for i, q in st['cost'].items())}) holds up to "
-                 f"{float(st['capacity']):g} food; anyone can put food in (transfer to \"store:<id>\"), only its owner (you, or an "
-                 "institution you name as owner) takes it out (withdraw).")
+                 f"{float(st['capacity']):g} food; anyone can put food in (transfer to \"store:<id>\"), you take food out of your own "
+                 "store (withdraw); out of an institution's store, whoever its code lets (when its code says nothing, its officers).")
     return "\n".join(lines)
 
 
@@ -628,7 +628,8 @@ def act_farm(k, aid, camp, sow=None, reap=None, plot=None):
 
 
 def stores_of(k, aid) -> list:
-    """The stores aid may take food out of: its own, and those of institutions it holds an office of (S3)."""
+    """The stores aid may take food out of when no law says more: its own, and those of institutions it holds an office of (S3;
+    the residual of withdraw_residual)."""
     return [s for _, s in sorted(state(k)["stores"].items()) if can_withdraw(k, aid, s)]
 
 
@@ -639,6 +640,17 @@ def can_withdraw(k, aid, s) -> bool:
         return False
     from charter import institutions as I
     return aid in I.officers(k, s["owner"])
+
+
+def may_try_withdraw(k, aid) -> bool:
+    """action_registry's `when` for withdraw: a store the agent owns, or one of an institution it is an officer or member of (whose
+    code may let members take food out)."""
+    from charter import institutions as I
+    for s in state(k)["stores"].values():
+        o = s["owner"]
+        if o == aid or (o not in k.w["agents"] and (aid in I.officers(k, o) or I.is_member(k, o, aid))):
+            return True
+    return False
 
 
 def store_line(k, aid) -> str:
@@ -735,13 +747,14 @@ def deposit(k, aid, to, item, qty, memo=None) -> str:
 
 
 def act_withdraw(k, aid, store, qty):
-    """withdraw {"store": "S1", "qty": 3}: the owner (or an officer of the owning institution) takes food out."""
-    from charter import lawlang as L
+    """withdraw {"store": "S1", "qty": 3}: take food out of a store (the routed `withdraw` primitive). An agent's store: its owner
+    only. An institution's store: its code decides (before_withdraw; dispatch.routing.RESIDUALS: when its code says nothing, its
+    officers only: withdraw_residual)."""
+    from charter import dispatch as D
     sid = _store_id(k, store)
     s = state(k)["stores"][sid]
-    if not can_withdraw(k, aid, s):
-        raise _err(f"only its owner ({s['owner']}) takes food out of store {sid}"
-                   + ("" if s["owner"] in k.w["agents"] else ": its officers, or its laws with move"))
+    if s["owner"] in k.w["agents"] and s["owner"] != aid:
+        raise _err(f"only its owner ({s['owner']}) takes food out of store {sid}")
     q = float(qty)
     if q <= 0:
         raise _err("qty must be positive")
@@ -749,12 +762,55 @@ def act_withdraw(k, aid, store, qty):
     if q > have + 1e-9:
         raise _err(f"store {sid} holds only {have:.3g} food")
     try:
-        k.apply("move", src=f"{STORE}{sid}", dst=aid, item=FOOD, qty=q, why="withdraw", actor=aid)
+        k.apply("withdraw", agent=aid, store=sid, owner=s["owner"], qty=q)
+    except D.Blocked as e:
+        raise _err(e.why if not e.by else f"a law blocked this withdrawal ({', '.join(e.by)}" + (f": {e.why})" if e.why else ")"))
+    return f"Took {q:g} food from store {sid} ({float(s['holdings'].get(FOOD, 0.0)):.3g} left)."
+
+
+def change_withdraw(k, agent, store, owner, qty) -> dict:
+    """A withdrawal (law: the owning institution's code decides who may make one): qty food moves from store:<store> to the agent
+    (a move with why "withdraw": laws' before_move and taxes see it)."""
+    from charter import lawlang as L
+    try:
+        out = k.apply("move", src=f"{STORE}{store}", dst=agent, item=FOOD, qty=float(qty), why="withdraw", actor=agent)
     except L.LawError as e:
         raise _err(str(e))
-    k.log("store_withdrawal", aid, {"store": sid, "owner": s["owner"], "qty": q, "text": f"{aid} took {q:g} food from store {sid}."},
-          vis=sorted({aid, s["owner"]} & set(k.w["agents"])) or [aid])
-    return f"Took {q:g} food from store {sid} ({float(s['holdings'].get(FOOD, 0.0)):.3g} left)."
+    if not out.ok:
+        raise _err("a law blocked this transfer" + (f" ({out.reason})" if getattr(out, "reason", None) else ""))
+    k.log("store_withdrawal", agent, {"store": store, "owner": owner, "qty": float(qty),
+                                      "text": f"{agent} took {float(qty):g} food from store {store}."},
+          vis=sorted({agent, owner} & set(k.w["agents"])) or [agent])
+    return {"store": store, "qty": float(qty)}
+
+
+def withdraw_residual(k, p, verdicts) -> str | None:
+    """dispatch.routing.RESIDUALS["withdraw"]: who may take food out of a store when no law decides (user, 10 Oct: "a primitive
+    decidable by the institution charter"). An agent's store: its owner. An institution's: an explicit allow (True, or a dict with
+    "block": False) from a law of the owning institution admits the agent; otherwise, its officers only. Returns the refusal, or
+    None."""
+    from charter import institutions as I
+    from charter import jurisdictions as J
+    aid, owner, sid = p["agent"], p["owner"], p["store"]
+    if owner == aid:
+        return None
+    if owner in k.w["agents"]:
+        return f"only its owner ({owner}) takes food out of store {sid}"
+    if any(v.allow and not v.block and J.law_jur(k, v.law) == owner for v in verdicts):
+        return None
+    if aid in I.officers(k, owner):
+        return None
+    return (f"{owner}'s code does not let you take food out of store {sid} (when its code says nothing, only its officers may: "
+            "before_withdraw decides)")
+
+
+def owner_laws(k, P, payload, laws) -> list:
+    """dispatch.hooks.bound_laws: the laws of the institution owning the store a withdrawal is from (its own code decides who takes
+    food out of its store, whoever acts)."""
+    if P.name != "withdraw" or not isinstance(payload.get("owner"), str) or payload["owner"] in k.w["agents"]:
+        return []
+    from charter import jurisdictions as J
+    return [l for l in laws if J.law_jur(k, l["id"]) == payload["owner"]]
 
 
 # ---------------------------------------------------------------------- the scripted bot (dry runs; own stream)

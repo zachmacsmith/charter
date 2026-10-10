@@ -488,7 +488,8 @@ E += [
      "prompt", "common"),
     ("food_of", "reads", "Read", "food_of(agent)", "the food an agent (or a store \"store:<id>\", or a treasury) holds.", "prompt", "common"),
     ("stores", "reads", "Read", "stores()", "every food store: id -> owner, food held, capacity. A law of the institution owning a "
-     "store moves food out of it with move(\"store:<id>\", ...).", "prompt", "common"),
+     "store moves food out of it with move(\"store:<id>\", ...); its before_withdraw(p, chain) decides who else may withdraw "
+     "(p: agent, store, owner, qty; True admits, False refuses; when its code says nothing, only its officers may).", "prompt", "common"),
     ("plots", "reads", "Read", "plots(camp)", "a fields camp's plots: id, status (fallow, growing, ripe), sower, ripe round, fertility.",
      "prompt", "common"),
 ]

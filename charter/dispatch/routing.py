@@ -55,9 +55,26 @@ def apply(k, name: str, payload: dict) -> Outcome:
     d = _legacy_before(k, P, p, chain)
     if d.block and P.blockable:
         return Outcome(ok=False, blocked_by=d.blocked_by, charges=d.charges)
+    _residual(k, P, p, ())
     result = fn(k, **p, **opts, **_extra(P, d))
     _legacy_after(k, P, p, chain, result)
     return Outcome(ok=True, result=result, charges=d.charges)
+
+
+# Residual rules (review 15 S3, user 10 Oct): a primitive whose permission a law decides, with a kernel default for when no law
+# speaks: {name: "module:function"} (k, payload, before-verdicts) -> a refusal (raised as Blocked with no blocking law) or None.
+# Run after the before-hooks' decision, before the change; without law.v2 there are no verdicts and the default alone decides.
+RESIDUALS = {"withdraw": "subsistence:withdraw_residual"}         # an institution's store: its code decides; else its officers
+
+
+def _residual(k, P, p, verdicts) -> None:
+    spec = RESIDUALS.get(P.name)
+    if spec is None:
+        return
+    mod, _, qual = spec.partition(":")
+    why = getattr(importlib.import_module(f"charter.{mod}"), qual)(k, p, tuple(verdicts))
+    if why:
+        raise Blocked(P.name, (), why)
 
 
 def _check(k, name, p, opts) -> dict:
@@ -194,11 +211,13 @@ def _apply_v2(k, cas, P, fn, p, opts) -> Outcome:
         return Outcome(ok=False, blocked_by=d.blocked_by, charges=d.charges)
     raw = list(k._causes)
     hide = hidden_agents(k, name, p, opts)
-    v2d = resolve_v2(k, P, p, _run_before(k, cas, P, p, opts, depth, raw, hide)) if P.before and not unhooked else DecisionV2()
+    verdicts = _run_before(k, cas, P, p, opts, depth, raw, hide) if P.before and not unhooked else []
+    v2d = resolve_v2(k, P, p, verdicts) if P.before and not unhooked else DecisionV2()
     if v2d.block and P.blockable and not ENTRENCHED_WHEN.get(name, lambda x: False)(p):
         out = on_block(k, cas, P, p, v2d, chain)
         if out is not None:
             return out
+    _residual(k, P, p, verdicts)
     extra = _extra(P, d)
     extra.update({x: v for x, v in v2d.directives.items() if _accepts(fn, x)})   # a new-style directive overrides a legacy one
     note = compel_note(k, name, p, opts)                              # P3.7: who a law-caused change concerns (before it)

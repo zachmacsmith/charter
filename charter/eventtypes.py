@@ -515,7 +515,7 @@ E("store_built", "subsistence", "primitive", "public", "event", "subsistence", a
   note="a building is visible: who built which store, owned by whom")
 E("store_deposit", "subsistence", "primitive", "parties", "event", "subsistence", primitive="move",
   note="food put in a store: the depositor and an agent owner")
-E("store_withdrawal", "subsistence", "primitive", "parties", "event", "subsistence", act="withdraw", primitive="move")
+E("store_withdrawal", "subsistence", "primitive", "parties", "event", "subsistence", act="withdraw", primitive="withdraw")
 E("conceive_offer", "life", "summary", "parties", "event", "life", act="conceive",
   note="review 15 S4: an offer to have a child, told to the partner")
 E("conceived", "life", "primitive", "parties", "event", "life", act="conceive", primitive="conceive",
