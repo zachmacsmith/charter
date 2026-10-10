@@ -69,7 +69,9 @@ DEFAULTS = {"enabled": False, "start": "j0", "board_scope": "founding", "admissi
             "scripted_founder": None,
             "declare_cost": 0,          # value the hidden jurisdiction's treasury must hold before it can be declared (members fund it)
             "declare_min_members": 1,   # members (founder and pledges) needed to declare
-            "max_charter": 5}           # starting laws a founder may set (found {"laws": [...]}, set_charter)
+            "max_charter": 5,           # starting laws a founder may set (found {"laws": [...]}, set_charter)
+            "admission_rounds": 1}      # an admission ballot closes this many rounds after it opens (0, before engine 9: the same
+                                        # round, so members never had a turn to vote and every application failed)
 ACTIONS = ("found", "invite", "join", "leave", "declare", "fund", "set_charter")
 AGENT_HOOKS = {"on_harvest": 0, "on_transfer": 0, "on_post": 0, "on_dm": 0}        # hook -> index of the agent it concerns
 OWN_HOOKS = ("on_exit", "on_admission", "on_birth")                                 # run only for one jurisdiction's laws
@@ -1092,8 +1094,8 @@ def change_join(k, agent, polity, via, parent=None, **directives) -> dict:
             k.log("jur_join_refused", agent, {"jurisdiction": polity, "by": "closed"}, vis="public")
             return {"status": "closed"}
         j = jurs(k)[polity]
-        bid = k.open_ballot(f"Admit {agent} to {polity} '{j['name']}'?", members(k, polity), ["yes", "no"], "majority_voting", 0,
-                            None, None, None)
+        bid = k.open_ballot(f"Admit {agent} to {polity} '{j['name']}'?", members(k, polity), ["yes", "no"], "majority_voting",
+                            int(cfg(k)["admission_rounds"]), None, None, None)
         k.w["ballots"][bid]["jurisdiction"] = polity
         jr["admission"][bid] = {"agent": agent, "jurisdiction": polity}
         return {"status": "ballot", "ballot": bid}

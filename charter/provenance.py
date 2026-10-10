@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 8
+ENGINE_VERSION = 9
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -81,6 +81,10 @@ ENGINE_FLIPS = {
         "flips": [("charter.conflict.DEFAULTS", ("model",), "disable", "auto")],
         "note": "conflict.model auto: the harm combat model (kill, wound or repelled; one weapon per fighter, food per attack, "
                 "fighting back, watch and craft; docs/review/21_combat.md) in worlds with subsistence; disable elsewhere, as before"},
+    9: {"commits": [],
+        "flips": [("charter.jurisdictions.DEFAULTS", ("admission_rounds",), 0, 1)],
+        "note": "jurisdiction admission ballots stay open one round so members can vote (they closed in the round they opened, "
+                "with no votes, so every application failed)"},
 }
 
 
