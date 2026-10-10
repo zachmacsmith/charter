@@ -4,7 +4,7 @@ number or adds a word to a prompt, so every existing world is byte-identical (th
 
 Food is physics (P). Every living agent but the exempt classes (`exempt`: the Board, the Fixer and the observer, U6) eats `ration`
 (1) food from its own holdings at the end of every round, automatically. There is no eat action and no step an agent takes (user,
-10 Oct): the ration drains the holdings. With eat_from_store (off by default) it tops an empty hand up from the eater's own stores.
+10 Oct): the ration drains the holdings. With eat_from_store (on by default) it tops an empty hand up from the eater's own stores.
 
     round end, after the laws' on_round_end, core regrow (the plants) and camps.world_update, before life.end_of_round:
       0. ecology: each forest's game regrows (_ecology); next round's season is drawn and sets the plants' regrowth (_next_season)
@@ -74,7 +74,7 @@ DEFAULTS = {
     "hunger_yield": {"hungry": 0.75, "starving": 0.5},   # forage and reap yield multipliers by stage
     "exempt": ["board", "fixer", "observer"],   # classes that do not eat or hunger (X: control arms, U6)
     "visibility": "public",             # public: the coarse hunger roster on everyone's state lines (U2 b) | private: own stage only
-    "eat_from_store": False,            # the ration draws on the eater's own stores when its hands hold less than a meal
+    "eat_from_store": True,             # the ration draws on the eater's own stores when its hands hold less than a meal
     "minor_yield": 0.5,                 # a minor's forage and hunting effort multiplier (pairs mode, review 15 §4.4)
     "child_food": 2,                    # a Maker's child starts with this many rounds' food (rations; until pair births, S4)
     "bot": "basic",                     # scripted bot (dry runs): idle (does nothing about food) | basic (forage, hunt, relief, stores)
@@ -318,7 +318,7 @@ def _eat(k, aid, c, rec) -> None:
 
 
 def _from_store(k, aid, need) -> None:
-    """subsistence.eat_from_store (off by default): the ration tops the eater's hands up from its own stores (agent-owned only, in id
+    """subsistence.eat_from_store (on by default): the ration tops the eater's hands up from its own stores (agent-owned only, in id
     order), a move with why "ration" (accounts.check_store_move lets it reach the owner only)."""
     for s in sorted((s for s in state(k)["stores"].values() if s["owner"] == aid), key=lambda s: s["id"]):
         q = round(min(need, float(s["holdings"].get(FOOD, 0.0))), 6)
@@ -539,7 +539,8 @@ def rules_text(inst) -> str:
     lines += after
     lines.append(f"A store (build {{\"kind\": \"store\"}}: {', '.join(f'{q:g} {i}' for i, q in st['cost'].items())}) holds up to "
                  f"{float(st['capacity']):g} food; anyone can put food in (transfer to \"store:<id>\"), you take food out of your own "
-                 "store (withdraw); out of an institution's store, whoever its code lets (when its code says nothing, its officers).")
+                 "store (withdraw); out of an institution's store, whoever its code lets (when its code says nothing, its officers)."
+                 + (" When you hold less than a meal, the ration is taken from your own store." if c.get("eat_from_store") else ""))
     return "\n".join(lines)
 
 

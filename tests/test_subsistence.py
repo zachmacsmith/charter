@@ -146,7 +146,8 @@ def test_there_is_no_eat_action_the_ration_is_automatic():
     assert k.bal(a, "food") == pytest.approx(2)                            # drained 1, with no action at all
 
 
-def test_eat_from_store_is_off_by_default_and_draws_only_on_own_stores():
+def test_eat_from_store_is_on_by_default_and_draws_only_on_own_stores():
+    assert SB.DEFAULTS["eat_from_store"] is True
     for on_, want in ((False, -1), (True, 0)):
         inst, k = small(["subsistence.spoil=0", "subsistence.store_spoil=0", f"subsistence.eat_from_store={str(on_).lower()}"])
         a, b = eaters(k)[:2]

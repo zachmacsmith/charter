@@ -684,7 +684,7 @@ DOCS = {
     "conflict.assassin.disguise_prob_assassin": "chance the assassin starts with the disguise article",
     "conflict.start": "per agent outside the Board and the Fixer: starting weapons and quicksilver",
     # ---- subsistence (review 15, charter/subsistence.py)
-    "subsistence.eat_from_store": "the ration draws on the eater's own stores when its hands hold less than a meal (off by default)",
+    "subsistence.eat_from_store": "the ration draws on the eater's own stores when its hands hold less than a meal (on by default)",
     "subsistence.minor_yield": "a minor's forage yield and hunting effort multiplier (two-parent reproduction)",
     "subsistence.child_food": "rations of food a Maker's child starts with (until pair reproduction)",
     "subsistence.hazard.step": "added to the starvation hazard per further missed meal (base: the hidden frailty)",
