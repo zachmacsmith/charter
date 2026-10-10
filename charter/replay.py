@@ -201,7 +201,7 @@ def replay(run, out=None, to: int | None = None, sandbox=None, log=print, check_
     from charter import runner
     run = Path(run)
     inst = json.loads((run / "instance.json").read_text())             # the saved world is authoritative
-    from charter import settings as ST                                  # and its code defaults (frozen, else inferred; D-50): a replay
+    from charter import settings as ST                                  # and its code defaults (frozen, else inferred; D-43): a replay
     inst["settings"] = ST.resolve(run, inst, allow_code_drift=True, record=False)   # under other defaults diverges, never hides it
     meta = PV.read(run) or {}
     dry = bool(meta["dry"]) if meta.get("dry") is not None else "_dry" in run.name
@@ -422,7 +422,7 @@ def fork(run, at: int, schedule=None, out=None, replicates: int | None = None, r
     if base is None:
         raise SystemExit(f"{run} has no checkpoint at or before round {at} (per-round checkpoints: {', '.join(map(str, have)) or 'none'})")
     inst0 = json.loads((run / "instance.json").read_text())
-    from charter import settings as ST                                  # the parent's code defaults (D-50); refuse before any copy
+    from charter import settings as ST                                  # the parent's code defaults (D-43); refuse before any copy
     settings = ST.resolve(run, inst0, allow_code_drift, record=False)
     if not 0 <= at < int(inst0["rounds"]):
         raise SystemExit(f"--at {at}: the run has rounds 0..{int(inst0['rounds']) - 1} (fork at N plays round N onwards)")

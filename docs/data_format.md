@@ -40,6 +40,18 @@ null in every `str` column, in both formats (a CSV cell cannot tell them apart).
 ever written; a test exports frozen fixtures of each (`tests/fixtures/export_runs/log_format_<n>`; the format-0 fixture has the
 oldest layout, turns.jsonl without reasoning.jsonl). `provenance.LOG_FORMAT` is the current value.
 
+## Frozen settings and the engine version (D-43)
+
+`instance.json` gains `settings`: `{"engine_version": N, "defaults": {"charter.context.DEFAULTS": {...}, ...}}`, the value at
+generation of every code default the run reads (each registered module `DEFAULTS` dict, `charter.schema.EXTRA` and every event
+type's defaults; `charter/settings.py` TARGETS). A run plays, resumes, forks and replays under these, never under the code's
+current defaults. Instances without it (made before this change) get them inferred on resume from run.json's git sha
+(`docs/engine_versions.md`); the result is stored in run.json `settings_inferred` (same shape, plus `source`, and `code_drift`
+when `--allow-code-drift` continued under the current defaults). Each run.json segment records `settings` {engine_version,
+source[, code_drift]}; run.json gains `engine_version` (the code's, `provenance.ENGINE_VERSION`) and `code.engine`. The export's
+`runs.engine_version` (schema 2.3) is the settings' engine version. `charter rerun RUN_DIR` plays a run's recorded command again
+in a git worktree at its sha; the copy's run.json gets `rerun_of` {run, run_id, sha, command, source}.
+
 ## New tables
 
 Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.

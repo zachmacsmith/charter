@@ -1,4 +1,4 @@
-"""Frozen settings (ARCHITECTURE D-50): a run keeps the code defaults it was generated under, whatever the code says later.
+"""Frozen settings (ARCHITECTURE D-43): a run keeps the code defaults it was generated under, whatever the code says later.
 
 Many spec keys have their default in code (each feature module's DEFAULTS, schema.EXTRA, the event types' defaults), merged into
 the spec when the key is read. Flipping such a default (context.memory_text v1 -> v2, channels.delivery pull -> push) would silently

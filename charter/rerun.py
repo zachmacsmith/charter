@@ -3,7 +3,7 @@
 A run records the git sha it started under (run.json `git`) and the command line (the start segment's `argv`). rerun checks out
 that sha in a temporary git worktree, runs the same command there (with .env copied in, so the same backend is used) and moves
 the run directory it makes to OUT (default <RUN_DIR>_rerun, numbered if taken); run.json of the copy gets `rerun_of`. This is the
-way to repeat a run made before frozen settings (charter/settings.py, D-50) whose defaults cannot be inferred, or any run whose
+way to repeat a run made before frozen settings (charter/settings.py, D-43) whose defaults cannot be inferred, or any run whose
 behaviour depends on code since changed.
 
 Refused, with the reason: no git sha, or a sha this repository does not have; a dirty tree when the run started (the diff itself

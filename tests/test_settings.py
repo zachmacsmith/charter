@@ -1,4 +1,4 @@
-"""Frozen settings (charter/settings.py, D-50): a run keeps the code defaults it was generated under; old runs get them inferred
+"""Frozen settings (charter/settings.py, D-43): a run keeps the code defaults it was generated under; old runs get them inferred
 from their git sha, or are refused."""
 from __future__ import annotations
 
@@ -170,3 +170,11 @@ def test_export_has_the_engine_version(reference, tmp_path):
     runs = X.load(tmp_path / "ds")["runs"]
     assert [int(r["engine_version"]) for r in runs] == [PV.ENGINE_VERSION]
     assert PV.read(ref)["engine_version"] == PV.ENGINE_VERSION
+
+
+def test_engine_versions_doc_lists_every_version():
+    doc = (Path(PV.__file__).parents[1] / "docs" / "engine_versions.md").read_text()
+    rows = {int(m.group(1)) for m in re.finditer(r"^\| (\d+) \|", doc, re.M)}
+    assert rows == set(range(1, PV.ENGINE_VERSION + 1)) and set(PV.ENGINE_FLIPS) <= rows
+    for e in PV.ENGINE_FLIPS.values():
+        assert e["commits"][0][:7] in doc

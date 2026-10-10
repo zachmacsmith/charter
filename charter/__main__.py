@@ -138,7 +138,7 @@ def run_one(spec_name, sp, seed, dry, sandbox_mode, parent=None, quiet=False, fr
             return out, res["summary"]
         out.mkdir(parents=True, exist_ok=True)
         if (out / "checkpoint.pkl").exists():
-            from charter import settings as ST                        # the run's own code defaults, not today's (D-50)
+            from charter import settings as ST                        # the run's own code defaults, not today's (D-43)
             saved = json.loads((out / "instance.json").read_text()) if (out / "instance.json").exists() else {}
             inst = generator.generate(sp, seed, settings=ST.resolve(out, saved, allow_code_drift))
             inst["run_id"] = out.name
@@ -183,7 +183,7 @@ def cmd_resume(a):
     if not (out / "checkpoint.pkl").exists():
         raise SystemExit(f"{out} has no checkpoint.pkl (runs from before checkpoints existed cannot be resumed)")
     saved = json.loads((out / "instance.json").read_text())
-    from charter import settings as ST                                # the run's frozen code defaults (inferred for older runs; D-50)
+    from charter import settings as ST                                # the run's frozen code defaults (inferred for older runs; D-43)
     settings = ST.resolve(out, saved, getattr(a, "allow_code_drift", False))
     if "spec_source" in saved:                                        # regenerate from the spec as given and check the code still agrees
         inst = generator.generate(saved["spec_source"], saved["seed"], check=False,   # a run made before the schema still resumes

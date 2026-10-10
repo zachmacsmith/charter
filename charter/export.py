@@ -31,7 +31,7 @@ from pathlib import Path
 
 SCHEMA_VERSION = 2           # major: a column removed, renamed, or changed in type or meaning (docs/data_format.md)
 SCHEMA_MINOR = 3             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
-                             # 2: review 20 (runs.memory_text, runs.dm_delta, turns.dm_mode); 3: runs.engine_version (D-50)
+                             # 2: review 20 (runs.memory_text, runs.dm_delta, turns.dm_mode); 3: runs.engine_version (D-43)
 TYPES = ("str", "int", "float", "bool", "json")
 
 
