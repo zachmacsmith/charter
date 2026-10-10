@@ -1,7 +1,7 @@
 {
  "E2_library2_6": {
   "events.jsonl": "f72ec8035adf7a02",
-  "instance.json": "40318db472823344",
+  "instance.json": "24aa0ef669bfa250",
   "score": {
    "activity_mix": "3c100a18e670cde0",
    "agents": "cc2212d12640d3d0",
@@ -25,7 +25,7 @@
  },
  "E2_rng2_drift_5": {
   "events.jsonl": "0421a67ee62680a5",
-  "instance.json": "bc2c3cfe081c0e1e",
+  "instance.json": "575a33b53c9a88ec",
   "score": {
    "activity_mix": "24e8ec5c4e3f5d79",
    "agents": "a68c3aae9d70881a",
@@ -49,7 +49,7 @@
  },
  "E2_seq_6": {
   "events.jsonl": "b22cb7f96088261d",
-  "instance.json": "d4329fd371137fca",
+  "instance.json": "0026a7801434f643",
   "score": {
    "activity_mix": "0ff6778b254daa57",
    "agents": "4987414e340113ef",
@@ -73,7 +73,7 @@
  },
  "E4_fast_4": {
   "events.jsonl": "e75cfc3e4d6277bd",
-  "instance.json": "6ac6190b633c19b4",
+  "instance.json": "1d031bc4faeb483a",
   "score": {
    "activity_mix": "1cca04c20bae3233",
    "agents": "67401b2f4a9dadf6",
@@ -105,7 +105,7 @@
  },
  "E4_observer_hidden_4": {
   "events.jsonl": "a6ee9236088e8a85",
-  "instance.json": "b9b316b2071d2248",
+  "instance.json": "e9453493ac541d61",
   "score": {
    "activity_mix": "8a73c4ca89d98b91",
    "agents": "56198ac9337befa2",
@@ -137,7 +137,7 @@
  },
  "E6_seq_3": {
   "events.jsonl": "a453e44a29542489",
-  "instance.json": "95c316f780728474",
+  "instance.json": "090c18da143916d7",
   "score": {
    "activity_mix": "caec9688929cfe9d",
    "agents": "b671c00e831937c8",
@@ -180,7 +180,7 @@
  },
  "E7_events_3": {
   "events.jsonl": "3657ad989b149005",
-  "instance.json": "ec3ef3118cda209f",
+  "instance.json": "05f2062d7b91f9e5",
   "score": {
    "activity_mix": "c86cb33c43ed7671",
    "agents": "4df10dd9dce803a6",
@@ -255,7 +255,7 @@
  },
  "contracts_small": {
   "events.jsonl": "785e44f65f333f60",
-  "instance.json": "f6047068e6d32ffc",
+  "instance.json": "c5d46503bfac22d1",
   "score": {
    "activity_mix": "081f20e989281a5f",
    "agents": "871f2df460801e26",
@@ -279,10 +279,10 @@
  },
  "pairs_small": {
   "events.jsonl": "84f3465c41e729dd",
-  "instance.json": "7d8dc3d1cf18bdaa",
+  "instance.json": "53737f3ce37ff0a3",
   "score": {
    "activity_mix": "60c3e2e36366444f",
-   "agents": "f75260777ca2e9ed",
+   "agents": "65bc50a1c4e01897",
    "goal_scores": {
     "Aksel": 0.7143,
     "Asta": 0.0355,
@@ -297,7 +297,7 @@
     "Sena": 0.5214,
     "Ulf": 0.0
    },
-   "goals": "ad176cc7ca7612e3",
+   "goals": "13afc1daaae5a9f1",
    "lineage": "8f4d537ae62ebbff",
    "summary": "d521cd2c170ae59b"
   },
@@ -518,8 +518,8 @@
   }
  },
  "society_law_v2": {
-  "events.jsonl": "6f1fcd5ef9159b46",
-  "instance.json": "bda828c1b3cfd705",
+  "events.jsonl": "22c1e36ae3d63272",
+  "instance.json": "e9bdff01c2f7edfa",
   "score": {
    "activity_mix": "0d7447567b6170cc",
    "agents": "09986d88c5feda81",
@@ -543,8 +543,8 @@
   "snapshots.json": "73d853b961f1d683"
  },
  "society_small_4": {
-  "events.jsonl": "9029d7cf1220b694",
-  "instance.json": "f0c0bb21ed634b0f",
+  "events.jsonl": "b214918ac513d572",
+  "instance.json": "e02adaef0b428b68",
   "score": {
    "activity_mix": "4fb1eeda1f4db33e",
    "agents": "6b03fcfde72a4cc9",
@@ -569,8 +569,8 @@
   "snapshots.json": "3ce5be68c19e75d9"
  },
  "subsistence_small": {
-  "events.jsonl": "bc21bf33768dafee",
-  "instance.json": "bd049ed9a281bbcf",
+  "events.jsonl": "97d51894d92cf403",
+  "instance.json": "f73ee55ed8db043d",
   "score": {
    "activity_mix": "a4251a73f07d44fd",
    "agents": "42fa16fa1f2e5508",
