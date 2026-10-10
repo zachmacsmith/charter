@@ -376,3 +376,99 @@ def test_scripted_run_conserves_food_except_at_sources_and_sinks():
         change = t1.get(item, 0.0) - t0.get(item, 0.0)
         accounted = sum(f.get(item, 0.0) for site, f in flows.items() if site in explicit)
         assert change == pytest.approx(accounted, abs=1e-6), (item, change, accounted)
+
+
+# ---------------------------------------------------------------------- children's goals and maturity (S5)
+def _inherited_child(extra=(), inherit="Wealth"):
+    inst, k = world(extra=["life.reproduction.maturity=2", *extra])
+    a, b = pair(k)
+    conceive(k, a, b, inherit, inherit)
+    ch = born_child(k)
+    return inst, k, a, b, ch, next(x for x in inst["agents"] if x["id"] == ch)
+
+
+def test_a_child_has_a_random_primary_and_the_shared_value_as_provisional_secondary():
+    inst, k, a, b, ch, rec = _inherited_child()
+    g = rec["goal"]
+    assert g["secondary"] == "Wealth" and g["primary"] != "Wealth" and g.get("tertiary") is None
+    assert g["provisional"]["goal"] == "Wealth"
+    assert "Your parents' value, your secondary goal for now" in g["text"] and "more food your parents gave you" in g["text"]
+    inst2, k2 = world()
+    c, d = pair(k2)
+    conceive(k2, c, d)
+    ch2 = born_child(k2)
+    assert "provisional" not in next(x for x in inst2["agents"] if x["id"] == ch2)["goal"]
+
+
+def test_promotion_probability_rises_with_the_parents_food():
+    inst, k, a, b, ch, rec = _inherited_child()
+    m = PR.state(k)["minors"][ch]
+    m["invested"] = m["provisions"]
+    assert PR.promotion_p(k, m) == pytest.approx(0.25)
+    m["invested"] = m["provisions"] + 1.0                                 # maturity 2 x ration 1: span 2
+    assert PR.promotion_p(k, m) == pytest.approx(0.55)
+    m["invested"] = m["provisions"] + 5.0
+    assert PR.promotion_p(k, m) == pytest.approx(0.85)
+
+
+def _mature(k, ch):
+    for _ in range(4):
+        if not PR.is_minor(k, ch):
+            return next(e for e in k.events if e["type"] == "maturity" and e["agent"] == ch)["data"]
+        set_food(k, ch, 5)
+        end_round(k)
+    raise AssertionError("never matured")
+
+
+@pytest.mark.parametrize("p_lo,promoted", [(1.0, True), (0.0, False)])
+def test_maturity_promotes_or_keeps(p_lo, promoted):
+    from charter import events as EV
+    inst, k, a, b, ch, rec = _inherited_child([f"life.reproduction.promotion={{p_lo: {p_lo}, p_hi: {p_lo}}}"])
+    first = rec["goal"]["primary"]
+    d = _mature(k, ch)
+    assert d["promoted"] is promoted and d["inherit"] == "Wealth" and "p" in d and "u" in d
+    g = rec["goal"]
+    bounds = [x for x in EV.state(k)["boundaries"] if x["agent"] == ch]
+    if promoted:
+        assert (g["primary"], g["secondary"]) == ("Wealth", first)
+        assert len(bounds) == 1 and bounds[0]["round"] == k.r and bounds[0]["why"] == "maturity"
+        assert bounds[0]["old"]["primary"] == first and bounds[0]["new"]["primary"] == "Wealth"
+        assert any(e["type"] == "goal_change" and e["data"].get("why") == "maturity" for e in k.events)
+    else:
+        assert (g["primary"], g["secondary"]) == (first, "Wealth") and bounds == []
+    assert "provisional" not in g and "may become your primary" not in g["text"]
+    notes = [e["data"]["text"] for e in k.events if e["type"] == "notify" and e["data"]["to"] in (a, b) and ch in e["data"]["text"]
+             and "comes of age" in e["data"]["text"]]
+    assert len(notes) == 2 and all("0." not in t for t in notes)              # parents learn the outcome, never p or u
+
+
+def test_the_maturity_draw_is_seeded():
+    outs = []
+    for _ in range(2):
+        inst, k, a, b, ch, rec = _inherited_child()
+        outs.append((ch, _mature(k, ch)["u"]))
+    assert outs[0] == outs[1]
+
+
+def test_a_promotion_splits_the_childs_scoring_into_segments():
+    import tempfile
+    from pathlib import Path
+    from charter import agents as AG, runner
+    from charter.history import History
+    sp = S.apply_overrides(S.load("nature_pairs"), ["rounds=14", "shared_archive.enabled=false", "life.reproduction.maturity=3",
+                                                    "life.reproduction.promotion={p_lo: 1.0, p_hi: 1.0}",
+                                                    "agents={worker: 10, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}"])
+    inst = generator.generate(sp, 2)
+    inst["run_id"] = "pairs_segments"
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "out"
+        runner.run(inst, AG.ScriptedPolicy(2), out, log=lambda *a: None)
+        h = History.load(out)
+    gt = h.gt
+    bounds = [b for b in gt["world_events"]["goal_boundaries"] if b.get("why") == "maturity"]
+    if not bounds:
+        pytest.skip("no inherited goal reached maturity in this run")
+    ch = bounds[0]["agent"]
+    segs = h.segments(ch)
+    assert segs is not None and len(segs) == 2 and segs[1][0] == bounds[0]["round"]
+    assert segs[0][2]["primary"] == bounds[0]["old"]["primary"] and segs[1][2]["primary"] == bounds[0]["new"]["primary"]

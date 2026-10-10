@@ -482,6 +482,19 @@ def change_goal(k, inst, gc) -> None:
                                "new_text": new["text"]}, vis="monitor")
 
 
+def set_goal_boundary(k, inst, aid, old, new, rnd, why) -> None:
+    """The set_goal primitive for a goal the world sets outside the world events' draws (review 15 S5: a child's coming of age): the
+    agent's goal becomes `new` from round `rnd` (a goal boundary {agent, round, old, new, why}, so History.segments scores it as two
+    segments), its system prompt is rewritten at the next sync, and a monitor goal_change event records it with its why."""
+    st = state(k)
+    a = next(x for x in inst["agents"] if x["id"] == aid)
+    a["goal"] = new
+    st["boundaries"].append({"agent": aid, "round": int(rnd), "old": copy.deepcopy(old), "new": copy.deepcopy(new), "why": why})
+    st["dirty"].append(aid)
+    k.log("goal_change", aid, {"agent": aid, "old": old["primary"], "new": new["primary"], "old_text": old.get("text"),
+                               "new_text": new["text"], "why": why}, vis="monitor")
+
+
 def sync(k, inst, rs) -> None:
     """Bring the runner in line with the kernel: new agents get a turn slot, system prompt and feed cursor; departed agents leave
     the turn order; agents whose goal changed get a new system prompt."""

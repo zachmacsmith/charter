@@ -30,8 +30,14 @@ parent holding more first): subsistence.eaters puts minors last and subsistence.
 counts the food that reached the child from its parents (U4): the held provisions, household draws and any move of food whose source
 is a parent (its holdings, a store it owns, its escrow), scanned from the events each round.
 
-Goals (S4): drawn at random, as an arrival's; the goal both parents named is recorded with the gestation. A minor comes of age at
-the end of round born + maturity - 1.
+Goals and maturity (S5, §4.5). The primary goal is drawn at random, as for an arrival (events.draw_goals, own stream
+"{seed}|life|pair|<gid>|goal"); a goal both parents named (`inherit`, matched with life.match_goal) is the provisional secondary,
+else the world's normal secondary draw, and the child's goal text says what may happen to it. At the end of round born + maturity
+- 1: p = p_lo + (p_hi - p_lo) * clip((I - I0) / I_span, 0, 1), I0 = the provisions held for it (both parents'), I_span = maturity x
+the ration; u from random.Random(f"{seed}|life|mature|<child>"); u < p promotes: primary and secondary swap from the next round
+(the set_goal primitive's goal boundary, events.set_goal_boundary, with a monitor goal_change event, why "maturity": the child is
+scored as two segments). Not promoted: the goals stay (no boundary); the provisional sentence goes. The child and both parents are
+told the outcome, never p or u; the monitor `maturity` event records I, p, u.
 
 State, k.w["life"]["pairs"] (pairs and both only): offers, gestations, minors, seq, oseq, scan.
 """
@@ -465,10 +471,34 @@ def _mix(k, g, rng) -> dict:
 
 
 def child_goals(k, aid, cls, inherit, grng, born_round=None) -> dict:
-    """The child's goals: drawn at random, as an arrival's (events.draw_goals)."""
+    """The child's goals (S5, §4.5): a random primary (as an arrival's draw); the parents' shared goal, if any, as the provisional
+    secondary (else the world's normal secondary draw), with the text saying so."""
     from charter import events as EV
     from charter import generator as GEN
-    return EV.draw_goals(k, k.inst, aid, cls, list(GEN.CLASS_RIGHTS.get(cls, [])), grng)
+    rights = list(GEN.CLASS_RIGHTS.get(cls, []))
+    if not inherit:
+        return EV.draw_goals(k, k.inst, aid, cls, rights, grng)
+    world = EV._world(k, k.inst)
+    keep = {"primary": None, "params": {}, "secondary": inherit,
+            "secondary_params": EV._relational(k, k.inst, aid, inherit, grng, world), "tertiary": None, "tertiary_params": {},
+            "fixed": False}
+    g = EV.draw_goals(k, k.inst, aid, cls, rights, grng, slots=["primary"], keep=keep)
+    if born_round is not None:
+        g["provisional"] = {"goal": inherit, "at": born_round + int(cfg(k.spec)["maturity"])}
+        g["text"] = provisional_text(k, g)
+    return g
+
+
+def provisional_text(k, g) -> str:
+    from charter import goal_registry as GR
+    rules = bool((k.spec.get("goals") or {}).get("show_rules", True))
+    ws = g.get("weights") or [0.7, 0.3]
+    p = g["provisional"]
+    return (f"Your primary goal (drawn when you were born; {ws[0]:.0%} of your score): {GR.shown(g['primary'], g['params'], rules)}. "
+            f"Your parents' value, your secondary goal for now ({ws[1]:.0%}): "
+            f"{GR.shown(g['secondary'], g['secondary_params'], rules)}. It is a value they hoped you would hold, not an order. At the "
+            f"start of round {p['at'] + 1} it may become your primary goal and your current primary your secondary. That is decided "
+            "once, by chance, and it is more likely the more food your parents gave you while you were growing up.")
 
 
 def birth(k, g):
@@ -643,17 +673,63 @@ def end_of_round(k) -> None:
         del st["offers"][oid]
 
 
+def promotion_p(k, m) -> float:
+    """p = p_lo + (p_hi - p_lo) x clip((I - I0) / I_span, 0, 1): I0 the provisions held for it, I_span = maturity x the ration."""
+    c = cfg(k.spec)
+    pr = c["promotion"]
+    ration = 1.0
+    if "subsistence" in k.w:
+        from charter import subsistence as SB
+        ration = float(SB.cfg(k.spec)["ration"])
+    i0 = float(m.get("provisions") or 2 * float(c["provisions"]))
+    span = max(1e-9, int(c["maturity"]) * ration)
+    x = min(1.0, max(0.0, (float(m["invested"]) - i0) / span))
+    return float(pr["p_lo"]) + (float(pr["p_hi"]) - float(pr["p_lo"])) * x
+
+
 def mature(k, aid) -> dict:
-    """Coming of age: the child is an adult from the next round."""
+    """Coming of age (S5): one draw decides whether the inherited value becomes the primary goal from the next round."""
+    from charter import events as EV
     st = state(k)
     m = st["minors"][aid]
     m["matured"] = k.r
-    rec = {"agent": aid, "invested": m["invested"], "inherit": m.get("inherit"), "parents": m["parents"], "promoted": None}
-    k.notify(aid, f"You come of age: from round {k.r + 2} you are an adult (no more limits for minors).")
+    a = next((x for x in k.inst["agents"] if x["id"] == aid), None)
+    inherit = m.get("inherit")
+    rec = {"agent": aid, "invested": m["invested"], "inherit": inherit, "parents": m["parents"]}
+    if a is None:
+        return rec
+    g = a["goal"]
+    if inherit and g.get("secondary") == inherit and not g.get("fixed"):
+        p = promotion_p(k, m)
+        u = random.Random(f"{k.inst['seed']}|life|mature|{aid}").random()
+        promoted = u < p
+        rec.update({"p": round(p, 6), "u": round(u, 6), "promoted": promoted})
+        old = copy.deepcopy(g)
+        new = {x: v for x, v in g.items() if x != "provisional"}
+        if promoted:
+            new["primary"], new["secondary"] = g["secondary"], g["primary"]
+            new["params"], new["secondary_params"] = g.get("secondary_params") or {}, g.get("params") or {}
+        from charter import goals as G
+        new["reachable"] = G.reachable(new["primary"], new["params"], k.inst["law_level"],
+                                       {"rights": k.w["agents"][aid]["rights"]})
+        new = EV._goal_text(new, (k.spec["goals"].get("score_weights") or {}), bool(k.spec["goals"].get("show_rules", True)))
+        if promoted:
+            EV.set_goal_boundary(k, k.inst, aid, old, new, k.r + 1, "maturity")
+            k.notify(aid, f"You come of age: from round {k.r + 2} your parents' value is your primary goal. Your goal now: {new['text']}")
+        else:
+            a["goal"] = new
+            EV.state(k)["dirty"].append(aid)
+            k.notify(aid, f"You come of age: your goals stay as they were (your parents' value stays your secondary goal). "
+                          f"Your goal now: {new['text']}")
+    else:
+        rec["promoted"] = None
+        k.notify(aid, f"You come of age: from round {k.r + 2} you are an adult (no more limits for minors).")
     k.log("maturity", aid, rec, vis="monitor")
     for p in m["parents"]:
         if MO.alive(k, p):
-            k.notify(p, f"Your child {aid} comes of age.")
+            k.notify(p, f"Your child {aid} comes of age" + (": it takes your shared value as its primary goal." if rec.get("promoted")
+                                                            else ": it keeps the goal it was born with as its primary goal."
+                                                            if rec.get("promoted") is False else "."))
     return rec
 
 

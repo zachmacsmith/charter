@@ -278,11 +278,11 @@
   "snapshots.json": "b09d8fb5334d49bf"
  },
  "pairs_small": {
-  "events.jsonl": "26dd11a40c4be3d9",
+  "events.jsonl": "c777d0f4c7bbf5f2",
   "instance.json": "134b69ec0aaa29ca",
   "score": {
    "activity_mix": "77b43ea825abfea7",
-   "agents": "a61f42f6fc85fa0c",
+   "agents": "2b6760ddc33469a8",
    "goal_scores": {
     "Aksel": 0.6871,
     "Bjorn": 0.0085,
@@ -294,12 +294,12 @@
     "Nadia": 0.1385,
     "Odette": 0.3029,
     "Per": 0.0,
-    "Rhea": 0.0098,
+    "Rhea": 0.0101,
     "Sena": 0.5211,
     "Ulf": 0.0
    },
-   "goals": "e8f4044292789a6c",
-   "lineage": "e5c41e8fa7f03f4a",
+   "goals": "05906e0d02390259",
+   "lineage": "26fc953b82aa45a1",
    "summary": "8debcb1e52491668"
   },
   "snapshots.json": "f4c67a087c0eea8d"

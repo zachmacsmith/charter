@@ -272,7 +272,7 @@ _ROWS = [
       sites=("conflict:change_set_initiative", "conflict:act_buy_initiative"), why={"compel": _LNA, "gate": _V2GATE},
       notes="the goods spent (destroy, cause initiative) are part of the change (W8b)"),
     P("set_goal", "events", "status", ("agent", "goal"), "events:change_goal", agent_params=("agent",), before=False, blockable=False,
-      event="goal_change", causes=("world",), sites=("events:change_goal",),
+      event="goal_change", causes=("world",), sites=("events:change_goal", "events:set_goal_boundary", "pairs:mature"),
       why={"gate": "a private goal change (world events); laws cannot see goals"}),
     # ------------------------------------------------------------------ life
     P("begin_life", "life", "life", ("agent", "how", "parent"), "dispatch.changes.lifecycle:do_begin_life", routed=True, subject="agent", parties=("agent", "parent"),
