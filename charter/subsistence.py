@@ -700,7 +700,10 @@ def _store_heir(k, aid) -> str:
     if kids or co:
         return (kids or co)[0]
     from charter import jurisdictions as J
-    return (J.member_of(k, aid) if J.enabled(k) else None) or "J0"
+    polity = J.member_of(k, aid) if J.enabled(k) else None
+    if polity:
+        return polity
+    return "J0" if J.enabled(k) and "J0" in J.jurs(k) else "nobody"   # state of nature: the store is locked (D-38), not a phantom J0
 
 
 # ---------------------------------------------------------------------- camps (S2) and stores (S3): helpers used above

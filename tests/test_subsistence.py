@@ -929,7 +929,7 @@ def test_a_dead_owners_store_passes_on():
     builder(k, a)
     A.act(k, a, "build", {"kind": "store"})
     assert MO.disable(k, a, "accident")
-    assert SB.state(k)["stores"]["S1"]["owner"] == "J0" and any(e["type"] == "store_owner" for e in k.events)
+    assert SB.state(k)["stores"]["S1"]["owner"] in ("J0", "nobody") and any(e["type"] == "store_owner" for e in k.events)
 
 
 def test_stores_conserve_food():

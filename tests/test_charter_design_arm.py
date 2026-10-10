@@ -128,9 +128,10 @@ def test_design_arm_agents_see_and_use_only_the_core(design):
     inst, k = design
     for a in inst["agents"]:
         allowed = CX.allowed_actions(inst, a, k.w["agents"][a["id"]]["rights"], k)
-        assert set(allowed) <= set(AR.CORE_SURFACE), set(allowed) - set(AR.CORE_SURFACE)
+        core = set(AR.core_surface(inst["spec"]))                         # plus guard/join_attack where conflict is on, channel verbs
+        assert set(allowed) <= core, set(allowed) - core
     a = next(x for x in inst["agents"] if x["cls"] == "worker")
-    assert len(CX.allowed_actions(inst, a, k.w["agents"][a["id"]]["rights"], k)) <= 30
+    assert len(CX.allowed_actions(inst, a, k.w["agents"][a["id"]]["rights"], k)) <= 32   # guard, join_attack where conflict is on
     inst2, k2 = make("design_arm")
     with pytest.raises(A.ActionError, match="unknown action 'guard'") as e:
         A.act(k2, citizen(k2), "guard", {"agent": citizen(k2)})

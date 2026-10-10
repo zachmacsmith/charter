@@ -278,30 +278,30 @@
   "snapshots.json": "b09d8fb5334d49bf"
  },
  "pairs_small": {
-  "events.jsonl": "f8eece3cde4f3476",
+  "events.jsonl": "84f3465c41e729dd",
   "instance.json": "e25e85714b7831c0",
   "score": {
-   "activity_mix": "20d3347d477cd80e",
-   "agents": "a99ca7fe9fe132e5",
+   "activity_mix": "60c3e2e36366444f",
+   "agents": "f75260777ca2e9ed",
    "goal_scores": {
-    "Aksel": 0.7364,
-    "Asta": 0.0392,
-    "Bjorn": 0.1183,
-    "Elin": 0.0571,
+    "Aksel": 0.7143,
+    "Asta": 0.0355,
+    "Bjorn": 0.0,
+    "Elin": 0.1029,
     "Gry": 0.7,
-    "Jory": 0.4028,
-    "Kasper": 0.1604,
-    "Nadia": 0.125,
-    "Odette": 0.1468,
+    "Jory": 0.3524,
+    "Kasper": 0.1622,
+    "Nadia": 0.175,
+    "Odette": 0.3028,
     "Per": 0.0,
-    "Sena": 0.5327,
+    "Sena": 0.5214,
     "Ulf": 0.0
    },
-   "goals": "57b3352d94d482c1",
-   "lineage": "a222bed9f0c2368b",
-   "summary": "d113d493f55d4a54"
+   "goals": "ad176cc7ca7612e3",
+   "lineage": "8f4d537ae62ebbff",
+   "summary": "d521cd2c170ae59b"
   },
-  "snapshots.json": "1bf589c7105f43a5"
+  "snapshots.json": "60742cf5a328add5"
  },
  "prompts_E4_1": {
   "Abel": {
@@ -569,30 +569,30 @@
   "snapshots.json": "3ce5be68c19e75d9"
  },
  "subsistence_small": {
-  "events.jsonl": "5207ffdb66a27e67",
+  "events.jsonl": "bc21bf33768dafee",
   "instance.json": "ed1b260bc165e7bb",
   "score": {
-   "activity_mix": "9fe0752d7b17e02a",
-   "agents": "7fe3cc8095b7ced2",
+   "activity_mix": "a4251a73f07d44fd",
+   "agents": "42fa16fa1f2e5508",
    "goal_scores": {
-    "Bruna": 0.4725,
-    "Felix": 0.1276,
+    "Bruna": 0.1105,
+    "Felix": 0.113,
     "Iris": 0.2,
-    "Jarl": 0.7237,
-    "Maya": 0.6582,
-    "Oda": 0.2607,
-    "Rakel": 0.8566,
-    "Siv": 0.038,
-    "Valter": 0.9165,
-    "Vidar": 0.0728,
-    "Wanda": 0.1566,
-    "Yuri": 0.2464,
-    "Zeno": 0.4103
+    "Jarl": 0.7246,
+    "Maya": 0.5111,
+    "Oda": 0.1837,
+    "Rakel": 0.5666,
+    "Siv": 0.1875,
+    "Valter": 0.8901,
+    "Vidar": 0.0707,
+    "Wanda": 0.1735,
+    "Yuri": 0.2466,
+    "Zeno": 0.4508
    },
-   "goals": "f90269cd184ff72b",
-   "lineage": "a2db9090fe4eb533",
-   "summary": "57563113245a2d65"
+   "goals": "f57e54deec71cdfe",
+   "lineage": "8b86dd543c5e61f9",
+   "summary": "a2a78f45852d3426"
   },
-  "snapshots.json": "b2b1d0952342eed5"
+  "snapshots.json": "0b09503dcda6c1ae"
  }
 }

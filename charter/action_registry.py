@@ -938,6 +938,8 @@ def core_surface(spec) -> tuple:
     nature."""
     from charter import jurisdictions as J
     out = CORE_SURFACE + NATURE_SURFACE if J.nature_start(spec) else CORE_SURFACE
+    if ((spec or {}).get("conflict") or {}).get("enabled"):            # force: protecting others and acting together, not only attacking
+        out = out + tuple(a for a in ("guard", "join_attack") if a not in out)
     if ((spec or {}).get("channels") or {}).get("v2"):                 # channels v2 is the communication fabric: its verbs are core
         out = out + CHANNELS_SURFACE
     from charter import directories as DR
