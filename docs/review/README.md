@@ -28,6 +28,7 @@ Later reviews (design documents, 7-9 Oct):
 | [16](16_economy_audit.md) | Economy and population audit of the first Haiku runs |
 | [17](17_space.md) | Space: a weighted graph of places (presence, perception, custody, territory, staging) |
 | [18](18_institution_holdings.md) | What institutions should be able to hold (title, control, custody) |
+| [19](19_ecosystem.md) | The forest ecosystem: plants and game, carrying capacity, hunting speed and population (toy model, recommendation, dry runs) |
 
 ## Verdict
 

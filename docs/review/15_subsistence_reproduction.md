@@ -15,6 +15,12 @@ decisions still open.*
 > and measures the dynamics (oscillation period and amplitude, overshoot above carrying capacity, collapse depth, cohort echoes). The
 > "±15%" and "deaths per round ≤ ⌈N/μ⌉" targets below are superseded where they conflict.
 
+> **v2.2 (user, 10 Oct): forests, not camps; foraging first.** Food comes from forests with two stocks (plants and game, their own
+> regrowth, shared seasons); hunting is open to anyone and better in a party (no crew threshold, no weakest link); fields (§2.4) and
+> the agricultural ladder (§2.7) are parked behind `subsistence.fields.enabled` (off); hunger stage changes are not public events;
+> withdrawal from an institution's store is decided by its own code (residual: its officers). The forest parameters of §2.3 and the
+> weak_link hunt of §2.5 are superseded: see [review 19](19_ecosystem.md) and ARCHITECTURE D-41.
+
 ## Changelog
 
 ### v2 (user direction 8 Oct)
