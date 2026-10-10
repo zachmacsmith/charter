@@ -969,9 +969,10 @@ def owner_laws(k, P, payload, laws) -> list:
 def scripted_actions(k, aid, n) -> list:
     """The scripted food bot (dry runs, own stream "{seed}|subsistence-bot|<aid>|<round>"). Eating is automatic; bot `idle` does
     nothing about food. Bot `basic`: reap its own ripe crops and sow a fallow plot when it holds food to spare (fields only), with
-    chance bot_hunt hunt bot_effort times in a band of about four (bands by roster order, each at one forest), forage when short
-    (with what is left of its forest actions), share a meal with a starving or hungry agent when it has plenty, and (stores) build
-    one when it holds the materials, keep its surplus there and take food out before a missed meal. Not a model of behaviour."""
+    chance bot_hunt hunt bot_effort times in a band of about four (bands by roster order, each at one forest), forage when low;
+    when short of a meal, both forest actions on the better source (forage now, or hunt in a band), share a meal with a starving
+    or hungry agent when it has plenty, and (stores) build one when it holds the materials, keep its surplus there and take food
+    out before a missed meal. Not a model of behaviour."""
     if not on(k) or exempt(k, aid):
         return []
     c = cfg(k.spec)
@@ -1007,7 +1008,19 @@ def scripted_actions(k, aid, n) -> list:
         hunt = [act("hunt", camp=game[idx % len(game)], party=band)] * e
     forage = 0
     if forests and (f < 4 or stage(k, aid) < 0):
-        forage = min(2, budget) if f < 2 else max(0, min(1, budget - len(hunt)))   # short of a meal: gather first
+        forage = min(2, budget) if f < 2 else max(0, min(1, budget - len(hunt)))   # short of a meal: all on the better source
+        if f < 2:
+            from charter.camptypes import forest as FO
+            best = max(forests, key=lambda x: k.w["camps"][x]["game"]["G"] / k.w["camps"][x]["game"]["K"])
+            g = k.w["camps"][best]["game"]
+            cm = k.w["camps"][forests[0]]
+            per_hunt = FO.expected_catch(cm["fn"]["game"], 4, g["G"] / g["K"]) / 4      # in a band of about four
+            per_forage = float(cm["fn"]["yield"]) * max(0.0, cm["S"] - float(cm["fn"]["refuge"]) * cm["K"]) / cm["K"]
+            if per_hunt > per_forage:
+                everyone = eaters(k)
+                nb = max(1, round(len(everyone) / 8))
+                idx = everyone.index(aid) % nb if aid in everyone else 0
+                hunt, forage = [act("hunt", camp=best, party=f"band{idx}")] * budget, 0
         hunt = hunt[:max(0, budget - forage)]
     gather = [act("harvest", camp=forests[0])] * forage if forests else []
     out += gather if f < 2 else []
