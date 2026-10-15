@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 12
+ENGINE_VERSION = 13
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -99,6 +99,11 @@ ENGINE_FLIPS = {
          "note": "established worlds (review 27): spec start (round-0 establish interventions), office duties, controls and term "
                  "calendars, institutions.office_control (default false), election electorates, subsistence.shocks (default []), "
                  "agents.names; all opt-in: no default changes"},
+    13: {"commits": ["f9e53282c0aa455ed2074bf5b48d26538b2e386e"],
+         "flips": [],
+         "note": "channel purposes and prompt changes: the state lists channels an agent can post in; opening a channel needs a "
+                 "purpose; starvation reads as starvation; soft context budgets (state 1500); the Press Act only where "
+                 "channels.found_right is set (behaviour, not a default; prompts differ from earlier versions)"},
 }
 
 
