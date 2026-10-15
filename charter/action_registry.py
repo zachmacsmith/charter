@@ -454,7 +454,7 @@ R("post", "speak publicly: claims, offers, pressure", "TALK AND TRADE", core=Tru
   handler="actions:_post", module="core", category="talk", emits=("post", "submission"), aliases={"message": "text"},
   doc='post {"text": "..."}: $post_where')
 R("transfer", "give goods: pay, bribe, gift, fund", "TALK AND TRADE", core=True,
-  handler="actions:_transfer", module="core", category="economic", emits=("transfer", "transfer_blocked"), aliases={"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item", "resources": "item", "goods": "item", "good": "item", "payment": "item"},
+  handler="actions:_transfer", module="core", category="economic", emits=("transfer", "transfer_blocked", "office_payment"), aliases={"recipient": "to", "agent": "to", "amount": "qty", "quantity": "qty", "resource": "item", "items": "item", "resources": "item", "goods": "item", "good": "item", "payment": "item"},
   doc='transfer {"to": "Name", "item": "timber", "qty": 3}: give resources or currency')
 # ^ W6a: under law.v2 transfer also takes "memo" (a short purpose laws read as p["memo"]); agents.action_doc appends it in law.v2 worlds
 #   only, so every other world's prompt is unchanged (actions._transfer refuses a memo without law.v2, exactly as before)

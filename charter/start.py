@@ -868,6 +868,7 @@ def lived(run) -> list:
                 except ActionError:
                     pass
             drew = sorted({e["agent"] for e in events if e["type"] == "store_withdrawal" and e["data"].get("store") == sid})
+            could = sorted(could)
             add(f"store {sid} ({owner})", (could == holders) if ctl else True,
                 f"controlled by {', '.join(owner + '.' + o for o in ctl) or 'no office (any officer)'}; holders {holders}; agents able "
                 f"to withdraw at round 0: {could}; withdrew during the run: {drew or 'nobody'}")
