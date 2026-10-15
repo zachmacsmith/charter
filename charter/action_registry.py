@@ -477,7 +477,7 @@ R("search_dms", "search your messages", "INFORMATION", core=True, pre=True, need
   doc='search_dms {"query": "..."}: keyword search over the private messages you sent or received ($search_hits best matches)')
 R("read_law", "read a law's full code, intent, status and patches", "INFORMATION", core=True, pre=True, needs=("level:1",), args='{"law": "L5"}',
   handler="actions:_read_law", module="context", category="productive", legacy=False,
-  doc='read_law {"law": "L5"}: any law proposed in this world (by id or title): its title, intent, class, status, author, full code and patch history')
+  doc='read_law {"law": "L5"}: any law proposed in this world (by id or title): its title, intent, class, status, author, full code and patch history; read_law {} lists every law in force')
 R("preview_law", "try a draft law or contract against the legal system you can see", "INFORMATION", core=True, pre=True,
   needs=("mod:context", "level:1", "law:v2"), args='{"code": "...", "scenario": "default"}',
   handler="lawpreview:act_preview_law", module="context", category="political", legacy=False,

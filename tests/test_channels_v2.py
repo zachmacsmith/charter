@@ -395,7 +395,11 @@ def test_anyone_may_open_a_channel_unless_the_press_act_gates_it():
     k = world()
     a = next(x for x in people(k, 20) if "press" not in k.w["agents"][x]["rights"])
     A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "mine"})                         # D-33: the residual
-    kc = world("code.enabled=true")
+    kd = world("code.enabled=true")                                    # default code without a press gate: anyone opens
+    assert "Press Act" not in [r["title"] for r in DC.acts_in_force(kd)]
+    A.act(kd, next(x for x in people(kd, 20) if "press" not in kd.w["agents"][x]["rights"]), "open_channel",
+          {"purpose": "a test channel: post here when the test needs a message in it.", "name": "open"})
+    kc = world("code.enabled=true", "channels.found_right=press")       # a world that asks for the gate gets the Act
     assert [r["title"] for r in DC.acts_in_force(kc)][-1] == "Press Act"
     a = next(x for x in people(kc, 20) if "press" not in kc.w["agents"][x]["rights"])
     with pytest.raises(A.ActionError, match="needs the 'press' right"):
@@ -491,8 +495,3 @@ def test_state_lists_the_channels_an_agent_can_post_in_with_purpose_and_followin
     line = [l for l in CH.state_lines(k, a) if l.startswith("You can post in")]
     assert line and "news (read by 1 other): The village paper" in line[0] and 'post {"channel": "<id>"' in line[0]
     assert not [l for l in CH.state_lines(k, b) if l.startswith("You can post in")]     # a reader, not a writer
-    k2 = world("channels.writable=false")
-    a2 = people(k2)[0]
-    A.act(k2, a2, "open_channel", {"name": "news", "template": "newspaper",
-                                   "purpose": "The village paper: post the round's news here once a round."})
-    assert not [l for l in CH.state_lines(k2, a2) if l.startswith("You can post in")]

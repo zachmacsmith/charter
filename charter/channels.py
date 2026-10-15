@@ -50,7 +50,7 @@ SQUARES = ("one", "per_camp", "none")
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-.]{0,39}$")
 WORLD = "world"
 SQUARE = "square"
-DEFAULTS = {"v2": False, "delivery": "push", "square": "one", "square_rate": 2, "found_right": None, "headlines": 8, "writable": True}
+DEFAULTS = {"v2": False, "delivery": "push", "square": "one", "square_rate": 2, "found_right": None, "headlines": 8}
 # A channel's purpose: one or two sentences saying what the channel is for and when to post in it (required when an agent opens one).
 PURPOSE_MIN, PURPOSE_MAX = 20, 300
 ACTIONS = ("send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")
@@ -968,10 +968,7 @@ def _headline(e) -> str:
 
 def writable_line(k, aid) -> list:
     """The channels this agent can post in (beyond the square and inboxes, which anyone may use): each with its purpose and how many
-    follow it, so a channel an agent owns or writes for an institution is in front of it every turn, not only in the round it opened.
-    Spec channels.writable (default on) turns the line off."""
-    if not cfg(k).get("writable", True):
-        return []
+    follow it, so a channel an agent owns or writes for an institution is in front of it every turn, not only in the round it opened."""
     mine = [ch for ch in k.w["channels"].values() if ch.get("v") == 2 and not ch.get("inbox") and ch["owner"] != WORLD
             and not ch.get("closed") and ch.get("writers") != {"all": True} and can_write(k, aid, ch)]
     if not mine:
