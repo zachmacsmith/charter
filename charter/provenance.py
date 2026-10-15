@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 11
+ENGINE_VERSION = 12
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -94,6 +94,11 @@ ENGINE_FLIPS = {
          "flips": [],
          "note": "contracts.scope_api reads the association record live: a contract's members() sees agents who joined after the "
                  "first dry run (behaviour fix, not a default; reproducible only by rerun)"},
+    12: {"commits": ["542f65cf43e5e2bacc71560081b92ee28816fd96"],
+         "flips": [],
+         "note": "established worlds (review 27): spec start (round-0 establish interventions), office duties, controls and term "
+                 "calendars, institutions.office_control (default false), election electorates, subsistence.shocks (default []), "
+                 "agents.names; all opt-in: no default changes"},
 }
 
 
