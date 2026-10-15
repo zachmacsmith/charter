@@ -419,7 +419,11 @@ def contexts(run_dir, rnd: int, agents=None, at: str = "end", log=None) -> dict:
                 inst2 = json.loads((d / "instance.json").read_text())
                 if "settings" not in inst2:
                     inst2["settings"] = ST.resolve(run, inst2, allow_code_drift=True, record=False)
-                runner.run(inst2, pol, d, sbx, log=quiet, resume=True, dry=dry, until=rnd + 1,
+                late = None                                             # interventions from the checkpoint on (a fork's are not in
+                if (run / "interventions.yaml").exists():               # the parent's checkpoint it was restored from)
+                    late = [e for e in IV.load_schedule(run / "interventions.yaml")
+                            if e["at"]["phase"] != "setup" and int(e["at"]["round"]) >= base] or None
+                runner.run(inst2, pol, d, sbx, log=quiet, resume=True, dry=dry, until=rnd + 1, schedule=late,
                            instance_source=f"interview of {run} at round {rnd}", publish_archive=False)
             else:
                 inst["settings"] = ST.resolve(run, inst, allow_code_drift=True, record=False)
