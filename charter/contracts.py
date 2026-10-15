@@ -960,7 +960,7 @@ def scope_api(k, lid, api: dict) -> dict:
             return tk
         if isinstance(x, str) and ((x.startswith(esc) and not word()) or x.startswith(f"{AC.FUND}{lid}:")):
             return x
-        if "unlimited_seizure" in ext and x in rec["members"]:          # wave 9 E: a granted seizure, from members only
+        if "unlimited_seizure" in ext and x in live()["members"]:          # wave 9 E: a granted seizure, from members only
             return x
         if isinstance(x, str) and x.startswith(AC.STORE) and (AC.stores(k).get(x[len(AC.STORE):]) or {}).get("owner") == cid:
             return x                                                    # review 15 S3: a food store it owns
@@ -999,7 +999,7 @@ def scope_api(k, lid, api: dict) -> dict:
             def wrap(*a, **kw):
                 for pos, pname in specs:
                     ag = J._arg(a, kw, pos, pname)
-                    if ag is not None and ag not in rec["members"]:
+                    if ag is not None and ag not in live()["members"]:
                         refuse(name, ag)
                         return LA.LAWFNS[name].refused
                 return fn(*a, **kw)
@@ -1010,7 +1010,7 @@ def scope_api(k, lid, api: dict) -> dict:
         if "compel_members" in ext:
             def fine_members(aid, item, qty):
                 """A fine from a member's holdings (not only its escrow) into the treasury: what was taken."""
-                if aid not in rec["members"]:
+                if aid not in live()["members"]:
                     refuse("fine", aid)
                     return 0.0
                 take = min(float(qty), k.bal(aid, item))
@@ -1023,7 +1023,7 @@ def scope_api(k, lid, api: dict) -> dict:
 
                 def set_dm_limit(n, agent=None):
                     if agent is None:                                   # every member (never the world default)
-                        for m in list(rec["members"]):
+                        for m in list(live()["members"]):
                             api["set_dm_limit"](n, m)
                         return True
                     return base_dm(n, agent)

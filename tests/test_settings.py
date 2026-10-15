@@ -128,7 +128,7 @@ def _have(sha):
 def test_infer_version_from_git_history():
     for v, e in PV.ENGINE_FLIPS.items():
         assert ST.infer_version(e["commits"][0]) == v
-        assert ST.infer_version(e["commits"][0] + "^") == {2: 1, 3: 1, 10: 7}.get(v, v - 1)   # 2, 3 and 10 were made on parallel branches
+        assert ST.infer_version(e["commits"][0] + "^") == {2: 1, 3: 1, 10: 7, 11: 1}.get(v, v - 1)   # 2, 3, 10 and 11 were made on parallel branches
     s = ST.infer(PV.ENGINE_FLIPS[3]["commits"][0])                       # version 3 without version 2's flip
     assert s["engine_version"] == 3 and s["defaults"] == {"charter.channels.DEFAULTS": {"delivery": "pull"}}
     assert ST.patches(s) == {"charter.channels.DEFAULTS": {"delivery": "pull"},
