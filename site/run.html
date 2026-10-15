@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run · Charter</title>
+<script>try{document.documentElement.dataset.theme=new URLSearchParams(location.search).get("theme")||localStorage.getItem("charter-theme")||"broadsheet"}catch(e){}</script>
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/run/run.css">
+</head>
+<body>
+<main class="wrap run-page" id="main"><p class="loading">Loading the run…</p></main>
+<div id="hovercard" role="tooltip"></div>
+<script type="module">
+  import { chrome, dataset, DATASET_URL } from "./assets/site.js";
+  import { prepare } from "./assets/run/model.js";
+  import { buildSprite } from "./assets/run/mascots.js";
+  import * as V from "./assets/run/views.js";
+  import { mountSquare } from "./assets/run/square.js";
+  chrome("runs");
+
+  const SECTIONS = [["front", "Front page"], ["chronicle", "Chronicle"], ["people", "People"], ["correspondence", "Correspondence"], ["laws", "Laws"], ["square", "The square"], ["data", "Data"]];
+  const main = document.querySelector("#main");
+  const id = new URLSearchParams(location.search).get("id");
+  const ds = await dataset();
+  const entry = (await ds.catalog()).find((r) => r.run_id === id);
+  if (!entry) { main.innerHTML = `<p class="loading">No run called ${V.esc(id)}. <a href="runs.html">All runs</a></p>`; throw new Error("no run"); }
+  document.title = `${entry.title} · Charter`;
+  const run = ds.run(entry);
+  const D = await (await fetch(`${ds.root}/${entry.path}/viewer.json`)).json();   // TEMPORARY source (site/README.md)
+  const S = prepare(D);
+  const dark = document.documentElement.dataset.theme === "night";
+  buildSprite(S, dark);
+  const st = { S, entry, root: ds.root, datasetUrl: DATASET_URL, dark, round: S.lastRound, section: "front", target: null, filter: "",
+    order: (() => { try { return localStorage.getItem("charter-diary-order") || "asc"; } catch (e) { return "asc"; } })(),
+    hide: new Set((() => { try { return JSON.parse(localStorage.getItem("charter-diary-hide") || "[]"); } catch (e) { return []; } })()),
+    fold: (() => { try { return localStorage.getItem("charter-diary-fold2") === "on"; } catch (e) { return false; } })() };
+  const keep = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+
+  main.innerHTML = `
+    <header class="run-mast"><div class="label"><a href="runs.html">Runs</a> · ${V.esc(entry.spec)} · seed ${entry.seed ?? "?"}</div>
+      <h1>${V.esc(entry.title)}</h1>
+      ${entry.validity ? `<p class="notice">${V.esc(entry.validity.replace(/\*\*/g, ""))}</p>` : ""}</header>
+    <div class="run-bar">
+      <nav class="sections">${SECTIONS.map(([k, t]) => `<a data-k="${k}">${t}</a>`).join("")}</nav>
+      <div class="clock">
+        <button class="ck-prev" title="Previous round (←)">‹</button>
+        <div class="ck-label"></div>
+        <button class="ck-next" title="Next round (→)">›</button>
+        <button class="ck-play" title="Play the rounds (space)">▶</button>
+        <div class="strip"></div>
+        <button class="ck-help" title="What the strip shows" aria-expanded="false">?</button>
+        <div class="ck-legend" hidden></div>
+      </div>
+    </div>
+    <div id="view"></div>`;
+  const view = document.querySelector("#view");
+
+  // ---------------------------------------------------------------- the clock strip
+  const act = S.heads.map((h) => (h ? h.posts + h.dms : 0)), amax = Math.max(1, ...act);
+  const strip = main.querySelector(".strip");
+  strip.innerHTML = Array.from({ length: S.lastRound + 1 }, (_, r) => { const h = S.heads[r] || { items: [] };
+    const marks = (h.items || []).map((x) => x.k === "enacted" ? "law" : x.k === "left" ? "left" : x.k === "raid" || x.k === "vetoed" ? "alarm" : "").filter(Boolean);
+    return `<button data-r="${r}" title="Round ${r + 1}"><i style="height:${Math.round(4 + 22 * (act[r] || 0) / amax)}px"></i>${marks.length ? `<em class="${marks[0]}"></em>` : ""}</button>`; }).join("");
+  strip.onclick = (e) => { const b = e.target.closest("button[data-r]"); if (b) go({ round: +b.dataset.r }); };
+  main.querySelector(".ck-prev").onclick = () => go({ round: Math.max(0, st.round - 1) });
+  main.querySelector(".ck-next").onclick = () => go({ round: Math.min(S.lastRound, st.round + 1) });
+  let playT = null;
+  const playBtn = main.querySelector(".ck-play");
+  function togglePlay() {
+    if (st.section === "square" && square) return square.togglePlay();
+    if (playT) { clearInterval(playT); playT = null; playBtn.textContent = "▶"; return; }
+    if (st.round >= S.lastRound) go({ round: 0 });
+    playBtn.textContent = "❚❚";
+    playT = setInterval(() => { if (st.round >= S.lastRound) return togglePlay(); go({ round: st.round + 1 }); }, 2200);
+  }
+  playBtn.onclick = togglePlay;
+  // hovering a round says what happened in it; in an agent's diary the strip also carries that agent's markers
+  const worldOf = (r) => ((S.heads[r] || {}).items || []).map((x) => V.headlineText(st, x)).filter(Boolean);
+  let markedFor;
+  function paintStrip() {
+    const who = st.section === "people" && st.target ? st.target : null;
+    if (who === markedFor) return;
+    markedFor = who;
+    const marks = who ? V.agentMarks(S, who) : new Map();
+    strip.classList.toggle("agent-mode", !!who);
+    strip.querySelectorAll("button").forEach((b) => {
+      const r = +b.dataset.r, mine = marks.get(r) || [], world = worldOf(r);
+      b.title = [`Round ${r + 1}`, ...mine.map((m) => `${who} ${m.text}`), ...world].join("\n");
+      const k = mine.length ? V.MARK_KINDS.find(([kk]) => mine.some((m) => m.k === kk)) : null;
+      if (k) b.dataset.am = k[1]; else delete b.dataset.am;
+    });
+    const legend = main.querySelector(".ck-legend");
+    legend.innerHTML = `<b>The round strip</b><ul>
+      <li><i class="lg-bar"></i> bar height: how busy the round was (public posts and private messages); red is the round on the clock</li>
+      <li><em class="lg-dot"></em> a law was enacted</li><li><em class="lg-dot left"></em> someone left the game (old age or disabled)</li>
+      <li><em class="lg-dot alarm"></em> a raid or a Board veto</li></ul>
+      ${who ? `<b>${V.esc(who)}'s markers</b><ul>${V.MARK_KINDS.map(([, g, t]) => `<li><span class="lg-glyph">${g}</span> ${t}</li>`).join("")}</ul>` : ""}
+      <p class="meta">Hover a round to see what happened in it; click to go there.</p>`;
+  }
+  main.querySelector(".ck-help").onclick = (e) => { const l = main.querySelector(".ck-legend"); l.hidden = !l.hidden; e.currentTarget.setAttribute("aria-expanded", String(!l.hidden)); };
+  function paintClock() {
+    paintStrip();
+    main.querySelector(".ck-label").innerHTML = `<b>Round ${st.round + 1}</b> <span class="meta">of ${S.rounds}</span>`;
+    strip.querySelectorAll("button").forEach((b) => { const r = +b.dataset.r; b.classList.toggle("on", r === st.round); b.classList.toggle("past", r < st.round); });
+    main.querySelectorAll(".sections a").forEach((a) => { a.classList.toggle("on", a.dataset.k === st.section); a.href = V.href(st, a.dataset.k); });
+  }
+
+  // ---------------------------------------------------------------- routing: #section/target@round
+  function parseHash() {
+    const m = decodeURIComponent(location.hash.slice(1)).match(/^([a-z]+)?(?:\/([^@]*))?(?:@(\d+))?$/);
+    if (!m) return {};
+    const out = {};
+    if (m[1] && SECTIONS.some(([k]) => k === m[1])) out.section = m[1];
+    out.target = m[2] || null;
+    if (m[3]) out.round = Math.max(0, Math.min(S.lastRound, +m[3] - 1));
+    return out;
+  }
+  function go(patch, push = false, { scroll = true } = {}) {
+    Object.assign(st, patch);
+    if ("round" in patch) st.horizon = Math.max(st.horizon ?? 0, st.round);
+    const h = V.href(st, st.section, st.target);
+    if (location.hash !== h) (push ? history.pushState : history.replaceState).call(history, null, "", h);
+    render();
+    if (st.section === "people" && st.target && "round" in patch) { markRound(st.round); if (scroll) toRound(st.round); }
+  }
+  // the diary: mark the round being read (its heading, the band) and bring a round to the top under the sticky bars
+  function markRound(k) {
+    view.querySelectorAll(".tl-round.now").forEach((x) => x.classList.remove("now"));
+    const cur = view.querySelector(`.tl-round[data-round="${k}"]`); if (cur) cur.classList.add("now");
+    const band = view.querySelector(".agent-band");
+    if (band) { band.querySelector(".ab-round").textContent = `Round ${k + 1}`;
+      const w = cur && cur.querySelector(".tl-head .meta"); band.querySelector(".ab-worth").textContent = w ? w.textContent.replace(/ after$/, "") : ""; }
+  }
+  function stickyH() { return main.querySelector(".run-bar").offsetHeight + ((view.querySelector(".agent-band") || {}).offsetHeight || 0)
+    + ((view.querySelector(".tl-cols") || {}).offsetHeight || 0); }
+  function toRound(k) {
+    const sec = view.querySelector(`.tl-round[data-round="${k}"]`);
+    if (sec) { ignoreScroll = true; scrollTo({ top: sec.getBoundingClientRect().top + scrollY - stickyH() + 1 }); requestAnimationFrame(() => (ignoreScroll = false)); }
+  }
+  let ignoreScroll = false;
+  let square = null, rendered = "";
+  async function render() {
+    paintClock();
+    document.documentElement.style.setProperty("--bar-h", main.querySelector(".run-bar").offsetHeight + "px");
+    const diary = st.section === "people" && st.target;
+    const key = `${st.section}|${st.target}|${st.section === "square" ? "" : diary ? st.horizon : st.round}|${st.filter}|${st.order}|${st.fold}`;
+    if (st.section === "square" && square && rendered.startsWith("square|")) { square.setRound(st.round); return; }
+    if (key === rendered) return;
+    rendered = key;
+    if (square) { square.stop(); square = null; }
+    const keepY = rendered.split("|")[0] === st.section;
+    if (st.section === "square") { square = mountSquare(view, st, (r) => { st.round = r; history.replaceState(null, "", V.href(st, "square")); paintClock(); }); return; }
+    const html = st.section === "data" ? await V.data(st, run) : V[st.section](st, st.target);
+    view.innerHTML = html;
+    const f = view.querySelector("#convfilter");
+    if (f) { f.oninput = (e) => { st.filter = e.target.value; const pos = e.target.selectionStart; render(); const g = view.querySelector("#convfilter"); g.focus(); g.setSelectionRange(pos, pos); }; }
+    if (st.section === "correspondence") { const t = view.querySelector(".thread"); if (t) t.scrollTop = t.scrollHeight; }
+    if (st.section === "people") { V.layoutNotes(view); measureBand(); }
+  }
+  function measureBand() {
+    const b = view.querySelector(".agent-band");
+    document.documentElement.style.setProperty("--band-h", (b ? b.offsetHeight : 0) + "px");
+  }
+  // reading the diary moves the clock: the round whose heading has passed under the sticky bars becomes the clock's round
+  // (no re-render, so nothing already revealed disappears; the hash follows, so other sections open at the same moment)
+  let scrollRaf = 0;
+  addEventListener("scroll", () => {
+    if (scrollRaf || st.section !== "people" || !st.target) return;
+    scrollRaf = requestAnimationFrame(() => {
+      scrollRaf = 0;
+      if (ignoreScroll) return;
+      const line = stickyH() + 40;
+      let k = null;
+      for (const sec of view.querySelectorAll(".tl-round[data-round]")) {
+        const top = sec.getBoundingClientRect().top;
+        if (st.order === "desc") { if (top <= line) { k = +sec.dataset.round; break; } k = +sec.dataset.round; }
+        else if (top <= line) k = +sec.dataset.round; else break;
+      }
+      if (k == null || k === st.round) return;
+      st.round = k;
+      paintClock();
+      history.replaceState(null, "", V.href(st, "people", st.target));
+      markRound(k);
+    });
+  }, { passive: true });
+  let notesT; addEventListener("resize", () => { clearTimeout(notesT); notesT = setTimeout(() => {
+    document.documentElement.style.setProperty("--bar-h", main.querySelector(".run-bar").offsetHeight + "px"); V.layoutNotes(view); }, 120); });
+  // an agent's diary: round 1 first (default) or latest first, remembered per browser
+  view.addEventListener("click", (e) => {
+    const jump = e.target.closest("[data-jump]");
+    if (jump) { st.from = { i: +jump.dataset.jump, to: jump.dataset.jumpTo }; return; }   // the hash change does the rest (cameFrom)
+    const lm = e.target.closest(".tlm.long");
+    if (lm && !e.target.closest("a")) { lm.classList.toggle("open"); V.layoutNotes(view); return; }
+    const kind = e.target.closest("[data-kind]");
+    if (kind) { const k = kind.dataset.kind; st.hide.has(k) ? st.hide.delete(k) : st.hide.add(k); keep("charter-diary-hide", JSON.stringify([...st.hide]));
+      kind.classList.toggle("on", !st.hide.has(k)); view.querySelector(".timeline").classList.toggle("hide-" + k, st.hide.has(k)); V.layoutNotes(view); return; }
+    if (e.target.closest("[data-foldall]")) { st.fold = !st.fold; keep("charter-diary-fold2", st.fold ? "on" : "off");
+      const y = scrollY; render(); scrollTo({ top: y }); return; }
+    const fold = e.target.closest(".tl-fold") || (e.target.closest(".tl-round.quiet:not(.folded) .tl-head") && !e.target.closest("a") ? e.target.closest(".tl-round") : null);
+    if (fold) { fold.closest(".tl-round").classList.toggle("folded"); V.layoutNotes(view); return; }
+    const step = e.target.closest("[data-step]");
+    if (step) {                                                     // one round on, with the button held still on screen
+      const y0 = step.getBoundingClientRect().top;
+      go({ round: Math.min(S.lastRound, (st.horizon ?? st.round) + 1) }, false, { scroll: false });
+      const again = view.querySelector("[data-step]") || view.querySelector(".later-note") || view.querySelector(".tl-round.now");
+      if (again) scrollBy(0, again.getBoundingClientRect().top - y0);
+      return;
+    }
+    const b = e.target.closest("[data-order]");
+    if (!b || b.dataset.order === st.order) return;
+    st.order = b.dataset.order;
+    try { localStorage.setItem("charter-diary-order", st.order); } catch (err) {}
+    const y = scrollY; render(); scrollTo({ top: y });
+  });
+  // opening an agent at an earlier round: bring that round into view (at the last round, start from the top of the diary)
+  function showNow() {
+    const now = view.querySelector(".tl-round.now");
+    if (now && st.round < S.lastRound) toRound(st.round);
+  }
+  let prevTarget = null;
+  addEventListener("hashchange", () => { const p = parseHash(); Object.assign(st, { section: p.section || "front", target: p.target, ...(p.round != null ? { round: p.round } : {}) });
+    if (st.from && st.from.to !== st.target) st.from = null;
+    if (st.section !== "people" || st.target !== prevTarget) st.horizon = st.round;
+    else st.horizon = Math.max(st.horizon ?? 0, st.round);
+    prevTarget = st.section === "people" ? st.target : null;
+    const old = rendered; render();
+    if (st.from && cameFrom()) return;
+    if (!old.startsWith(st.section + "|" + st.target)) { scrollTo({ top: main.querySelector(".run-bar").offsetTop - 0 }); showNow(); } });
+  // arriving from a message on another agent's timeline: show the same message here (a reply wave's message may only be read the
+  // next round, so step the clock on a little if it is not on the page yet) and bring it to the middle of the screen
+  function cameFrom() {
+    let el = view.querySelector(".tlm.came-from");
+    for (let n = 0; !el && n < 3 && st.round < S.lastRound; n++) { go({ round: st.round + 1 }, false, { scroll: false }); el = view.querySelector(".tlm.came-from"); }
+    if (!el) return false;
+    scrollTo({ top: el.getBoundingClientRect().top + scrollY - innerHeight / 2 + el.offsetHeight / 2 });
+    return true;
+  }
+  addEventListener("keydown", (e) => {
+    if (e.target.closest("input, textarea, select")) return;
+    if (e.key === "ArrowLeft") { go({ round: Math.max(0, st.round - 1) }); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { go({ round: Math.min(S.lastRound, st.round + 1) }); e.preventDefault(); }
+    else if (e.key === " ") { togglePlay(); e.preventDefault(); }
+  });
+
+  // ---------------------------------------------------------------- hover previews
+  const hc = document.querySelector("#hovercard"); let hcT = null;
+  document.addEventListener("mouseover", (e) => {
+    const t = e.target.closest("[data-agent], [data-law]");
+    if (!t || t.closest("#hovercard")) { if (!e.target.closest("#hovercard")) { clearTimeout(hcT); hcT = setTimeout(() => hc.classList.remove("show"), 150); } return; }
+    clearTimeout(hcT);
+    hcT = setTimeout(() => {
+      const html = t.dataset.law ? V.lawCard(st, t.dataset.law) : V.agentCard(st, t.dataset.agent);
+      if (!html) return;
+      hc.innerHTML = html; hc.classList.add("show");
+      const rc = t.getBoundingClientRect(), w = hc.offsetWidth, h = hc.offsetHeight;
+      hc.style.left = Math.min(Math.max(8, rc.left), innerWidth - w - 8) + "px";
+      hc.style.top = (rc.bottom + 8 + h > innerHeight ? Math.max(8, rc.top - h - 8) : rc.bottom + 8) + "px";
+    }, t.dataset.law ? 120 : 300);
+  });
+
+  const p = parseHash();
+  Object.assign(st, { section: p.section || "front", target: p.target, ...(p.round != null ? { round: p.round } : {}) });
+  st.horizon = st.round; prevTarget = st.section === "people" ? st.target : null;
+  go({});
+  if (st.section === "people" && st.target) { history.scrollRestoration = "manual"; setTimeout(showNow, 50); }
+</script>
+</body>
+</html>

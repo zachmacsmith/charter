@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runs · Charter</title>
+<script>try{document.documentElement.dataset.theme=new URLSearchParams(location.search).get("theme")||localStorage.getItem("charter-theme")||"broadsheet"}catch(e){}</script>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<main class="wrap">
+  <div class="runs-head">
+    <div class="label">Registry</div>
+    <h1 style="margin-top:10px">Runs</h1>
+    <p class="meta" id="count" style="margin-top:10px">Loading…</p>
+  </div>
+  <div class="filters" id="filters">
+    <input id="q" type="search" placeholder="Search titles, descriptions, tags">
+  </div>
+  <div class="cards" id="cards"></div>
+</main>
+<script type="module">
+  import { chrome, dataset, esc, runFacts } from "./assets/site.js";
+  chrome("runs");
+  const ds = await dataset();
+  const runs = await ds.catalog();
+  const state = { q: "", spec: null, model: null, featured: false };
+  const specs = [...new Set(runs.map((r) => r.spec))].sort();
+  const models = [...new Set(runs.flatMap((r) => runFacts(r).models))].sort();
+  const f = document.querySelector("#filters");
+  const btn = (label, on, key, val) => `<button data-k="${key}" data-v="${esc(val)}" class="${on ? "on" : ""}">${esc(label)}</button>`;
+  function renderFilters() {
+    f.querySelectorAll("button").forEach((b) => b.remove());
+    f.insertAdjacentHTML("beforeend", btn("★ Featured", state.featured, "featured", "1")
+      + specs.map((s) => btn(s, state.spec === s, "spec", s)).join("")
+      + models.map((m) => btn(m, state.model === m, "model", m)).join(""));
+    f.querySelectorAll("button").forEach((b) => (b.onclick = () => {
+      const { k, v } = b.dataset;
+      if (k === "featured") state.featured = !state.featured; else state[k] = state[k] === v ? null : v;
+      renderFilters(); render();
+    }));
+  }
+  document.querySelector("#q").oninput = (e) => { state.q = e.target.value.toLowerCase(); render(); };
+  function render() {
+    const shown = runs.filter((r) => {
+      const fx = runFacts(r);
+      const hay = [r.title, r.description, r.spec, ...fx.tags].join(" ").toLowerCase();
+      return (!state.q || hay.includes(state.q)) && (!state.spec || r.spec === state.spec)
+        && (!state.model || fx.models.includes(state.model)) && (!state.featured || r.featured);
+    }).sort((a, b) => (b.featured - a.featured) || a.spec.localeCompare(b.spec));
+    document.querySelector("#count").textContent = `${shown.length} of ${runs.length} runs`;
+    document.querySelector("#cards").innerHTML = shown.map((r) => {
+      const fx = runFacts(r);
+      return `<a class="card" href="run.html?id=${encodeURIComponent(r.run_id)}">
+        <div class="label">${r.featured ? '<span class="star">★</span> ' : ""}${esc(r.spec)}</div>
+        <h3>${esc(r.title)}</h3><p>${esc(r.description || "")}</p>
+        <div>${fx.tags.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>
+        <div class="foot"><span>${r.n_agents} agents</span><span>${fx.rounds} rounds${r.usable_rounds ? ` (usable ${esc(r.usable_rounds)})` : ""}</span>
+          <span>${esc(fx.models.join(" · "))}</span></div></a>`;
+    }).join("");
+  }
+  renderFilters(); render();
+</script>
+</body>
+</html>

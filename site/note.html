@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Note · Charter</title>
+<script>try{document.documentElement.dataset.theme=new URLSearchParams(location.search).get("theme")||localStorage.getItem("charter-theme")||"broadsheet"}catch(e){}</script>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<main class="wrap"><article class="note" id="note"><p class="loading">Loading…</p></article></main>
+<script type="module">
+  import { chrome, esc } from "./assets/site.js";
+  import { marked } from "https://cdn.jsdelivr.net/npm/marked@14.1.3/+esm";
+  chrome("notes");
+  const slug = new URLSearchParams(location.search).get("slug") || "";
+  const [index, text] = await Promise.all([fetch("notes/index.json").then((r) => r.json()), fetch(`notes/${encodeURIComponent(slug)}.md`).then((r) => r.ok ? r.text() : null)]);
+  const meta = index.find((n) => n.slug === slug);
+  const el = document.querySelector("#note");
+  if (!text || !meta) { el.innerHTML = `<p class="loading">No note called ${esc(slug)}. <a href="notes.html">All notes</a></p>`; }
+  else {
+    document.title = `${meta.title} · Charter`;
+    const body = text.replace(/^---\n[\s\S]*?\n---\n/, "");
+    el.innerHTML = `<div class="label"><a href="notes.html">Notes</a> · ${esc(meta.date)} · ${meta.minutes} min read</div>
+      <h1>${esc(meta.title)}</h1><div class="body">${marked.parse(body)}</div>`;
+  }
+</script>
+</body>
+</html>

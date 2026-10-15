@@ -7,6 +7,7 @@ Without --push nothing leaves the machine: the dataset is staged in --staging (d
 of what would be uploaded is printed. Layout on the Hub (docs/data_format.md, "Layout on Hugging Face"):
 
     catalog.parquet, catalog.json             one row per published run: the site's index (curated card + key run facts)
+    stories.json                              the stories registry the site's home page rotates through (--stories)
     runs/<spec>/<run_id>/<table>.parquet      charter.export tables for that run, plus manifest.json and card.json
     raw/<spec>/<run_id>.tar.gz                the raw run directory (the record; re-exported from when the schema changes)
     README.md                                 dataset card with one config per table (the Hub's viewer and SQL console span all runs)
@@ -39,6 +40,9 @@ Versions and releases (docs/data_format.md, "Versions and releases"; every perso
   before engine versions, under earlier simulation designs), else "current"; a card's `era` overrides it. Sites filter
   `era = 'legacy'` out by default. The catalog's `engine_version` is the export's `runs.engine_version`.
 - Papers cite a DOI snapshot of a tagged release (e.g. Zenodo), not main.
+
+--stories takes the stories registry (site/stories.yaml: a list of {title, subtitle, quote, agent, run_id, class, model, mood,
+round}) and writes it as stories.json, replacing the published one. With no runs, only stories.json is staged and uploaded.
 """
 from __future__ import annotations
 
@@ -59,6 +63,8 @@ STAGING = Path(__file__).resolve().parent / "out" / "_publish"
 NEVER = re.compile(r"(^|/)(checkpoints?(/|$)|.*\.pkl$|.*\.pickle$|abandoned_calls\.jsonl$)")
 REPORTS = {"story.html", "messages.md", "overview.md", "observer.md", "spec_outline.md"}
 CARD_KEYS = ("title", "description", "tags", "featured", "usable_rounds", "validity", "era")
+STORY_KEYS = ("title", "subtitle", "quote", "agent", "run_id", "class", "model", "mood", "round")
+STORY_REQUIRED = ("title", "subtitle", "quote", "agent", "run_id")
 CATALOG_RUN_COLS = ("seed", "rounds", "rounds_played", "complete", "dry", "backend", "schema_version", "models_json",
                     "parent_run_id", "fork_round", "code_sha", "engine_version")
 ERAS = ("legacy", "current")
@@ -145,6 +151,40 @@ def load_cards(path) -> dict:
     return data
 
 
+def load_stories(path) -> list[dict] | None:
+    """The stories registry: a YAML/JSON list of stories (or {"stories": [...]}), trimmed to STORY_KEYS."""
+    if not path:
+        return None
+    text = Path(path).read_text()
+    if str(path).endswith((".yaml", ".yml")):
+        import yaml
+        data = yaml.safe_load(text) or []
+    else:
+        data = json.loads(text)
+    if isinstance(data, dict):
+        data = data.get("stories", [])
+    return [{k: (v.strip() if isinstance(v, str) else v) for k, v in st.items() if k in STORY_KEYS and v is not None}
+            for st in data]
+
+
+def check_stories(stories: list[dict], run_ids: set[str]) -> list[str]:
+    problems = []
+    for i, st in enumerate(stories):
+        name = st.get("title") or f"story {i + 1}"
+        missing = [k for k in STORY_REQUIRED if not st.get(k)]
+        if missing:
+            problems.append(f"story '{name}': missing {', '.join(missing)}")
+        if st.get("run_id") and st["run_id"] not in run_ids:
+            problems.append(f"story '{name}': run {st['run_id']} is not in the catalog")
+        if st.get("mood", "ok") not in ("ok", "happy", "sad"):
+            problems.append(f"story '{name}': mood must be ok, happy or sad")
+    return problems
+
+
+def write_stories(stories: list[dict], stage: Path) -> None:
+    (stage / "stories.json").write_text(json.dumps({"stories": stories}, indent=1, ensure_ascii=False))
+
+
 # ------------------------------------------------------------------ guards
 LOCAL = re.compile(r"(^|[\s\"'=(:])(/Users/|/home/|/private/var/|[A-Za-z]:\\\\Users\\\\)")
 
@@ -228,6 +268,64 @@ def raw_archive(run: Path, out: Path, spec: str) -> dict:
             tf.addfile(info, io.BytesIO(data))
             files, size = files + 1, size + len(data)
     return {"files": files, "bytes_raw": size, "bytes_archive": out.stat().st_size}
+
+
+def viewer_data(run: Path) -> dict:
+    """TEMPORARY (--with-viewer-json): the story viewer's data, plus each model call's planned actions (and, for the decide call,
+    the actions that finally ran), so the site can order a round's phases: decide -> DM waves (dm_reply_1, 2) -> final actions."""
+    from charter import viewer as V
+    data = V.load(run)
+    plans = {}
+    p = Path(run) / "reasoning.jsonl"
+    for line in (p.read_text().splitlines() if p.exists() else []):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        plans[(r.get("round"), r.get("agent"), r.get("phase"))] = {k: r[k] for k in ("actions", "final_actions") if r.get(k)}
+    for x in data["reasoning"]:
+        x.update(plans.get((x.get("round"), x.get("agent"), x.get("phase")), {}))
+    _what_each_call_saw(data, p)
+    return data
+
+
+_DM_LINE = re.compile(r"\[(e\d+) r\d+\] DM ")
+_PHASE_ORDER = {"lookup": -1, "decide": 0}
+
+
+def _what_each_call_saw(data: dict, reasoning: Path) -> None:
+    """From the prompts themselves (the record of what each model call was shown): "saw", the private messages to this agent that
+    the call showed it for the first time, and for a DM-step reply, "lookup_results", the look-up answers that arrived with them.
+    The site places received messages, and the wave each message was sent in, from this rather than from inference."""
+    if not reasoning.exists():
+        return
+    to = {e["id"]: (e.get("data") or {}).get("to") for e in data["events"] if e.get("type") == "dm"}
+    calls = []
+    for line in reasoning.read_text().splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        ph = str(r.get("phase") or "")
+        order = _PHASE_ORDER.get(ph, int(ph[9:]) if re.fullmatch(r"dm_reply_\d+", ph) else None)
+        if order is not None and r.get("prompt"):
+            calls.append(((r["round"], order), r))
+    seen, out = set(), {}
+    for _, r in sorted(calls, key=lambda c: (c[0], c[1].get("agent", ""))):
+        aid, prompt, results = r["agent"], r["prompt"], []
+        if str(r.get("phase")).startswith("dm_reply"):           # only the "New messages" section is new; the rest repeats the turn prompt
+            m = re.search(r"New messages to you(?: \(and the text of any lookups you asked for\))?:\n(.*?)\n\nYour plan for this round", prompt, re.S)
+            prompt = m.group(1) if m else ""
+            dm_part, _, rest = prompt.partition("(lookup result) ")
+            for chunk in (("(lookup result) " + rest).split("(lookup result) ")[1:] if rest else []):
+                head, _, text = chunk.partition(":\n")
+                results.append({"head": head.strip()[:300], "text": text.strip()[:6000]})
+            prompt = dm_part
+        saw = [i for i in dict.fromkeys(_DM_LINE.findall(prompt)) if to.get(i) == aid and (i, aid) not in seen]
+        seen.update((i, aid) for i in saw)
+        out[(r["round"], aid, r.get("phase"))] = {k: v for k, v in (("saw", saw), ("lookup_results", results)) if v}
+    for x in data["reasoning"]:
+        x.update(out.get((x.get("round"), x.get("agent"), x.get("phase")), {}))
 
 
 # ------------------------------------------------------------------ export, catalog, card
@@ -486,7 +584,7 @@ def fetch_raw(repo: str, row: dict, dest: Path) -> Path:
 
 # ------------------------------------------------------------------ publish
 def stage_runs(runs: list[Path], stage: Path, cards: dict, log=print, with_prompts: bool = False,
-               spec_override: str | None = None) -> tuple[list[dict], list[str], set[str]]:
+               spec_override: str | None = None, with_viewer_json: bool = False) -> tuple[list[dict], list[str], set[str]]:
     """Stage each run (tables, card, raw archive). Returns (catalog rows, problems, table names)."""
     rows, problems, tables = [], [], set()
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -500,6 +598,9 @@ def stage_runs(runs: list[Path], stage: Path, cards: dict, log=print, with_promp
         card["era"] = era_of(run, card)
         (tdir / "card.json").write_text(json.dumps({"run_id": rid, "spec": spec, **card}, indent=1))
         raw = raw_archive(run, stage / "raw" / spec / f"{rid}.tar.gz", spec)
+        if with_viewer_json:                                            # TEMPORARY: the story viewer's own data file, until the
+            text = json.dumps(viewer_data(run), separators=(",", ":"), default=str)
+            (tdir / "viewer.json").write_text(_scrub(text, _local_prefixes(run), _home()))
         problems += [f"{rid}: {p}" for p in check_tables(tdir)]
         rows.append(catalog_row(spec, rid, tdir, card, now))
         log(f"staged {spec}/{rid}: {sum(v.get('rows') or 0 for v in man['tables'].values())} table rows, raw {raw['files']} files "
@@ -510,10 +611,11 @@ def stage_runs(runs: list[Path], stage: Path, cards: dict, log=print, with_promp
 def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: bool = False, staging=None,
             reexport_all: bool = False, with_prompts: bool = False, spec_override: str | None = None,
             prune_legacy: bool = False, message: str | None = None, release: str | None = None, notes: str | None = None,
-            log=print) -> dict:
+            with_viewer_json: bool = False, stories=None, log=print) -> dict:
     """Stage (and with push=True, upload) runs as one dataset commit. Returns a summary dict.
 
-    release="vX.Y[.Z]" also prepends a changelog entry (CHANGELOG.md and the card) in that commit and tags it (module docstring)."""
+    release="vX.Y[.Z]" also prepends a changelog entry (CHANGELOG.md and the card) in that commit and tags it (module docstring).
+    stories (a list from load_stories) are written as stories.json, checked against the catalog."""
     last_release = None
     if release:
         parse_release(release)
@@ -534,9 +636,12 @@ def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: boo
                 run_dirs.append(fetch_raw(repo, row, tmp))
                 cards.setdefault(row["run_id"], {k: (json.loads(row["tags_json"]) if k == "tags" else row.get(k))
                                                  for k in CARD_KEYS if (row.get("tags_json") if k == "tags" else row.get(k))})
+    if not run_dirs and stories is not None:
+        return publish_stories(stories, repo, stage, published, push=push, message=message, log=log)
     if not run_dirs:
         raise SystemExit("no runs to publish")
-    rows, problems, tables = stage_runs(run_dirs, stage, cards, log=log, with_prompts=with_prompts, spec_override=spec_override)
+    rows, problems, tables = stage_runs(run_dirs, stage, cards, log=log, with_prompts=with_prompts, spec_override=spec_override,
+                                        with_viewer_json=with_viewer_json)
     if tmp:
         shutil.rmtree(tmp, ignore_errors=True)
     new_ids = {r["run_id"] for r in rows}
@@ -560,6 +665,9 @@ def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: boo
                 f"(docs/data_format.md, 'Versions and releases')")
     if entries:
         (stage / "CHANGELOG.md").write_text(render_changelog(entries))
+    if stories is not None:
+        problems += check_stories(stories, {r["run_id"] for r in catalog})
+        write_stories(stories, stage)
     (stage / "README.md").write_text(dataset_card(repo, sorted(tables), catalog, entries))
     problems += check_staging(stage)
     files = sorted(p for p in stage.rglob("*") if p.is_file())
@@ -596,17 +704,42 @@ def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: boo
     return summary
 
 
+def publish_stories(stories: list[dict], repo: str, stage: Path, published: list[dict], push: bool = False,
+                    message: str | None = None, log=print) -> dict:
+    """Stage (and with push=True, upload) only stories.json, checked against the published catalog."""
+    problems = check_stories(stories, {r["run_id"] for r in published})
+    write_stories(stories, stage)
+    summary = {"repo": repo, "staging": str(stage), "runs": [], "stories": len(stories), "files": 1, "problems": problems,
+               "pushed": False}
+    log(f"{len(stories)} stories staged in {stage / 'stories.json'}")
+    for p in problems:
+        log(f"  PROBLEM {p}")
+    if not push:
+        log("dry run: nothing uploaded (add --push to publish)")
+        return summary
+    if problems:
+        raise SystemExit("not uploading: fix the problems above")
+    commit = _api().upload_file(path_or_fileobj=str(stage / "stories.json"), path_in_repo="stories.json", repo_id=repo,
+                                repo_type="dataset", commit_message=message or f"stories: {len(stories)}")
+    summary.update(pushed=True, commit=str(getattr(commit, "oid", commit)), url=str(getattr(commit, "commit_url", commit)))
+    log(f"pushed: {summary['url']}")
+    return summary
+
+
 # ------------------------------------------------------------------ CLI
 def add_command(sub) -> None:
     p = sub.add_parser("publish", help="publish runs to a Hugging Face dataset (charter/publish.py; docs/data_format.md)")
     p.add_argument("runs", nargs="*", help="run directories, or directories holding runs")
     p.add_argument("--repo", default=DEFAULT_REPO, help=f"dataset repo (default {DEFAULT_REPO})")
     p.add_argument("--card", help="YAML/JSON card, or {run_id: card} (title, description, tags, featured, usable_rounds, validity)")
+    p.add_argument("--stories", help="stories registry (site/stories.yaml) to publish as stories.json; runs are optional")
     p.add_argument("--title"), p.add_argument("--description"), p.add_argument("--tags", help="comma-separated")
     p.add_argument("--spec", help="override the spec folder name")
     p.add_argument("--staging", help="staging directory (default charter/out/_publish/<time>)")
     p.add_argument("--reexport-all", action="store_true", help="also rebuild every published run's tables from its raw archive")
     p.add_argument("--with-prompts", action="store_true", help="include the prompts table (blobs) when the exporter supports it")
+    p.add_argument("--with-viewer-json", action="store_true",
+                   help="TEMPORARY: also write the story viewer's data (viewer.json) per run, until the site reads the tables")
     p.add_argument("--prune-legacy", action="store_true", help="delete pre-catalog files (runs.csv) from the dataset")
     p.add_argument("--message", help="commit message")
     p.add_argument("--push", action="store_true", help="upload (without it: stage and summarise only)")
@@ -626,6 +759,6 @@ def cmd(a) -> None:
         cards["*"] = {**cards.get("*", {}), **flags}
     s = publish(a.runs, repo=a.repo, cards=cards, push=a.push, staging=a.staging, reexport_all=a.reexport_all,
                 with_prompts=a.with_prompts, spec_override=a.spec, prune_legacy=a.prune_legacy, message=a.message,
-                release=a.release, notes=a.notes)
+                release=a.release, notes=a.notes, with_viewer_json=a.with_viewer_json, stories=load_stories(a.stories))
     if s["problems"] and not a.push:
         raise SystemExit(1)

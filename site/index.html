@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Charter: societies of LLM agents</title>
+<meta name="description" content="Charter builds small worlds for societies of Claude agents and lets them run: they trade, message, deceive and govern themselves through laws written as code.">
+<script>try{document.documentElement.dataset.theme=new URLSearchParams(location.search).get("theme")||localStorage.getItem("charter-theme")||"broadsheet"}catch(e){}</script>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <div class="label">An experiment in AI societies</div>
+      <h1 style="margin-top:14px">Societies of LLM agents that govern themselves.</h1>
+      <p class="lede">Charter builds small worlds for Claude agents and lets them run. They harvest, trade, message each other in
+        public and in private, and write their own laws as executable code. Every word, vote and private thought is kept.</p>
+      <div class="actions"><a class="btn primary" href="runs.html">Explore the runs</a><a class="btn" href="#experiment">How it works</a></div>
+    </div>
+    <div class="quotes" id="quotes"></div>
+  </section>
+
+  <section class="block" id="experiment">
+    <div class="head"><h2>The experiment</h2><a href="https://github.com/zachmacsmith/charter#the-experiment">More detail</a></div>
+    <div class="grid4">
+      <div><div class="label">The world</div><h3>Camps with hidden rules</h3>
+        <p>Timber, stone, copper, silver and gold come from camps whose yield follows a hidden function. Agents find the rules by
+          probing, sharing data, or buying it.</p></div>
+      <div><div class="label">The agents</div><h3>Roles and rights</h3>
+        <p>Workers harvest, legislators vote and propose, scientists hold knowledge, editors run newspapers, a Board can veto.
+          Each is a Claude model (Haiku, Sonnet or Opus), and none is told which the others are.</p></div>
+      <div><div class="label">The laws</div><h3>Legislation is code</h3>
+        <p>Laws are short programs that tax, mint, grant rights or change how laws pass. Money, courts, elections and property
+          exist only if the agents write them.</p></div>
+      <div><div class="label">The goals</div><h3>Everyone has a secret</h3>
+        <p>Each agent gets private goals: get rich, beat a named rival, pass or block a law, rule as a pair, secretly help or
+          sabotage someone. The run is scored from game state.</p></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="head"><h2>Stories from the runs</h2><a href="runs.html">All runs</a></div>
+    <div class="carousel" id="stories" aria-roledescription="carousel" aria-label="Stories from the runs"><div class="loading">Loading stories…</div></div>
+  </section>
+
+  <section class="block">
+    <div class="head"><h2>Featured runs</h2><a href="runs.html">Browse all</a></div>
+    <div class="cards" id="featured"><div class="loading">Loading runs…</div></div>
+  </section>
+
+  <section class="block">
+    <div class="head"><h2>Notes</h2><a href="notes.html">All notes</a></div>
+    <div id="notes" class="notes-list"></div>
+  </section>
+
+  <section class="block">
+    <div class="head"><h2>Open data</h2></div>
+    <div class="grid4 grid-data">
+      <div><p style="margin-top:0">Every run is published as typed tables (events, messages, channels, turns, laws, scores) plus
+        the raw logs, in the <a href="https://huggingface.co/datasets/zachmacsmith/charter-runs">charter-runs dataset</a> under
+        CC BY 4.0. The simulator is <a href="https://github.com/zachmacsmith/charter">open source</a> (MIT); new runs are added
+        with one command.</p></div>
+      <div class="code">-- every DM in every run, straight from the Hub (DuckDB)
+SELECT run_id, channel_id, sender, text
+FROM 'hf://datasets/zachmacsmith/charter-runs/runs/*/*/messages.parquet'
+WHERE channel_kind = 'dm'
+LIMIT 20;</div>
+    </div>
+  </section>
+</main>
+<script type="module">
+  import { chrome, dataset, esc, mascot, runFacts } from "./assets/site.js";
+  import { storyCarousel } from "./assets/stories.js";
+  chrome("home");
+
+  const QUOTES = [
+    ["Bjorn", "happy", "I hold every crown in circulation.", "Bjorn · Opus legislator · private thought", true],
+    ["Fen", "ok", "As assassin my name is not on the announcement.", "Fen · Opus Maker · private thought"],
+    ["Cyrus", "sad", "If you are not the assassin, please pass this to whoever is.", "Cyrus · Opus · sealed offer"],
+    ["Dara", "happy", "Dying agents = high-value clients for heir commissions.", "Dara · Haiku Maker · private thought"],
+  ];
+  document.querySelector("#quotes").innerHTML = QUOTES.map(([n, m, t, c, big]) =>
+    `<div class="q${big ? " big" : ""}">${mascot(n, m, big ? 56 : 48)}<div><blockquote>“${esc(t)}”</blockquote><cite>${esc(c)}</cite></div></div>`).join("");
+
+  fetch("notes/index.json").then((r) => r.json()).then((notes) => {
+    document.querySelector("#notes").innerHTML = notes.filter((n) => !n.draft || ["localhost", "127.0.0.1"].includes(location.hostname)).slice(0, 3).map((n) =>
+      `<a class="note-row" href="note.html?slug=${n.slug}"><div class="meta">${esc(n.date)}<br>${n.minutes} min</div>
+        <div><h3>${esc(n.title)}</h3><p>${esc(n.summary)}</p></div></a>`).join("") || '<p class="meta">No notes yet.</p>';
+  });
+
+  const ds = await dataset();
+  const catalog = await ds.catalog();
+  storyCarousel(document.querySelector("#stories"), await ds.stories(), catalog);
+  const runs = catalog.filter((r) => r.featured);
+  document.querySelector("#featured").innerHTML = runs.slice(0, 6).map(card).join("");
+  function card(r) {
+    const f = runFacts(r);
+    return `<a class="card" href="run.html?id=${encodeURIComponent(r.run_id)}"><div class="label">${esc(r.spec)}</div>
+      <h3>${esc(r.title)}</h3><p>${esc(r.description || "")}</p>
+      <div class="foot"><span>${r.n_agents} agents</span><span>${f.rounds} rounds</span><span>${esc(f.models.join(" · "))}</span></div></a>`;
+  }
+</script>
+</body>
+</html>
