@@ -439,3 +439,15 @@ def test_a_scripted_dry_run_exercises_craft_watch_and_attacks(tmp_path):
     kinds = {e["data"].get("kind") for e in ev if e["type"] == "arms"}
     assert {"craft", "watch"} <= kinds
     assert [e for e in ev if e["type"] == "attack_outcome"]
+
+
+def test_a_death_nobody_caused_is_never_rendered_as_a_killing():
+    """Millbrook (2026-10-15): starvation deaths read "killed by an unknown hand", and survivors guarded against killers who did
+    not exist. A death with no attacker says what it was; only an attack (or the law) with no named hand reads as a killing."""
+    ev = lambda cause, by=None, text=None: {"type": "disabled", "data": {"agent": "Fen", "cause": cause, "by": by,
+                                                                          **({"text": text} if text else {})}}
+    assert CF.render_event(None, ev("starvation"), "[e1 r1]") == "[e1 r1] Fen starved to death and left the game."
+    assert "unknown hand" not in CF.render_event(None, ev("exposure", text="Fen has been removed from the game: the cold."), "[e1]")
+    assert "unknown hand" not in CF.render_event(None, ev("exposure"), "[e1]")
+    assert "by an unknown hand" in CF.render_event(None, ev("attack"), "[e1]")
+    assert "by Cleo" in CF.render_event(None, ev("attack", by="Cleo"), "[e1]")

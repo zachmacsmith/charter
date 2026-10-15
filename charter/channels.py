@@ -51,6 +51,8 @@ NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-.]{0,39}$")
 WORLD = "world"
 SQUARE = "square"
 DEFAULTS = {"v2": False, "delivery": "push", "square": "one", "square_rate": 2, "found_right": None, "headlines": 8}
+# A channel's purpose: one or two sentences saying what the channel is for and when to post in it (required when an agent opens one).
+PURPOSE_MIN, PURPOSE_MAX = 20, 300
 ACTIONS = ("send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")
 OLD_ACTIONS = ("create_channel", "channel_post")                       # replaced by open_channel and send/post under v2
 # Actions whose handler differs under channels.v2 (actions._act): the same verbs, with channels.
@@ -726,6 +728,18 @@ def act_send(k, aid, to, text, encrypted=False, **kw):
     raise _err(f"unknown recipient {target}: an agent, an institution or a channel (read {{}} lists the directory)")
 
 
+def check_purpose(purpose) -> str:
+    """A channel's purpose as given, or an error: it is required (one or two sentences: what the channel is for, when to post in it)."""
+    text = " ".join(str(purpose or "").split())
+    if len(text) < PURPOSE_MIN:
+        raise _err("a channel needs a purpose: one or two sentences saying what it is for and when to post in it "
+                   "(e.g. \"House Marlow's working channel: post here to coordinate the house's trades and votes, or to ask the head "
+                   "for a decision.\")")
+    if len(text) > PURPOSE_MAX:
+        raise _err(f"a channel's purpose is one or two sentences (at most {PURPOSE_MAX} characters; this one is {len(text)})")
+    return text
+
+
 def act_open_channel(k, aid, name, purpose="", readers=None, writers=None, listed=None, identity="named", retention="all",
                      members=None, template=None, rate=None, **kw):
     """open_channel: a new channel you own (or an institution owns: "as"). Anyone may (unless the world's Press Act gates it)."""
@@ -762,7 +776,8 @@ def act_open_channel(k, aid, name, purpose="", readers=None, writers=None, liste
     cid = _new_id(k, name, listed)
     if cid in k.w["channels"] or cid.startswith(("@", SQUARE)):
         raise _err(f"channel {cid} exists")
-    settings = {"purpose": str(purpose or t.get("doc", ""))[:200], "readers": readers, "writers": writers, "listed": listed,
+    purpose = check_purpose(purpose)                                     # a template's doc describes the kind, not this channel
+    settings = {"purpose": purpose, "readers": readers, "writers": writers, "listed": listed,
                 "identity": identity, "retention": retention, "rate": rate, "owner": owner}
     k.apply("found", agent=aid, polity=cid, kind="channel", members=mem, open=writers == {"all": True}, settings=settings)
     return (f"Channel {cid} opened (owner {owner}; readers: {describe(readers)}; writers: {describe(writers)}; "
@@ -805,7 +820,7 @@ def act_set_channel(k, aid, channel, field, value=None):
     elif key == "rate" and value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
         raise _err("rate is a whole number (at least 1) or null")
     elif key == "purpose":
-        value = str(value or "")[:200]
+        value = check_purpose(value)
     k.apply("set_channel", agent=aid, channel=ch["id"], key=key, value=value)
     return f"{ch['id']}: {key} set to {json.dumps(value)}."
 
@@ -951,13 +966,28 @@ def _headline(e) -> str:
     return f"{who}: \"{t[:80]}{'...' if len(t) > 80 else ''}\""
 
 
+def writable_line(k, aid) -> list:
+    """The channels this agent can post in (beyond the square and inboxes, which anyone may use): each with its purpose and how many
+    follow it, so a channel an agent owns or writes for an institution is in front of it every turn, not only in the round it opened."""
+    mine = [ch for ch in k.w["channels"].values() if ch.get("v") == 2 and not ch.get("inbox") and ch["owner"] != WORLD
+            and not ch.get("closed") and ch.get("writers") != {"all": True} and can_write(k, aid, ch)]
+    if not mine:
+        return []
+    others = [x for x in k.roster() if x != aid and k.w["agents"][x].get("departed") is None]
+    def row(ch):
+        n = sum(1 for x in others if can_read(k, x, ch))                     # who it reaches (readers by any rule, not only followers)
+        return f"{ch['id']} (read by {n} other{'' if n == 1 else 's'}): {ch['purpose'] or 'no purpose given'}"
+    return ["You can post in: " + "; ".join(row(ch) for ch in sorted(mine, key=lambda c: c["id"]))
+            + ". Post there with post {\"channel\": \"<id>\", \"text\": \"...\"}; a post without a channel goes to the square."]
+
+
 def state_lines(k, aid) -> list:
     """The channel lines of an agent's state (agents.state_view under channels.v2)."""
     chans = [ch for ch in k.w["channels"].values() if ch.get("v") == 2 and ch["id"] != inbox_id(aid) and followed(k, aid, ch)]
     own = f"Your inbox: {inbox_id(aid)} (messages to you arrive in your feed)."
     if not pull(k):
         names = ", ".join(sorted(c["id"] for c in chans))
-        return [own, "Channels you follow: " + (names or "none") + " (read {} lists the directory)."]
+        return [own, "Channels you follow: " + (names or "none") + " (read {} lists the directory)."] + writable_line(k, aid)
     rows = []
     for ch in chans:
         n, latest = unread(k, aid, ch["id"])
@@ -968,7 +998,7 @@ def state_lines(k, aid) -> list:
     more = len(rows) - cap
     line = ("Channels (their posts are not in your feed: read {\"channel\": \"<id>\"} opens one; read {} lists the directory): "
             + ("; ".join(parts) or "none") + (f"; and {more} more" if more > 0 else "") + ".")
-    return [own, line]
+    return [own, line] + writable_line(k, aid)
 
 
 def render(k, e, tag, viewer=None) -> str:
@@ -1148,8 +1178,10 @@ def manual_text(k=None) -> str:
         "latest headline. Private messages and your own inbox always reach your feed.\n"
         "- open_channel {\"name\": \"...\", \"purpose\": \"...\", \"readers\": <selector>, \"writers\": <selector>, \"listed\": true, "
         "\"identity\": \"named\"|\"anonymous\", \"retention\": \"all\"|\"joined\", \"members\": [\"Name\"], \"rate\": null, "
-        "\"template\": \"<name>\", \"as\": \"<institution>\"}: you (or the institution) own it. An unlisted channel's id gets a "
-        "random suffix: its address is a key, learned only by being told (a message that names it).\n"
+        "\"template\": \"<name>\", \"as\": \"<institution>\"}: you (or the institution) own it. \"purpose\" is required: one or two "
+        "sentences saying what the channel is for and when to post in it (its readers see it in the directory, and its writers "
+        "every turn). An unlisted channel's id gets a random suffix: its address is a key, learned only by being told (a message "
+        "that names it).\n"
         "- set_channel {\"channel\": \"<id>\", \"field\": \"readers\", \"value\": <selector>}: fields purpose, readers, writers, "
         "listed, identity, retention, rate, inbox (owner only; an institution's channels: its speak office).\n"
         "- join_channel / leave_channel {\"channel\": \"<id>\"}: follow a channel (subscribe); add_member, remove_member and "

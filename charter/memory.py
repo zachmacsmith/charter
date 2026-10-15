@@ -509,9 +509,11 @@ def turn(k, a: dict, order: list, since: int, n_actions: int, final: bool, simul
         return HistoryTurn(text, (aid, s), False, text), len(k.events)
     starts = s == k.r
     rec = {}
-    state, rec["state"] = CX.state_layer(k, a, order, n_actions, simultaneous, int(b["state"]))
+    state, rec["state"] = CX.state_layer(k, a, order, n_actions, simultaneous, int(b["state"]) * CX.HARD_FACTOR)
     shown = {e["id"] for e in CX.exchange_events(k, aid, k.r - 1)} if k.r > 0 else set()
-    feed, cursor, rec["feed"] = CX.feed_layer(k, aid, since, int(b["feed"]), shown)
+    feed, cursor, rec["feed"] = CX.feed_layer(k, aid, since, int(b["feed"]) * CX.HARD_FACTOR, shown)
+    for layer in ("state", "feed"):                                      # soft budgets (context.HARD_FACTOR): shown whole, overage recorded
+        CX._soft(k, aid, layer, rec[layer], int(b[layer]))
     note_saw(k, aid, feed)
     st.built[aid] = k.r
     last = st.rows.get(aid, {}).get(k.r - 1)

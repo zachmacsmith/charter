@@ -51,8 +51,10 @@ def test_dry_run_layers_within_budget(tmp_path, mode):
     assert decide and look, "scripted bots use both phases"
     for r in decide + look:
         c = r["context"]
-        for layer in ("state", "feed", "recent", "core"):
-            assert c[layer]["tokens"] <= c[layer]["budget"], (layer, c[layer])
+        assert c["core"]["tokens"] <= c["core"]["budget"], c["core"]
+        for layer in ("state", "feed", "recent"):                         # soft budgets: shown whole up to the hard limit, overage recorded
+            assert c[layer]["tokens"] <= c[layer]["hard_limit"], (layer, c[layer])
+            assert (c[layer]["tokens"] > c[layer]["budget"]) == bool(c[layer].get("over_budget")), (layer, c[layer])
         assert c["scratchpad"]["tokens"] <= c["scratchpad"]["budget"]
         assert c["lookups"]["tokens"] <= c["lookups"]["budget"]
         assert c["total_tokens"] < 15000
@@ -63,17 +65,21 @@ def test_dry_run_layers_within_budget(tmp_path, mode):
     assert (out / "agents").exists()                                  # the report still builds
 
 
-def test_small_budgets_trim_but_hold(tmp_path):
-    rows, _ = run(tmp_path, ["turns=simultaneous", "rounds=3", "context.budgets.feed=300", "context.budgets.state=150",
-                             "context.budgets.recent=200"])
-    trimmed = 0
+def test_small_budgets_are_exceeded_openly_and_cut_only_past_the_hard_limit(tmp_path):
+    rows, out = run(tmp_path, ["turns=simultaneous", "rounds=3", "context.budgets.feed=60", "context.budgets.state=40",
+                               "context.budgets.recent=50"])
+    trimmed = over = 0
     for r in [x for x in rows if x["phase"] == "decide"]:
         c = r["context"]
-        assert c["feed"]["tokens"] <= 300 and c["state"]["tokens"] <= 150 and c["recent"]["tokens"] <= 200
-        trimmed += sum(c["feed"]["dropped"].values())
-        if c["feed"]["dropped"]:
-            assert "not shown" in r["prompt"]
-    assert trimmed > 0
+        for layer, b in (("feed", 60), ("state", 40), ("recent", 50)):
+            assert c[layer]["budget"] == b and c[layer]["tokens"] <= b * CX.HARD_FACTOR
+            over += bool(c[layer].get("over_budget"))
+        trimmed += sum(c["feed"]["dropped"].values()) + c["state"]["dropped_lines"]
+        if c["feed"]["dropped"] or c["state"]["dropped_lines"]:
+            assert "not shown" in r["prompt"]                            # a cut is never silent
+    assert over > 0 and trimmed > 0
+    gt = json.loads((out / "ground_truth.json").read_text())["context"]["over_budget"]
+    assert gt["state"]["calls"] > 0 and gt["state"]["budget"] == 40
 
 
 def test_trimming_is_deterministic(tmp_path):

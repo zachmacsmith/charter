@@ -570,9 +570,7 @@ def state_lines(k, aid) -> list:
     stores = store_line(k, aid)
     if stores:
         out.append(stores)
-    r = roster_line(k, aid)
-    if r:
-        out.append(r)
+    # the roster of who is hungry or starving is no longer a state line (user, 15 Oct): an agent learns it as people say so or die
     return out
 
 

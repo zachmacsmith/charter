@@ -4,7 +4,8 @@ Store-based. Row:
   right    the right opening a channel needs (open_channel). Seam: channels.found_right, read when an agent opens a channel.
            Today: "press" (the Media's right: create_channel needed it). Residual (no Act, or repealed): anyone may open a channel
            (D-33). Without the default code the seam reads spec channels.found_right (null: anyone).
-Selected only where channels.v2 is on (Act.when), so every other world's code (and its Act ids) is unchanged.
+Selected only where channels.v2 is on AND the spec asks for a press gate (channels.found_right set): by default anyone may open a
+channel (the residual; user, 15 Oct: Millbrook had the Act with no Media, so nobody could open one).
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ RIGHT = "press"
 
 
 def today(sp: dict) -> dict:
-    return {"RIGHT": "press"}
+    return {"RIGHT": (sp.get("channels") or {}).get("found_right") or "press"}
 
 
 def check(key, value, sp):
@@ -40,7 +41,8 @@ def describe(rows: dict) -> str:
 
 
 def when(sp: dict) -> bool:
-    return bool((sp.get("channels") or {}).get("v2"))
+    c = sp.get("channels") or {}
+    return bool(c.get("v2") and c.get("found_right"))
 
 
 ACT = register(Act(

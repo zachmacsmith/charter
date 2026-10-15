@@ -3,7 +3,7 @@
 With the module on, every turn is a fresh model call built from fixed layers, each with its own token budget; nothing accumulates:
 
   core        (system prompt, cached) short rules, identity, class, roles, goal, personality, action names, manual index   2,500
-  state       round, turn order, holdings, rights, jurisdiction, open ballots, lifespan left, memory used                  800
+  state       round, turn order, holdings, rights, jurisdiction, open ballots, lifespan left, memory used                1,500
   feed        what it can see that changed since its last turn, trimmed by priority                                      3,000
   recent      its own last 3 turns (actions and results), verbatim                                                       1,000
   scratchpad  its scratchpad (replaces the old free-text notes field)                                                    2,000
@@ -39,7 +39,7 @@ from charter import eventtypes as ET                                  # the even
 
 DEFAULTS = {
     "enabled": False,
-    "budgets": {"core": 2500, "state": 800, "feed": 3000, "recent": 1000, "scratchpad": 2000, "media": 600, "pinned": 1000,
+    "budgets": {"core": 2500, "state": 1500, "feed": 3000, "recent": 1000, "scratchpad": 2000, "media": 600, "pinned": 1000,
                 "lookup": 1000},
     "media_outlets": 4,               # at most this many editions in the Media layer
     "recent_turns": 3,                # own last turns shown verbatim (the default when memory_turns is not set)
@@ -161,7 +161,7 @@ def _clip_lines(lines: list, budget: int, what: str) -> tuple[str, int]:
         else:
             dropped += 1
     if dropped:
-        out.append(f"({dropped} more {what} not shown)")
+        out.append(f"({dropped} more {what} not shown: this section is over its size limit)")
     return "\n".join(out), dropped
 
 
@@ -489,6 +489,15 @@ def read_law(k, aid, ref) -> str:
     """A law's full record (any law ever proposed, by id or title): title, intent, class, status, author, code and patches."""
     ref = str(ref or "").strip()
     laws = k.w["laws"]
+    if ref.lower() in ("", "all", "list"):                              # read_law {}: every law in force, newest first
+        from charter import agents as AG
+        act = [l for l in sorted(k.active_laws(), key=lambda l: (l.get("enacted_round") or 0, l["id"]), reverse=True)]
+        from charter import code as _DC
+        acts = [f"{r['id']} '{r['title']}' (default code)" for r in (_DC.acts_in_force(k) if _DC.enabled(k) else [])]
+        return (f"Laws in force ({len(act)}): " + ("; ".join(f"{l['id']} '{l['title']}' ({l['cls']}), enacted round "
+                f"{(l.get('enacted_round') or 0) + 1}" for l in act) or "none") + "."
+                + (f"\nDefault code (the rules every world starts with, amendable like any law): {'; '.join(acts)}." if acts else "")
+                + "\nread_law {\"law\": \"<id>\"} reads one in full.")
     law = laws.get(ref) or next((l for l in laws.values() if l["title"].lower() == ref.lower()), None)
     if law is None:
         listing = "; ".join(f"{l['id']} '{l['title']}' ({l['status']})" for l in laws.values())
@@ -1325,6 +1334,14 @@ def _optional(module, fn, *args):
     return f(*args) if callable(f) else None
 
 
+# Budgets are targets, not cuts (user, 15 Oct): a layer over its budget is shown whole and the overage is recorded (the call's
+# layer record, ground_truth.json["context"]["over_budget"], and one warning per layer per run on stderr). Only past HARD_FACTOR
+# times its budget is a layer cut, and then the prompt says so.
+HARD_FACTOR = 4
+
+VITAL_STATE = ("Food:", "Hunger:", "Warning: you hold", "Rounds of life left", "Your lifespan")   # never clipped (see state_layer)
+
+
 def state_layer(k, a, order, n_actions, simultaneous, budget) -> tuple[str, dict]:
     from charter import agents as AG
     aid = a["id"]
@@ -1350,6 +1367,10 @@ def state_layer(k, a, order, n_actions, simultaneous, budget) -> tuple[str, dict
         lines.append(rl)
         budget += tokens(rl)                                             # the roster has its own room: it never pushes other state out
     lines.append(memory_line(k, aid))
+    # survival comes first: the budget drops the last lines, so food, hunger and life-or-death warnings go right after the round line
+    # (Millbrook, 15 Oct: every turn dropped ~16 state lines and starving agents never saw "STARVING: you may die")
+    vital = [l for l in lines[1:] if l.startswith(VITAL_STATE) or re.match(r"^[A-Z]{4,}:", l)]
+    lines = lines[:1] + vital + [l for l in lines[1:] if l not in vital]
     text, dropped = _clip_lines(lines, budget, "lines of state")
     return text, {"tokens": tokens(text), "budget": budget, "lines": len(lines), "dropped_lines": dropped}
 
@@ -1400,14 +1421,16 @@ def turn_prompt(k, a: dict, order: list, since: int, n_actions: int, final: bool
     init_agent(k, aid)
     st = _st(k, aid)
     rec = {}
-    state, rec["state"] = state_layer(k, a, order, n_actions, simultaneous, int(b["state"]))
+    state, rec["state"] = state_layer(k, a, order, n_actions, simultaneous, int(b["state"]) * HARD_FACTOR)
     exchange, shown = "", ()
     if c.get("dm_delta") and k.r > 0:                                    # review 20: last round's DMs whole, as threads (the DM
         exchange = round_exchange(k, aid, k.r - 1)                       # step's replies are otherwise only "Message sent to X")
         shown = {e["id"] for e in exchange_events(k, aid, k.r - 1)}
         rec["exchange"] = {"tokens": tokens(exchange), "messages": len(shown)}
-    feed, cursor, rec["feed"] = feed_layer(k, aid, since, int(b["feed"]), shown)
-    recent, rec["recent"] = recent_layer(k, aid, int(b["recent"]))
+    feed, cursor, rec["feed"] = feed_layer(k, aid, since, int(b["feed"]) * HARD_FACTOR, shown)
+    recent, rec["recent"] = recent_layer(k, aid, int(b["recent"]) * HARD_FACTOR)
+    for layer in ("state", "feed", "recent"):
+        _soft(k, aid, layer, rec[layer], int(b[layer]))
     pad, cut = clip(k.w["scratchpad"][aid], scratchpad_size(k, aid))
     rec["scratchpad"] = {"tokens": tokens(pad), "budget": scratchpad_size(k, aid), "trimmed": cut}
     from charter import media
@@ -1487,6 +1510,9 @@ def situation_lines(k, a, n_actions) -> list:
     hold = k.w["agents"][aid]["holdings"]
     lines.append("You hold: " + (", ".join(f"{q:g} {i}" for i, q in sorted(hold.items()) if q > 1e-9) or "nothing")
                  + f" (value {k.holdings_value(aid):.4g}).")
+    # survival, again last before acting (it also heads the state layer): food, and any hunger or missed-meal warning
+    food = _optional("subsistence", "state_lines", k, aid) or []
+    lines += [l for l in food if l.startswith(("Food:", "HUNGRY", "STARVING", "Warning: you hold"))]
     bal = [b for b in k.w["ballots"].values() if b["status"] == "open" and aid in b["electorate"] and aid not in b["votes"]]
     if bal:
         lines.append(f"Ballots waiting for your vote: {', '.join(b['id'] for b in bal)}.")
@@ -1576,10 +1602,30 @@ def truth(k, inst=None) -> dict:
     return {"context": _truth(k)} if enabled(k) else {}               # ground_truth.json["context"] (only when on)
 
 
+def _soft(k, aid, layer, rec, budget) -> None:
+    """A layer's record against its (soft) budget: the overage, counted per layer for the run and warned about once per layer."""
+    import sys
+    rec["budget"], rec["hard_limit"] = budget, budget * HARD_FACTOR
+    over = max(0, int(rec.get("tokens", 0)) - budget)
+    if not over:
+        return
+    rec["over_budget"] = over
+    agg = _st(k).setdefault("over_budget", {}).setdefault(layer, {"calls": 0, "max_tokens": 0, "budget": budget, "agents": []})
+    agg["calls"] += 1
+    agg["max_tokens"] = max(agg["max_tokens"], int(rec["tokens"]))
+    if aid not in agg["agents"]:
+        agg["agents"].append(aid)
+    if agg["calls"] == 1:
+        print(f"charter: warning: the {layer} layer is over its {budget}-token budget ({rec['tokens']} tokens for {aid}, round "
+              f"{k.r + 1}); it is shown whole up to {budget * HARD_FACTOR} tokens. Raise context.budgets.{layer} or slim the layer "
+              f"(totals: ground_truth.json context.over_budget).", file=sys.stderr)
+
+
 def _truth(k) -> dict:
-    """For ground_truth.json: which manual sections each agent read (and how often), and every agent's files at the end."""
+    """For ground_truth.json: which manual sections each agent read (and how often), every agent's files at the end, and how often
+    each layer ran over its budget (over_budget: shown whole, but worth slimming or a bigger budget)."""
     st = _st(k)
-    return {"manual_reads": copy.deepcopy(st.get("manual_reads", {})),
+    return {"manual_reads": copy.deepcopy(st.get("manual_reads", {})), "over_budget": copy.deepcopy(st.get("over_budget", {})),
             "files": {aid: {n: {"tokens": f["tokens"], "pinned": f["pinned"], "origin": f["origin"]} for n, f in fs.items()}
                       for aid, fs in (k.w.get("files") or {}).items()},
             "scratchpad_tokens": {aid: tokens(t) for aid, t in (k.w.get("scratchpad") or {}).items()},

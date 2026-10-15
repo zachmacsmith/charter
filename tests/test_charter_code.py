@@ -312,15 +312,15 @@ def test_v1_court_seams_read_the_act():
 
 
 # ------------------------------------------------------------------ what agents see
-def test_prompt_shows_one_line_per_act_only_with_code_on():
+def test_the_state_leaves_the_default_code_to_read_law():
+    """The Acts every world starts with are not listed or described in the state every turn (15 Oct); read_law {} lists them."""
     on, off = world(), world(code=False)
     aid = on.roster()[0]
     text = AG.state_view(on, aid)
-    assert "Laws in force: A1 'Communications Act' (default code); A2 'Court Rules Act' (default code); L1" in text
-    lines = [ln for ln in text.splitlines() if ln.startswith("Default code ")]
-    assert len(lines) == 2 and lines[0].startswith("Default code A1 'Communications Act' (statute; default code, inherited")
-    assert "Court Rules Act" in lines[1] and "a case waits at most 3 rounds" in lines[1]
-    assert "Default code" not in AG.state_view(off, aid) and "(default code)" not in AG.state_view(off, aid)
+    assert "Default code" not in text and "(default code)" not in text and "Laws in force (" in text and "read_law {}" in text
+    assert "Default code (the rules every world starts with" in CX.read_law(on, aid, "")
+    assert "Communications Act" in CX.read_law(on, aid, "")
+    assert "Default code" not in CX.read_law(off, aid, "")
 
 
 def test_read_law_marks_the_default_code():

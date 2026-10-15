@@ -116,7 +116,7 @@ def test_selectors_agents_members_office_subscribers_all_any():
 def test_address_selector_is_a_capability_learned_by_being_told():
     k = world()
     a, b, c, d = people(k)
-    A.act(k, a, "open_channel", {"name": "cell", "template": "secret_cell", "members": [a]})
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "cell", "template": "secret_cell", "members": [a]})
     cid = next(x for x in k.w["channels"] if x.startswith("cell~"))
     ch = k.w["channels"][cid]
     assert not ch["listed"] and ch["writers"] == {"address": True}
@@ -128,7 +128,7 @@ def test_address_selector_is_a_capability_learned_by_being_told():
     A.act(k, b, "send", {"to": cid, "text": "reporting"})
     assert last(k, "channel_post")["data"]["channel_id"] == cid
     assert k.can_see(a, last(k, "channel_post")) and not k.can_see(b, last(k, "channel_post"))   # members read; b only writes
-    A.act(k, a, "open_channel", {"name": "board", "template": "group", "members": [a, d]})
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "board", "template": "group", "members": [a, d]})
     gid = next(x for x in k.w["channels"] if x.startswith("board~"))
     A.act(k, a, "send", {"to": gid, "text": f"the cell is {cid}"})       # told in a channel: its readers know it
     assert CH.knows(k, d, ch) and not CH.knows(k, c, ch)
@@ -208,8 +208,8 @@ def test_send_as_an_agent_needs_its_authorization():
 def test_listed_and_unlisted_channels_in_the_directory():
     k = world()
     a, b, _, _ = people(k)
-    A.act(k, a, "open_channel", {"name": "news", "template": "newspaper"})
-    A.act(k, a, "open_channel", {"name": "plot", "listed": False, "readers": {"members": True}, "writers": {"members": True}})
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "news", "template": "newspaper"})
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "plot", "listed": False, "readers": {"members": True}, "writers": {"members": True}})
     plot = next(x for x in k.w["channels"] if x.startswith("plot~"))
     assert last(k, "channel_opened")["vis"] == [a]                       # an unlisted opening reaches its members only
     seen_b, seen_a = A.act(k, b, "read", {}), A.act(k, a, "read", {})
@@ -223,7 +223,7 @@ def test_listed_and_unlisted_channels_in_the_directory():
 def test_join_retention_and_subscriber_readers():
     k = world()
     a, b, c, _ = people(k)
-    A.act(k, a, "open_channel", {"name": "news", "template": "newspaper", "retention": "joined"})
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "news", "template": "newspaper", "retention": "joined"})
     A.act(k, a, "post", {"channel": "news", "text": "first issue"})
     first = last(k, "channel_post")
     assert not k.can_see(b, first)
@@ -237,13 +237,13 @@ def test_join_retention_and_subscriber_readers():
     A.act(k, b, "leave_channel", {"channel": "news"})
     assert not k.can_see(b, last(k, "channel_post"))
     with pytest.raises(A.ActionError, match="channel template"):
-        A.act(k, c, "open_channel", {"name": "x", "template": "fanclub"})
+        A.act(k, c, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "x", "template": "fanclub"})
 
 
 def test_anonymous_identity_hides_the_author_but_records_it():
     k = world()
     a, b, _, _ = people(k)
-    A.act(k, a, "open_channel", {"name": "tips", "identity": "anonymous"})
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "tips", "identity": "anonymous"})
     A.act(k, b, "post", {"channel": "tips", "text": "the mayor lies"})
     e = last(k, "channel_post")
     assert e["agent"] is None and "Anonymous" in AG.render_event(k, e, a)
@@ -309,7 +309,7 @@ def before_post(p, chain):
 def test_a_before_post_hook_censors_a_channel():
     k = world()
     a, b, _, _ = people(k)
-    A.act(k, a, "open_channel", {"name": "guild"})
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "guild"})
     lid = k.new_law(MODERATION, "constitution")
     k.enact(lid)
     A.act(k, b, "post", {"channel": "guild", "text": "hello all"})
@@ -325,7 +325,7 @@ def test_an_institution_s_own_law_governs_its_channel_whoever_posts():
     body = MODERATION.split("\n", 2)[2].replace('"guild"', "CHANNEL")
     cid = found(k, a, "Guild", 'CHANNEL = "hall"\n' + body)
     office(k, a, cid)
-    A.act(k, a, "open_channel", {"name": "hall", "as": cid, "readers": {"members": cid}, "writers": {"all": True}})
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "hall", "as": cid, "readers": {"members": cid}, "writers": {"all": True}})
     assert k.w["channels"]["hall"]["owner"] == cid and b not in k.w["contracts"]["assoc"][cid]["members"]
     with pytest.raises(A.ActionError, match="no talk of traitors"):      # b is no member: the owner's law still binds the post,
         A.act(k, b, "post", {"channel": "hall", "text": "traitor!"})     # and reads its own (closed) channel's text
@@ -335,7 +335,7 @@ def test_an_institution_s_own_law_governs_its_channel_whoever_posts():
 def test_a_closed_channel_s_text_stays_closed_to_other_laws():
     k = world()
     a, b, _, _ = people(k)
-    A.act(k, a, "open_channel", {"name": "guild", "readers": {"members": True}, "writers": {"all": True}})
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "guild", "readers": {"members": True}, "writers": {"all": True}})
     k.enact(k.new_law(MODERATION, "constitution"))
     A.act(k, b, "post", {"channel": "guild", "text": "traitor"})         # J0's law does not own it and cannot read it (V18)
 
@@ -343,13 +343,13 @@ def test_a_closed_channel_s_text_stays_closed_to_other_laws():
 def test_set_channel_is_hookable():
     k = world()
     a = people(k, 1)[0]
-    A.act(k, a, "open_channel", {"name": "guild"})
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "guild"})
     k.enact(k.new_law('title = "Open channels stay open"\nintent = "test"\ndef before_set_channel(p, chain):\n'
                       '    if p["key"] == "readers":\n        refuse("channels stay readable")\n', "constitution"))
     with pytest.raises(A.ActionError, match="channels stay readable"):
         A.act(k, a, "set_channel", {"channel": "guild", "field": "readers", "value": {"members": True}})
-    A.act(k, a, "set_channel", {"channel": "guild", "field": "purpose", "value": "the guild's talk"})
-    assert k.w["channels"]["guild"]["purpose"] == "the guild's talk" and last(k, "channel_set")["vis"] == "channel:guild"
+    A.act(k, a, "set_channel", {"channel": "guild", "field": "purpose", "value": "the guild's talk: post here about hunts and shares."})
+    assert k.w["channels"]["guild"]["purpose"] == "the guild's talk: post here about hunts and shares." and last(k, "channel_set")["vis"] == "channel:guild"
 
 
 def test_a_standing_order_sends_on_schedule():
@@ -394,14 +394,18 @@ def test_law_api_send_message_exists_only_under_channels_v2():
 def test_anyone_may_open_a_channel_unless_the_press_act_gates_it():
     k = world()
     a = next(x for x in people(k, 20) if "press" not in k.w["agents"][x]["rights"])
-    A.act(k, a, "open_channel", {"name": "mine"})                         # D-33: the residual
-    kc = world("code.enabled=true")
+    A.act(k, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "mine"})                         # D-33: the residual
+    kd = world("code.enabled=true")                                    # default code without a press gate: anyone opens
+    assert "Press Act" not in [r["title"] for r in DC.acts_in_force(kd)]
+    A.act(kd, next(x for x in people(kd, 20) if "press" not in kd.w["agents"][x]["rights"]), "open_channel",
+          {"purpose": "a test channel: post here when the test needs a message in it.", "name": "open"})
+    kc = world("code.enabled=true", "channels.found_right=press")       # a world that asks for the gate gets the Act
     assert [r["title"] for r in DC.acts_in_force(kc)][-1] == "Press Act"
     a = next(x for x in people(kc, 20) if "press" not in kc.w["agents"][x]["rights"])
     with pytest.raises(A.ActionError, match="needs the 'press' right"):
-        A.act(kc, a, "open_channel", {"name": "mine"})
+        A.act(kc, a, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "mine"})
     p = next(x for x in kc.roster() if "press" in kc.w["agents"][x]["rights"])
-    A.act(kc, p, "open_channel", {"name": "gazette"})
+    A.act(kc, p, "open_channel", {"purpose": "a test channel: post here when the test needs a message in it.", "name": "gazette"})
     off = world("code.enabled=true", v2=False)
     assert "Press Act" not in [r["title"] for r in DC.acts_in_force(off)]   # no other world's code changes
 
@@ -463,3 +467,31 @@ def test_manual_section_and_spec_fragment():
     from charter import lawlang as L
     for name, src in CH.LAW_EXAMPLES.items():
         L.check(src, v2=True)
+
+
+# ---------------------------------------------------------------------- purposes and the channels an agent can post in
+def test_opening_a_channel_needs_a_purpose_of_one_or_two_sentences():
+    k = world()
+    a, _, _, _ = people(k)
+    for purpose in (None, "", "news"):
+        args = {"name": "news", "template": "newspaper"} | ({} if purpose is None else {"purpose": purpose})
+        with pytest.raises(A.ActionError, match="needs a purpose"):
+            A.act(k, a, "open_channel", args)
+    with pytest.raises(A.ActionError, match="one or two sentences"):
+        A.act(k, a, "open_channel", {"name": "news", "purpose": "x" * 400})
+    A.act(k, a, "open_channel", {"name": "news", "template": "newspaper",
+                                 "purpose": "The village paper: post the round's news and your rulings here once a round."})
+    assert k.w["channels"]["news"]["purpose"].startswith("The village paper")
+    with pytest.raises(A.ActionError, match="needs a purpose"):
+        A.act(k, a, "set_channel", {"channel": "news", "field": "purpose", "value": "news"})
+
+
+def test_state_lists_the_channels_an_agent_can_post_in_with_purpose_and_following():
+    k = world()
+    a, b, _, _ = people(k)
+    A.act(k, a, "open_channel", {"name": "news", "template": "newspaper",
+                                 "purpose": "The village paper: post the round's news here once a round."})
+    A.act(k, b, "join_channel", {"channel": "news"})
+    line = [l for l in CH.state_lines(k, a) if l.startswith("You can post in")]
+    assert line and "news (read by 1 other): The village paper" in line[0] and 'post {"channel": "<id>"' in line[0]
+    assert not [l for l in CH.state_lines(k, b) if l.startswith("You can post in")]     # a reader, not a writer

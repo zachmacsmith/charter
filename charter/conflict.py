@@ -1541,8 +1541,12 @@ def render_event(k, e, tag, viewer=None):
         if cause == "wounds":                                           # harm: starved within a few rounds of a wound
             return f"{tag} {who} died of the wounds {d['by']} gave them" + " and left the game." if d.get("by") else \
                 f"{tag} {who} died of their wounds and left the game."
+        if cause == "starvation":                                       # subsistence: hunger, not a killing
+            return f"{tag} {who} starved to death and left the game."
         if d.get("by"):
             return f"{tag} {who} was {_verb(k)} by {d['by']}" + (" acting for the law" if cause == "law" else "") + " and removed from the game."
+        if cause not in (None, "attack", "assassin", "law"):            # a death nobody caused: say what it was, never "an unknown hand"
+            return f"{tag} {d['text']}" if d.get("text") else f"{tag} {who} died ({str(cause).replace('_', ' ')}) and left the game."
         return f"{tag} {who} was {_verb(k)} by an unknown hand and removed from the game."
     if t == "wounded":
         return f"{tag} {d['text']}"

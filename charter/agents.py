@@ -612,7 +612,31 @@ def feed(k, aid: str, since: int, max_items: int = 80) -> tuple[str, int]:
 def dm_source(k, aid) -> str:
     """" (your capacity)" / " (capped by law)" after an agent's DM allowance under dm_step.capacity natural; "" under legacy."""
     src = k.dm_limit_source(aid)
-    return "" if src is None else " (your capacity)" if src == "capacity" else " (capped by law)"
+    if src is None:
+        return ""
+    if src == "capacity":
+        return " (your capacity)"
+    from charter import code as DC                                     # name the Act that caps it, when the default code does
+    act = next((r for r in DC.acts_in_force(k) if r.get("title") == "Communications Act"), None) if DC.enabled(k) else None
+    return f" (capped by the Communications Act, {act['id']})" if act else " (capped by law)"
+
+
+LAWS_SHOWN = 8
+
+
+def laws_line(k) -> str:
+    """The laws in force, most recently changed first (enacted or patched), at most LAWS_SHOWN; older ones are counted, and read_law
+    lists them all. The default code's Acts are not listed (an agent reads them with read_law; the state names the one that caps
+    its messages)."""
+    from charter import dispatch as D
+    def changed(l):
+        rs = [l.get("enacted_round") or 0] + [p.get("round", 0) for p in (l.get("patches") or [])]
+        return max(rs)
+    laws = sorted(k.active_laws(), key=lambda l: (changed(l), l["id"]), reverse=True)
+    shown = [f"{l['id']} '{l['title']}' ({l['cls']}){D.window_note(k, l['id'])}" for l in laws[:LAWS_SHOWN]]
+    more = len(laws) - len(shown)
+    return (f"Laws in force ({len(laws)}, most recently changed first): " + ("; ".join(shown) or "none")
+            + (f"; [... {more} older]" if more > 0 else "") + ". read_law {\"law\": \"<id>\"} reads one; read_law {} lists them all.")
 
 
 def state_view(k, aid: str) -> str:
@@ -628,13 +652,12 @@ def state_view(k, aid: str) -> str:
                      + (", convertible" if v.get("convertible") else "") + CR.currency_note(k, c, v) for c, v in w["currencies"].items()) or "none"
     from charter import dispatch as D                                  # W7e: a law's declared window (law.v2)
     from charter import code as DC                                     # code.enabled: the default code's Acts (off: nothing)
-    laws = "; ".join(DC.law_list(k) + [f"{l['id']} '{l['title']}' ({l['cls']}){D.window_note(k, l['id'])}"
-                                       for l in k.active_laws()]) or "none"
+    laws = laws_line(k)
     ballots = "; ".join(f"{b['id']}: {b['question']} {b['options']}" for b in w["ballots"].values()
                         if b["status"] == "open" and aid in b["electorate"]) or "none"
     lines = [f"Your holdings: {hold} (value {k.holdings_value(aid):.4g}). Your rights: {rights}.",
              f"Camps: {camps}.", f"Reserve: " + (", ".join(f"{q:.3g} {i}" for i, q in w["reserve"].items()) or "empty") + f". Currencies: {curs}.",
-             f"Laws in force: {laws}.", *DC.prompt_lines(k), f"Open ballots you can vote in: {ballots}."]   # D7: one line per Act
+             laws, f"Open ballots you can vote in: {ballots}."]   # the default code's Acts: read_law (no line each, every turn)
     if a["title"]:
         lines.append(f"Your title: {a['title']}.")
     if a["limit"] and a["limit"]["until"] >= k.r:

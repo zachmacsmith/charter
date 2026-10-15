@@ -116,13 +116,13 @@ def test_stages_fall_one_per_missed_meal_and_recover_one_per_meal():
     assert [e["data"]["stage"] for e in hunger] == [-1, -2, -1, 0] and {e["vis"] for e in hunger} == {"monitor"}   # (user, 10 Oct)
 
 
-def test_hunger_is_on_the_roster_never_a_public_event():
+def test_hunger_is_on_its_own_state_lines_never_a_public_event_nor_a_roster():
     inst, k = small(["subsistence.spoil=0"])
     a, b = eaters(k)[:2]
     set_food(k, a, 0)
     end_round(k)
     assert SB.stage(k, a) == -1
-    assert f"Hunger now: hungry: {a}." in SB.state_lines(k, b)                # the coarse roster on everyone's state lines
+    assert not any(x.startswith("Hunger now") for x in SB.state_lines(k, b))   # no roster of who is hungry (15 Oct)
     assert not [e for e in k.events if e["type"] == "hunger" and k.can_see(b, e)]
     assert not [e for e in k.events if e["type"] == "hunger" and k.can_see(a, e)]
     inst, k = small(["subsistence.spoil=0", "subsistence.visibility=private"])
