@@ -152,7 +152,13 @@ def hub(monkeypatch):
     monkeypatch.setattr(P, "_api", lambda: api)
     monkeypatch.setattr(P, "remote_catalog", lambda repo, revision=None: [])
     monkeypatch.setattr(P, "remote_changelog", lambda repo: P.changelog_entries(OLD_LOG))
+    monkeypatch.setattr(P, "code_info", lambda: dict(CODE))
+    api.git = []
+    monkeypatch.setattr(P, "_git_run", lambda *args: (api.git.append(args), (0, ""))[1])   # no tag or push in tests
     return api
+
+
+CODE = {"sha": "0123456789abcdef0123456789abcdef01234567", "branch": "wp", "dirty": False, "export_schema": "2.6", "engine_version": 10}
 
 
 def test_release_prepends_changelog_and_tags_upload_commit(run, tmp_path, hub):
@@ -351,3 +357,77 @@ def test_what_each_call_saw_unknown_dm_step_falls_back_to_the_whole_prompt(tmp_p
             {"round": 0, "agent": "Bo", "phase": "dm_reply_1"}]                                       # no prompt recorded: skipped
     out = _saw(tmp_path, rows, [_dm("e1", 0, "Bo", "Ann"), _dm("e2", 0, "Bo", "Ann")])
     assert out[(0, "Ann", "dm_reply_1")] == {"saw": ["e2"]} and out[(0, "Bo", "dm_reply_1")] == {}
+
+
+# ------------------------------------------------------------------ releases name their code (changelog entry + dataset-vX.Y tag)
+def test_release_records_the_code_and_tags_it(run, tmp_path, hub):
+    s = P.publish([run], repo="me/data", staging=tmp_path / "st", push=True, release="v1.1", notes="adds pub1", **QUIET)
+    log = hub.uploaded["CHANGELOG.md"]
+    assert f"- Code: [`{CODE['sha'][:12]}`](https://github.com/zachmacsmith/charter/commit/{CODE['sha']})" in log
+    assert "code tag `dataset-v1.1`" in log and "export schema 2.6; engine version 10" in log and "dirty" not in log
+    tag, push = hub.git
+    assert tag[:3] == ("tag", "-a", "dataset-v1.1") and tag[-1] == CODE["sha"]
+    assert "adds pub1" in tag[4] and "https://hf.co/c/abc123" in tag[4]                       # notes + the Hub commit
+    assert push == ("push", "origin", "dataset-v1.1") and s["code_tag"]["pushed"]
+
+
+def test_release_refused_from_a_dirty_tree_unless_allowed(run, tmp_path, hub, monkeypatch):
+    monkeypatch.setattr(P, "code_info", lambda: {**CODE, "dirty": True})
+    with pytest.raises(SystemExit, match="uncommitted"):
+        P.publish([run], repo="me/data", staging=tmp_path / "st", push=True, release="v1.1", **QUIET)
+    assert hub.calls == [] and not (tmp_path / "st").exists()
+    P.publish([run], repo="me/data", staging=tmp_path / "st2", push=True, release="v1.1", allow_dirty=True, **QUIET)
+    assert ", dirty: true;" in hub.uploaded["CHANGELOG.md"]
+
+
+def test_a_failed_code_tag_push_warns_and_never_fails_the_release(run, tmp_path, hub, monkeypatch):
+    monkeypatch.setattr(P, "_git_run", lambda *args: (1, "denied") if args[0] == "push" else (0, ""))
+    logs = []
+    s = P.publish([run], repo="me/data", staging=tmp_path / "st", push=True, release="v1.1", log=logs.append)
+    assert s["tag"] == "v1.1" and s["code_tag"]["created"] and not s["code_tag"]["pushed"]
+    assert any("WARNING" in m and "push origin dataset-v1.1" in m for m in logs)
+
+
+# ------------------------------------------------------------------ the raw archive: what a continuation needs, no account data
+def test_raw_archive_keeps_abandoned_calls_and_only_redacted_transcripts(run, tmp_path):
+    import shutil
+    d = tmp_path / "E0" / "pub1"
+    shutil.copytree(run, d)
+    (d / "abandoned_calls.jsonl").write_text('{"call": "r1:Ann:0", "abandoned": true}\n')
+    cs = d / "claude_sessions"
+    (cs / "backups").mkdir(parents=True)
+    (cs / ".claude.json").write_text('{"oauthAccount": {"emailAddress": "someone@example.com"}}')
+    (cs / "backups" / ".claude.json.backup.1").write_text("{}")
+    (cs / "policy-limits.json").write_text("{}")
+    proj = cs / "projects" / "-home-x-charter-out-E0-pub1-claude-sessions-cwd"
+    proj.mkdir(parents=True)
+    (proj / "s1.jsonl").write_text('{"context": "The user\'s email address is someone@example.com.", '
+                                   '"attachment": {"type": "credential_org", "organizationUuid": "b173ca6c-98f1"}}\n')
+    nested = cs / "cwd" / "charter" / "out" / "E0" / "pub1" / "claude_sessions" / "projects" / "slug"
+    nested.mkdir(parents=True)
+    (nested / "s2.jsonl").write_text('{"userID": "abc", "text": "hi"}\n')
+    out = tmp_path / "st" / "raw" / "E0" / "pub1.tar.gz"
+    P.raw_archive(d, out, "E0")
+    with tarfile.open(out) as tf:
+        names = set(tf.getnames())
+        s1 = tf.extractfile("E0/pub1/claude_sessions/transcripts/s1.jsonl").read().decode()
+        s2 = tf.extractfile("E0/pub1/claude_sessions/transcripts/s2.jsonl").read().decode()
+    assert "E0/pub1/abandoned_calls.jsonl" in names and "E0/pub1/checkpoint.pkl" not in names
+    assert {n for n in names if "claude_sessions" in n} == {"E0/pub1/claude_sessions/transcripts/s1.jsonl",
+                                                             "E0/pub1/claude_sessions/transcripts/s2.jsonl"}
+    assert "@" not in s1 and "b173ca6c" not in s1 and '"organizationUuid": "<redacted>"' in s1 and '"userID": "<redacted>"' in s2
+    assert P.check_staging(tmp_path / "st") == []
+
+
+def test_staging_guard_flags_cli_config_and_addresses(tmp_path):
+    import io
+    out = tmp_path / "raw" / "E0" / "r.tar.gz"
+    out.parent.mkdir(parents=True)
+    with tarfile.open(out, "w:gz") as tf:
+        for name, text in (("E0/r/claude_sessions/.claude.json", "{}"), ("E0/r/claude_sessions/transcripts/a.jsonl", "me@example.com")):
+            data = text.encode()
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
+    probs = P.check_staging(tmp_path)
+    assert any("CLI config file" in p for p in probs) and any("e-mail address" in p for p in probs)

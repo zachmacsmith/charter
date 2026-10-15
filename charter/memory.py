@@ -89,9 +89,11 @@ class Store:
     """Per-agent round records, the frozen system prompts and the round's pending rows. Lives on the kernel (k._history), not in
     k.w, so checkpoints stay small: memory.jsonl is the durable copy (loaded back on resume)."""
 
-    def __init__(self, out=None, segment_start: int = 0):
+    def __init__(self, out=None, segment_start: int = 0, restarts=()):
         self.out = Path(out) if out is not None else None
         self.segment_start = int(segment_start)
+        self.restarts = sorted({int(x) for x in restarts or ()})        # a replay: the rounds the run restarted every conversation at
+        self.first_seg = self.segment_start                             # (its resumes and forks; run.json history_restarts)
         self.rows: dict = {}                                            # aid -> {round: row}
         self.pending: dict = {}                                         # aid -> the current round's row, filled during the round
         self.first: dict = {}                                           # aid -> its first round with a history turn (this segment)
@@ -128,10 +130,11 @@ def store(k) -> Store:
     return st
 
 
-def attach(k, out, first_round: int) -> Store:
+def attach(k, out, first_round: int, restarts=()) -> Store:
     """runner: the run's store (memory.jsonl, already cut back to the checkpoint on a resume); first_round > 0: a resume or a fork,
-    where every agent's conversation starts afresh."""
-    st = Store(out, first_round)
+    where every agent's conversation starts afresh. restarts: later rounds at which every conversation starts afresh as well (a
+    replay reproduces the resumes and forks of the run it replays: run.json history_restarts)."""
+    st = Store(out, first_round, [x for x in restarts or () if int(x) > first_round])
     k.__dict__["_history"] = st
     return st
 
@@ -144,7 +147,13 @@ def chunk_start(k, aid, r=None) -> int:
     f = facts(k, aid)
     st = store(k)
     s = r - ((r + f["offset"]) % f["chunk"])
-    return max(s, st.segment_start, st.first.get(aid, r))
+    return max(s, _segment(st, r), st.first.get(aid, r))
+
+
+def _segment(st, r) -> int:
+    """The first round of the segment round r belongs to: the start (or resume, or fork) of this process, or a later recorded
+    restart at or before r."""
+    return max([st.segment_start] + [x for x in st.restarts if x <= r])
 
 
 def next_start(k, aid, after: int) -> int:
@@ -433,6 +442,9 @@ def system(k, a, core: str) -> str:
 
 def _begin(k, aid) -> int:
     st = store(k)
+    seg = _segment(st, k.r)
+    if seg != st.first_seg:                                             # a recorded restart: first turns count afresh, as after
+        st.first, st.first_seg = {}, seg                                # the resume or fork the replay reproduces
     st.first.setdefault(aid, k.r)
     return chunk_start(k, aid)
 
@@ -519,7 +531,9 @@ def turn(k, a: dict, order: list, since: int, n_actions: int, final: bool, simul
     if last is not None:
         middle.append(f"## Results of your round {k.r} actions\nWhat you did: " + ("; ".join(last.get("actions") or []) or "(no actions)")
                       + "\n" + ("\n".join("  " + str(x) for x in last.get("results") or []) or "  (no results)"))
-        if last.get("exchange"):
+        if last.get("exchange"):                                         # rendered at the end of that round: its events count
+            from charter import agents as AG                              # as shown by this prompt (reasoning.jsonl "shown")
+            AG.note_shown([e["id"] for e in CX.exchange_events(k, aid, k.r - 1)])
             middle.append(f"## Your private messages in round {k.r} (every message you received and sent, in order)\n" + last["exchange"])
     now = [f"## What happened since your last turn\n{feed}"]
     if final:

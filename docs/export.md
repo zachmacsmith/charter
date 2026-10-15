@@ -60,6 +60,11 @@ that bumps the major), and the tables below `scores`:
   channel_created / channel_member / channel_closed; a name reused after a close keeps its channel_id) and of dm/group channels.
 - **`turns`**: reasoning.jsonl rows (every phase: decide, dm_reply_<n>, editorial, the observer's steps), else turns.jsonl (phase
   `decide`, positions from the `turn` events). `blobs` (with `--with-prompts`) holds each distinct prompt once.
+- **`calls_seen`** (minor 6): one row per agent model call of a round (lookup, decide, dm_reply_<n>; editorial and observer
+  calls are not in it): the plan it made, the plan that finally ran (decide), the ids of others' messages it showed the agent for
+  the first time and the look-up answers it brought. From reasoning.jsonl `shown` / `lookup_results` (recorded by the runner at
+  prompt-build time: agents.Shown) when present, else parsed from the recorded prompt (event tags). Replaces the derived
+  viewer.json (docs/site_data_contract.md). Joins: `turns` and `calls` on (run_id, round, agent, phase), `messages.msg_id`.
 - **`state`**: every snapshots.json round flattened to leaves; a new snapshot key becomes new `key` values, never columns.
 - **`documents`**: directory stores (charter/directories.py): `base` from directories/base.json, `file` from state.json's last
   write-back, `record` from records-<store>.md. Run-scoped stores are not on disk and are not exported.
@@ -72,7 +77,7 @@ Not yet exported: `state_deltas` (per-round snapshot diffs) and `observer_assess
 
 ## Tables
 
-Dataset schema version **2.5** (`schema_version` 2, `schema_minor` 5). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
+Dataset schema version **2.6** (`schema_version` 2, `schema_minor` 6). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
 
 ### `runs`
 
@@ -453,6 +458,27 @@ Dataset schema version **2.5** (`schema_version` 2, `schema_minor` 5). Types: `s
 | `tokens_in` | int | input tokens (usage.input) |
 | `tokens_out` | int | output tokens (usage.output) |
 | `error` | str | turn-level error, if any |
+
+### `calls_seen`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `round` | int | round (0-based) |
+| `agent` | str | agent id |
+| `inherited` | bool | the row belongs to the prefix a fork or rewind copied from its parent (round < fork_round) |
+| `phase` | str | the call: lookup (asked for free lookups, then asked again), decide (the round's action reply), dm_reply_<n> (DM-step wave n: messages arrived before actions ran) |
+| `step` | int | the call's place in the agent's round: lookup -1, decide 0, dm_reply_<n> n (order by round, step) |
+| `wave` | int | n of dm_reply_<n>; null otherwise |
+| `call_id` | str | call id r<round>:<agent>:<n> (joins calls.call_id); null when the backend did not record one |
+| `position` | int | the agent's position in the round's turn order |
+| `planned_actions_json` | json | the actions this call's reply planned (a DM-step reply's plan replaces the earlier one; dm and reply items in it are sent at once) |
+| `final_actions_json` | json | decide only: the plan that ran after the DM step (reasoning.jsonl final_actions), else the decide's own plan; null for other calls. Results: turns.results_json |
+| `seen_msg_ids_json` | json | ids (messages.msg_id) of messages by others that this call showed the agent for the first time, in prompt order: any channel (join messages for channel_kind, sender, text) |
+| `n_seen` | int | length of seen_msg_ids_json |
+| `seen_source` | str | recorded (reasoning.jsonl `shown`: the event ids the runner rendered into the prompt it sent, recorded at prompt-build time), prompt (runs from before that record: event tags parsed from the recorded prompt text), null without a prompt |
+| `lookup_results_json` | json | look-up answers this call received, [{head, text}]: a DM-step reply's answers to lookups asked in the previous wave, a decide's answers to its lookup call |
+| `n_lookup_results` | int | length of lookup_results_json |
 
 ### `blobs`
 

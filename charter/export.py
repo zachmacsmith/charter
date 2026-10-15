@@ -30,9 +30,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCHEMA_VERSION = 2           # major: a column removed, renamed, or changed in type or meaning (docs/data_format.md)
-SCHEMA_MINOR = 5             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
+SCHEMA_MINOR = 6             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
                              # 2: review 20 (runs.memory_text, runs.dm_delta, turns.dm_mode); 3: runs.engine_version (D-43);
-                             # 4: history mode (runs.history_chunk, runs.history_restarts, turns.history_*); 5: the attacks table (harm)
+                             # 4: history mode (runs.history_chunk, runs.history_restarts, turns.history_*); 5: the attacks table (harm);
+                             # 6: the calls_seen table (what each model call was shown for the first time; replaces viewer.json)
 TYPES = ("str", "int", "float", "bool", "json")
 
 
@@ -396,6 +397,31 @@ SCHEMA: dict[str, tuple] = {
         ("tokens_in", "int", "input tokens (usage.input)"),
         ("tokens_out", "int", "output tokens (usage.output)"),
         ("error", "str", "turn-level error, if any"),
+    ),
+    "calls_seen": _cols(
+        RUN_ID,
+        ("round", "int", "round (0-based)"),
+        ("agent", "str", "agent id"),
+        INHERITED,
+        ("phase", "str", "the call: lookup (asked for free lookups, then asked again), decide (the round's action reply), "
+                         "dm_reply_<n> (DM-step wave n: messages arrived before actions ran)"),
+        ("step", "int", "the call's place in the agent's round: lookup -1, decide 0, dm_reply_<n> n (order by round, step)"),
+        ("wave", "int", "n of dm_reply_<n>; null otherwise"),
+        ("call_id", "str", "call id r<round>:<agent>:<n> (joins calls.call_id); null when the backend did not record one"),
+        ("position", "int", "the agent's position in the round's turn order"),
+        ("planned_actions_json", "json", "the actions this call's reply planned (a DM-step reply's plan replaces the earlier one; "
+                                         "dm and reply items in it are sent at once)"),
+        ("final_actions_json", "json", "decide only: the plan that ran after the DM step (reasoning.jsonl final_actions), else "
+                                       "the decide's own plan; null for other calls. Results: turns.results_json"),
+        ("seen_msg_ids_json", "json", "ids (messages.msg_id) of messages by others that this call showed the agent for the first "
+                                      "time, in prompt order: any channel (join messages for channel_kind, sender, text)"),
+        ("n_seen", "int", "length of seen_msg_ids_json"),
+        ("seen_source", "str", "recorded (reasoning.jsonl `shown`: the event ids the runner rendered into the prompt it sent, "
+                               "recorded at prompt-build time), prompt (runs from before that record: event tags parsed from "
+                               "the recorded prompt text), null without a prompt"),
+        ("lookup_results_json", "json", "look-up answers this call received, [{head, text}]: a DM-step reply's answers to "
+                                        "lookups asked in the previous wave, a decide's answers to its lookup call"),
+        ("n_lookup_results", "int", "length of lookup_results_json"),
     ),
     "blobs": _cols(
         RUN_ID,
@@ -1317,10 +1343,95 @@ def v2_tables(run: Path, meta: dict, h, inh, ever, with_prompts: bool = False) -
     for n in sorted(set(n_events) - set(ET.REG)):                       # logged under a name the registry does not know
         et_rows.append({"type": n, "module": None, "kind": None, "vis_json": None, "natural": None, "feed": None, "act": None,
                         "primitive": None, "is_message": False, "aliases_json": None, "n_events": n_events[n]})
+    seen_rows = calls_seen_rows(run, {m["msg_id"]: m.get("sender") for m in msgs}, inh)
     out = {"messages": msgs, "channels": ch_rows, "channel_members": mem_rows, "turns": turn_rows, "state": state_rows,
-           "documents": doc_rows, "event_types": et_rows}
+           "documents": doc_rows, "event_types": et_rows, "calls_seen": seen_rows}
     if with_prompts:
         out["blobs"] = blob_rows
+    return out
+
+
+# ---------------------------------------------------------------------- calls_seen
+_TAG = re.compile(r"(?m)^[ \t>*-]*\[(e\d+) r\d+\]")                    # an event line as agents.render_event writes it
+# A DM-step reply prompt's new part, in the two formats the engine has written (for runs from before reasoning.jsonl `shown` and
+# `lookup_results`): full (agents.dm_prompt): "New messages to you ...:" up to "Your plan for this round"; delta
+# (agents.dm_delta_prompt, context.dm_delta): "Since you acted you received:" up to "You have N of your M messages left".
+_DM_STEP_FULL = re.compile(r"New messages to you(?: \(and the text of any lookups you asked for\))?:\n(.*?)\n\nYour plan for this round", re.S)
+_DM_STEP_DELTA = re.compile(r"Since you acted you received:\n(.*)\n\nYou have \d+ of your \d+ messages left this round", re.S)
+_LOOKUP = "(lookup result) "
+
+
+def call_step(phase) -> int | None:
+    """lookup -1, decide 0, dm_reply_<n> n; None for other phases (editorial, observer: not in calls_seen)."""
+    ph = str(phase or "")
+    if ph == "lookup":
+        return -1
+    if ph == "decide":
+        return 0
+    m = re.fullmatch(r"dm_reply_(\d+)", ph)
+    return int(m.group(1)) if m else None
+
+
+def _split_lookups(texts) -> list[dict]:
+    out = []
+    for t in texts or []:
+        head, _, text = str(t).partition(":\n")
+        out.append({"head": head.strip()[:300], "text": text.strip()[:6000]})
+    return out
+
+
+def _parsed_dm_step(prompt: str) -> tuple[str, list[dict]]:
+    """(message part, look-up answers) of a DM-step reply prompt from before the record (the whole prompt when unrecognised)."""
+    m = _DM_STEP_FULL.search(prompt) or _DM_STEP_DELTA.search(prompt)
+    part = m.group(1) if m else prompt
+    dm_part, _, rest = part.partition(_LOOKUP)
+    return dm_part, _split_lookups((_LOOKUP + rest).split(_LOOKUP)[1:] if rest else [])
+
+
+def _lookup_head(x: dict) -> str:
+    args = x.get("args")
+    return (str(x.get("name") or "lookup") + (" " + json.dumps(args, sort_keys=True) if args is not None else ""))[:300]
+
+
+def calls_seen_rows(run: Path, sender: dict, inh) -> list[dict]:
+    """One row per agent model call of a round (lookup, decide, dm_reply_<n>) from reasoning.jsonl: the messages it showed the
+    agent for the first time (from the row's `shown`, else parsed from its prompt) and the look-up answers it received.
+    sender: messages.msg_id -> sender (an id not in it is not a message)."""
+    rows, lookups = [], {}
+    for t in _jsonl(run / "reasoning.jsonl"):
+        step = call_step(t.get("phase"))
+        if step is None or t.get("agent") is None:
+            continue
+        if step == -1:
+            lookups[(t.get("round"), t.get("agent"))] = t.get("lookups") or []
+        rows.append((t.get("round") if t.get("round") is not None else -1, step, len(rows), t))
+    rows.sort(key=lambda x: (x[0], x[1], x[2]))
+    seen, out = set(), []
+    for r, step, _, t in rows:
+        aid, prompt = str(t.get("agent")), t.get("prompt")
+        if "shown" in t:
+            ids, source = [str(x) for x in t.get("shown") or []], "recorded"
+            answers = _split_lookups(t.get("lookup_results")) if step > 0 else []
+        elif isinstance(prompt, str) and prompt:
+            text, answers = _parsed_dm_step(prompt) if step > 0 else (prompt, [])
+            ids, source = _TAG.findall(text), "prompt"
+        else:
+            ids, answers, source = [], [], None
+        if step == 0 and (t.get("round"), t.get("agent")) in lookups:    # the decide after a lookup call: the answers it fetched
+            answers = [{"head": _lookup_head(x), "text": str(x.get("text", ""))[:6000]}
+                       for x in lookups[(t.get("round"), t.get("agent"))] if isinstance(x, dict)]
+        new = []
+        for i in dict.fromkeys(ids):
+            if i in sender and sender[i] != aid and (i, aid) not in seen:
+                seen.add((i, aid))
+                new.append(i)
+        u = t.get("usage") if isinstance(t.get("usage"), dict) else {}
+        acts = t.get("actions") if isinstance(t.get("actions"), list) else None
+        final = (t.get("final_actions") if isinstance(t.get("final_actions"), list) else acts) if step == 0 else None
+        out.append({"round": t.get("round"), "agent": aid, "inherited": inh(t.get("round")), "phase": t.get("phase"),
+                    "step": step, "wave": step if step > 0 else None, "call_id": _s(u.get("call")), "position": t.get("position"),
+                    "planned_actions_json": acts, "final_actions_json": final, "seen_msg_ids_json": new, "n_seen": len(new),
+                    "seen_source": source, "lookup_results_json": answers, "n_lookup_results": len(answers)})
     return out
 
 

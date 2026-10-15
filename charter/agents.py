@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import random
+import threading
 import time
 
 from charter import action_registry as AR                             # every action's doc line (Act.doc)
@@ -471,7 +472,65 @@ def compelled_text(d: dict, viewer=None) -> str:
     return f"compelled by {who}: {what}{why}"
 
 
+# ------------------------------------------------------------------ what each prompt showed (reasoning.jsonl "shown")
+_SHOWN = threading.local()
+
+
+class Shown:
+    """Records the events rendered while a prompt is built (render_event), so the runner can store in reasoning.jsonl which event
+    ids each model call was shown: `with Shown() as sh: user = ...build...` then `sh.ids(user)`. An event counts when its rendered
+    line (its first 60 characters, so a line clipped to a budget still counts) is in the text actually sent; ids added with note_shown (texts
+    rendered earlier and stored, e.g. history mode's exchange of the last round) count as they are. Prompts are built on the
+    runner's thread; a Shown nests (an inner one also reports to the outer)."""
+
+    def __init__(self, carry=()):
+        self.carry = list(carry or ())                                  # (id, line) rendered earlier for this prompt (lookup answers)
+
+    def __enter__(self):
+        self.got: list = list(self.carry)
+        self.direct: list = []
+        self.outer = getattr(_SHOWN, "cur", None)
+        _SHOWN.cur = self
+        return self
+
+    def __exit__(self, *exc):
+        _SHOWN.cur = self.outer
+        if self.outer is not None:
+            self.outer.got += self.got
+            self.outer.direct += self.direct
+        return False
+
+    def ids(self, text) -> list:
+        """The ids of events whose rendered line appears in `text` (the prompt as sent), in the order they appear in it."""
+        text = str(text)
+        pos = {}
+        for eid in self.direct:
+            at = text.find(f"[{eid} r")
+            pos.setdefault(eid, at if at >= 0 else len(text))
+        for eid, line in self.got:
+            head = line.split("\n", 1)[0][:60].strip()
+            at = text.find(head) if head else -1
+            if at >= 0 and (eid not in pos or at < pos[eid]):
+                pos[eid] = at
+        return sorted(pos, key=lambda e: pos[e])
+
+
+def note_shown(ids) -> None:
+    """Event ids a prompt shows through text rendered earlier (memory rows): counted by the Shown being built, if any."""
+    cur = getattr(_SHOWN, "cur", None)
+    if cur is not None:
+        cur.direct += [i for i in ids or () if i]
+
+
 def render_event(k, e, viewer=None) -> str | None:
+    s = _render_event(k, e, viewer)
+    cur = getattr(_SHOWN, "cur", None)
+    if cur is not None and s and isinstance(e, dict) and e.get("id"):
+        cur.got.append((e["id"], s))
+    return s
+
+
+def _render_event(k, e, viewer=None) -> str | None:
     e = H.as_shown(k, e)                                             # rewritten history reads as forged (hidden.py)
     if e["type"] in H.EVENT_TYPES:
         return H.render(k, e, render_event)

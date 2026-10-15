@@ -3,7 +3,10 @@
   python -m charter replay RUN [--to N] [--out DIR] [--sandbox off|docker]
       Re-executes RUN from its recorded inputs (instance.json and every model reply in calls.jsonl) into a new directory and
       reports whether events.jsonl and snapshots.json came out byte-identical (ignoring timestamps). --to N stops after N rounds
-      and compares with RUN's state after round N. Exit status 1 when they differ.
+      and compares with RUN's state after round N (a run that stopped or paused: the rounds it played). Exit status 1 when
+      they differ. History mode's conversations restart at the rounds the run's resumes and forks restarted them (run.json
+      history_restarts), as they did in the run. A published run (no checkpoints) is replayed from its raw archive the same
+      way: `charter fetch` / `charter continue` (charter/fetch.py).
   python -m charter rewind RUN --to N --out NEWDIR
       A new run directory continuing from RUN's state after N complete rounds (checkpoints/rNNNN.pkl): the append-only logs copied
       up to that checkpoint's offsets, snapshots cut to N rounds, run.json with a segment of kind "rewind" naming the parent run
@@ -213,13 +216,18 @@ def replay(run, out=None, to: int | None = None, sandbox=None, log=print, check_
     if out.exists() and any(out.iterdir()):
         raise SystemExit(f"{out} exists and is not empty")
     out.mkdir(parents=True, exist_ok=True)
+    if to is None:                                                      # a run that stopped or paused: replay what it played
+        played = len(json.loads((run / "snapshots.json").read_text()))
+        if played < int(inst["rounds"]):
+            to = played
     calls, legacy = load_calls(run)
     pol = ReplayPolicy(calls, legacy, check_prompts)
     from charter import interventions as IV                             # the run's interventions are inputs too
     sched = IV.load_schedule(run / "interventions.yaml") if (run / "interventions.yaml").exists() else None
     sbx = ReplaySandbox(run, live=sandbox)                              # recorded sandbox outputs, not Docker
     runner.run(inst, pol, out, sbx, log=log, dry=dry, until=to, instance_source="replay of " + str(run), schedule=sched,
-               archive_from=run, publish_archive=False)                 # the run's frozen archive; never published
+               archive_from=run, publish_archive=False,                 # the run's frozen archive; never published
+               history_restarts=meta.get("history_restarts") or ())    # its resumes restarted every conversation (history mode)
     extra = pol.unused(to)
     if extra:
         raise ReplayMiss(f"{len(extra)} recorded call(s) were never asked for in the replay (first: {', '.join(extra[:5])})")
@@ -403,13 +411,15 @@ def replicate_seed(seed, at: int, i: int) -> int:
 
 
 def fork(run, at: int, schedule=None, out=None, replicates: int | None = None, replay_mode: str = "strict",
-         policy_factory=None, sandbox=None, log=print, fresh_schedule: bool = False, allow_code_drift: bool = False) -> list[Path]:
+         policy_factory=None, sandbox=None, log=print, fresh_schedule: bool = False, allow_code_drift: bool = False,
+         rounds: int | None = None) -> list[Path]:
     """Branches of `run` from round `at` (0-based: the first round played anew; `at` complete rounds are kept): each a new run
     directory restored from the latest checkpoint at or before `at`, with the schedule applied (merged by id into the parent's
     pending schedule, unless fresh_schedule) and played to the end with ForkPolicy (the parent's recorded replies before `at`, the
     live policy from `at`). replicates K: K branches <out>/rep1..repK whose live policies get distinct seeds (replicate_seed);
     otherwise one branch whose live policy continues from the parent's state. run.json of each: a "fork" segment, `parent`
-    {run, run_id, round, checkpoint, branch, replicate, live_seed, schedule, replay} and top-level `replicate`. Returns the dirs."""
+    {run, run_id, round, checkpoint, branch, replicate, live_seed, schedule, replay} and top-level `replicate`. rounds K: play K
+    rounds from `at` and pause (resumable) instead of playing to the end. Returns the dirs."""
     import pickle
     from charter import interventions as IV
     from charter import runner
@@ -420,7 +430,9 @@ def fork(run, at: int, schedule=None, out=None, replicates: int | None = None, r
     have = sorted(int(x) for x, v in idx.items() if (run / runner.CKPT_DIR / v["file"]).exists())
     base = max((n for n in have if n <= at), default=None)
     if base is None:
-        raise SystemExit(f"{run} has no checkpoint at or before round {at} (per-round checkpoints: {', '.join(map(str, have)) or 'none'})")
+        hint = ("" if have else "; a published or fetched run has none (checkpoints are pickles and never published): "
+                "`python -m charter continue RUN --at N` rebuilds them by replaying the record, then forks")
+        raise SystemExit(f"{run} has no checkpoint at or before round {at} (per-round checkpoints: {', '.join(map(str, have)) or 'none'}){hint}")
     inst0 = json.loads((run / "instance.json").read_text())
     from charter import settings as ST                                  # the parent's code defaults (D-43); refuse before any copy
     settings = ST.resolve(run, inst0, allow_code_drift, record=False)
@@ -469,7 +481,8 @@ def fork(run, at: int, schedule=None, out=None, replicates: int | None = None, r
                 f"{len(sched)} intervention(s), replay {replay_mode}")
         sbx = ReplaySandbox(run, live=sandbox, until=at if replay_mode != "none" else 0)   # recorded outputs before the fork point
         runner.run(inst, pol, d, sbx, log=log or (lambda *a: None), resume=True, dry=dry, schedule=sched,
-                   instance_source=f"fork of {run} at round {at}", publish_archive=False)   # the parent's frozen archive, unpublished
+                   instance_source=f"fork of {run} at round {at}", publish_archive=False,   # the parent's frozen archive, unpublished
+                   until=at + int(rounds) if rounds else None)
         missed = [kid for kid, r in calls.items() if base <= r["round"] < at and kid not in pol.replay.used
                   and kid not in prefix] if replay_mode != "none" else []
         if missed:
@@ -570,7 +583,7 @@ def cmd_fork(a) -> None:
         sched = IV.merge(sched, IV.load_schedule(f))
     try:
         dirs = fork(run, a.at, sched, a.out, a.replicates, a.replay, M.policy_for, sandbox, fresh_schedule=a.fresh_schedule,
-                    allow_code_drift=a.allow_code_drift)
+                    allow_code_drift=a.allow_code_drift, rounds=a.rounds)
     except (ReplayMiss, ReplayDivergence, IV.InterventionError) as e:
         print(f"fork FAILED: {type(e).__name__}: {e}")
         raise SystemExit(1)
@@ -615,6 +628,7 @@ def add_commands(sub) -> None:
     p.add_argument("--replay", choices=["strict", "prompt-match", "none"], default="strict",
                    help="strict: recorded replies before N, live from N; prompt-match: also after N while prompts match")
     p.add_argument("--fresh-schedule", action="store_true", help="drop the parent's pending interventions")
+    p.add_argument("--rounds", type=int, default=None, help="play K rounds from the fork point and pause (default: to the end)")
     p.add_argument("--allow-code-drift", action="store_true", help="a parent without frozen settings whose code defaults cannot be "
                    "inferred: play the branch under the current defaults (recorded) instead of refusing")
     p.add_argument("--sandbox", choices=["docker", "off"], default=None, help="default: off for dry runs, docker for model runs")

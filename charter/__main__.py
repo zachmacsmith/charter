@@ -380,6 +380,7 @@ def main(argv=None):
     __import__("charter.export", fromlist=["add_command"]).add_command(sub)     # export RUN.. --out DIR [--format parquet|csv]
     __import__("charter.publish", fromlist=["add_command"]).add_command(sub)    # publish RUN.. --repo OWNER/NAME [--push]
     __import__("charter.rerun", fromlist=["add_command"]).add_command(sub)      # rerun RUN [--out DIR] [--dry-run]: its own code
+    __import__("charter.fetch", fromlist=["add_commands"]).add_commands(sub)    # fetch RUN_ID; continue RUN --at N [--rounds K]
     from charter import preview
     p = sub.add_parser("preview", help="render what agents see, with token counts (charter/preview.py)")
     preview.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(preview.cmd(a)))

@@ -3,7 +3,9 @@
 Writes to the run directory (checkpointed every round, so a crash keeps everything up to the last round):
   instance.json      the concrete world (spec, agents with goals/personalities/models, camps, constitution, library)
   events.jsonl       every action, message (incl. encrypted DMs), law execution: the monitors' full log
-  reasoning.jsonl    per agent turn: private reasoning, notes, chosen actions, results, usage (stored apart from the event log)
+  reasoning.jsonl    per agent turn: private reasoning, notes, chosen actions, results, usage (stored apart from the event log);
+                     for each lookup, decide and DM-step call also `shown` (the ids of the events its prompt showed, recorded as
+                     the prompt is built: agents.Shown) and, for a DM-step reply, `lookup_results` (the look-up answers it brought)
   snapshots.json     per-round state (holdings, rights, vote weights, decisive set, probes, efficiency, welfare, role holders)
   common_text.json   Leaker's common text (texts every agent sees, and their sha), frozen at run start
   ground_truth.json  goals, constitution law id, start values, final laws (code, patches), goal guesses, shared-archive snapshot
@@ -217,14 +219,17 @@ def _as_item(q) -> dict | None:
 
 @ST.frozen_run                                                          # plays under inst["settings"]
 def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live=None, notices=(), dry=None,
-        instance_source=None, until=None, keep_checkpoints=None, schedule=None, archive_from=None, publish_archive=None) -> Path:
+        instance_source=None, until=None, keep_checkpoints=None, schedule=None, archive_from=None, publish_archive=None,
+        history_restarts=()) -> Path:
     """dry: recorded in run.json (None: inferred from the policy, scripted = dry). instance_source: how a resume got its world
     (recorded in the segment). until: stop (paused, resumable) after that many rounds (replay --to). keep_checkpoints: per-round
     checkpoint retention (None: CHARTER_KEEP_CHECKPOINTS, else all). schedule: interventions (interventions.load_schedule), merged
     by id into a resumed run's schedule; live and notices (--live, --notice) become setup entries of it.
     Shared archive (P5.4, archive.Frozen): frozen into the run directory at a fresh start (archive_from: use that run's frozen base
     instead, as a replay does), read from the frozen view throughout, and published to the live directory when the run completes
-    (publish_archive False: never, stored for later resumes; None: keep the stored choice, default publish)."""
+    (publish_archive False: never, stored for later resumes; None: keep the stored choice, default publish).
+    history_restarts: rounds at which history mode restarts every conversation as the replayed run's resumes and forks did
+    (replay passes the run's run.json history_restarts; a live run leaves it empty)."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     resuming = resume and (out / "checkpoint.pkl").exists()
@@ -233,17 +238,17 @@ def run(inst: dict, policy, out_dir, sandbox=None, log=print, resume=False, live
                         dry=PV.policy_info(policy, inst, dry)["dry"])   # directories: frozen per run, written back (None: off)
     if fz is None:                                                      # the shared archive is off
         return _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_source, until, keep_checkpoints, schedule,
-                    dz=dz)
+                    dz=dz, history_restarts=history_restarts)
     if not resuming:
         fz.rebuild()                                                    # a resume rebuilds once the overlay is cut to the checkpoint
     with fz.bind(inst["spec"]):
         res = _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_source, until, keep_checkpoints, schedule,
-                   fz=fz, dz=dz)
+                   fz=fz, dz=dz, history_restarts=history_restarts)
     return res
 
 
 def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_source, until, keep_checkpoints, schedule,
-         fz=None, dz=None) -> Path:
+         fz=None, dz=None, history_restarts=()) -> Path:
     k = Kernel(inst, sandbox)
     agents = {a["id"]: a for a in inst["agents"]}
     ckpt_path = out / "checkpoint.pkl"
@@ -325,8 +330,8 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
     if hist:
         if not resuming:
             (out / HM.FILE).unlink(missing_ok=True)                     # memory.jsonl: a fresh start keeps no earlier rows
-        HM.attach(k, out, first_round)                                  # a resume or fork restarts every agent's conversation
-        restarts = (PV.read(out) or {}).get("history_restarts") or []
+        HM.attach(k, out, first_round, history_restarts)                # a resume or fork restarts every agent's conversation
+        restarts = (PV.read(out) or {}).get("history_restarts") or [int(x) for x in history_restarts or ()]
         PV.annotate(out, history=HM.run_info(inst), history_restarts=restarts + ([first_round] if resuming else []))
     use_run_dir = getattr(policy, "use_run_dir", None)                  # the CLI's sessions live in the run folder (llm.Sessions)
     if (dm_delta or hist) and use_run_dir is not None:
@@ -426,6 +431,14 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         dmc = inst["spec"].get("dm_step") or {}
         dm_step = mode == "simultaneous" and dmc.get("enabled", False) and inst["spec"]["channels"].get("dm", True)
         tally = FS.Tally(fail_frac, len(order))                         # this round's model calls (decisions and DM replies)
+        shown_of = {}                                                   # agent -> event ids its latest turn prompt showed
+        fetched_shown = {}                                              # agent -> events rendered into its free lookups' answers
+
+        def lookups_of(aid, dec):
+            with AG.Shown() as lsh:
+                got = CX.do_lookups(k, aid, dec[0])
+            fetched_shown[aid] = lsh.got                                # shown by the prompt that brings the answers
+            return got
 
         def in_parallel(fn, items):
             if getattr(policy, "parallel_safe", False) and len(items) > 1:
@@ -439,6 +452,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
             received one is asked again (in parallel): they see the new messages, may reply, and may replace their plan. Replies
             are delivered and their recipients asked again, up to `exchanges` times. Then all plans run in the round's order."""
             waves = int(dmc.get("exchanges", 2))
+            carried = {}                                                # agent -> events rendered into its look-up answers
             seen = {aid: len(k.events) for aid in order}
             fast_lk = cx and CX.cfg(inst)["lookups_in_dm_step"]               # context: lookups answered here, each using a DM slot
             lq = {aid: [q for q in (decisions[aid][0].get("lookups") or []) if isinstance(q, dict)] if fast_lk else [] for aid in order}
@@ -465,24 +479,28 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
                             pre[aid].append(f"{item.get('action', 'dm')}: ERROR {e}")
                     outbox[aid] = []
                     for q in (lq[aid] if wave < waves else []):             # context: fast lookups, answered before actions
-                        with k.cause("action", "lookup", agent=aid):     # provenance: a lookup answered in the DM step
+                        with k.cause("action", "lookup", agent=aid), AG.Shown() as lsh:   # provenance: a lookup answered in the DM step
                             looked[aid].append(CX.dm_step_lookup(k, aid, q))
+                        carried.setdefault(aid, []).extend(lsh.got)      # events in the answer: shown by the next prompt
                         if aid not in got:
                             got.append(aid)
                     lq[aid] = []
                 if wave == waves or not got:
                     break
-                asks = []
+                asks, shown, answers = [], {}, {}
                 for aid in [x for x in order if x in got]:
-                    new = [AG.render_event(k, e, aid) for e in k.events[seen[aid]:] if e["type"] == "dm" and e["data"].get("to") == aid] \
-                        + [f"(lookup result) {t}" for t in looked[aid]]
-                    looked[aid] = []
-                    seen[aid] = len(k.events)
-                    full = AG.dm_prompt(k, agents[aid], preps[aid][2], decisions[aid][0], plan[aid], new, k.w["dm_sent"].get(aid, 0),
-                                        k.dm_limit(aid), preps[aid][1], wave + 1, waves, final)
-                    if dm_delta or hist:                                # review 20 §4.5: continue the agent's conversation
-                        full = AG.DMDelta(AG.dm_delta_prompt(k, agents[aid], new, k.w["dm_sent"].get(aid, 0), k.dm_limit(aid),
-                                                             preps[aid][1], wave + 1, waves, final), full)
+                    with AG.Shown(carried.pop(aid, ())) as sh:                              # reasoning.jsonl "shown": the messages this prompt shows
+                        new = [AG.render_event(k, e, aid) for e in k.events[seen[aid]:] if e["type"] == "dm" and e["data"].get("to") == aid] \
+                            + [f"(lookup result) {t}" for t in looked[aid]]
+                        answers[aid] = [str(t) for t in looked[aid]]     # "lookup_results": the look-up answers it brings
+                        looked[aid] = []
+                        seen[aid] = len(k.events)
+                        full = AG.dm_prompt(k, agents[aid], preps[aid][2], decisions[aid][0], plan[aid], new, k.w["dm_sent"].get(aid, 0),
+                                            k.dm_limit(aid), preps[aid][1], wave + 1, waves, final)
+                        if dm_delta or hist:                            # review 20 §4.5: continue the agent's conversation
+                            full = AG.DMDelta(AG.dm_delta_prompt(k, agents[aid], new, k.w["dm_sent"].get(aid, 0), k.dm_limit(aid),
+                                                                 preps[aid][1], wave + 1, waves, final), full)
+                    shown[aid] = sh
                     asks.append((aid, full))
                 outs = in_parallel(lambda q: policy.act(k, agents[q[0]], sysp[q[0]], q[1], preps[q[0]][1], final,
                                                         key={"phase": "dm_reply", "wave": wave + 1}), asks)
@@ -500,6 +518,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
                                                "phase": f"dm_reply_{wave + 1}", "reasoning": reasoning, "stated_reasoning": str(o.get("reasoning", "")),
                                                "notes": str(o.get("notes", "")), "actions": acts, "results": [], "usage": usage, "mode": mode,
                                                "prompt_chars": len(sysp[aid]) + len(prompt), "prompt": prompt, "error": o.get("_error"),
+                                               "shown": shown[aid].ids(prompt), "lookup_results": answers[aid],
                                                **dmx, **CX.record_fields(k, aid)}) + "\n")   # context: layer sizes ({} when off)
                     if o.get("_error"):
                         pre[aid].append(f"(your reply to the messages could not be used, so your plan stands: {o['_error'][:200]})")
@@ -530,23 +549,26 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
             if "pairs" in (k.w.get("life") or {}):                      # review 15 S4: a minor's actions
                 from charter import pairs as PR
                 n = PR.actions_of_minor(k, aid, n)
-            user, cursor = AG.turn_prompt(k, a, order, cursors.get(aid, 0), notes.get(aid, ""), results.get(aid, []), n, final,
-                                          simultaneous=(mode == "simultaneous"))
-            spy = R.turn_section(k, aid, user)                          # roles: the Spy's private "What you saw" section
-            if spy is not user:
-                user = user.extend(spy[len(user):]) if isinstance(user, HM.HistoryTurn) else spy
+            with AG.Shown(fetched_shown.pop(aid, ())) as sh:            # reasoning.jsonl "shown": the events this prompt shows
+                user, cursor = AG.turn_prompt(k, a, order, cursors.get(aid, 0), notes.get(aid, ""), results.get(aid, []), n, final,
+                                              simultaneous=(mode == "simultaneous"))
+                spy = R.turn_section(k, aid, user)                      # roles: the Spy's private "What you saw" section
+                if spy is not user:
+                    user = user.extend(spy[len(user):]) if isinstance(user, HM.HistoryTurn) else spy
+            shown_of[aid] = sh.ids(user)                                # the latest prompt built for the agent (lookup, then decide)
             return a, n, user, cursor
 
         def cx_lookups(items):
             """context: the lookup phase. items: (aid, prep, decision). Agents whose reply asked for lookups get them fetched (free,
             up to context.free_lookups) and are asked again with the text in the Lookups layer; returns {aid: (prep, decision)}."""
-            asks = [(aid, pr, dec) for aid, pr, dec in items if not dec[0].get("_error") and CX.do_lookups(k, aid, dec[0])]
+            asks = [(aid, pr, dec) for aid, pr, dec in items if not dec[0].get("_error") and lookups_of(aid, dec)]
             for aid, pr, (o, reasoning, usage) in asks:
                 reason_f.write(json.dumps({"round": r, "position": order.index(aid) + 1, "agent": aid, "model": agents[aid]["model"],
                                            "phase": "lookup", "reasoning": reasoning, "stated_reasoning": str(o.get("reasoning", "")),
                                            "notes": "", "actions": list(o.get("actions") or []), "results": [], "usage": usage, "mode": mode,
                                            "lookups": CX.lookup_records(k, aid), "prompt_chars": len(sysp[aid]) + len(pr[2]),
-                                           "prompt": pr[2], "error": None, **CX.record_fields(k, aid)}) + "\n")
+                                           "prompt": pr[2], "error": None, "shown": shown_of.get(aid, []),
+                                           **CX.record_fields(k, aid)}) + "\n")
             if not asks:
                 return {}
             preps2 = [prepare(aid) for aid, _, _ in asks]
@@ -615,6 +637,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
                                        "notes": notes[aid], "actions": first, "results": res, "usage": usage, "mode": mode,
                                        "phase": "decide", **({"final_actions": acts} if final_outp is not None else {}),
                                        "prompt_chars": len(sysp[aid]) + len(user), "prompt": user, "error": outp.get("_error"),
+                                       "shown": shown_of.get(aid, []),
                                        **CX.record_fields(k, aid)}) + "\n")   # context: layer sizes and trimming ({} when off)
             reason_f.flush()
             for e in k.events[n_ev:]:                                   # live: the log and overview.md update after every turn
