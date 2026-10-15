@@ -139,6 +139,16 @@ def test_op_grant(world):
     assert "fly" in k.w["rights"] and "fly" in k.agent(a)["rights"]
 
 
+def test_op_establish(world):
+    k, inst, rs = world
+    a = _worker(k)
+    rec, _ = apply(world, "establish", {"kind": "rights", "spec": {"agents": [a], "rights": ["elder"]}}, phase="setup")
+    assert ok(rec) and "elder" in k.agent(a)["rights"] and "elder" in k.w["rights"]
+    assert "unknown kind" in apply(world, "establish", {"kind": "teleport", "spec": {}}, phase="setup")[0]["error"]
+    with pytest.raises(IV.InterventionError, match="cannot run at round_start"):
+        IV.load_schedule([{"id": "x", "op": "establish", "args": {"kind": "rights", "spec": {}}}])
+
+
 def test_op_revoke(world):
     k, inst, rs = world
     a = _worker(k)

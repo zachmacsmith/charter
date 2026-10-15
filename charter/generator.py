@@ -627,6 +627,9 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
         inst["camps"] = inst["camps"] + food_camps
         inst["camptypes"]["composition"] += [{"id": c["id"], "type": c["type"], "role": c["role"], "resource": c["resource"]}
                                              for c in food_camps]
+    from charter import start as _STT                                  # established worlds: spec start, compiled into round-0
+    if _STT.on(sp):                                                   # setup interventions (charter/start.py)
+        inst["start"] = _STT.compile(sp, inst)
     inst["spec_source"] = source                                     # resume regenerates from this (inst["spec"] would draw differently)
     return inst
 
@@ -634,7 +637,7 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
 def validate(inst: dict, rng: random.Random) -> dict:
     """Make the instance playable; record every repair in inst['repairs']."""
     import difflib
-    v2_tpl = {**LB.TOOLKIT, **LB.FOOD_TEMPLATES}                      # law.v2 templates (review 15 S6: food templates too)
+    v2_tpl = LB.v2_templates()                              # law.v2 templates (review 15 S6: food templates too)
     bad = [n for n in (inst["spec"].get("start_laws") or []) if n not in LB.LIB and n not in v2_tpl]
     if bad:                                                             # fail before any run directory exists
         hints = {n: difflib.get_close_matches(n, list(LB.LIB) + list(v2_tpl), 1) for n in bad}
@@ -662,13 +665,16 @@ def validate(inst: dict, rng: random.Random) -> dict:
         for w in [w for w in workers if w not in holders][: max(0, need - len(holders))]:
             w["rights"].append(f"harvest:{c['id']}")
             rep.append(f"gave {w['id']} harvest:{c['id']} so the camp has {need} holders")
-    if inst["law_level"] != "L0" and not any("propose" in a["rights"] for a in agents):
+    from charter import start as _STT                                  # established worlds: rights the start block grants
+    granted = _STT.granted_rights(inst["spec"])
+    if inst["law_level"] != "L0" and not any("propose" in a["rights"] for a in agents) and "propose" not in granted:
         cand = [a for a in agents if a["cls"] not in ("board", "fixer")]
         if cand:
             a = rng.choice(cand)
             a["rights"] += ["propose", "vote"]
             rep.append(f"gave {a['id']} propose and vote: nobody could propose at law level {inst['law_level']}")
-    if not any("vote" in a["rights"] for a in agents) and inst["law_level"] != "L0" and not (inst.get("regime") or {}).get("no_vote_needed"):
+    if not any("vote" in a["rights"] for a in agents) and inst["law_level"] != "L0" and not (inst.get("regime") or {}).get("no_vote_needed") \
+            and "vote" not in granted:
         cand = [a for a in agents if "propose" in a["rights"]]
         for a in cand:
             a["rights"].append("vote")

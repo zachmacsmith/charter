@@ -140,7 +140,7 @@ def _templates():
     templates (review 15 S6; regimes.template_code accepts them; docs/review/27 §0 bug 1)."""
     from charter import library as LB
     from charter import regimes as RG
-    return tuple(LB.TOOLKIT) + tuple(LB.LIB) + tuple(RG.STATUTES) + tuple(LB.FOOD_TEMPLATES)
+    return tuple(LB.TOOLKIT) + tuple(LB.LIB) + tuple(RG.STATUTES) + tuple(LB.FOOD_TEMPLATES) + tuple(LB.ESTABLISHED)
 
 
 def _archetypes():
@@ -402,6 +402,7 @@ def _ann():
         "conflict.watch.*": dict(types=("number",), range=NONNEG),
         "conflict.wound_credit_rounds": dict(types=("int",), range=NONNEG),
         "subsistence.start_food": dict(types=("list",)),                  # review 15 (charter/subsistence.py)
+        "subsistence.shocks": dict(kind="leaf", types=("list",), check=_check_shocks),   # review 27: scheduled forest shocks
         "subsistence.frailty": dict(types=("list",)),
         "subsistence.exempt": dict(types=("list",), items=CLASSES + ("observer",)),
         "subsistence.visibility": dict(types=("str",), enum=("public", "private")),
@@ -470,6 +471,8 @@ def _ann():
         "institutions.unified": dict(types=("bool",)),                  # review 14 WP-D (P4.6): one institution store
         "institutions.grants": dict(types=("bool",)),                   # review 14 WP-E: powers from grants (charter/grants.py)
         "institutions.succession": dict(types=("bool",)),               # review 14 §7.2: vacancies and succession (succession.py)
+        "institutions.office_control": dict(types=("bool",)),          # established worlds: duties and controls of offices
+        "start": dict(kind="leaf", types=("dict", "null"), check=_check_start),   # established worlds (charter/start.py)
         "channels.v2": dict(types=("bool",)),                           # wave 9 C: channels v2 (charter/channels.py)
         "channels.delivery": dict(types=("str",), enum=("push", "pull")),
         "channels.square": dict(types=("str",), enum=("one", "per_camp", "none")),
@@ -567,6 +570,8 @@ EXTRA = {
     "institutions.unified": False,                                     # review 14 WP-D: off = the two stores, byte-identical
     "institutions.grants": False,                                      # review 14 WP-E: off = the power table's kinds column
     "institutions.succession": False,                                  # review 14 §7.2: off = no vacancies, byte-identical
+    "institutions.office_control": False,                             # established worlds: off = office duties/controls unread
+    "start": None,                                                    # established worlds (charter/start.py): none = as before
     # wave 9 C, channels v2 (charter/channels.py; review 14 §4.6, D-37): off = byte-identical
     "channels.v2": False, "channels.delivery": "push", "channels.square": "one", "channels.square_rate": 2,
     "channels.found_right": None, "channels.headlines": 8,
@@ -626,6 +631,17 @@ DOCS = {
                                "dissolved institutions' holdings go by their wind-up clause, else the polity's Dissolution and "
                                "Escheat Act, else are locked; contracts may declare party_death. The two Acts are default code "
                                "(code.enabled), overridable unless MANDATORY. Off: today, byte-identical",
+    "institutions.office_control": "established worlds (charter/institutions.py; needs institutions.grants): an office's declared "
+                                   "duties are shown to its holder every turn; its controls (\"store:S1\", \"treasury\") belong to "
+                                   "that office alone (only its holders withdraw from a controlled store; they pay out of the "
+                                   "treasury with transfer \"as\"); office transfer grants are usable within their bound. Off: "
+                                   "the fields are recorded, nothing reads them",
+    "subsistence.shocks": "scheduled forest shocks (review 27): [{round, plants, game, season, rounds, text}]: at the end of round "
+                          "`round` (1-based) every forest keeps `plants` (and `game`) of its stock, announced publicly; then the "
+                          "season is `season` for `rounds` rounds. [] (default): none",
+    "start": "established worlds (charter/start.py): who and what exists at round 0 (rights, currencies, institutions with members, "
+             "offices and treasuries, stores, holdings, wages, loans, kin, channels, camp rights, laws), compiled at generation into "
+             "round-0 setup interventions (recorded like any intervention); every name must resolve",
     "actions.core_only": "review 14 A: only the core surface (action_registry.CORE_SURFACE, ~30 actions) exists; every other action "
                          "is unknown",
     "channels.v2": "wave 9 C (charter/channels.py; review 14 §4.6, D-37): one channel structure (owner, reader and writer "
@@ -1156,7 +1172,7 @@ def _check_start_laws(path, v) -> list:
     if not isinstance(v, list):
         return [f"{path}: expected a list of library law names, got {v!r}"]
     from charter import library as LB
-    names = _laws() + tuple(LB.TOOLKIT) + tuple(LB.FOOD_TEMPLATES)    # W6d: toolkit templates too (law.v2 worlds); food templates
+    names = _laws() + tuple(LB.v2_templates())                         # W6d: toolkit templates too (law.v2 worlds); food templates
     return [f"{path}: unknown start_laws {n!r}{_close(n, names)}" for n in v if n not in names]
 
 
@@ -1207,7 +1223,7 @@ def _check_law_set(p, x) -> list:
         for n in names:
             if n in bad:
                 continue
-            known = n in LB.TOOLKIT or n in LB.LIB or n in LB.FOOD_TEMPLATES
+            known = n in LB.TOOLKIT or n in LB.LIB or n in LB.FOOD_TEMPLATES or n in LB.ESTABLISHED
             if not known:
                 continue
             consts = LB.params(n)
@@ -1256,6 +1272,32 @@ def _check_regime(path, v) -> list:
                     + (_check_tree(f"{p}.tree", x["tree"]) if "tree" in x else []))
         return [f"{p}: expected a regime name, a distribution over names, an inline definition or null, got {x!r}"]
     return _values(path, v, one)
+
+
+def _check_shocks(path, v) -> list:
+    """[{round, plants, game, season, rounds, text}]"""
+    if not isinstance(v, list):
+        return [f"{path}: a list of {{round, plants, game, season, rounds, text}}"]
+    errs = []
+    for i, s in enumerate(v):
+        p = f"{path}[{i}]"
+        if not isinstance(s, dict) or not isinstance(s.get("round"), int) or s["round"] < 1:
+            errs.append(f"{p}: needs round (a whole number from 1: the shock strikes at the end of that round)")
+            continue
+        errs += [f"{p}.{k}: unknown key" for k in s if k not in ("round", "plants", "game", "season", "rounds", "text")]
+        for f in ("plants", "game"):
+            if f in s and not (_is_num(s[f]) and 0 <= s[f] <= 1):
+                errs.append(f"{p}.{f}: the share of the stock kept, 0..1")
+        if s.get("season") not in (None, "lean", "normal", "plentiful"):
+            errs.append(f"{p}.season: lean, normal or plentiful")
+        if "rounds" in s and not (isinstance(s["rounds"], int) and s["rounds"] >= 1):
+            errs.append(f"{p}.rounds: a whole number from 1")
+    return errs
+
+
+def _check_start(path, v) -> list:
+    from charter import start as STT
+    return STT.check(path, v)
 
 
 def _check_tree(path, v) -> list:
@@ -1591,7 +1633,7 @@ def validate(spec) -> list[str]:
     if lib.get("edition") == 2 and law.get("v2") is not True:
         errs.append("law.library.edition: edition 2 builds laws from lib:* blocks with use(), which needs law.v2: true")
     from charter import library as LB
-    tk = [n for n in (spec.get("start_laws") or []) if isinstance(n, str) and (n in LB.TOOLKIT or n in LB.FOOD_TEMPLATES)] \
+    tk = [n for n in (spec.get("start_laws") or []) if isinstance(n, str) and n in LB.v2_templates()] \
         if isinstance(spec.get("start_laws"), list) else []
     if tk and law.get("v2") is not True:
         errs.append(f"start_laws: toolkit templates ({', '.join(tk)}) are law.v2 code, which needs law.v2: true")
@@ -1816,8 +1858,23 @@ def add_arguments(p: argparse.ArgumentParser):
     c = sub.add_parser("check", help="validate a spec (preset name or path), with --set overrides applied")
     c.add_argument("spec", nargs="+")
     c.add_argument("--set", action="append", default=[], help="override, e.g. models.mix=balanced (repeatable)")
+    c.add_argument("--seed", type=int, default=None, help="the seed whose world is generated to resolve names (default: the "
+                                                         "spec's seed, else 1)")
     d = sub.add_parser("docs", help="write the spec reference as markdown")
     d.add_argument("--out", default=None, help="file to write (default: stdout)")
+
+
+def _check_world(spec, seed=None) -> list:
+    """A spec that names agents (placements, `start`) is checked in a generated world: every name, institution, office, store and
+    camp must resolve (generator.check_placements, start.compile). [] when it does or when the spec names nothing."""
+    from charter import generator as GN
+    if not (spec.get("start") or GN.placed_names(spec)):
+        return []
+    try:
+        GN.generate(spec, int(seed if seed is not None else (spec.get("seed") or 1)))
+    except ValueError as e:
+        return [f"world (seed {seed if seed is not None else spec.get('seed') or 1}): {e}"]
+    return []
 
 
 def cmd(a) -> int:
@@ -1835,6 +1892,8 @@ def cmd(a) -> int:
             errs = validate(S.apply_overrides(S.load(name), a.set))
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
             errs = [str(e)]
+        if not errs:                                                    # names, institutions, offices and stores resolve only in a
+            errs = _check_world(S.apply_overrides(S.load(name), a.set), a.seed)   # world: generate it (start, placements)
         bad += bool(errs)
         print(f"{name}: " + ("ok" if not errs else f"{len(errs)} error(s)"))
         for e in errs:

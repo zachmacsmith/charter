@@ -124,6 +124,7 @@ def references() -> dict:
     out.update({f"toolkit:{n}": e["code"] for n, e in LB.TOOLKIT.items()})
     out.update({f"toolkit:{n}": e["code"] for n, e in LB.CONTRACT_TEMPLATES.items()})     # review 14 B: Assurance Founding
     out.update({f"toolkit:{n}": e["code"] for n, e in LB.FOOD_TEMPLATES.items()})         # review 15 S6: food and family templates
+    out.update({f"toolkit:{n}": e["code"] for n, e in LB.ESTABLISHED.items()})            # review 27: established-world templates
     out.update({f"template:{n}": C.instantiate(t["code"], {}) for n, t in C.TEMPLATES.items()})
     out.update({f"constitution:{n}": c for n, c in LB.CONSTITUTIONS.items()})
     out.update({f"constitution:{n}": c for n, c in getattr(RG, "CONSTITUTIONS", {}).items() if isinstance(c, str)})

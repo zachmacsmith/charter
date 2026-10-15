@@ -520,6 +520,11 @@ E("store_built", "subsistence", "primitive", "public", "event", "subsistence", a
 E("store_deposit", "subsistence", "primitive", "parties", "event", "subsistence", primitive="move",
   note="food put in a store: the depositor and an agent owner")
 E("store_withdrawal", "subsistence", "primitive", "parties", "event", "subsistence", act="withdraw", primitive="withdraw")
+E("kin", "start", "summary", "public", "event", "subsistence",
+  note="established worlds (spec start.kin): a founding family's parentage, announced at round 0 (rendered from its text)")
+E("office_payment", "institutions", "primitive", "parties", "event", "subsistence", act="transfer", primitive="move",
+  note="established worlds (institutions.office_control): an office holder paid out of its institution's treasury; told to the payer, "
+       "the payee and the institution's officers (rendered from its text)")
 E("conceive_offer", "life", "summary", "parties", "event", "life", act="conceive",
   note="review 15 S4: an offer to have a child, told to the partner")
 E("conceived", "life", "primitive", "parties", "event", "life", act="conceive", primitive="conceive",
@@ -532,8 +537,9 @@ E("hunt", "subsistence", "primitive", "parties", "event", "subsistence", act="hu
   note="a hunting entry (sealed until the round's end): the hunter only")
 E("hunt_result", "subsistence", "summary", "parties", "event", "subsistence",
   note="a hunting party's catch and the hunter's share, to each member only (hunt results are private)")
-E("forest_shock", "subsistence", "summary", "parties", "event", "subsistence",
-  note="a rare forest shock (forest.shock): the plants or the game lose 30-60%; told to the agents who used that forest that round")
+E("forest_shock", "subsistence", "summary", "public|parties", "event", "subsistence",
+  note="a rare forest shock (forest.shock): the plants or the game lose 30-60%; told to the agents who used that forest that round. "
+       "A scheduled shock (subsistence.shocks, review 27) is public")
 E("hunt_round", "subsistence", "record", "monitor", "silent", None, primitive="hunt",
   note="a forest's hunting round: each party's hunters, effort, quarry and catch, and the game left (monitor-only; a law may publish it)")
 

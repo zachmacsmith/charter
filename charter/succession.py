@@ -33,7 +33,9 @@ Filling (the same end-of-round step, for every open vacancy, in the order they a
                  "partition" (every eligible child, as far as the seats allow)
     election     a ballot through the institution's procedure (electorate: its living members, or its founder alone under the
                  "founder" procedure; candidates: its eligible members; plurality; closes_in rounds, default 1); one candidate:
-                 filled at once. A ballot with no winner leaves the office vacant and a new one opens the next round
+                 filled at once. A ballot with no winner leaves the office vacant and a new one opens the next round.
+                 electorate (established worlds): a right; only its holders vote: "vote" (a franchise among the members), or an
+                 office of the institution ("J0.council": appointment by the council)
     cooptation   the same ballot, with the remaining officers as the electorate (none left: vacant)
     seniority    the longest-standing eligible member (join order), or with among: "officers" the longest-serving other officer
     lot          a seeded draw among the eligible members
@@ -69,7 +71,7 @@ ACT_RULES = ("election", "receiver", "none")                         # the Succe
 CAUSES = ("death", "exit", "expelled", "term", "removed")
 ESCHEAT = ("polity", "family", "members", "lock")                    # the Dissolution and Escheat Act's TO (lock: the residual)
 PARTY_DEATH = ("end", "estate", "heirs")
-RULE_PARAMS = {"designation": (), "hereditary": ("order",), "election": ("closes_in",), "cooptation": ("closes_in",),
+RULE_PARAMS = {"designation": (), "hereditary": ("order",), "election": ("closes_in", "electorate"), "cooptation": ("closes_in", "electorate"),
                "seniority": ("among",), "lot": (), "none": ()}
 SUCCESSION_ACT = "Succession Act"
 ESCHEAT_ACT = "Dissolution and Escheat Act"
@@ -113,6 +115,8 @@ def check_clause(name, v) -> dict:
         raise L.LawError(f"offices.{name}.succession.order: primogeniture or partition")
     if rule == "seniority" and v.get("among", "members") not in ("members", "officers"):
         raise L.LawError(f"offices.{name}.succession.among: members or officers")
+    if "electorate" in v and not (isinstance(v["electorate"], str) and 0 < len(v["electorate"]) <= 64):
+        raise L.LawError(f"offices.{name}.succession.electorate: the right whose holders vote (e.g. vote, or J0.council)")
     if "closes_in" in v:
         c = v["closes_in"]
         if isinstance(c, bool) or not isinstance(c, int) or not 1 <= c <= 5:
@@ -340,8 +344,15 @@ def _candidates(k, iid, name) -> list:
     return [a for a in IN.members(k, iid) if eligible(k, iid, name, a)]
 
 
-def _electorate(k, iid, rule) -> list:
+def _electorate(k, iid, rule, right=None) -> list:
+    """The voters of a succession ballot. right (the clause's electorate, established worlds): only those holding that right vote,
+    the members for an election (a franchise: "vote"), the officers for a cooptation ("J0.council": appointment by the council)."""
     from charter import institutions as IN
+    if right is not None:
+        pool = IN.officers(k, iid) if rule == "cooptation" else IN.members(k, iid)
+        if rule == "election" and right.startswith(f"{iid}."):          # an office of the institution elects (appointment)
+            pool = IN.holders(k, iid, right)
+        return [a for a in pool if _alive(k, a) and k.has(a, right)]
     if rule == "cooptation":
         return [a for a in IN.officers(k, iid) if _alive(k, a)]
     rec = IN.get(k, iid) or {}
@@ -372,7 +383,7 @@ def choose(k, vac, clause, node) -> tuple:
             out = kids[:max(1, _free(k, iid, name, o))] if clause.get("order") == "partition" else kids[:1]
     elif rule in ("election", "cooptation"):
         cands = cands_()
-        voters = _electorate(k, iid, rule)
+        voters = _electorate(k, iid, rule, clause.get("electorate"))
         if len(cands) == 1 and voters:
             out = cands
         elif cands and voters:
