@@ -3,7 +3,8 @@
 # heirs and succession matter. Rival goal sets: three ways to want deaths (by one's own line, by anyone, an empty world) against
 # a Populator and a Peacekeeper; a Board seat sought from outside; money against votes across classes; family wealth and power.
 extends: [society]
-agents: {worker: 15, scientist: 7, legislator: 9, media: 0, board: 3, fixer: 1}
+agents: {worker: 15, scientist: 7, legislator: 9, media: 0, board: 3, fixer: 1,
+         names: {worker: [Ravi, Dina, Runa, Elin, Rosa, Mats, Yngve, Clara, Wilma, Liv, Pavel, Dara, Tova, Felix, Vera], scientist: [Per, Freya, Zeno, Yuri, Soren, Kaj, Ada], legislator: [Gus, Vesna, Zane, Jory, Zia, Bruna, Lena, Wanda, Hana], board: [Jette, Vidar, Ruben], fixer: [Gry]}}   # seed 35's names, now fixed for every seed (seed 35's world is unchanged), so the placed goals below hold
 rounds: 100
 models:
   mix: balanced

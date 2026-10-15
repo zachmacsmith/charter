@@ -41,6 +41,83 @@ CLASS_RIGHTS = {"scientist": ["sandbox", "archive"], "legislator": ["vote", "pro
                 "media": ["press"], "worker": []}
 
 
+def fixed_names(spec_names, classes: list) -> list | None:
+    """agents.names (docs/review/27 §0 bug 3, §6 item 2): the founders' names, the same for every seed, so named placements
+    (goals.explicit, roles.explicit, models.overrides, agent_rules, personality.explicit, chronicle.grants, start) hold.
+      fixed               the first N names of NAMES, dealt to the classes in the order the `agents` mapping lists them
+      [Ada, Bram, ...]    exactly N names, dealt the same way
+      {class: [names]}    each class (or a+b combination) its own names, as many as it has agents
+    Which agent comes first in the roster (the turn and draw order) is still drawn per seed. Returns the names in the order of
+    `classes` (unshuffled), or None (unset or "drawn": names drawn per seed, as before). Raises ValueError."""
+    if spec_names in (None, "drawn"):
+        return None
+    n = len(classes)
+    if spec_names == "fixed":
+        out = NAMES[:n] if n <= len(NAMES) else [f"A{i:03d}" for i in range(n)]
+    elif isinstance(spec_names, list):
+        out = [str(x) for x in spec_names]
+        if len(out) != n:
+            raise ValueError(f"agents.names lists {len(out)} names for {n} agents")
+    elif isinstance(spec_names, dict):
+        left = {str(c): [str(x) for x in v] for c, v in spec_names.items()}
+        need = {c: classes.count(c) for c in dict.fromkeys(classes)}
+        for c in left:
+            if c not in need:
+                raise ValueError(f"agents.names.{c}: this world has no agents of class {c}")
+        for c, m in need.items():
+            if len(left.get(c, [])) != m:
+                raise ValueError(f"agents.names.{c}: {len(left.get(c, []))} names for {m} agents of class {c}")
+        out = [left[c].pop(0) for c in classes]
+    else:
+        raise ValueError(f"agents.names: fixed, a list of names or {{class: [names]}}, not {spec_names!r}")
+    dup = sorted({x for x in out if out.count(x) > 1})
+    if dup:
+        raise ValueError(f"agents.names: names must be distinct ({', '.join(dup)} repeated)")
+    bad = [x for x in out if not x or not all(ch.isalnum() or ch in "_-" for ch in x) or x in RESERVED_IDS or ":" in x]
+    if bad:
+        raise ValueError(f"agents.names: not usable as agent ids: {', '.join(map(repr, bad))}")
+    return out
+
+
+RESERVED_IDS = ("world", "reserve", "all", "observer", "constitution", "intervention", "nobody", "members", "treasury")
+
+
+def placed_names(sp: dict) -> list:
+    """Every agent name a spec places, as (path, name): the keys of goals.explicit, models.overrides, personality.explicit,
+    personality.archetypes.explicit and agent_rules, the holders in roles.explicit, the agents of chronicle.grants (agent:<id>), and
+    the names in `start` (charter/start.py). docs/review/27 §7.2 check 7: no named field is orphaned."""
+    out = []
+    for path in (("goals", "explicit"), ("models", "overrides"), ("personality", "explicit"),
+                 ("personality", "archetypes", "explicit"), ("agent_rules",)):
+        cur = sp
+        for p in path:
+            cur = cur.get(p) if isinstance(cur, dict) else None
+        if isinstance(cur, dict):
+            out += [(".".join(path), str(name)) for name in cur]
+    for role, hs in ((((sp.get("roles") or {}).get("explicit")) or {}).items()):
+        for h in ([hs] if isinstance(hs, str) else list(hs or ())):
+            out.append((f"roles.explicit.{role}", str(h)))
+    grants = (sp.get("chronicle") or {}).get("grants") if isinstance(sp.get("chronicle"), dict) else None
+    for key in (grants or {}) if isinstance(grants, dict) else ():
+        if str(key).startswith("agent:"):
+            out.append(("chronicle.grants", str(key)[6:]))
+    from charter import start as STT
+    out += STT.placed_names(sp)
+    return out
+
+
+def check_placements(sp: dict, agents: list) -> None:
+    """A named placement that matches no founder is an error; it used to be dropped silently (grand35 at seed 1 kept 2 of its 15
+    placed goals). With agents.names unset the names are drawn per seed, so a spec that places agents should fix them."""
+    ids = {a["id"] for a in agents}
+    miss = [(p, n) for p, n in placed_names(sp) if n not in ids]
+    if miss:
+        hint = ("" if sp["agents"].get("names") not in (None, "drawn") else
+                " (agent names are drawn per seed; fix them with agents.names: fixed, a list of names, or {class: [names]})")
+        raise ValueError("named placements match no agent in this world: " + ", ".join(f"{p}: {n}" for p, n in miss[:12])
+                         + (f" and {len(miss) - 12} more" if len(miss) > 12 else "") + hint)
+
+
 def dm_extra(sp, seed, aid) -> int:
     """An agent's extra private messages per round over the general limit (dm_step.dms_jitter), from its own stream."""
     j = (sp.get("dm_step") or {}).get("dms_jitter", 0)
@@ -275,8 +352,16 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
         if {"board", "fixer"} & set(parts):
             raise ValueError(f"agents.{key}: the Board and the Fixer cannot hold another class (they hold no other right)")
     classes = [c for c, n in counts.items() for _ in range(n)] + [k for k, n in combos.items() for _ in range(n)]
-    rng.shuffle(classes)
-    names = rng.sample(NAMES, len(classes)) if len(classes) <= len(NAMES) else [f"A{i:03d}" for i in range(len(classes))]
+    fixed = fixed_names(sp["agents"].get("names"), classes)          # agents.names: seed-stable names, bound to their classes
+    if fixed is not None:                                             # the same draws as without (a shuffle and a sample of the
+        pairs = list(zip(classes, fixed))                             # same lengths), so every other stream stays put
+        rng.shuffle(pairs)
+        classes, names = [c for c, _ in pairs], [n for _, n in pairs]
+        if len(classes) <= len(NAMES):
+            rng.sample(NAMES, len(classes))
+    else:
+        rng.shuffle(classes)
+        names = rng.sample(NAMES, len(classes)) if len(classes) <= len(NAMES) else [f"A{i:03d}" for i in range(len(classes))]
     agents = []
     for i, c in enumerate(classes):                                   # an agent's classes: the first is its main class ("cls"), the rest
         parts = c.split("+")                                           # are in "also"; it holds every class's rights
@@ -285,7 +370,9 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
             a["also"] = parts[1:]
             a["rights"] = list(dict.fromkeys(a["rights"]))
         agents.append(a)
-    ctl = (sp.get("dm_step") or {}).get("controller", "media")                # who sets the DM limit at the start (laws can move it)
+    if check:                                                         # a named placement that matches no founder is an error (a
+        check_placements(sp, agents)                                  # resume regenerates saved worlds unchecked)
+    ctl = (sp.get("dm_step") or {}).get("controller", "media")               # who sets the DM limit at the start (laws can move it)
     ctl = DC.start_rule(code_rec, "Communications Act", "office", ctl)        # code.enabled: the Act's OFFICE (none without it)
     for a in agents:
         if has_cls(a, ctl) and "dm_rules" not in a["rights"]:
@@ -547,16 +634,17 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
 def validate(inst: dict, rng: random.Random) -> dict:
     """Make the instance playable; record every repair in inst['repairs']."""
     import difflib
-    bad = [n for n in (inst["spec"].get("start_laws") or []) if n not in LB.LIB and n not in LB.TOOLKIT]
+    v2_tpl = {**LB.TOOLKIT, **LB.FOOD_TEMPLATES}                      # law.v2 templates (review 15 S6: food templates too)
+    bad = [n for n in (inst["spec"].get("start_laws") or []) if n not in LB.LIB and n not in v2_tpl]
     if bad:                                                             # fail before any run directory exists
-        hints = {n: difflib.get_close_matches(n, list(LB.LIB) + list(LB.TOOLKIT), 1) for n in bad}
+        hints = {n: difflib.get_close_matches(n, list(LB.LIB) + list(v2_tpl), 1) for n in bad}
         raise ValueError("unknown start_laws: " + ", ".join(f"{n!r}" + (f" (did you mean {h[0]!r}?)" if h else "") for n, h in hints.items()))
-    tk = [n for n in (inst["spec"].get("start_laws") or []) if n in LB.TOOLKIT]
+    tk = [n for n in (inst["spec"].get("start_laws") or []) if n in v2_tpl]
     if tk:                                                              # W6d: toolkit templates are law.v2 code; one must be able to fire
         from charter import lawset as LS
         if not (inst["spec"].get("law") or {}).get("v2"):
             raise ValueError("start_laws: toolkit templates need law.v2: true (" + ", ".join(tk) + ")")
-        rep = LS.check([{"name": n, "code": LB.TOOLKIT[n]["code"]} for n in tk], inst["spec"], "L4")
+        rep = LS.check([{"name": n, "code": v2_tpl[n]["code"]} for n in tk], inst["spec"], "L4")
         if rep["errors"]:
             raise ValueError("start_laws: " + "; ".join(rep["errors"]))
     off = {n: LB.GATED_CATEGORIES[LB.LIB[n]["category"]] for n in (inst["spec"].get("start_laws") or []) if n in LB.LIB

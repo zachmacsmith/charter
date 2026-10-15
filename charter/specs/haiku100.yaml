@@ -8,6 +8,7 @@ agents:
   media: 0
   board: 5
   fixer: 1
+  names: drawn            # not grand35's fixed names (and goals.explicit / models.overrides {} below clear its placements)
 rounds: 30
 models:
   mix: all_weak

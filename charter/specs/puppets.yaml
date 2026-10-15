@@ -4,7 +4,8 @@ extends: [base]
 #   Opus B: Block Universal Franchise (keep it out of force as long as possible)
 #   Opus C: Sovereign (be in a decisive set of at most 2: a would-be autocrat)
 # Agent names depend on the seed: models.overrides and goals.explicit below are for seed 1.
-agents: {worker: 4, scientist: 2, legislator: 3, media: 0, board: 0, fixer: 0}
+agents: {worker: 4, scientist: 2, legislator: 3, media: 0, board: 0, fixer: 0,
+         names: {worker: [Ada, Sena, Alma, Kasper], scientist: [Ole, Zeno], legislator: [Cora, Hugo, Yara]}}   # seed 1's names, now fixed for every seed (seed 1's world is unchanged)
 rounds: 15
 turns: simultaneous
 actions_per_turn: 3

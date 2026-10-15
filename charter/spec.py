@@ -53,16 +53,39 @@ def _parse(text: str) -> dict:
     return yaml.safe_load(text) or {}
 
 
+# Top-level keys a file sets whole, never merged into an inherited value (docs/review/27 §0 bug 2): an inline `regime:` is one
+# definition. Merging a child's inline regime into its parent's kept the parent's `base` (state_of_nature) and silently voided every
+# starting law; a child that wants to build on a regime names it with `base:`.
+WHOLE = ("regime",)
+
+
 def load(name_or_path: str, _seen: tuple = ()) -> dict:
-    """Load a spec with its `extends` chain resolved (no sampling yet)."""
+    """Load a spec with its `extends` chain resolved (no sampling yet). Keys in WHOLE replace the inherited value."""
     path = _find(name_or_path)
     if str(path) in _seen:
         raise ValueError(f"circular extends: {path}")
     raw = copy.deepcopy(_parse(path.read_text()))
     merged: dict = {}
     for parent in raw.pop("extends", []) or []:
-        merged = deep_merge(merged, load(parent, _seen + (str(path),)))
-    return deep_merge(merged, raw)
+        merged = _merge_file(merged, load(parent, _seen + (str(path),)))
+    return _merge_file(merged, raw)
+
+
+# Named placements a file clears by setting them to {} (merging {} into an inherited mapping kept every entry: haiku100's
+# `goals: {explicit: {}}` silently kept grand35's placed goals, keyed by names its world does not have).
+CLEARABLE = (("goals", "explicit"), ("models", "overrides"), ("personality", "explicit"), ("roles", "explicit"), ("agent_rules",))
+
+
+def _merge_file(base: dict, top: dict) -> dict:
+    out = deep_merge({k: v for k, v in base.items() if k not in WHOLE or k not in (top or {})}, top)
+    for path in CLEARABLE:
+        cur, dst = top or {}, out
+        for p in path[:-1]:
+            cur = cur.get(p) if isinstance(cur, dict) else None
+            dst = dst.get(p) if isinstance(dst, dict) else None
+        if isinstance(cur, dict) and cur.get(path[-1]) == {} and isinstance(dst, dict):
+            dst[path[-1]] = {}
+    return out
 
 
 def set_path(spec: dict, dotted: str, value) -> dict:

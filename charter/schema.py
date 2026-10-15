@@ -136,10 +136,11 @@ def _laws():
 
 
 def _templates():
-    """Names a regime law set may instantiate (W6d): toolkit templates, library laws, regimes.STATUTES."""
+    """Names a regime law set may instantiate (W6d): toolkit templates, library laws, regimes.STATUTES, and the food and family
+    templates (review 15 S6; regimes.template_code accepts them; docs/review/27 §0 bug 1)."""
     from charter import library as LB
     from charter import regimes as RG
-    return tuple(LB.TOOLKIT) + tuple(LB.LIB) + tuple(RG.STATUTES)
+    return tuple(LB.TOOLKIT) + tuple(LB.LIB) + tuple(RG.STATUTES) + tuple(LB.FOOD_TEMPLATES)
 
 
 def _archetypes():
@@ -945,7 +946,9 @@ DOCS = {
     "resources.upkeep.item": "resource consumed",
     "resources.upkeep.qty": "units consumed",
     "seed": "the world's seed (set by the generator; `--seed` on the command line)",
-    "agents": "agents per class (worker, scientist, legislator, media, board, fixer); `a+b: n` gives n agents holding both classes",
+    "agents": "agents per class (worker, scientist, legislator, media, board, fixer); `a+b: n` gives n agents holding both classes; "
+              "names: fixed | [names] | {class: [names]} fixes the founders' names for every seed (unset: drawn per seed), so named "
+              "placements hold (a placement naming no agent is an error)",
     "rounds": "rounds in the run",
     "law": "the legal system (docs/review/09_law_composition.md)",
     "law.v2": "true: the legal system v2 (exports, use and public state between laws, versions; ARCHITECTURE §6; new-style hooks "
@@ -1094,6 +1097,11 @@ def _check_agents(path, v) -> list:
         return [f"{path}: expected a mapping {{class: count}}, got {v!r}"]
     errs = []
     for k, n in v.items():
+        if k == "names":                                               # agents.names: seed-stable names (generator.fixed_names)
+            if not (n in ("fixed", "drawn", None) or (isinstance(n, list) and all(isinstance(x, str) for x in n))
+                    or (isinstance(n, dict) and all(isinstance(x, list) and all(isinstance(y, str) for y in x) for x in n.values()))):
+                errs.append(f"{path}.names: fixed | drawn | a list of names | {{class: [names]}}, got {n!r}")
+            continue
         parts = [p.strip() for p in str(k).split("+")]
         bad = [p for p in parts if p not in CLASSES]
         if bad:
@@ -1148,7 +1156,7 @@ def _check_start_laws(path, v) -> list:
     if not isinstance(v, list):
         return [f"{path}: expected a list of library law names, got {v!r}"]
     from charter import library as LB
-    names = _laws() + tuple(LB.TOOLKIT)                                # W6d: toolkit templates too (law.v2 worlds)
+    names = _laws() + tuple(LB.TOOLKIT) + tuple(LB.FOOD_TEMPLATES)    # W6d: toolkit templates too (law.v2 worlds); food templates
     return [f"{path}: unknown start_laws {n!r}{_close(n, names)}" for n in v if n not in names]
 
 
@@ -1199,9 +1207,10 @@ def _check_law_set(p, x) -> list:
         for n in names:
             if n in bad:
                 continue
-            consts = LB.params(n) if n in LB.TOOLKIT or n in LB.LIB else {}
-            if n not in LB.TOOLKIT and n not in LB.LIB:
+            known = n in LB.TOOLKIT or n in LB.LIB or n in LB.FOOD_TEMPLATES
+            if not known:
                 continue
+            consts = LB.params(n)
             for k_, val in prm.items():
                 if k_ not in consts:
                     errs.append(f"{q}.params.{k_}: {n} has no constant {k_}{_close(k_, consts)}; it has {', '.join(consts) or 'none'}")
@@ -1582,7 +1591,8 @@ def validate(spec) -> list[str]:
     if lib.get("edition") == 2 and law.get("v2") is not True:
         errs.append("law.library.edition: edition 2 builds laws from lib:* blocks with use(), which needs law.v2: true")
     from charter import library as LB
-    tk = [n for n in (spec.get("start_laws") or []) if isinstance(n, str) and n in LB.TOOLKIT] if isinstance(spec.get("start_laws"), list) else []
+    tk = [n for n in (spec.get("start_laws") or []) if isinstance(n, str) and (n in LB.TOOLKIT or n in LB.FOOD_TEMPLATES)] \
+        if isinstance(spec.get("start_laws"), list) else []
     if tk and law.get("v2") is not True:
         errs.append(f"start_laws: toolkit templates ({', '.join(tk)}) are law.v2 code, which needs law.v2: true")
     reg = spec.get("regime")
