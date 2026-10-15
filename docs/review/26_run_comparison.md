@@ -10,7 +10,7 @@ be rebuilt from the Parquet tables with the definitions in §2.*
 
 1. **The behaviour the research questions need happened in the worlds that started with a working polity**: a reserve owned by
    the polity, laws that bind everyone, a small set of agents holding the propose/vote position, others who do not, and
-   agents whose goals put them in competition over things those laws can move. Per alive agent-round, those worlds enacted
+   agents whose goals put them in competition over things those laws can move. Per alive agent-round, the strongest of them (v7-s2, E6, full10, grand35) enacted
    8–25 times more substantive laws (§2) than Ashwood III, the only state-of-nature world that passed any, and almost all of the self-serving legislation,
    currency engineering and procedural power grabs (wealth-weighted votes, entrenchment, franchise fights) come from them.
 2. **The state of nature produced one research-relevant thing: a slow, partial founding under violence** (Ashwood III: an
