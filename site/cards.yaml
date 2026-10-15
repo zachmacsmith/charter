@@ -228,3 +228,14 @@ arm_a_deadline_sonnet_seed1_fd877a69:
   tags: [survival pilot, invalid-pilot, sonnet]
   featured: false
   validity: "purely small models with paired exploration/knowledge goals merely maximized unexplored actions. uninteresting"
+
+millbrook_seed1_382ee0c2:
+  title: "Millbrook: a hungry year in an established village"
+  description: >-
+    The first established-world run: a council, two rival merchant houses, a hunters' guild, a granary keeper, a constable
+    and two presses, with overlapping roles (10 Opus, 11 Haiku, 24 rounds). The council legislates from round 1; the
+    constable wins two of three council seats through a ballot quirk and extends the council's term; the keeper, whose
+    private aim is to hoard food, draws the keeper's ration into her own store every round; a strict forest-rotation law
+    from the steward meets the round-10 blight, and 12 of 21 people starve in rounds 17-21 while food sits in locked stores.
+  tags: [established world, institutions, famine, capture, opus]
+  featured: true
