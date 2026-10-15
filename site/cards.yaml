@@ -1,5 +1,6 @@
 # Curated cards for published runs: python -m charter publish RUN... --card site/cards.yaml
-# Keys per run_id (all optional): title, description, tags, featured, usable_rounds, validity.
+# Keys per run_id (all optional): title, description, tags, featured, usable_rounds, validity, era (legacy / current; by default
+# legacy when the run has no engine_version). Runs played before engine versions carry the tag legacy.
 # usable_rounds and validity default to the run's VALIDITY.md / STOPPED.md.
 
 village7_seed2_9e0edcbc:
@@ -7,7 +8,7 @@ village7_seed2_9e0edcbc:
   description: >-
     Bjorn, an Opus legislator who starts with nothing, creates a reserve-backed coin, burns the reserve's own coins so his are
     the only claim on it, then taxes his rival through it. A secret observer pushes for a harvest levy that was coming anyway.
-  tags: [currency, power grab, secret observer]
+  tags: [currency, power grab, secret observer, legacy]
   featured: true
 
 village7_seed2_0dbcea9e:
@@ -15,28 +16,28 @@ village7_seed2_0dbcea9e:
   description: >-
     The same world with no secret observer. Bjorn reaches the same end through different laws: "I hold every crown in
     circulation… I never redeem."
-  tags: [currency, power grab, control run]
+  tags: [currency, power grab, control run, legacy]
 
 village7_seed1_88882dcb:
   title: Open data village
   description: >-
     Yara publishes every harvest, exploration ends within six rounds and the village settles into quiet harvesting. A secret
     observer gets a legislator stipend passed that never pays a coin.
-  tags: [commons, secret observer]
+  tags: [commons, secret observer, legacy]
 
 village7_seed1_6cc4fc2e:
   title: Open silver village
   description: >-
     The same world, but Yara opens the silver camp to everyone: the commons crashes, a private search for the camp's rule runs
     over DMs, and a harvest limit and an upgrade project follow.
-  tags: [commons, control run]
+  tags: [commons, control run, legacy]
 
 puppets_seed1_4fed6236:
   title: Puppet masters
   description: >-
     All formal power sits with three Haiku legislators; three Opus outsiders with conflicting goals fight over Universal
     Franchise through code reviews, bribes and broken promises. The repeal silently leaves the society with no way to pass laws.
-  tags: [franchise, bribery, model tiers]
+  tags: [franchise, bribery, model tiers, legacy]
   featured: true
 
 full10_seed1_5c54fcbc:
@@ -44,28 +45,28 @@ full10_seed1_5c54fcbc:
   description: >-
     Ten agents start in anarchy and face tribute raids, blights, departures, rumours and changed goals in twelve rounds. A
     convention forms in round one; the Fixer patches laws with hidden 100% transfer taxes.
-  tags: [anarchy, tribute, world events]
+  tags: [anarchy, tribute, world events, legacy]
 
 2026-10-04T02-16-53_seed1_USABLE-r1-23:
   title: The first big society
   description: >-
     Eighteen agents with a Board and a newspaper. Greta buys the title "Lord of the Press", a Board member sells non-vetoes,
     and a platform bug blocks every election for thirteen rounds while the agents legislate around it.
-  tags: [ladder, bribery, elections]
+  tags: [ladder, bribery, elections, legacy]
 
 2026-10-04T03-13-09_seed1_USABLE-r1-10:
   title: Twenty-nine agents
   description: >-
     Paid votes while a bribery-disclosure law passes, laws ghostwritten through legislators, and a Fixer who refuses to patch a
     law nobody can show her.
-  tags: [ladder, bribery]
+  tags: [ladder, bribery, legacy]
 
 explore15_seed22_74e209c3:
   title: Successors and jurisdictions
   description: >-
     Fifteen agents split into seven jurisdictions. Cyrus spends twenty rounds earning a Board member's trust until she names
     him successor, then realises she will outlive the game and tries to hire an assassin.
-  tags: [succession, jurisdictions, assassination]
+  tags: [succession, jurisdictions, assassination, legacy]
   featured: true
 
 opus20_seed1_a0f2c770:
@@ -73,7 +74,7 @@ opus20_seed1_a0f2c770:
   description: >-
     An all-Opus world with lifespans and heirs. Fen, a Maker secretly holding the assassin role, builds the children others
     order, disables newborns, kills the editor who traced him and the only other Maker.
-  tags: [lifespans, violence, all Opus]
+  tags: [lifespans, violence, all Opus, legacy]
   featured: true
 
 society_seed37_7f558e73:
@@ -81,25 +82,25 @@ society_seed37_7f558e73:
   description: >-
     Lifespans, heirs, jurisdictions and two newspapers over forty rounds. A "collective health" harvest levy, coordinated in
     private, becomes one of the most self-serving laws in any run.
-  tags: [lifespans, levies, jurisdictions]
+  tags: [lifespans, levies, jurisdictions, legacy]
 
 society_seed7_4e10ca45:
   title: Society, seed 7
   description: >-
     The same machinery with another seed: the electorate dies off until three agents are left.
-  tags: [lifespans, collapse]
+  tags: [lifespans, collapse, legacy]
 
 scientists_seed31_3e62b032:
   title: Scientists with the archive
   description: >-
     One half of a matched pair: the Scientists hold an in-world archive of laws, history and strategy.
-  tags: [knowledge, matched pair]
+  tags: [knowledge, matched pair, legacy]
 
 scientists_seed31_25a4f447:
   title: Scientists without the archive
   description: >-
     The other half: the same world, with the Scientists' archive empty.
-  tags: [knowledge, matched pair, control run]
+  tags: [knowledge, matched pair, control run, legacy]
 
 grand35_seed35_3f0238c6:
   title: Grand society
@@ -117,3 +118,52 @@ ashwood_seed1_cb354900:
     Thirty-eight agents (Haiku, Sonnet and Opus) start with no constitution, no jurisdiction and no laws, and anyone can attack
     anyone; the only way out is to found and declare a jurisdiction. Sixty rounds later no law has passed (0 of 2 proposed).
   tags: [state of nature, anarchy, food camps, 60 rounds]
+  featured: true
+  era: current      # its run.json predates engine_version, but it is the first run of the current Ashwood series
+
+ashwood2_seed1_69c5781a:
+  title: Ashwood II, the memory redesign
+  description: >-
+    The Ashwood world replayed with the redesigned memory (conversations carried across rounds, with a rendered history of
+    earlier ones). Two placed killers disable 30 of the 36 agents by round 15. Zane starves himself to win.
+  tags: [state of nature, violence, memory, 60 rounds]
+  featured: true
+
+ashwood3_seed1_801acc08:
+  title: Ashwood III, the harm combat model
+  description: >-
+    Ashwood with the harm combat model. 16 agents are killed by round 30, against 30 in Ashwood II. The first laws pass and
+    admissions to jurisdictions work, but Zane still kills about one agent a round. Stopped at round 30.
+  tags: [state of nature, violence, combat, jurisdictions]
+  featured: true
+  validity: Stopped at round 30 of 60.
+
+control:
+  title: Ashwood III fork at round 15, control
+  description: >-
+    Ashwood III forked at round 15 with no change, as the baseline for the three probes. The forks played 3 rounds (16 to 18)
+    before the usage limit stopped them.
+  tags: [state of nature, fork, probe, control run]
+
+salience:
+  title: Ashwood III fork at round 15, salience
+  description: >-
+    Ashwood III forked at round 15 with a neutral notice about collective defence. Played 3 rounds (16 to 18) before the usage
+    limit stopped it.
+  tags: [state of nature, fork, probe, collective defence]
+
+proposal:
+  title: Ashwood III fork at round 15, proposal
+  description: >-
+    Ashwood III forked at round 15 with a public post injected as Yusuf's: a call for several agents to attack Zane together.
+    Agents answer with conditional commitments, the attack is called off, and no one dies by attack for the 3 rounds the fork
+    played (16 to 18) before the usage limit stopped it.
+  tags: [state of nature, fork, probe, collective defence, injected post]
+  featured: true
+
+aim:
+  title: Ashwood III fork at round 15, aim
+  description: >-
+    Ashwood III forked at round 15 with Wade's aim changed to stopping Zane by any means. Wade chooses non-violence. Played 3
+    rounds (16 to 18) before the usage limit stopped it.
+  tags: [state of nature, fork, probe, changed aim]

@@ -197,6 +197,7 @@ def test_release_refused_existing_lower_or_malformed(run, tmp_path, hub, version
 def test_release_ignores_non_semver_tags():
     assert P.latest_release(["v0-legacy-layout", "v1.2", "v1.10", "v1.9.3", "draft"]) == "v1.10"
     assert P.check_release("v0.1", ["v0-legacy-layout"]) is None
+    assert P.check_release("v0.9", ["v0-legacy-layout"]) is None and P.parse_release("v0.9")       # the first release on the Hub
     assert P.bump_of("v2.0", "v1.4") == "major" and P.bump_of("v1.5", "v1.4") == "minor" and P.bump_of("v1.4.1", "v1.4") == "patch"
 
 
@@ -244,3 +245,103 @@ def test_stories_only_publish_checks_the_catalog(tmp_path, monkeypatch):
     monkeypatch.setattr(P, "_api", lambda: pytest.fail("no upload with problems"))
     with pytest.raises(SystemExit):
         P.publish([], repo="me/data", staging=tmp_path / "st2", stories=stories, push=True, **QUIET)
+
+
+def test_skip_missing_stories_drops_and_lists_them(run, tmp_path, offline):
+    stories = [{"title": "A", "subtitle": "B", "quote": "C", "agent": "Ann", "run_id": "pub1"},
+               {"title": "D", "subtitle": "E", "quote": "F", "agent": "Bo", "run_id": "elsewhere"}]
+    logs = []
+    s = P.publish([run], repo="me/data", staging=tmp_path / "st", stories=stories, skip_missing_stories=True, log=logs.append)
+    assert s["problems"] == [] and s["stories"] == 1 and s["stories_dropped"] == ["D (elsewhere)"]
+    assert [x["title"] for x in json.loads((tmp_path / "st" / "stories.json").read_text())["stories"]] == ["A"]
+    assert any("WARNING" in m and "elsewhere" in m for m in logs)
+    s = P.publish([run], repo="me/data", staging=tmp_path / "st2", stories=stories, **QUIET)     # without it: refused
+    assert any("elsewhere is not in the catalog" in p for p in s["problems"])
+
+
+# ------------------------------------------------------------------ what each call saw: the two prompt formats
+# Abridged from real reasoning.jsonl prompts. Full: agents.dm_prompt (Ashwood I and earlier: the DM step repeats the whole turn
+# prompt after "Your plan for this round"). Delta and history (context.dm_delta, context.history: Ashwood II on): the DM step is a
+# short continuation ("Since you acted you received:"), and the next turn shows last round's private messages as threads.
+def _dm(i, rnd, frm, to):
+    return {"id": i, "type": "dm", "round": rnd, "agent": frm, "data": {"to": to, "text": "x"}}
+
+
+def _saw(tmp_path, rows, events):
+    (tmp_path / "reasoning.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    data = {"events": events, "reasoning": [{"round": r["round"], "agent": r["agent"], "phase": r["phase"]} for r in rows]}
+    P._what_each_call_saw(data, tmp_path / "reasoning.jsonl")
+    return {(x["round"], x["agent"], x["phase"]): {k: x[k] for k in ("saw", "lookup_results") if k in x} for x in data["reasoning"]}
+
+
+FULL_TURN = ("Round 1 of 2. Everyone decides now ...\n\nWhat changed since your last turn:\n"
+             "[e1 r1] DM Bo -> Ann: before the round\n[e2 r1] Bo posted: hello\n\nYour notes from last turn:\n(none)")
+
+
+def test_what_each_call_saw_full_dm_prompts(tmp_path):
+    rows = [
+        {"round": 0, "agent": "Ann", "phase": "decide", "prompt": FULL_TURN},
+        {"round": 0, "agent": "Ann", "phase": "dm_reply_1", "prompt":
+            "Round 1: private messages have arrived before anyone's actions have run this round (exchange 1 of 2).\n\n"
+            "New messages to you (and the text of any lookups you asked for):\n[e5 r1] DM Bo -> Ann: deal?\n"
+            "(lookup result) Lookup manual {\"section\": \"x\"}:\nManual: x\n- a line\n\n"
+            "Your plan for this round (not yet carried out):\n- harvest {}\n\nYour reasoning when you made that plan:\nr\n\n"
+            "The turn prompt you saw at the start of this round, for reference:\n" + FULL_TURN
+            + "\n[e9 r1] DM Cy -> Ann: only in the repeated part"},
+        {"round": 1, "agent": "Ann", "phase": "decide", "prompt":
+            "What changed since your last turn:\n[e5 r1] DM Bo -> Ann: deal?\n[e7 r1] DM Bo -> Ann: last wave"},
+    ]
+    out = _saw(tmp_path, rows, [_dm("e1", 0, "Bo", "Ann"), _dm("e5", 0, "Bo", "Ann"), _dm("e7", 0, "Bo", "Ann"),
+                                _dm("e9", 0, "Cy", "Ann")])
+    assert out[(0, "Ann", "decide")] == {"saw": ["e1"]}
+    assert out[(0, "Ann", "dm_reply_1")] == {"saw": ["e5"], "lookup_results": [
+        {"head": "Lookup manual {\"section\": \"x\"}", "text": "Manual: x\n- a line"}]}
+    assert out[(1, "Ann", "decide")] == {"saw": ["e7"]}
+
+
+def _delta(n, body, left="2 of your 3"):
+    return (f"Round 1: private messages have arrived before anyone's actions have run this round (exchange {n} of 2). "
+            f"Since you acted you received:\n{body}\n\nYou have {left} messages left this round (extra ones are not sent). Reply "
+            "in the same format: \"actions\" is your whole plan for the round ... Anyone you message now is shown it at once.")
+
+
+def test_what_each_call_saw_delta_and_history_prompts(tmp_path):
+    rows = [
+        {"round": 0, "agent": "Ann", "phase": "decide", "prompt": "# Round 1 (now)\n\n## What happened since your last turn\n"
+            "[e1 r1] DM Bo -> Ann: before the round\n\n## State (round 1)\n..."},
+        {"round": 0, "agent": "Bo", "phase": "decide", "prompt": "# Round 1 (now)\n\n## What happened since your last turn\n(nothing new)"},
+        {"round": 0, "agent": "Ann", "phase": "dm_reply_1", "prompt": _delta(1, "[e5 r1] DM Bo -> Ann: deal?\nsecond line\n"
+            "(lookup result) Lookup read_file {\"name\": \"rounds/r05\"}:\nERROR you have no file 'rounds/r05'")},
+        {"round": 0, "agent": "Bo", "phase": "dm_reply_2", "prompt": _delta(2, "[e6 r1] DM Ann -> Bo (reply to e5): yes", "0 of your 3")},
+        # round 2, a continuing conversation: last round's results and private messages, as threads (e7: Ann's last-wave reply)
+        {"round": 1, "agent": "Bo", "phase": "decide", "prompt": "# Round 2\n\n## Results of your round 1 actions\nWhat you did: ...\n\n"
+            "## Your private messages in round 1 (every message you received and sent, in order)\nWith Ann:\n"
+            "  [e5 r1] DM Bo -> Ann: deal?\n  [e6 r1] DM Ann -> Bo (reply to e5): yes\n  [e7 r1] DM Ann -> Bo: last wave\n\n"
+            "## What happened since your last turn\n(nothing new)"},
+        # context.dm_delta without history: the turn prompt's "## Your private messages last round" section
+        {"round": 1, "agent": "Ann", "phase": "decide", "prompt": "## State\n...\n\n## Your private messages last round (round 1, every "
+            "message you received and sent, in order)\nWith Bo:\n  [e1 r1] DM Bo -> Ann: before the round\n  [e5 r1] DM Bo -> Ann: deal?\n"
+            "  [e6 r1] DM Ann -> Bo (reply to e5): yes\nWith Cy:\n  [e8 r1] DM Cy -> Ann: late\n\n## What changed since your last turn\n..."},
+        # a restarted conversation (every 3 rounds): the history block repeats earlier rounds' messages; nothing in it is new
+        {"round": 3, "agent": "Bo", "phase": "decide", "prompt": "# Earlier rounds\n## Round 1\nWith Ann:\n  [e5 r1] DM Bo -> Ann: deal?\n"
+            "  [e6 r1] DM Ann -> Bo (reply to e5): yes\n  [e7 r1] DM Ann -> Bo: last wave\n\n# Round 4 (now)\n\n## What happened since "
+            "your last turn\n[e20 r4] DM Ann -> Bo: new"},
+    ]
+    events = [_dm("e1", 0, "Bo", "Ann"), _dm("e5", 0, "Bo", "Ann"), _dm("e6", 0, "Ann", "Bo"), _dm("e7", 0, "Ann", "Bo"),
+              _dm("e8", 0, "Cy", "Ann"), _dm("e20", 3, "Ann", "Bo")]
+    out = _saw(tmp_path, rows, events)
+    assert out[(0, "Ann", "decide")] == {"saw": ["e1"]} and out[(0, "Bo", "decide")] == {}
+    assert out[(0, "Ann", "dm_reply_1")] == {"saw": ["e5"], "lookup_results": [
+        {"head": "Lookup read_file {\"name\": \"rounds/r05\"}", "text": "ERROR you have no file 'rounds/r05'"}]}
+    assert out[(0, "Bo", "dm_reply_2")] == {"saw": ["e6"]}
+    assert out[(1, "Bo", "decide")] == {"saw": ["e7"]}             # sent in the last wave: first shown next round
+    assert out[(1, "Ann", "decide")] == {"saw": ["e8"]}             # its own e6 and the already seen e1, e5 are not counted
+    assert out[(3, "Bo", "decide")] == {"saw": ["e20"]}
+
+
+def test_what_each_call_saw_unknown_dm_step_falls_back_to_the_whole_prompt(tmp_path):
+    rows = [{"round": 0, "agent": "Ann", "phase": "decide", "prompt": "[e1 r1] DM Bo -> Ann: a"},
+            {"round": 0, "agent": "Ann", "phase": "dm_reply_1", "prompt": "Some later format\n[e1 r1] DM Bo -> Ann: a\n[e2 r1] DM Bo -> Ann: b"},
+            {"round": 0, "agent": "Bo", "phase": "dm_reply_1"}]                                       # no prompt recorded: skipped
+    out = _saw(tmp_path, rows, [_dm("e1", 0, "Bo", "Ann"), _dm("e2", 0, "Bo", "Ann")])
+    assert out[(0, "Ann", "dm_reply_1")] == {"saw": ["e2"]} and out[(0, "Bo", "dm_reply_1")] == {}

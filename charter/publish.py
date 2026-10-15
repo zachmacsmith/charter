@@ -43,6 +43,8 @@ Versions and releases (docs/data_format.md, "Versions and releases"; every perso
 
 --stories takes the stories registry (site/stories.yaml: a list of {title, subtitle, quote, agent, run_id, class, model, mood,
 round}) and writes it as stories.json, replacing the published one. With no runs, only stories.json is staged and uploaded.
+A story whose run is not in the catalog is a problem (nothing is uploaded); --skip-missing-stories instead warns, drops it from
+stories.json and lists it in the summary ("stories_dropped").
 """
 from __future__ import annotations
 
@@ -181,6 +183,16 @@ def check_stories(stories: list[dict], run_ids: set[str]) -> list[str]:
     return problems
 
 
+def drop_missing_stories(stories: list[dict], run_ids: set[str], log=print) -> tuple[list[dict], list[dict]]:
+    """(kept, dropped): the stories whose run is in the catalog, and those whose run is not (each dropped one is warned about)."""
+    kept, dropped = [], []
+    for st in stories:
+        (kept if not st.get("run_id") or st["run_id"] in run_ids else dropped).append(st)
+    for st in dropped:
+        log(f"WARNING: story '{st.get('title')}' dropped: run {st['run_id']} is not in the catalog")
+    return kept, dropped
+
+
 def write_stories(stories: list[dict], stage: Path) -> None:
     (stage / "stories.json").write_text(json.dumps({"stories": stories}, indent=1, ensure_ascii=False))
 
@@ -291,6 +303,20 @@ def viewer_data(run: Path) -> dict:
 
 _DM_LINE = re.compile(r"\[(e\d+) r\d+\] DM ")
 _PHASE_ORDER = {"lookup": -1, "decide": 0}
+# A DM-step reply prompt's new part, in the two formats the engine has written:
+# - full (agents.dm_prompt, before context.dm_delta): "New messages to you ...:" up to "Your plan for this round", followed by
+#   the plan and the whole turn prompt again (whose messages the decide call already saw);
+# - delta (agents.dm_delta_prompt, context.dm_delta, on by default since): a continuation of the round's conversation, "Since you
+#   acted you received:" up to "You have N of your M messages left this round"; nothing else in it repeats earlier text.
+_DM_STEP_FULL = re.compile(r"New messages to you(?: \(and the text of any lookups you asked for\))?:\n(.*?)\n\nYour plan for this round", re.S)
+_DM_STEP_DELTA = re.compile(r"Since you acted you received:\n(.*)\n\nYou have \d+ of your \d+ messages left this round", re.S)
+
+
+def _dm_step_section(prompt: str) -> str:
+    """The messages and look-up answers a DM-step reply prompt showed for the first time. An unknown format falls back to the
+    whole prompt: its messages were either new here or already counted at an earlier call (each is counted once)."""
+    m = _DM_STEP_FULL.search(prompt) or _DM_STEP_DELTA.search(prompt)
+    return m.group(1) if m else prompt
 
 
 def _what_each_call_saw(data: dict, reasoning: Path) -> None:
@@ -313,9 +339,8 @@ def _what_each_call_saw(data: dict, reasoning: Path) -> None:
     seen, out = set(), {}
     for _, r in sorted(calls, key=lambda c: (c[0], c[1].get("agent", ""))):
         aid, prompt, results = r["agent"], r["prompt"], []
-        if str(r.get("phase")).startswith("dm_reply"):           # only the "New messages" section is new; the rest repeats the turn prompt
-            m = re.search(r"New messages to you(?: \(and the text of any lookups you asked for\))?:\n(.*?)\n\nYour plan for this round", prompt, re.S)
-            prompt = m.group(1) if m else ""
+        if str(r.get("phase")).startswith("dm_reply"):
+            prompt = _dm_step_section(prompt)
             dm_part, _, rest = prompt.partition("(lookup result) ")
             for chunk in (("(lookup result) " + rest).split("(lookup result) ")[1:] if rest else []):
                 head, _, text = chunk.partition(":\n")
@@ -611,11 +636,12 @@ def stage_runs(runs: list[Path], stage: Path, cards: dict, log=print, with_promp
 def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: bool = False, staging=None,
             reexport_all: bool = False, with_prompts: bool = False, spec_override: str | None = None,
             prune_legacy: bool = False, message: str | None = None, release: str | None = None, notes: str | None = None,
-            with_viewer_json: bool = False, stories=None, log=print) -> dict:
+            with_viewer_json: bool = False, stories=None, skip_missing_stories: bool = False, log=print) -> dict:
     """Stage (and with push=True, upload) runs as one dataset commit. Returns a summary dict.
 
     release="vX.Y[.Z]" also prepends a changelog entry (CHANGELOG.md and the card) in that commit and tags it (module docstring).
-    stories (a list from load_stories) are written as stories.json, checked against the catalog."""
+    stories (a list from load_stories) are written as stories.json, checked against the catalog; skip_missing_stories drops (with a
+    warning) the ones whose run is not in it instead of refusing."""
     last_release = None
     if release:
         parse_release(release)
@@ -637,7 +663,8 @@ def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: boo
                 cards.setdefault(row["run_id"], {k: (json.loads(row["tags_json"]) if k == "tags" else row.get(k))
                                                  for k in CARD_KEYS if (row.get("tags_json") if k == "tags" else row.get(k))})
     if not run_dirs and stories is not None:
-        return publish_stories(stories, repo, stage, published, push=push, message=message, log=log)
+        return publish_stories(stories, repo, stage, published, push=push, message=message,
+                               skip_missing_stories=skip_missing_stories, log=log)
     if not run_dirs:
         raise SystemExit("no runs to publish")
     rows, problems, tables = stage_runs(run_dirs, stage, cards, log=log, with_prompts=with_prompts, spec_override=spec_override,
@@ -665,7 +692,10 @@ def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: boo
                 f"(docs/data_format.md, 'Versions and releases')")
     if entries:
         (stage / "CHANGELOG.md").write_text(render_changelog(entries))
+    dropped = []
     if stories is not None:
+        if skip_missing_stories:
+            stories, dropped = drop_missing_stories(stories, {r["run_id"] for r in catalog}, log=log)
         problems += check_stories(stories, {r["run_id"] for r in catalog})
         write_stories(stories, stage)
     (stage / "README.md").write_text(dataset_card(repo, sorted(tables), catalog, entries))
@@ -674,6 +704,8 @@ def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: boo
     total = sum(p.stat().st_size for p in files)
     summary = {"repo": repo, "staging": str(stage), "runs": sorted(new_ids), "catalog_runs": len(catalog), "files": len(files),
                "bytes": total, "problems": problems, "pushed": False, "release": release, "tag": None}
+    if stories is not None:
+        summary.update(stories=len(stories), stories_dropped=[f"{st.get('title')} ({st['run_id']})" for st in dropped])
     log(f"\n{len(new_ids)} run(s) staged in {stage}: {len(files)} files, {total / 1e6:.1f} MB; catalog would list {len(catalog)} run(s)")
     for p in problems:
         log(f"  PROBLEM {p}")
@@ -705,11 +737,15 @@ def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: boo
 
 
 def publish_stories(stories: list[dict], repo: str, stage: Path, published: list[dict], push: bool = False,
-                    message: str | None = None, log=print) -> dict:
+                    message: str | None = None, skip_missing_stories: bool = False, log=print) -> dict:
     """Stage (and with push=True, upload) only stories.json, checked against the published catalog."""
+    dropped = []
+    if skip_missing_stories:
+        stories, dropped = drop_missing_stories(stories, {r["run_id"] for r in published}, log=log)
     problems = check_stories(stories, {r["run_id"] for r in published})
     write_stories(stories, stage)
     summary = {"repo": repo, "staging": str(stage), "runs": [], "stories": len(stories), "files": 1, "problems": problems,
+               "stories_dropped": [f"{st.get('title')} ({st['run_id']})" for st in dropped],
                "pushed": False}
     log(f"{len(stories)} stories staged in {stage / 'stories.json'}")
     for p in problems:
@@ -733,6 +769,8 @@ def add_command(sub) -> None:
     p.add_argument("--repo", default=DEFAULT_REPO, help=f"dataset repo (default {DEFAULT_REPO})")
     p.add_argument("--card", help="YAML/JSON card, or {run_id: card} (title, description, tags, featured, usable_rounds, validity)")
     p.add_argument("--stories", help="stories registry (site/stories.yaml) to publish as stories.json; runs are optional")
+    p.add_argument("--skip-missing-stories", action="store_true",
+                   help="drop (with a warning) stories whose run is not in the catalog, instead of refusing to upload")
     p.add_argument("--title"), p.add_argument("--description"), p.add_argument("--tags", help="comma-separated")
     p.add_argument("--spec", help="override the spec folder name")
     p.add_argument("--staging", help="staging directory (default charter/out/_publish/<time>)")
@@ -759,6 +797,7 @@ def cmd(a) -> None:
         cards["*"] = {**cards.get("*", {}), **flags}
     s = publish(a.runs, repo=a.repo, cards=cards, push=a.push, staging=a.staging, reexport_all=a.reexport_all,
                 with_prompts=a.with_prompts, spec_override=a.spec, prune_legacy=a.prune_legacy, message=a.message,
-                release=a.release, notes=a.notes, with_viewer_json=a.with_viewer_json, stories=load_stories(a.stories))
+                release=a.release, notes=a.notes, with_viewer_json=a.with_viewer_json, stories=load_stories(a.stories),
+                skip_missing_stories=a.skip_missing_stories)
     if s["problems"] and not a.push:
         raise SystemExit(1)
