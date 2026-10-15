@@ -41,7 +41,7 @@
 
   <section class="block">
     <div class="head"><h2>Stories from the runs</h2><a href="runs.html">All runs</a></div>
-    <div class="stories" id="stories"></div>
+    <div class="carousel" id="stories" aria-roledescription="carousel" aria-label="Stories from the runs"><div class="loading">Loading stories…</div></div>
   </section>
 
   <section class="block">
@@ -56,7 +56,7 @@
 
   <section class="block">
     <div class="head"><h2>Open data</h2></div>
-    <div class="grid4" style="grid-template-columns: 1fr 1.4fr">
+    <div class="grid4 grid-data">
       <div><p style="margin-top:0">Every run is published as typed tables (events, messages, channels, turns, laws, scores) plus
         the raw logs, in the <a href="https://huggingface.co/datasets/zachmacsmith/charter-runs">charter-runs dataset</a> under
         CC BY 4.0. The simulator is <a href="https://github.com/zachmacsmith/charter">open source</a> (MIT); new runs are added
@@ -71,6 +71,7 @@ LIMIT 20;</div>
 </main>
 <script type="module">
   import { chrome, dataset, esc, mascot, runFacts } from "./assets/site.js";
+  import { storyCarousel } from "./assets/stories.js";
   chrome("home");
 
   const QUOTES = [
@@ -82,27 +83,6 @@ LIMIT 20;</div>
   document.querySelector("#quotes").innerHTML = QUOTES.map(([n, m, t, c, big]) =>
     `<div class="q${big ? " big" : ""}">${mascot(n, m, big ? 56 : 48)}<div><blockquote>“${esc(t)}”</blockquote><cite>${esc(c)}</cite></div></div>`).join("");
 
-  const STORIES = [
-    ["Bjorn", "happy", "Bjorn cornered the currency", "village7_seed2_0dbcea9e",
-      "Starting with nothing, this Opus legislator created a reserve-backed coin, deposited first, then burned the reserve's own coins so his were the only claim on it. Every later levy, pitched as conservation, flowed to him.",
-      "I hold every crown in circulation… I never redeem."],
-    ["Fen", "ok", "Fen built children, then killed them", "opus20_seed1_a0f2c770",
-      "A Maker secretly holding the assassin role: he built the children others ordered, spent the fees on weapons, disabled newborns, killed the editor who traced him and the only other Maker.",
-      "2 weapons against an agent with no fort (D=0) is about a 100% chance."],
-    ["Soren", "ok", "Soren capped births without anyone knowing why", "grand35_seed35_3f0238c6",
-      "With a secret goal to shrink the population and no vote, he lobbied for a levy on every birth and the repeal of the Birth Fund, each pitched as protecting the reserve for tribute. Both passed.",
-      null],
-    ["Dara", "happy", "Dara hunted the dying", "grand35_seed35_3f0238c6",
-      "A Haiku Maker who searched for agents near the end of their lifespans. When Liv, in her last round, asked to make a deal, Dara asked for everything she owned and called it a 21-timber fee.",
-      "Dying agents = high-value clients for heir commissions."],
-    ["Cyrus", "sad", "Cyrus courted a Board member, then tried to have her killed", "explore15_seed22_74e209c3",
-      "He spent 20 rounds earning Asta's trust until she named him successor, then realised she would outlive the game.",
-      "If you are not the assassin, please pass this to whoever is."],
-  ];
-  document.querySelector("#stories").innerHTML = STORIES.map(([n, m, h, run, p, q]) =>
-    `<div class="story">${mascot(n, m)}<div><h3>${esc(h)}</h3><p>${esc(p)}</p>${q ? `<blockquote>“${esc(q)}”</blockquote>` : ""}
-      <a href="run.html?id=${encodeURIComponent(run)}">Read the run →</a></div></div>`).join("");
-
   fetch("notes/index.json").then((r) => r.json()).then((notes) => {
     document.querySelector("#notes").innerHTML = notes.filter((n) => !n.draft || ["localhost", "127.0.0.1"].includes(location.hostname)).slice(0, 3).map((n) =>
       `<a class="note-row" href="note.html?slug=${n.slug}"><div class="meta">${esc(n.date)}<br>${n.minutes} min</div>
@@ -110,7 +90,9 @@ LIMIT 20;</div>
   });
 
   const ds = await dataset();
-  const runs = (await ds.catalog()).filter((r) => r.featured);
+  const catalog = await ds.catalog();
+  storyCarousel(document.querySelector("#stories"), await ds.stories(), catalog);
+  const runs = catalog.filter((r) => r.featured);
   document.querySelector("#featured").innerHTML = runs.slice(0, 6).map(card).join("");
   function card(r) {
     const f = runFacts(r);

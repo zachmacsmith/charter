@@ -3,6 +3,7 @@
 //   import { openDataset } from "./charter-data.js";
 //   const ds = await openDataset({ repo: "zachmacsmith/charter-runs" });
 //   const runs = await ds.catalog();                       // one row per published run (catalog.json)
+//   const stories = await ds.stories();                    // curated stories: title, subtitle, quote, agent, run_id (stories.json)
 //   const run = ds.run(runs[0]);                           // lazy: nothing is fetched until a table is asked for
 //   const chans = await run.channels();                    // [{channel_id, channel_kind, name, members, n_messages, ...}]
 //   const thread = await run.thread("dm:Bjorn|Kasper");    // messages of one conversation, in log order
@@ -27,6 +28,7 @@ export async function openDataset({ repo = "zachmacsmith/charter-runs", revision
   return {
     root,
     catalog: async () => (await json("catalog.json")).runs,
+    stories: async () => (await json("stories.json").catch(() => ({}))).stories || [],   // the home page's stories registry
     run: (entry) => openRun(root, typeof entry === "string" ? entry : entry.path, json),
   };
 }

@@ -47,6 +47,7 @@ function mascotSymbol(a, mood, dk) {
 }
 
 // one hidden <svg> holding every agent's symbols; mascot() references them
+export { mascotSymbol };
 export function buildSprite(S, dark = false) {
   let el = document.getElementById("run-sprite");
   if (!el) { el = document.createElementNS("http://www.w3.org/2000/svg", "svg"); el.id = "run-sprite";

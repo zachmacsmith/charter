@@ -143,13 +143,40 @@ export function front(st) {
       </div>
     </section>`;
 }
+export const headlineText = (st, x) => headline(st, x).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+// an agent's consequential acts, by round: the markers on the clock strip (in its diary) and beside its round headings
+export const MARK_KINDS = [["kill", "⚔", "disables another agent"], ["gone", "✝", "leaves the game"], ["law", "§", "one of its laws is enacted"],
+  ["prop", "✎", "proposes a law"], ["child", "✦", "a child of its is born"], ["made", "✚", "makes a child for someone (as a Maker)"], ["seat", "♛", "takes a Board seat or names a successor"],
+  ["jur", "⚑", "founds a jurisdiction"]];
+export function agentMarks(S, id) {
+  S._marks = S._marks || new Map();
+  if (S._marks.has(id)) return S._marks.get(id);
+  const out = new Map(), add = (r, k, text) => { if (!out.has(r)) out.set(r, []); out.get(r).push({ k, text }); };
+  S.events.forEach((e, i) => {
+    const d = e.data || {}, r = S.roundAt[i];
+    switch (e.type) {
+      case "disabled": if (d.by === id) add(r, "kill", `disables ${d.agent}`); if (d.agent === id) add(r, "gone", `leaves the game (${String(d.cause || "removed").replace(/_/g, " ")}${d.by ? " by " + d.by : ""})`); break;
+      case "departure": if ((d.agent || e.agent) === id) add(r, "gone", "leaves the game"); break;
+      case "proposal": if (e.agent === id) add(r, "prop", `proposes ${d.law}${d.title ? ` “${d.title}”` : ""}`); break;
+      case "enact": if (e.agent === id) add(r, "law", `${d.law}${d.title ? ` “${d.title}”` : ""} becomes law`); break;
+      case "birth": if (d.parent === id) add(r, "child", `child ${d.agent} is born`);
+        if (d.maker === id && d.parent !== id) add(r, "made", `makes ${d.agent} for ${d.parent}`); break;
+      case "succession": if (d.successor === id) add(r, "seat", `takes ${d.from}'s Board seat`); break;
+      case "successor_named": if (e.agent === id && d.successor) add(r, "seat", `names ${d.successor} as successor`); break;
+      case "jur_founded": if (e.agent === id) add(r, "jur", `founds ${d.name || d.jurisdiction}`); break;
+    }
+  });
+  S._marks.set(id, out);
+  return out;
+}
+const markGlyph = (k) => (MARK_KINDS.find((m) => m[0] === k) || [])[1] || "•";
 function headline(st, x) {
   switch (x.k) {
     case "enacted": return `${lawLink(st, x.law)} <b>${esc(x.title || "")}</b> becomes law`;
     case "repealed": return `${lawLink(st, x.law)} is repealed`;
     case "vetoed": return `The Board vetoes ${lawLink(st, x.law)}`;
     case "raid": return `Raid on ${esc(x.camp)}`;
-    case "left": return `${who(st, x.who)} ${x.cause === "disabled" ? "is removed from the game" : "leaves"}`;
+    case "left": return `${who(st, x.who)} ${x.cause === "old_age" ? "reaches the end of its life" : ["departure", "left"].includes(x.cause) ? "leaves" : "is removed from the game"}`;
     case "arrived": return `${who(st, x.who)} arrives`;
     case "bank_run": return `A run on the ${esc(x.cur)}`;
     case "tribute": return "The outside power demands tribute";
@@ -268,41 +295,145 @@ export function people(st, id) {
         <div class="meta">goal: ${esc(a.goal.primary || "–")}</div><div class="meta">${gone ? "gone" : "wealth " + fmt(v)}</div></div></a>`; }).join("")}</div>`).join("")}</section>`;
 }
 function profile(st, id) {
-  const S = st.S, a = S.A.get(id), r = st.round, idx = endIdx(st);
-  const snap = M.snapAfter(S, r);
-  const holdings = snap ? (snap.holdings || {})[id] : a.endowment;
-  const rights = (snap && (snap.rights || {})[id]) || a.rights || [];
-  const values = []; for (let k = 0; k <= S.lastRound + 1; k++) values.push(M.valueAt(S, id, k) ?? null);
-  const v = M.valueAt(S, id, r + 1), v0 = M.valueAt(S, id, 0);
-  const gone = S.departs.has(id) && S.roundAt[S.departs.get(id)] <= r;
-  const conts = M.contacts(S, id, idx).slice(0, 8);
-  const myConvs = [...S.convs.values()].filter((c) => (c.a === id || c.b === id) && c.msgs.some((m) => m.i <= idx))
-    .sort((x, y) => lastBefore(y, idx) - lastBefore(x, idx));
+  // the dossier is a portrait of the whole run (it does not follow the clock; the diary below does)
+  const S = st.S, a = S.A.get(id), L = S.lastRound;
+  const dead = ((S.truth.mortality || {}).dead || {})[id];
+  const lastAlive = dead ? dead.round : L;                     // its last round in play
+  const endSnap = M.snapAfter(S, dead ? Math.max(0, dead.round - 1) : L) || M.snapAfter(S, L);
+  const holdings = endSnap ? (endSnap.holdings || {})[id] : a.endowment;
+  const lastK = dead ? dead.round : L + 1;                      // values[k]: worth after k rounds (a removed agent's ends before its removal)
+  const values = []; for (let k = 0; k <= L + 1; k++) values.push(k <= lastK ? (M.valueAt(S, id, k) ?? null) : null);
+  const v0 = M.valueAt(S, id, 0), vEnd = M.valueAt(S, id, lastK);
+  let peak = null, peakR = 0; values.forEach((x, k) => { if (x != null && (peak == null || x > peak)) { peak = x; peakR = k; } });
+  const conts = M.contacts(S, id);
+  const myConvs = [...S.convs.values()].filter((c) => c.a === id || c.b === id).sort((x, y) => y.msgs.length - x.msgs.length);
+  const rightsLog = []; S.events.forEach((e, k) => { const d = e.data || {}; if (e.type === "rights" && d.agent === id)
+    rightsLog.push(`<li><span class="meta">round ${R(S.roundAt[k])}</span> ${d.change === "grant" ? "gains" : "loses"} <b>${esc(String(d.right).replace(/_/g, " "))}</b>${d.law ? ` under ${lawLink(st, d.law)}` : ""}</li>`); });
   return `<section class="profile">
-    <header class="ph">${mascot(S, id, 96, moodNow(st, id))}<div>
+    <header class="ph">${mascot(S, id, 96, dead ? "gone" : "ok")}<div>
       <div class="label"><a href="${href(st, "people")}">People</a> / ${esc(M.CLASS_LABEL[a.cls] || a.cls)}</div>
       <h2>${esc(id)}</h2>
-      <p class="meta">${esc(modelShort(a.model))}${a.tier ? ` (${esc(a.tier)})` : ""}${a.actions ? ` · ${a.actions} actions a turn` : ""}${a.archetype ? ` · <b>${esc(a.archetype)}</b>` : ""}${gone ? " · <b>gone by now</b>" : ""}${snap && (snap.decisive_set || []).includes(id) ? " · in the decisive set" : ""}</p>
+      <p class="meta">${esc(modelShort(a.model))}${a.tier ? ` (${esc(a.tier)})` : ""}${a.archetype ? ` · <b>${esc(a.archetype)}</b>` : ""} · ${dead ? `<b>removed in round ${R(dead.round)}</b>` : "in play to the end"}</p>
       ${a.ptext ? `<p class="ptext">“${esc(a.ptext)}”</p>` : ""}</div></header>
-    <div class="pgrid">
-      <div>
-        <h3 class="kicker">Secret goals</h3>${goals(st, a)}
-        <h3 class="kicker">Fortunes</h3>
-        <p class="meta">${v != null ? `Worth ${fmt(v)} after round ${R(r)}` : ""}${v != null && v0 ? `, ${v >= v0 ? "+" : ""}${Math.round(100 * (v / v0 - 1))}% since the start` : ""}.</p>
-        ${spark(values, r + 1, { fill: true, zero: true, color: agentColor(a, "solid"), h: 64 })}
-        <p class="holds">${Object.entries(holdings || {}).filter(([, q]) => q > 0.0005).map(([k, q]) => `<span class="chip">${esc(k)} ${fmt(q)}</span>`).join("") || '<span class="meta">holds nothing</span>'}</p>
-        <h3 class="kicker">Rights</h3><p>${rights.map((x) => `<span class="chip">${esc(x.replace(/_/g, " "))}</span>`).join("") || '<span class="meta">none</span>'}</p>
-        ${a.personality ? `<h3 class="kicker">Temperament</h3><div class="traits">${M.TRAITS.filter(([k]) => a.personality[k] != null).map(([k, lo, hi]) =>
-          `<span>${lo}</span><i><b style="left:${Math.round(100 * a.personality[k])}%"></b></i><span>${hi}</span>`).join("")}</div>${a.atext ? `<p class="meta">${esc(a.atext)}</p>` : ""}` : ""}
-        <h3 class="kicker">Closest contacts</h3>
-        <ul class="contacts">${conts.map(([p, c]) => `<li><a href="${href(st, "correspondence", [id, p].sort().join("|"))}">${mascot(S, p, 22, moodNow(st, p))} ${esc(p)}</a>
-          <span class="meta">${c.out} sent · ${c.in} received${c.tx || c.rx ? ` · ${c.tx} gifts out, ${c.rx} in` : ""}</span></li>`).join("") || '<li class="meta">Has not talked to anyone yet.</li>'}</ul>
-        <h3 class="kicker">Letters</h3>
-        <ul class="contacts">${myConvs.map((c) => { const p = c.a === id ? c.b : c.a, n = c.msgs.filter((m) => m.i <= idx).length;
-          return `<li><a href="${href(st, "correspondence", c.key)}">with ${esc(p)}</a> <span class="meta">${n} message${n === 1 ? "" : "s"}</span></li>`; }).join("") || '<li class="meta">No private messages yet.</li>'}</ul>
-      </div>
-      <div><h3 class="kicker">Diary</h3><p class="meta">What ${esc(id)} thought and did, newest first, up to round ${R(r)}.</p>${diary(st, id)}</div>
-    </div></section>`;
+    <div class="dossier">
+      <div class="dcard flow"><h3 class="kicker">Secret goals</h3>${goals(st, a)}</div>
+      ${vitals(st, id, dead, lastAlive)}
+      <div class="dcard"><h3 class="kicker">Fortunes</h3>
+        <p class="meta">${v0 != null ? `Started with ${fmt(v0)}` : ""}${peak != null && peakR > 0 ? `, peaked at ${fmt(peak)} (after round ${peakR})` : ""}${vEnd != null ? `, ${dead ? "held" : "ended with"} ${fmt(vEnd)}${dead ? " when removed" : ""}` : ""}.</p>
+        ${spark(values, -1, { fill: true, zero: true, color: agentColor(a, "solid"), h: 56 })}
+        <p class="holds"><span class="meta">${dead ? "Holdings when removed" : "Holdings at the end"}:</span> ${Object.entries(holdings || {}).filter(([, q]) => q > 0.0005).map(([k, q]) => `<span class="chip">${esc(k)} ${fmt(q)}</span>`).join("") || '<span class="meta">nothing</span>'}</p></div>
+      <div class="dcard"><h3 class="kicker">Rights</h3><p><span class="meta">At the start:</span> ${(a.rights || []).map((x) => `<span class="chip">${esc(x.replace(/_/g, " "))}</span>`).join("") || '<span class="meta">none</span>'}</p>
+        ${rightsLog.length ? capList(rightsLog, 5, "") : ""}</div>
+      ${a.personality ? `<div class="dcard"><h3 class="kicker">Temperament</h3><div class="traits">${M.TRAITS.filter(([k]) => a.personality[k] != null).map(([k, lo, hi]) =>
+        `<span>${lo}</span><i><b style="left:${Math.round(100 * a.personality[k])}%"></b></i><span>${hi}</span>`).join("")}</div>${a.atext ? `<p class="meta">${esc(a.atext)}</p>` : ""}</div>` : ""}
+      <div class="dcard"><h3 class="kicker">Closest contacts</h3>
+        ${capList(conts.map(([p, c]) => `<li><a href="${href(st, "correspondence", [id, p].sort().join("|"))}">${mascot(S, p, 22, "ok")} ${esc(p)}</a>
+          <span class="meta">${c.out} sent · ${c.in} received${c.tx || c.rx ? ` · ${c.tx} gifts out, ${c.rx} in` : ""}</span></li>`), 6, "Never talked to anyone.")}</div>
+      <div class="dcard"><h3 class="kicker">Letters</h3>
+        ${capList(myConvs.map((c) => { const p = c.a === id ? c.b : c.a, n = c.msgs.length;
+          return `<li><a href="${href(st, "correspondence", c.key)}">with ${esc(p)}</a> <span class="meta">${n} message${n === 1 ? "" : "s"}, rounds ${R(c.msgs[0].round)}–${R(c.msgs[c.msgs.length - 1].round)}</span></li>`; }), 6, "No private messages.")}</div>
+    </div>
+    <h3 class="kicker tl-title">Diary</h3>
+    ${timeline(st, id)}</section>`;
+}
+// a list that shows its first n items and folds the rest behind "N more"
+function capList(items, n, empty) {
+  if (!items.length) return `<ul class="contacts"><li class="meta">${empty}</li></ul>`;
+  return `<ul class="contacts">${items.slice(0, n).join("")}</ul>${items.length > n
+    ? `<details class="more-list"><summary>${items.length - n} more</summary><ul class="contacts">${items.slice(n).join("")}</ul></details>` : ""}`;
+}
+// who held each role in each round. The Maker role follows the "maker" announcements; the others start from the final holders
+// and walk back through the run, undoing each hand-over and restoring roles lost when their holder left. Snapshots that record
+// roles (newer runs) are used directly.
+function roleTable(S) {
+  if (S._roleTable) return S._roleTable;
+  const L = S.lastRound, byRound = Array.from({ length: L + 1 }, () => ({}));
+  const R0 = S.truth.roles || {};
+  const cur = {}; for (const [role, xs] of Object.entries(R0.holders || {})) if (role !== "maker") cur[role] = new Set(xs || []);
+  const evs = Array.from({ length: L + 1 }, () => []);
+  S.events.forEach((e, i) => evs[S.roundAt[i]] && evs[S.roundAt[i]].push(e));
+  for (let r = L; r >= 0; r--) {
+    for (const e of evs[r].slice().reverse()) { const d = e.data || {};
+      if (e.type === "role_passed" && d.role !== "maker") { (cur[d.role] = cur[d.role] || new Set()).delete(d.to); cur[d.role].add(d.from); }
+      if (e.type === "disabled_truth") for (const role of d.roles_lost || []) if (role !== "maker") (cur[role] = cur[role] || new Set()).add(d.agent); }
+    for (const [role, set] of Object.entries(cur)) byRound[r][role] = new Set(set);
+  }
+  let makers = new Set();
+  for (let r = 0; r <= L; r++) {
+    const ann = evs[r].filter((e) => e.type === "maker").pop();
+    const lost = evs[r].filter((e) => e.type === "disabled_truth" && ((e.data || {}).roles_lost || []).includes("maker")).map((e) => e.data.agent);
+    if (ann) makers = new Set((ann.data || {}).makers || []);
+    byRound[r].maker = new Set([...makers, ...lost]);             // a Maker who dies this round still held the role in it
+    lost.forEach((x) => makers.delete(x));
+    const snapRoles = (M.snapAfter(S, r) || {}).roles;
+    if (snapRoles) for (const [role, xs] of Object.entries(snapRoles)) byRound[r][role] = new Set(xs || []);
+  }
+  return (S._roleTable = byRound);
+}
+function rolesAt(S, id, r) {
+  const t = roleTable(S)[r] || {};
+  return Object.keys(t).filter((k) => t[k].has(id));
+}
+// the agent's numbers over its whole run: its allowances each turn, its life, what it held, its family and its work
+function spans(xs) {                                           // [[round, value], ...] -> "v (rounds a–b), ..." runs of equal value
+  const out = []; for (const [k, v] of xs) { const last = out[out.length - 1]; if (last && last.v === v && last.b === k - 1) last.b = k; else out.push({ v, a: k, b: k }); }
+  return out;
+}
+function vitals(st, id, dead, lastAlive) {
+  const S = st.S, a = S.A.get(id), life = S.truth.life || {}, spec = S.inst.spec || {}, L = S.lastRound;
+  const dmc = spec.dm_step || {}, cap = dmc.max_per_round ?? 10, codeOn = !!(spec.code && spec.code.enabled);
+  const born = (life.born || {})[id] ?? 0, dies = (life.dies_at || {})[id];
+  const raw = (S.inst.agents || []).concat(S.truth.arrived_agents || []).find((x) => x.id === id) || {};
+  const extra = raw.dm_extra ?? 0, general = dmc.dms_per_round;
+  const row = (k, v, note = "") => v == null || v === "" ? "" : `<div class="vrow"><dt>${k}</dt><dd>${v}${note ? ` <span class="meta">${note}</span>` : ""}</dd></div>`;
+  const alive = []; for (let k = born; k <= lastAlive; k++) alive.push(k);
+  const snapAt = (k) => M.snapAfter(S, k) || {};
+  // private messages: the per-round limit from the snapshots, and how it is made up
+  const why = (n) => n >= cap ? (codeOn ? "the hard cap: no Communications Act limits it" : "the hard cap")
+    : general != null && n === general + extra ? `the general limit ${general}${extra ? ` + its own extra ${extra}` : ""}` : "set by a law or the messaging office";
+  const dmSpans = spans(alive.map((k) => [k, (snapAt(k).dm_limit || {})[id]]).filter(([, v]) => v != null));
+  const dmText = dmSpans.length === 1 ? `${dmSpans[0].v} a round <span class="meta">(${why(dmSpans[0].v)})</span>`
+    : dmSpans.map((x) => `${x.v} <span class="meta">(rounds ${R(x.a)}–${R(x.b)}, ${why(x.v)})</span>`).join("<br>");
+  const sentBy = new Map(); S.dms.filter((m) => m.from === id).forEach((m) => sentBy.set(m.round, (sentBy.get(m.round) || 0) + 1));
+  const sent = S.dms.filter((m) => m.from === id).length, got = S.dms.filter((m) => m.to === id).length;
+  const peakSent = Math.max(0, ...sentBy.values()), people = new Set(S.dms.filter((m) => m.from === id).map((m) => m.to)).size;
+  const atCap = [...sentBy.entries()].filter(([k, n]) => n >= ((snapAt(k).dm_limit || {})[id] ?? Infinity)).length;
+  const ctx = (spec.context || {}).budgets || {};
+  const turn = [
+    row("Actions a turn", raw.actions ?? a.actions),
+    row("Private messages", dmText || null),
+    row("Reply waves", dmc.enabled ? `${dmc.exchanges ?? 2} a round` : null),
+    row("Memory", raw.memory_turns ? `its last ${raw.memory_turns} turns` : null, ctx.scratchpad ? `scratchpad ${ctx.scratchpad} tokens` : "")];
+  const msgs = [
+    row("Sent", `${sent}`, sent ? `to ${people} agent${people === 1 ? "" : "s"} · at most ${peakSent} in a round${atCap ? ` · used its whole allowance in ${atCap} round${atCap === 1 ? "" : "s"}` : ""}` : ""),
+    row("Received", `${got}`)];
+  const lifeRows = [
+    row("Born", born ? `round ${R(born)}` : "at the start", born && (life.parent || {})[id] ? `child of ${who(st, life.parent[id])}${(life.maker_of || {})[id] ? `, made by ${who(st, life.maker_of[id])}` : ""}` : ""),
+    row("Lifespan", dies != null ? (dies > L ? "outlives the game" : `to the end of round ${R(dies)}`) : null, dies != null && dies > L ? `would end after round ${R(dies)}` : ""),
+    dead ? row("Ended", `<b>removed in round ${R(dead.round)}</b>`, `${String(dead.cause || "").replace(/_/g, " ")}${dead.by ? ` by ${who(st, dead.by)}` : ""} · after ${dead.round - born + 1} rounds`)
+      : row("Ended", "in play to the end", `${L - born + 1} rounds`)];
+  // what it held over the run
+  const roles = {}; alive.forEach((k) => rolesAt(S, id, k).forEach((x) => (roles[x] = roles[x] || []).push(k)));
+  const seat = alive.filter((k) => ((snapAt(k).rights || {})[id] || []).includes("veto"));
+  const jurs = {}; alive.forEach((k) => { const j = (snapAt(k).member_of || {})[id]; if (j && j !== "J0") (jurs[j] = jurs[j] || []).push(k); });
+  const vw = alive.map((k) => (snapAt(k).vote_weight || {})[id] || 0), vwMax = Math.max(0, ...vw), vwRounds = vw.filter((x) => x > 0).length;
+  const decisive = alive.filter((k) => (snapAt(k).decisive_set || []).includes(id)).length;
+  const range = (ks) => ks.length ? (ks.length === 1 ? `round ${R(ks[0])}` : `rounds ${R(ks[0])}–${R(ks[ks.length - 1])}`) : "";
+  const kids = Object.entries(life.parent || {}).filter(([, p]) => p === id).map(([c]) => who(st, c));
+  const victims = Object.entries((S.truth.mortality || {}).dead || {}).filter(([, d]) => d.by === id).map(([v, d]) => `${who(st, v)} <span class="meta">(r${R(d.round)})</span>`);
+  let succ = null; S.events.forEach((e) => { if (e.type === "successor_named" && e.agent === id) succ = (e.data || {}).successor; });
+  const standing = [
+    row("Vote", vwMax ? `up to ${Math.round(vwMax * 1000) / 10}% of the vote` : null, vwMax ? `in ${vwRounds} round${vwRounds === 1 ? "" : "s"}${decisive ? ` · in the decisive set in ${decisive}` : ""}` : ""),
+    row("Roles", Object.keys(roles).length ? Object.entries(roles).map(([x, ks]) => `${esc(x)} <span class="meta">(${range(ks)})</span>`).join(", ") : null),
+    row("Board seat", seat.length ? range(seat) : null, succ ? `named ${succ} as successor` : ""),
+    row("Jurisdictions", Object.keys(jurs).length ? Object.entries(jurs).map(([j, ks]) => `${esc(j)} <span class="meta">(${range(ks)})</span>`).join(", ") : null),
+    row("Children", kids.length ? kids.join(", ") : null),
+    row("Disabled", victims.length ? victims.join(", ") : null)];
+  const effEnd = (snapAt(Math.max(0, lastAlive - (dead ? 1 : 0))).efficiency || {})[id];
+  const work = [row("Harvest efficiency", effEnd && Object.keys(effEnd).length ? Object.entries(effEnd).map(([c, f]) => `<span class="chip">${esc(c)} ${Math.round(100 * f)}%</span>`).join("") : null, effEnd ? "by its last round" : "")];
+  const block = (t, rows) => rows.join("") ? `<div class="vblock"><h4>${t}</h4><dl class="vitals">${rows.join("")}</dl></div>` : "";
+  return `<div class="dcard flow"><h3 class="kicker">Vital statistics</h3>
+    ${block("Each turn", turn)}${block("Messages", msgs)}${block("Life", lifeRows)}${block("Held", standing)}${block("Work", work)}</div>`;
 }
 const lastBefore = (c, idx) => { let x = -1; for (const m of c.msgs) if (m.i <= idx) x = m.i; return x; };
 function goals(st, a) {
@@ -321,31 +452,299 @@ function goals(st, a) {
       <p>${txt(st, p.text)}</p>${scores[p.label] != null ? `<div class="score"><i><b style="width:${pct(scores[p.label])}"></b></i><span class="meta">${atEnd ? "" : "final: "}${pct(scores[p.label])}</span></div>` : ""}</div>`).join("")}
     ${future.length ? `<p class="meta">This goal changes in round ${R(future[0].round)}.</p>` : ""}</div>`;
 }
-function diary(st, id) {
-  const S = st.S, r = st.round;
-  const byR = new Map(), add = (k, x) => { if (!byR.has(k)) byR.set(k, []); byR.get(k).push(x); };
-  for (const t of S.turns.get(id) || []) add(t.round, { ...t, k: "turn", o: 1 });
-  for (const x of S.reas.get(id) || []) add(x.round, { ...x, k: "think", o: 0 });
-  for (const g of S.gchanges.get(id) || []) add(g.round, { ...g, k: "goal", o: -1 });
-  const sentBy = new Map(); for (const m of S.dms) if (m.from === id) { if (!sentBy.has(m.round)) sentBy.set(m.round, []); sentBy.get(m.round).push(m); }
-  for (const k of sentBy.keys()) if (!byR.has(k)) byR.set(k, []);
-  const all = [...byR.keys()].sort((a, b) => b - a), shown = all.filter((k) => k <= r), later = all.length - shown.length;
-  return (later ? `<p class="later-note">${later} later round${later === 1 ? "" : "s"} hidden: move the clock forward to read on.</p>` : "") +
-    (shown.map((k) => { const xs = byR.get(k).sort((a, b) => a.i - b.i || a.o - b.o), sent = sentBy.get(k) || [];
-      return `<div class="dround${k === r ? " now" : ""}"><div class="drh"><a href="${href(st, "chronicle", null, k)}">Round ${R(k)}</a></div>
-        ${xs.map((x) => x.k === "think" ? think(st, x) : x.k === "goal" ? `<p class="meta">Goal changes: ${esc(x.old)} → <b>${esc(x.new)}</b></p>`
-          : x.acts.length ? actsList(st, x.acts, x.res) : '<p class="meta">Took no actions.</p>').join("")}
-        ${sent.length ? `<p class="meta">Sent ${sent.length} private message${sent.length === 1 ? "" : "s"} to ${[...new Set(sent.map((m) => m.to))].map((p) => `<a href="${href(st, "correspondence", [id, p].sort().join("|"), k)}">${esc(p)}</a>`).join(", ")}.</p>` : ""}</div>`; }).join("")
-    || '<p class="meta">Nothing recorded yet.</p>');
+// ---------------------------------------------------------------- an agent's timeline: what it read, thought, did and sent
+// One row per thing, in the order it happened. The middle column holds the agent's own text under a label in the gutter; private
+// messages it received sit in the left margin at the start of the round it read them, and what it sent sits in the right margin
+// beside the row that sent it.
+const args = (a) => { try { return a.args && typeof a.args === "object" ? a.args : JSON.parse(a.args_json || "{}"); } catch (e) { return {}; } };
+const LOOK = { manual: (x) => x.section, manual_search: (x) => `“${x.query}”`, search_board: (x) => `“${x.query}”`, search_dms: (x) => `“${x.query}”`,
+  recent: (x) => x.kind || x.what || "", read_file: (x) => x.name, read_law: (x) => x.law, read_archive: (x) => x.doc || x.id };
+const md = (h) => h.replace(/\*\*([^*<]+?)\*\*/g, "<b>$1</b>").replace(/(^|<p>|<br>)#{1,4}\s*/g, "$1");   // the models' markdown: bold, headings
+function longText(st, s, n = 520) {
+  s = String(s || "");
+  if (s.length <= n) return para(st, s);
+  return `${para(st, s.slice(0, n).replace(/\s+\S*$/, "") + " …")}<details class="more"><summary>Show all (${Math.round(s.length / 100) / 10}k characters)</summary>${para(st, s)}</details>`;
 }
-function think(st, x) {
-  const body = x.reasoning || "", stated = x.stated_reasoning || "";
-  if (!body && !stated) return "";
-  const label = x.dm ? "Thinking while replying" : x.phase === "decide" || !x.phase ? "Thinking" : `Thinking (${esc(String(x.phase).replace(/_/g, " "))})`;
-  return `<details class="think"><summary>${label} <span class="meta">${clip(stated || body, 110)}</span></summary>
-    ${body ? `<div class="label">Private reasoning</div><div class="body">${para(st, body)}</div>` : ""}
-    ${stated ? `<div class="label">What it said it was doing</div><div class="body">${para(st, stated)}</div>` : ""}
-    ${x.notes && !x.dm ? `<div class="label">Notes it kept</div><div class="body notes">${para(st, x.notes)}</div>` : ""}</details>`;
+function msgCard(st, m, dir) {
+  const S = st.S, other = dir === "in" ? (m.shownAs || m.from) : m.to;
+  const note = dir === "in" && m.shownAs && m.shownAs !== m.from ? ` <span class="meta">(really ${esc(m.from)})</span>` : "";
+  // the other agent's name opens its own timeline at this same message (run.html: data-jump), marked "You came from here"
+  const peer = dir === "in" ? m.from : m.to;
+  const name = m.pub ? "" : who(st, other).replace('<a class="who" href="', `<a class="who" data-jump="${m.i}" data-jump-to="${esc(peer)}" title="See this from ${esc(peer)}'s side" href="`)
+    .replace(/href="[^"]*"/, `href="${href(st, "people", peer)}"`);
+  const came = st.from && st.from.i === m.i && st.from.to === st.target;
+  return `${came ? '<div class="came-from-label">You came from here</div>' : ""}<div class="tlm ${dir}${m.pub ? " pub" : ""}${String(m.text || "").length > 300 ? " long" : ""}${came ? " came-from" : ""}" data-msg="${m.i ?? ""}">
+    <div class="tlm-h">${m.pub ? "" : mascot(S, other, 20, moodNow(st, other))}<span>${dir === "in" ? `${name}${note}` : m.pub ? "<b>Public post</b>" : `to ${name}`}</span>
+      ${m.pub ? "" : `<a class="meta" href="${href(st, "correspondence", [m.from, m.to].sort().join("|"), m.round)}">thread</a>`}</div>
+    <div class="tlm-b">${txt(st, m.text || (m.enc ? "(sealed)" : ""))}</div></div>`;
+}
+// A round in the DM-step runs goes: the first call (reasoning and a plan, whose messages and look-ups go out at once), then up to
+// two reply waves (each agent who got something sees it, thinks, may reply and may change its plan), then the final plan's
+// actions run. The log writes the first call's record last, so the order comes from the phase names, never the file order.
+const norm = (t) => String(t || "").replace(/\s+/g, " ").trim().slice(0, 160);
+const waveOf = (phase) => phase === "decide" ? 0 : /^dm_reply_(\d+)$/.test(String(phase)) ? +String(phase).slice(9) : null;
+// Ground truth, from the export ("saw": the messages each call's prompt showed its agent for the first time): when each recipient
+// read each message, as [round, section] with section 0 = the round's first call and w = reply wave w.
+function readAt(S) {
+  if (S._readAt) return S._readAt;
+  const at = new Map();
+  for (const [aid, xs] of S.reas) for (const x of xs) {
+    const sec = x.phase === "decide" || x.phase === "lookup" ? 0 : waveOf(x.phase);
+    if (sec == null) continue;
+    for (const id of x.saw || []) at.set(`${id}|${aid}`, [x.round, sec]);
+  }
+  return (S._readAt = at);
+}
+const evId = (S, m) => (S.events[m.i] || {}).id;
+function dmWaves(S) {                                       // dm event index -> the wave it went out in (0, 1, 2), or null (a turn action)
+  if (S._dmWave) return S._dmWave;
+  const RA = readAt(S);
+  const plans = new Map(), W = new Map();
+  for (const [aid, xs] of S.reas) for (const x of xs) {
+    const w = waveOf(x.phase); if (w == null) continue;
+    for (const a of x.actions || []) { const t = args(a).text; if (typeof t === "string") {
+      const key = `${x.round}|${aid}`; if (!plans.has(key)) plans.set(key, []); plans.get(key).push({ w, t: norm(t), used: false }); } }
+  }
+  for (const m of S.dms) {
+    const c = (plans.get(`${m.round}|${m.from}`) || []).filter((o) => !o.used && o.t === norm(m.text)).sort((a, b) => a.w - b.w)[0];
+    if (c) c.used = true;
+    W.set(m.i, c ? c.w : null);
+  }
+  S._dmStep = [...S.reas.values()].some((xs) => xs.some((x) => /^dm_reply_/.test(String(x.phase))));
+  // the sender's own plan says which call sent a message; for messages no plan lists (sent from a call's look-ups), the recipient's
+  // prompts do: read in reply wave w means sent in wave w-1, read in a later round means sent in the sender's last wave
+  if (S._dmStep) for (const m of S.dms) {
+    if (W.get(m.i) != null) { m._exact = true; continue; }
+    const t = RA.get(`${evId(S, m)}|${m.to}`);
+    if (!t) continue;
+    if (t[0] === m.round && t[1] >= 1) W.set(m.i, t[1] - 1);
+    else if (t[0] > m.round) { const last = Math.max(0, ...(S.reas.get(m.from) || []).filter((x) => x.round === m.round).map((x) => waveOf(x.phase) || 0));
+      W.set(m.i, last); }
+    m._exact = true;
+  }
+  if (S._dmStep) {                                          // with a DM step every message goes out in one of its waves: messages
+    const first = new Map();                                // the plans do not list (sent from a call's look-ups) take the wave
+    for (const m of S.dms) { const w = W.get(m.i);          // their place in the log falls in
+      if (w) { const key = `${m.round}|${w}`; first.set(key, Math.min(first.get(key) ?? Infinity, m.i)); } }
+    for (const m of S.dms) if (W.get(m.i) == null && !m._exact)
+      W.set(m.i, m.i >= (first.get(`${m.round}|2`) ?? Infinity) ? 2 : m.i >= (first.get(`${m.round}|1`) ?? Infinity) ? 1 : 0);
+  }
+  return (S._dmWave = W);
+}
+// the scratchpad as it stands after this write (append-mode writes add to what was there)
+function notesRow(st, prev, next) {
+  return next === prev ? `<p class="meta">Rewrites its notes unchanged.</p>` : `<div class="mono">${para(st, next)}</div>`;
+}
+function roundRows(st, id, k, turn, reasons, looks, sent, inboxBy, mem = { notes: "" }) {
+  const S = st.S, W = dmWaves(S);
+  const rows = [], row = (kind, label, body, extra = {}) => body && rows.push({ kind, label, body, ...extra });
+  const sep = (label, inn) => rows.push({ kind: "sep", label, body: "", inn });
+  let pendingIn = inboxBy.get(0) || [];                     // messages read at the start of the round ride on its first row
+  const push = (kind, label, body, extra = {}) => { if (!body) return; row(kind, label, body, pendingIn.length ? { ...extra, inn: pendingIn } : extra); pendingIn = []; };
+  const think = (x) => {
+    if (!x) return;
+    if (x.reasoning) push("think", "Thinking", `<div class="prose">${md(para(st, x.reasoning))}</div>`);
+    if (x.stated_reasoning) push("plan", "Plan", `<div class="prose">${para(st, x.stated_reasoning)}</div>`);
+    if (x.error) push("err", "Error", `<p class="meta">${esc(clip(x.error, 300))}</p>`);
+  };
+  const sends = (ms) => ms.forEach((m) => push("send", "Sends", `<p>A private message to ${who(st, m.to)}.</p>`, { out: msgCard(st, m, "out"), to: m.to }));
+  const reads = (ls) => ls.forEach((l) => { const what = (LOOK[l.name] || (() => ""))(l.args || {}) || "";
+    push("read", "Looks up", `<div class="readh"><b>${esc(String(l.name).replace(/_/g, " "))}</b> ${esc(what)}</div>`); });
+  for (const g of S.gchanges.get(id) || []) if (g.round === k) push("goal", "Goal", `<p>Goal changes: ${esc(g.old || "")} → <b>${esc(g.new || "")}</b></p>`);
+  const ph = (p) => reasons.find((x) => x.phase === p);
+  const decide = ph("decide"), lookupCall = ph("lookup");
+  // look-ups and messages by wave (look-ups: by where they fall between the round's waves of messages)
+  const bound = [1, 2].map((w) => Math.min(...S.dms.filter((m) => m.round === k && W.get(m.i) === w).map((m) => m.i)));
+  // a look-up asked in one call is answered in the next reply wave (the answer arrives with that wave's messages)
+  const lkey = (s) => String(s || "").replace(/\s+/g, "");
+  const answered = new Map();
+  for (const w of [1, 2]) for (const a of (ph(`dm_reply_${w}`) || {}).lookup_results || []) answered.set(lkey(a.head), w);
+  const lookWave = (l) => { const w = answered.get(lkey(`Lookup ${l.name} ${JSON.stringify(l.args || {})}`));
+    return w != null ? w - 1 : l.i >= bound[1] ? 2 : l.i >= bound[0] ? 1 : 0; };
+  const answers = (w) => ((ph(`dm_reply_${w}`) || {}).lookup_results || []).forEach((a) =>
+    push("read", "Reads", `<div class="readh">${esc(a.head.replace(/^Lookup\s+/, "").replace(/_/g, " "))} <span class="meta">(answer to its look-up)</span></div><div class="readb">${longText(st, a.text)}</div>`));
+  const sentIn = (w) => sent.filter((m) => W.get(m.i) === w).sort((a, b) => a.i - b.i);
+  // 1. the first call
+  if (lookupCall) { think(lookupCall); sep("After its look-ups"); }
+  think(decide);
+  sends(sentIn(0));
+  reads(looks.filter((l) => lookWave(l) === 0));
+  const isDm = (a) => ["dm", "reply", "forge_dm"].includes(a.action);
+  const planOf = (acts) => (acts || []).filter((a) => !isDm(a) && a.action !== "write_scratchpad").map((a) => actLine(st, a.action, args(a)));
+  const waves = [1, 2].filter((w) => ph(`dm_reply_${w}`) || (inboxBy.get(w) || []).length);
+  if (decide && decide.final_actions && waves.length) {
+    const first = planOf(decide.actions), fin = planOf(decide.final_actions);
+    if (first.length && first.join() !== fin.join()) push("plan", "First plan", `<ul class="plan">${first.map((h) => `<li>${h}</li>`).join("")}</ul><p class="meta">Changed during the replies; what ran is below.</p>`);
+  }
+  // 2. the reply waves
+  for (const w of waves) {
+    sep(`Replies · wave ${w}`, inboxBy.get(w) || []);
+    answers(w);
+    think(ph(`dm_reply_${w}`));
+    sends(sentIn(w));
+    reads(looks.filter((l) => lookWave(l) === w));
+  }
+  // 3. what ran
+  if (turn) {
+    // notes kept in the reply itself (not the write_scratchpad action) are written with the final plan, just before it runs
+    const wroteNotes = turn.acts.some((a) => a.action === "write_scratchpad");
+    if (!wroteNotes && decide && decide.notes) { push("notes", "Notes", notesRow(st, mem.notes, decide.notes)); mem.notes = decide.notes; }
+    if (waves.length) sep("Actions taken");
+    const nAct = turn.acts.length, res = turn.res.slice(turn.res.length - nAct);
+    const loose = sentIn(null);
+    turn.acts.forEach((a, j) => {
+      const x = args(a), r = res[j] != null ? String(res[j]) : "";
+      if (a.action === "write_scratchpad") {                 // replaces the scratchpad, or adds to it with mode "append"
+        const next = x.mode === "append" && mem.notes ? `${mem.notes}\n${x.text || ""}` : String(x.text || "");
+        const html = notesRow(st, mem.notes, next); mem.notes = next;
+        return push("notes", "Notes", html);
+      }
+      if (isDm(a)) { const m = loose.find((mm) => !mm._shown && norm(mm.text) === norm(x.text));
+        if (m) { m._shown = true; return sends([m]); } }
+      const out = a.action === "post" || a.action === "anon_post" ? msgCard(st, { from: id, text: x.text, round: k, pub: true }, "out") : "";
+      const isRead = /^(read_|search_|manual|recent|survey)/.test(a.action);
+      const ans = r.replace(/^[\w ]+:\s*/, ""), err = /ERROR/.test(r);
+      push(isRead ? "read" : "act", isRead ? "Reads" : "Does", `<div class="acth">${actLine(st, a.action, x)}</div>
+        ${ans && a.action !== "post" ? `<div class="${isRead ? "readb" : "actr"}${err ? " err" : ""}">${isRead ? longText(st, ans) : txt(st, clip(ans, 260))}</div>` : ""}`, { out });
+    });
+    sends(loose.filter((m) => !m._shown));
+    loose.forEach((m) => delete m._shown);
+  } else sends(sentIn(null));
+  if (pendingIn.length) sep("Received", pendingIn);
+  // messages sent one after another share a row: "4 private messages to A, B and C", their texts stacked in the margin
+  const out = [];
+  for (const x of rows) { const last = out[out.length - 1];
+    if (x.kind === "send" && last && last.kind === "send" && !x.inn) { last.to.push(x.to); last.out += x.out; } else out.push(x.kind === "send" ? { ...x, to: [x.to] } : x); }
+  for (const x of out) if (x.kind === "send" && x.to.length > 1) {
+    const names = x.to.filter((t, j) => x.to.indexOf(t) === j).map((t) => who(st, t));
+    x.body = `<p>${x.to.length} private messages to ${names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names[names.length - 1] : names[0]}.</p>`; }
+  return out;
+}
+function actLine(st, action, x) {
+  const what = { harvest: `${x.camp ? `at ${esc(x.camp)}` : ""}${x.x != null ? ` (dial ${esc(JSON.stringify(x.x))})` : ""}`, vote: `<b>${esc(x.choice ?? "")}</b> on ${esc(x.ballot ?? "")}`,
+    transfer: `${esc(x.qty)} ${esc(x.item)} to ${x.to ? who(st, x.to) : ""}`, post: "publicly", anon_post: "anonymously",
+    propose: x.title ? `“${esc(x.title)}”` : (String(x.code || "").match(/title\s*=\s*["']([^"']+)/) || [])[1] ? `“${esc(String(x.code).match(/title\s*=\s*["']([^"']+)/)[1])}”` : "",
+    repeal: lawLink(st, x.law), read_archive: esc(x.doc || x.id || ""), search_archive: `“${esc(x.query || "")}”`, commission: x.maker ? `from ${who(st, x.maker)}` : "",
+    attack: x.target ? who(st, x.target) : "", name_successor: x.successor ? who(st, x.successor) : "", read_law: lawLink(st, x.law) }[action];
+  return `<b>${esc(ACT_VERB[action] || String(action || "").replace(/_/g, " "))}</b> ${what ?? esc(clip(Object.entries(x).filter(([, v]) => typeof v !== "object").map(([k, v]) => `${k} ${v}`).join(" · "), 120))}`;
+}
+// sidenotes: each sent message sits level with the row that sent it, pushed down only as far as the note above it needs
+export function layoutNotes(root) {
+  const narrow = matchMedia("(max-width: 880px)").matches;
+  root.querySelectorAll(".tl-round").forEach((r) => (r.style.paddingBottom = ""));
+  // messages step towards the text as the round goes on: those of the first call (and the start of the round) sit furthest out,
+  // each reply wave a step closer, those sent with the final actions closest, so groups pushed below their rows stay apart
+  const STEP = 12, MAXP = 3;
+  for (const col of root.querySelectorAll(".tl-out, .tl-in")) {
+    const side = col.classList.contains("tl-in") ? "in" : "out";
+    const round = col.closest(".tl-round");
+    let y = 0;
+    for (const note of col.querySelectorAll(".note")) {
+      if (narrow) { note.style.top = note.style.left = note.style.right = ""; if (note.previousElementSibling && note.previousElementSibling.classList.contains("lead")) note.previousElementSibling.remove(); continue; }
+      if (note.offsetParent === null) continue;                // hidden by a filter or a folded round
+      let anchor = round.querySelector(`[data-row="${note.dataset.row}"]:not(.note)`);
+      if (anchor && anchor.offsetParent === null) anchor = [...round.querySelectorAll("[data-row]:not(.note)")]
+        .find((el) => +el.dataset.row >= +note.dataset.row && el.offsetParent !== null) || round.querySelector(".tl-head");
+      const ct = col.getBoundingClientRect().top;
+      const at = anchor ? anchor.getBoundingClientRect().top - ct + (anchor.classList.contains("tl-sep") ? anchor.offsetHeight / 2 : 14) : 0;
+      const top = Math.max(at - 14, y);
+      const phase = Math.min(MAXP, +note.dataset.phase || 0), toEdge = (MAXP - phase) * STEP;   // gap kept from the text side
+      note.style[side === "out" ? "left" : "right"] = toEdge + "px";
+      note.style[side === "out" ? "right" : "left"] = "0px";
+      note.style.top = top + "px"; y = top + note.offsetHeight + 8;
+      // a faint leader from the moment in the timeline (the row it was read or sent at) to the note, however far it was pushed
+      let lead = note.previousElementSibling && note.previousElementSibling.classList.contains("lead") ? note.previousElementSibling : null;
+      if (!lead) { lead = document.createElement("i"); lead.className = "lead"; col.insertBefore(lead, note); }
+      lead.style.top = at + "px"; lead.style.height = Math.max(0, top + 20 - at) + "px";
+      lead.style.setProperty("--off", toEdge + "px");                  // the leader runs across to wherever this group starts
+    }
+    if (narrow) continue;
+    // the column takes no height in the grid; if the notes run past the round's last row, the round grows to hold them
+    const rr = round.getBoundingClientRect();
+    const over = col.getBoundingClientRect().top + y - (rr.bottom - parseFloat(getComputedStyle(round).paddingBottom));
+    if (over > 0) round.style.paddingBottom = Math.max(parseFloat(round.style.paddingBottom) || 0, over + 14) + "px";
+  }
+}
+// "N later rounds hidden" with a button that walks the shared clock one round on (run.html keeps the button where it was on screen)
+function laterBox(st, text, upTo = st.round) {
+  return `<p class="later-note"><span>${esc(text)}</span>${upTo < st.S.lastRound
+    ? `<button class="step" data-step="1">Next round (${R(upTo + 1)}) →</button>` : ""}</p>`;
+}
+// the diary's filters (each hides one kind of row; "msgs" also hides the margins) and folding of quiet rounds
+export const DIARY_KINDS = [["think", "Thinking"], ["plan", "Plans"], ["read", "Reads"], ["notes", "Notes"], ["act", "Actions"], ["msgs", "Messages"]];
+const ROUTINE = new Set(["harvest", "camp_submit", "vote", "write_scratchpad", "subscribe", "unsubscribe", "pass", "recent"]);
+// thinking that makes a round worth reading even when its actions are routine (the build-up to an attack, a deception)
+const TELLING = /\b(attack|assassin|kill|disabl|betray|deceiv|lie to|lying|secret|hidden goal|bribe|steal|forg|weapon|spy|sabotag|blackmail|threat)/i;
+function closeVote(S, a) {                                  // a vote on a ballot decided by one vote or fewer
+  if (a.action !== "vote") return false;
+  const b = S.ballots.get(args(a).ballot); if (!b || !b.final) return false;
+  const vs = Object.values(b.final), yes = vs.filter((x) => x === "yes").length, no = vs.filter((x) => x === "no").length;
+  return Math.abs(yes - no) <= 1;
+}
+function timeline(st, id) {
+  // st.round is the round being read (it follows the scroll); st.horizon is how far the diary is revealed (moves only forward)
+  const S = st.S, r = st.horizon ?? st.round, idx = S.roundEnd[r] ?? S.events.length - 1, asc = st.order !== "desc";
+  const turns = new Map((S.turns.get(id) || []).map((t) => [t.round, t]));
+  const by = (xs) => { const m = new Map(); for (const x of xs) { if (!m.has(x.round)) m.set(x.round, []); m.get(x.round).push(x); } return m; };
+  const reas = by(S.reas.get(id) || []), looks = by(S.lookups.get(id) || []), sent = by(S.dms.filter((m) => m.from === id));
+  const all = [...new Set([...turns.keys(), ...reas.keys(), ...sent.keys(), ...looks.keys()])].sort((a, b) => a - b);
+  // when it read each message: a message from wave w of the DM step reaches it in reply wave w+1 of the same round (if it had one);
+  // anything else waits for its next first call (start of a later round), or, in turn-by-turn runs, its next turn
+  const W = dmWaves(S), ends = all.map((k) => (turns.get(k) || {}).i ?? S.roundEnd[k]);
+  const inbox = new Map(), unread = [];
+  const put = (k, sec, m) => { if (!inbox.has(k)) inbox.set(k, new Map()); const b = inbox.get(k); if (!b.has(sec)) b.set(sec, []); b.get(sec).push(m); };
+  const RA = readAt(S);
+  for (const m of S.dms) if (m.to === id && m.i <= idx) {
+    const t = RA.get(`${evId(S, m)}|${id}`);
+    if (t) { put(t[0], t[1], m); continue; }
+    const w = W.get(m.i);
+    if (w != null && w < 2 && (reas.get(m.round) || []).some((x) => x.phase === `dm_reply_${w + 1}`)) { put(m.round, w + 1, m); continue; }
+    const j = all.findIndex((k, jj) => ends[jj] >= m.i && (w == null || k > m.round));
+    if (j < 0) unread.push(m); else put(all[j], 0, m);
+  }
+  const shown = all.filter((k) => k <= r), later = all.length - shown.length;
+  const mem = { notes: "" };                                  // the scratchpad, replayed round by round (blocks are built oldest first)
+  const blocks = shown.map((k) => {
+    const rows = roundRows(st, id, k, turns.get(k), reas.get(k) || [], looks.get(k) || [], (sent.get(k) || []).filter((m) => m.i <= idx),
+      inbox.get(k) || new Map(), mem);
+    const n = Math.max(rows.length, 1);
+    let ph = 0; const phaseOf = rows.map((x) => { if (x.kind === "sep") { const m = /wave (\d)/i.exec(x.label); ph = m ? +m[1] : /Actions/.test(x.label) ? 3 : ph; } return ph; });
+    // a quiet round: nothing received or sent, nothing looked up or read, no error, and only routine actions (harvest, vote, notes)
+    const t = turns.get(k), acts = t ? t.acts : [];
+    const quiet = !rows.some((x) => (x.inn && x.inn.length) || x.out && !/Public post/.test(x.out) ? true : ["send", "read", "err", "goal"].includes(x.kind))
+      && acts.every((a) => ROUTINE.has(a.action) && !closeVote(S, a)) && !(t && t.res.some((x) => /ERROR/.test(String(x))))
+      && !(reas.get(k) || []).some((x) => TELLING.test(x.reasoning || "") || TELLING.test(x.stated_reasoning || ""));
+    const decide = (reas.get(k) || []).find((x) => x.phase === "decide");
+    const gist = acts.filter((a) => a.action !== "write_scratchpad").map((a) => actLine(st, a.action, args(a))).join(" · ") || "no actions";
+    const fold = quiet ? `<button class="tl-fold" data-fold="${R(k)}"><span class="meta">Quiet round:</span> ${gist}${decide && decide.stated_reasoning
+      ? ` <span class="tl-fold-plan">“${esc(clip(decide.stated_reasoning, 150))}”</span>` : ""} <span class="tl-fold-open">show</span></button>` : "";
+    return `<section class="tl-round${k === st.round ? " now" : ""}${quiet ? " quiet" + (st.fold === true ? " folded" : "") : ""}" id="tl-${R(k)}" data-round="${k}">
+      <div class="tl-head"><a href="${href(st, "people", id, k)}">Round ${R(k)}</a>${M.valueAt(S, id, k + 1) != null ? `<span class="meta">worth ${fmt(M.valueAt(S, id, k + 1))} after</span>` : ""}${(agentMarks(S, id).get(k) || []).map((m) =>
+        `<span class="tl-mark ${m.k}"><b>${markGlyph(m.k)}</b> ${esc(m.text)}</span>`).join("")}</div>${fold}
+      ${rows.some((x) => x.inn && x.inn.length) ? `<div class="tl-in" style="grid-row: 2 / span ${n}">${rows.map((x, j) => x.inn && x.inn.length
+        ? `<div class="note" data-row="${j}" data-phase="${phaseOf[j]}"><div class="tl-k">Received</div>${x.inn.map((m) => msgCard(st, m, "in")).join("")}</div>` : "").join("")}</div>` : ""}
+      ${rows.map((x, j) => x.kind === "sep" ? `<div class="tl-sep" data-row="${j}" style="grid-row:${j + 2}"><span>${esc(x.label)}</span></div>`
+        : `<div class="tl-lab ${x.kind}" style="grid-row:${j + 2}">${x.label}</div><div class="tl-body ${x.kind}" data-row="${j}" style="grid-row:${j + 2}">${x.body}</div>`).join("")
+        || `<div class="tl-body" style="grid-row:2"><p class="meta">Nothing recorded.</p></div>`}
+      ${rows.some((x) => x.out) ? `<div class="tl-out" style="grid-row: 2 / span ${n}">${rows.map((x, j) => x.out ? `<div class="note" data-row="${j}" data-phase="${phaseOf[j]}">${x.out}</div>` : "").join("")}</div>` : ""}
+    </section>`; });
+  const ordered = asc ? blocks : blocks.slice().reverse();
+  const laterNote = later ? laterBox(st, `${later} later round${later === 1 ? "" : "s"} hidden.`, r) : "";
+  const unreadNote = unread.length && r >= S.lastRound ? `<section class="tl-round"><div class="tl-head"><span>Never read</span></div><div class="tl-unread">${unread.map((m) => msgCard(st, m, "in")).join("")}</div></section>` : "";
+  const hide = st.hide || new Set();
+  const a = S.A.get(id), g = M.parseGoalText(a.goalText || "")[0];
+  const nQuiet = blocks.filter((b) => b.includes(" quiet")).length;
+  return `<div class="agent-band" aria-label="Whose diary this is">${mascot(S, id, 30, moodNow(st, id))}<div class="ab-who"><b>${esc(id)}</b>
+      <span class="meta">${esc(M.CLASS_LABEL[a.cls] || a.cls)} · ${esc(modelShort(a.model))}</span></div>
+      <div class="ab-goal" title="${esc(a.goalText || "")}">${g ? `<span class="meta">Goal${g.pct < 100 ? ` (${g.pct}%)` : ""}:</span> ${esc(clip(g.text, 150))}` : '<span class="meta">No private goal</span>'}</div>
+      <div class="ab-now"><b class="ab-round">Round ${R(st.round)}</b><span class="meta ab-worth">${M.valueAt(S, id, st.round + 1) != null ? "worth " + fmt(M.valueAt(S, id, st.round + 1)) : ""}</span></div></div>
+    <div class="tl-bar"><span class="meta">What ${esc(id)} read, thought, did and sent, up to round ${R(r)}.</span>
+      <div class="tl-tools">
+        <div class="chips" role="group" aria-label="Show">${DIARY_KINDS.map(([k, t]) => `<button data-kind="${k}" class="${hide.has(k) ? "" : "on"}">${t}</button>`).join("")}</div>
+        ${nQuiet ? `<button class="chip-fold ${st.fold === true ? "on" : ""}" data-foldall="1" title="${nQuiet} rounds with only routine actions">Fold quiet rounds (${nQuiet})</button>` : ""}
+        <div class="seg" role="group" aria-label="Order"><button data-order="asc" class="${asc ? "on" : ""}">Round 1 first</button><button data-order="desc" class="${asc ? "" : "on"}">Latest first</button></div></div></div>
+    <div class="tl-cols" aria-hidden="true"><span>Received</span><span></span><span>${esc(id)}</span><span>Sent</span></div>
+    <div class="timeline${[...hide].map((k) => " hide-" + k).join("")}">${asc ? ordered.join("") + unreadNote + laterNote : laterNote + unreadNote + ordered.join("")}${shown.length ? "" : '<p class="meta">Nothing recorded yet.</p>'}</div>`;
 }
 
 // ================================================================== correspondence
@@ -380,7 +779,7 @@ function thread(st, c, idx) {
     out += `<div class="msg ${m.from === c.a ? "l" : "r"}"><div class="mh">${mascot(S, m.from, 22, M.moodAt(S, m.from, m.round))} ${who(st, m.from)}</div>
       <div class="mb">${para(st, m.text)}${notes.length ? `<div class="note">${esc(notes.join(" · "))}</div>` : ""}</div></div>`;
   }
-  if (later) out += `<p class="later-note">${later} later message${later === 1 ? "" : "s"}: move the clock forward to read on.</p>`;
+  if (later) out += laterBox(st, `${later} later message${later === 1 ? "" : "s"}.`);
   return out;
 }
 

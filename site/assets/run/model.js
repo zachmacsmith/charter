@@ -45,7 +45,7 @@ export function prepare(D) {
   const lawTL = new Map(), tl = (id, x) => { if (!id) return; if (!lawTL.has(id)) lawTL.set(id, []); lawTL.get(id).push(x); };
   const items = [], dms = [], lawEvents = [], roundAt = [], roundEnd = [], roundStart = [];
   const turns = new Map(), gchanges = new Map(), departs = new Map(), arrives = new Map(), transfers = [], harvests = [], ballots = new Map();
-  const turnAt = {}, dmOutAt = {}, posts = [];
+  const turnAt = {}, dmOutAt = {}, posts = [], lookups = new Map();
   const push = (m, k, x) => { if (!m.has(k)) m.set(k, []); m.get(k).push(x); };
   let round = 0;
   events.forEach((e, i) => {
@@ -55,6 +55,7 @@ export function prepare(D) {
     switch (e.type) {
       case "turn": push(turns, e.agent, { i, round, acts: d.actions || [], res: d.results || [], phase: d.phase }); turnAt[`${round}|${e.agent}`] = i; break;
       case "goal_change": push(gchanges, d.agent || e.agent, { i, round, ...d }); break;
+      case "lookup": push(lookups, e.agent, { i, round, name: d.name, args: d.args || {}, via: d.via }); break;
       case "departure": departs.set(d.agent || e.agent, i); break;
       case "disabled": departs.set(d.agent || e.agent, i); break;
       case "arrival": case "agent_arrives": arrives.set(d.agent || e.agent, i); break;
@@ -138,7 +139,7 @@ export function prepare(D) {
   const snapBy = new Map(snaps.map((s) => [s.round, s]));
   const lastRound = Math.max(0, ...events.map((e) => e.round || 0));
   const S = { inst, truth, events, snaps, snapBy, score, agents, A, items, dms, convs, lawEvents, laws, lawTL, roundAt, roundEnd, roundStart,
-    lastRound, turns, reas, gchanges, departs, arrives, transfers, harvests, ballots, posts, heads,
+    lastRound, turns, reas, lookups, gchanges, departs, arrives, transfers, harvests, ballots, posts, heads,
     rounds: inst.rounds || lastRound + 1, name: D.name || inst.run_id || "run" };
   S.titleLaw = new Map();
   for (const [id, l] of laws) if (l.title && l.title.length >= 6 && (!S.titleLaw.has(l.title) || l.enacted != null)) S.titleLaw.set(l.title, id);
