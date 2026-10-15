@@ -283,5 +283,62 @@ world state (`k.w["offices"]`, holders and past holders with since, term_end, un
 
 ## Layout on Hugging Face (publish's concern, recorded for reference)
 
-`runs/<spec>/<run_id>/<table>.parquet` plus `manifest.json`, `raw/<run_id>.tar.zst` (no checkpoints), and an index table of runs.
-Readers pin URLs to a commit (`resolve/<sha>/...`) and may cache them indefinitely.
+`charter publish` (`charter/publish.py`) writes, in one commit to the dataset `zachmacsmith/charter-runs`:
+
+- `catalog.parquet`, `catalog.json`: one row per run (the curated card, key run facts, `era`, `engine_version`).
+- `runs/<spec>/<run_id>/<table>.parquet` plus `manifest.json` and `card.json`.
+- `raw/<spec>/<run_id>.tar.gz`: the raw run directory (no checkpoints or pickles; local paths scrubbed).
+- `README.md` (the dataset card, one config per table) and `CHANGELOG.md` (one entry per release, newest first).
+
+Readers pin URLs to a release tag or a commit (`resolve/v1.0/...`, `resolve/<sha>/...`) and may cache them indefinitely.
+
+**Catalog `era`:** `legacy` for a run whose run.json has no `engine_version` (played before engine versions, under earlier
+simulation designs), else `current`; a card's `era` overrides it. Legacy runs are kept, not deleted: sites filter
+`era = 'legacy'` out by default and may offer them behind a toggle. Catalog `engine_version` is the export's
+`runs.engine_version` (null for most legacy runs). Rows published before these columns existed read them as null until a
+`--reexport-all`. The catalog is not separately versioned; its columns only grow.
+
+## Versions and releases
+
+Every person or agent publishing follows these rules (also in `charter/publish.py`'s module docstring).
+
+- **Releases are git tags** on the dataset repo: `vMAJOR.MINOR` or `vMAJOR.MINOR.PATCH`, created on the commit that publishes
+  the release. Publish with `python -m charter publish RUN... --push --release v1.1 --notes "..."`. That commit also prepends
+  an entry to `CHANGELOG.md` and to the card's "Changelog" section (earlier entries are read from the Hub and kept); the tag is
+  then created at it. A push without `--release` uploads exactly as before, with no tag and no entry, and prints a reminder:
+  use it only for work in progress, and mention it in the next release's notes.
+- **What counts as what:**
+  - *major*: a breaking change: the export schema major (`schema_version`) changes, or the layout on the Hub changes
+    (paths, file names, archive format).
+  - *minor*: runs added or replaced, or columns or tables added (export `schema_minor`, new catalog columns).
+  - *patch*: card, catalog or changelog fixes only; no table changes.
+- **Enforced:** the version must parse, its tag must not exist, and it must be greater than the latest `v*` semver tag
+  (non-semver tags such as `v0-legacy-layout` are ignored). The check runs before anything is staged or uploaded.
+  **Warned only:** a bump smaller than the change looks (a patch that adds runs, a minor across a schema major).
+- **Each changelog entry** gives the version and date, runs added and replaced (`spec/run_id`), the export schema versions in
+  the catalog, the engine versions it covers (and how many legacy runs have none), the catalog size and the notes:
+
+  ```
+  ## v1.1 (2026-10-15)
+
+  - Runs added (1): `E0/pub1`
+  - Runs replaced (0): none
+  - Export schema: 2.3
+  - Engine versions: 10 (plus 4 legacy run(s) without one)
+  - Catalog: 12 run(s)
+  - Notes: adds the survival runs
+  ```
+- **Old layouts live in tags, not archive folders.** `v0-legacy-layout` is the dataset as it was before the legacy runs were
+  republished in the export-schema-2 layout. Main only ever holds the current layout.
+- **Loading a pinned version:**
+
+  ```python
+  from huggingface_hub import hf_hub_download
+  hf_hub_download("zachmacsmith/charter-runs", "catalog.parquet", repo_type="dataset", revision="v1.0")
+  datasets.load_dataset("zachmacsmith/charter-runs", "messages", revision="v1.0")
+  ```
+  ```sql
+  SELECT * FROM 'hf://datasets/zachmacsmith/charter-runs@v1.0/catalog.parquet' WHERE era = 'current';
+  ```
+- **Legacy runs** are kept and marked `era: legacy` in the catalog; websites filter them out by default.
+- **Papers** cite a DOI snapshot of a tagged release (e.g. a Zenodo deposit of `v1.0`), never main or an untagged commit.

@@ -82,6 +82,8 @@ And a few patterns across societies:
 All published runs are in the Hugging Face dataset **[zachmacsmith/charter-runs](https://huggingface.co/datasets/zachmacsmith/charter-runs)**
 (CC BY 4.0): full prompts, stated reasoning, actions, every message, per-round world state, scores, and a self-contained
 `story.html` per run that replays it as a group chat with an inbox for each agent.
+Releases are git tags on the dataset (`revision="v1.0"`); `python -m charter publish ... --push --release vX.Y` tags one and
+adds a changelog entry. The rules are in [docs/data_format.md](docs/data_format.md#versions-and-releases).
 
 ## Quick start
 

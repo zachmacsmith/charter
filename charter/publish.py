@@ -1,6 +1,6 @@
 """Publish runs to a Hugging Face dataset: export tables, a raw archive, a run catalog and the dataset card, in one commit.
 
-    python -m charter publish RUN [RUN...] --repo OWNER/NAME [--card CARDS.yaml] [--push]
+    python -m charter publish RUN [RUN...] --repo OWNER/NAME [--card CARDS.yaml] [--push] [--release vX.Y[.Z] [--notes "..."]]
     python -m charter publish --repo OWNER/NAME --reexport-all [--push]      # rebuild every published run's tables
 
 Without --push nothing leaves the machine: the dataset is staged in --staging (default charter/out/_publish/<time>) and a summary
@@ -10,6 +10,7 @@ of what would be uploaded is printed. Layout on the Hub (docs/data_format.md, "L
     runs/<spec>/<run_id>/<table>.parquet      charter.export tables for that run, plus manifest.json and card.json
     raw/<spec>/<run_id>.tar.gz                the raw run directory (the record; re-exported from when the schema changes)
     README.md                                 dataset card with one config per table (the Hub's viewer and SQL console span all runs)
+    CHANGELOG.md                              one entry per release, newest first (also the card's "Changelog" section)
 
 Each run is replaced as a unit: publishing a run deletes whatever its folder and archive held before, so a republish never leaves
 stale files behind. Tables are written by charter.export and are never edited here; publish refuses to upload when an exported
@@ -19,7 +20,25 @@ simulator; local paths in them are rewritten to `<spec>/<run>`-relative ones bef
 
 A card gives a run its curated facts, all optional: title, description, tags, featured, usable_rounds ("1-23"), validity. --card
 takes a YAML or JSON file: either one card, or {run_id: card, ...}. Without one, the title is "<spec> seed <seed>" and usable
-rounds and validity come from VALIDITY.md / STOPPED.md when present.
+rounds and validity come from VALIDITY.md / STOPPED.md when present. A card may also set `era` (see below).
+
+Versions and releases (docs/data_format.md, "Versions and releases"; every person or agent publishing follows this):
+
+- The dataset is a git repo; a release is a git tag `vMAJOR.MINOR[.PATCH]` on the commit that publishes it. Publish with
+  `--push --release vX.Y[.Z] --notes "..."`: the upload commit carries a new entry at the top of CHANGELOG.md and of the card's
+  "Changelog" section (version, date, runs added / replaced, export schema, engine versions, notes; earlier entries are read
+  from the Hub and kept), then the tag is created at that commit. Publish refuses a malformed version, one whose tag exists, or
+  one not greater than the latest `v*` semver tag (non-semver tags such as `v0-legacy-layout` are ignored). A push without
+  --release uploads as before (no tag, no entry) and prints a reminder; the next release's notes should mention it.
+- MAJOR: a breaking change: the export schema major changes (`schema_version`) or the layout on the Hub changes.
+  MINOR: runs added or replaced, or columns / tables added (export `schema_minor`, catalog columns).
+  PATCH: card, catalog or changelog fixes only (no table changes). Publish warns when the bump looks smaller than the change.
+- Old layouts live in tags (e.g. `v0-legacy-layout`), never in archive folders on main. Readers pin a release with
+  `revision="v1.0"` (huggingface_hub / datasets) or `hf://datasets/<repo>@v1.0/...` (DuckDB, pandas, polars).
+- Runs are kept when the simulation changes. Catalog `era`: "legacy" for a run whose run.json has no `engine_version` (played
+  before engine versions, under earlier simulation designs), else "current"; a card's `era` overrides it. Sites filter
+  `era = 'legacy'` out by default. The catalog's `engine_version` is the export's `runs.engine_version`.
+- Papers cite a DOI snapshot of a tagged release (e.g. Zenodo), not main.
 """
 from __future__ import annotations
 
@@ -39,9 +58,11 @@ STAGING = Path(__file__).resolve().parent / "out" / "_publish"
 # raw files never published: pickles execute code when loaded; the rest are reports rebuilt from the data
 NEVER = re.compile(r"(^|/)(checkpoints?(/|$)|.*\.pkl$|.*\.pickle$|abandoned_calls\.jsonl$)")
 REPORTS = {"story.html", "messages.md", "overview.md", "observer.md", "spec_outline.md"}
-CARD_KEYS = ("title", "description", "tags", "featured", "usable_rounds", "validity")
+CARD_KEYS = ("title", "description", "tags", "featured", "usable_rounds", "validity", "era")
 CATALOG_RUN_COLS = ("seed", "rounds", "rounds_played", "complete", "dry", "backend", "schema_version", "models_json",
-                    "parent_run_id", "fork_round", "code_sha")
+                    "parent_run_id", "fork_round", "code_sha", "engine_version")
+ERAS = ("legacy", "current")
+RELEASE = re.compile(r"^v(\d+)\.(\d+)(?:\.(\d+))?$")
 
 
 # ------------------------------------------------------------------ helpers
@@ -96,6 +117,17 @@ def default_card(run: Path) -> dict:
                 card["validity"] = re.sub(r"\s+", " ", body[0])[:600]
             break
     return card
+
+
+def era_of(run: Path, card: dict | None = None) -> str:
+    """'legacy' when run.json records no engine_version (a run from before engine versions), else 'current'; a card's era wins."""
+    era = (card or {}).get("era")
+    if era:
+        if era not in ERAS:
+            raise SystemExit(f"card era must be one of {ERAS}, not {era!r}")
+        return era
+    meta = X._json(run / "run.json", {}) or {}
+    return "current" if meta.get("engine_version") is not None else "legacy"
 
 
 def load_cards(path) -> dict:
@@ -227,7 +259,7 @@ def catalog_row(spec: str, run_id: str, table_dir: Path, card: dict, published_a
            "title": card.get("title") or f"{spec} seed {r.get('seed', '?')}",
            "description": card.get("description"), "tags_json": json.dumps(card.get("tags") or []),
            "featured": bool(card.get("featured", False)), "usable_rounds": card.get("usable_rounds"),
-           "validity": card.get("validity"), "published_at": published_at,
+           "validity": card.get("validity"), "era": card.get("era"), "published_at": published_at,
            "schema_version": man.get("schema_version"), "schema_minor": man.get("schema_minor"),
            "n_agents": len(agents), "models_list_json": json.dumps(models),
            "rows_json": json.dumps({t: v.get("rows") for t, v in man.get("tables", {}).items()}, sort_keys=True)}
@@ -238,7 +270,7 @@ def catalog_row(spec: str, run_id: str, table_dir: Path, card: dict, published_a
 
 
 CATALOG_COLS = ("run_id", "spec", "path", "raw", "title", "description", "tags_json", "featured", "usable_rounds", "validity",
-                "published_at", "schema_version", "schema_minor", "n_agents", "models_list_json", "rows_json") + CATALOG_RUN_COLS
+                "era", "published_at", "schema_version", "schema_minor", "n_agents", "models_list_json", "rows_json") + CATALOG_RUN_COLS
 
 
 def write_catalog(rows: list[dict], stage: Path) -> None:
@@ -287,12 +319,67 @@ SELECT run_id, channel_id, sender, text FROM 'hf://datasets/{repo}/runs/*/*/mess
 |---|---|---|---|---|---|
 {run_rows}
 
+Runs with `era = legacy` were played before engine versions, under earlier simulation designs; they are kept for the record.
+
+## Versions
+Releases are git tags `vMAJOR.MINOR[.PATCH]` on this dataset (major: export schema major or layout change; minor: runs or
+columns added; patch: card or catalog fixes). Older layouts live in tags (`v0-legacy-layout`), not in folders. Pin a release
+with `revision="v1.0"` or `hf://datasets/{repo}@v1.0/catalog.parquet`; cite a DOI snapshot of a tagged release.
+
+## Changelog
+{changelog}
+
 ## License
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The Charter code is MIT-licensed.
 """
 
+CHANGELOG_HEAD = """# Changelog
 
-def dataset_card(repo: str, tables: list[str], catalog: list[dict]) -> str:
+Releases of this dataset, newest first. Each is a git tag on the commit that published it; the rules are in the dataset card's
+"Versions" section and in [docs/data_format.md](https://github.com/zachmacsmith/charter/blob/main/docs/data_format.md).
+
+"""
+
+
+def changelog_entries(text: str) -> str:
+    """The entries of a CHANGELOG.md (everything from the first '## ' heading), or of a card's '## Changelog' section ('### ')."""
+    if not text:
+        return ""
+    if "\n## Changelog" in "\n" + text and not text.lstrip().startswith("# Changelog"):   # a dataset card
+        sec = ("\n" + text).split("\n## Changelog", 1)[1]
+        sec = re.split(r"\n## ", sec, maxsplit=1)[0]
+        return re.sub(r"(?m)^### ", "## ", sec).strip() if "### " in sec else ""
+    m = re.search(r"(?m)^## ", text)
+    return text[m.start():].strip() if m else ""
+
+
+def changelog_entry(version: str, date: str, added: list[str], replaced: list[str], catalog: list[dict],
+                    notes: str | None) -> str:
+    """One CHANGELOG.md entry (a '## ' section)."""
+    schemas = sorted({f"{r.get('schema_version')}.{r.get('schema_minor') or 0}" for r in catalog if r.get("schema_version") is not None})
+    engines = sorted({r["engine_version"] for r in catalog if r.get("engine_version") is not None})
+    n_legacy = sum(1 for r in catalog if r.get("era") == "legacy")
+    out = [f"## {version} ({date})", ""]
+    out.append(f"- Runs added ({len(added)}): " + (", ".join(f"`{x}`" for x in added) or "none"))
+    out.append(f"- Runs replaced ({len(replaced)}): " + (", ".join(f"`{x}`" for x in replaced) or "none"))
+    out.append(f"- Export schema: {', '.join(schemas) or 'unknown'}")
+    out.append(f"- Engine versions: {', '.join(map(str, engines)) or 'none'}"
+               + (f" (plus {n_legacy} legacy run(s) without one)" if n_legacy else ""))
+    out.append(f"- Catalog: {len(catalog)} run(s)")
+    if notes:
+        out.append(f"- Notes: {notes.strip()}")
+    return "\n".join(out)
+
+
+def render_changelog(entries: str) -> str:
+    return CHANGELOG_HEAD + (entries.strip() + "\n" if entries.strip() else "")
+
+
+def card_changelog(entries: str) -> str:
+    return re.sub(r"(?m)^## ", "### ", entries.strip()) if entries.strip() else "No tagged release yet."
+
+
+def dataset_card(repo: str, tables: list[str], catalog: list[dict], changelog: str = "") -> str:
     configs = ["- config_name: catalog\n  data_files: catalog.parquet\n  default: true"]
     configs += [f"- config_name: {t}\n  data_files: runs/*/*/{t}.parquet" for t in sorted(tables)]
     rows = []
@@ -301,7 +388,52 @@ def dataset_card(repo: str, tables: list[str], catalog: list[dict]) -> str:
         rows.append(f"| {c['title']} | `{c['spec']}` | {c.get('n_agents') or ''} | {models} | {c.get('usable_rounds') or 'all'} | "
                     f"[files]({c['path']}) |")
     return CARD_HEAD.format(configs="\n".join(configs)) + "\n" + CARD_BODY.format(repo=repo, n_runs=len(catalog),
-                                                                              run_rows="\n".join(rows))
+                                                                              run_rows="\n".join(rows),
+                                                                              changelog=card_changelog(changelog))
+
+
+# ------------------------------------------------------------------ releases
+def parse_release(version: str) -> tuple[int, int, int]:
+    m = RELEASE.match(version or "")
+    if not m:
+        raise SystemExit(f"--release must look like v1.2 or v1.2.3, not {version!r}")
+    return int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)
+
+
+def latest_release(tags: list[str]) -> str | None:
+    """The greatest semver tag (vX.Y[.Z]); other tags (v0-legacy-layout) are ignored."""
+    sem = [t for t in tags if RELEASE.match(t)]
+    return max(sem, key=parse_release) if sem else None
+
+
+def check_release(version: str, tags: list[str]) -> str | None:
+    """Refuse a malformed version, an existing tag or one not above the latest release; returns that latest release."""
+    v = parse_release(version)
+    if version in tags:
+        raise SystemExit(f"tag {version} already exists on the dataset: pick the next version")
+    last = latest_release(tags)
+    if last and v <= parse_release(last):
+        raise SystemExit(f"--release {version} is not greater than the latest release {last}")
+    return last
+
+
+def suggested_bump(published: list[dict], catalog: list[dict], new_ids: set[str]) -> str:
+    """The smallest bump the change needs: major (export schema major changed), minor (runs or columns), patch."""
+    old_major = {r.get("schema_version") for r in published if r.get("schema_version") is not None}
+    new_major = {r.get("schema_version") for r in catalog if r.get("schema_version") is not None}
+    if old_major and new_major != old_major:
+        return "major"
+    old_cols = set().union(*(r.keys() for r in published)) if published else set()
+    if new_ids or (published and set(CATALOG_COLS) - old_cols):
+        return "minor"
+    return "patch"
+
+
+def bump_of(version: str, last: str | None) -> str:
+    if not last:
+        return "major"
+    a, b = parse_release(version), parse_release(last)
+    return "major" if a[0] != b[0] else "minor" if a[1] != b[1] else "patch"
 
 
 # ------------------------------------------------------------------ hub access
@@ -317,6 +449,28 @@ def remote_catalog(repo: str, revision: str | None = None) -> list[dict]:
         p = hf_hub_download(repo, "catalog.json", repo_type="dataset", revision=revision)
         return json.loads(Path(p).read_text()).get("runs", [])
     except Exception:
+        return []
+
+
+def remote_changelog(repo: str) -> str:
+    """The published changelog entries: CHANGELOG.md, else the card's Changelog section, else ''."""
+    from huggingface_hub import hf_hub_download
+    for name in ("CHANGELOG.md", "README.md"):
+        try:
+            entries = changelog_entries(Path(hf_hub_download(repo, name, repo_type="dataset")).read_text())
+        except Exception:
+            continue
+        if entries:
+            return entries
+    return ""
+
+
+def remote_tags(repo: str) -> list[str]:
+    """Tag names on the dataset ([] for a repo that does not exist yet)."""
+    from huggingface_hub.errors import RepositoryNotFoundError
+    try:
+        return [t.name for t in _api().list_repo_refs(repo, repo_type="dataset").tags]
+    except RepositoryNotFoundError:
         return []
 
 
@@ -343,6 +497,7 @@ def stage_runs(runs: list[Path], stage: Path, cards: dict, log=print, with_promp
         tables |= set(man.get("tables", {}))
         card = {**default_card(run), **cards.get("*", {}), **cards.get(rid, {})}
         card = {k: card[k] for k in CARD_KEYS if card.get(k) is not None}
+        card["era"] = era_of(run, card)
         (tdir / "card.json").write_text(json.dumps({"run_id": rid, "spec": spec, **card}, indent=1))
         raw = raw_archive(run, stage / "raw" / spec / f"{rid}.tar.gz", spec)
         problems += [f"{rid}: {p}" for p in check_tables(tdir)]
@@ -354,8 +509,15 @@ def stage_runs(runs: list[Path], stage: Path, cards: dict, log=print, with_promp
 
 def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: bool = False, staging=None,
             reexport_all: bool = False, with_prompts: bool = False, spec_override: str | None = None,
-            prune_legacy: bool = False, message: str | None = None, log=print) -> dict:
-    """Stage (and with push=True, upload) runs as one dataset commit. Returns a summary dict."""
+            prune_legacy: bool = False, message: str | None = None, release: str | None = None, notes: str | None = None,
+            log=print) -> dict:
+    """Stage (and with push=True, upload) runs as one dataset commit. Returns a summary dict.
+
+    release="vX.Y[.Z]" also prepends a changelog entry (CHANGELOG.md and the card) in that commit and tags it (module docstring)."""
+    last_release = None
+    if release:
+        parse_release(release)
+        last_release = check_release(release, remote_tags(repo))     # before any staging or upload
     stage = Path(staging) if staging else STAGING / time.strftime("%Y%m%d-%H%M%S")
     if stage.exists() and any(stage.iterdir()):
         raise SystemExit(f"{stage} is not empty: pass a new --staging directory")
@@ -383,12 +545,27 @@ def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: boo
     if len(majors) > 1:
         problems.append(f"published runs would mix export schema majors {sorted(majors, key=str)}: rerun with --reexport-all")
     write_catalog(catalog, stage)
-    (stage / "README.md").write_text(dataset_card(repo, sorted(tables), catalog))
+    entries = remote_changelog(repo)                                    # history is kept: the new entry goes on top
+    if release:
+        old_ids = {r["run_id"] for r in published}
+        ref = {r["run_id"]: f"{r['spec']}/{r['run_id']}" for r in rows}
+        entry = changelog_entry(release, time.strftime("%Y-%m-%d", time.gmtime()),
+                                sorted(ref[i] for i in new_ids - old_ids), sorted(ref[i] for i in new_ids & old_ids),
+                                catalog, notes)
+        entries = entry + ("\n\n" + entries if entries else "")
+        need, got = suggested_bump(published, catalog, new_ids), bump_of(release, last_release)
+        order = ("patch", "minor", "major")
+        if last_release and order.index(got) < order.index(need):
+            log(f"WARNING: {release} is a {got} bump after {last_release}, but this change looks {need} "
+                f"(docs/data_format.md, 'Versions and releases')")
+    if entries:
+        (stage / "CHANGELOG.md").write_text(render_changelog(entries))
+    (stage / "README.md").write_text(dataset_card(repo, sorted(tables), catalog, entries))
     problems += check_staging(stage)
     files = sorted(p for p in stage.rglob("*") if p.is_file())
     total = sum(p.stat().st_size for p in files)
     summary = {"repo": repo, "staging": str(stage), "runs": sorted(new_ids), "catalog_runs": len(catalog), "files": len(files),
-               "bytes": total, "problems": problems, "pushed": False}
+               "bytes": total, "problems": problems, "pushed": False, "release": release, "tag": None}
     log(f"\n{len(new_ids)} run(s) staged in {stage}: {len(files)} files, {total / 1e6:.1f} MB; catalog would list {len(catalog)} run(s)")
     for p in problems:
         log(f"  PROBLEM {p}")
@@ -402,10 +579,20 @@ def publish(runs, repo: str = DEFAULT_REPO, cards: dict | None = None, push: boo
         deletes += [f"{r['path']}/*", f"{r['path']}/**", r["raw"]]
     if prune_legacy:
         deletes += ["runs.csv"]
-    commit = _api().upload_folder(folder_path=str(stage), repo_id=repo, repo_type="dataset", delete_patterns=deletes,
-                                  commit_message=message or f"publish {len(new_ids)} run(s): " + ", ".join(sorted(new_ids))[:180])
+    api = _api()
+    msg = message or ((f"{release}: " if release else "") + f"publish {len(new_ids)} run(s): " + ", ".join(sorted(new_ids))[:180])
+    commit = api.upload_folder(folder_path=str(stage), repo_id=repo, repo_type="dataset", delete_patterns=deletes,
+                               commit_message=msg)
     summary.update(pushed=True, commit=str(getattr(commit, "oid", commit)), url=str(getattr(commit, "commit_url", "")))
     log(f"pushed: {summary['url'] or summary['commit']}")
+    if release:
+        api.create_tag(repo, tag=release, repo_type="dataset", revision=summary["commit"],
+                       tag_message=f"{release}: {notes}" if notes else release)
+        summary["tag"] = release
+        log(f"tagged {release} at {summary['commit']}: load with revision=\"{release}\"")
+    else:
+        log("reminder: no release tag. Releases are tagged: rerun with --release vX.Y[.Z] --notes \"...\" "
+            "(docs/data_format.md, 'Versions and releases')")
     return summary
 
 
@@ -423,16 +610,22 @@ def add_command(sub) -> None:
     p.add_argument("--prune-legacy", action="store_true", help="delete pre-catalog files (runs.csv) from the dataset")
     p.add_argument("--message", help="commit message")
     p.add_argument("--push", action="store_true", help="upload (without it: stage and summarise only)")
+    p.add_argument("--release", help="tag the upload commit vX.Y[.Z] and add a changelog entry (major: schema major or layout; "
+                                     "minor: runs or columns added; patch: card/catalog fixes)")
+    p.add_argument("--notes", help="changelog notes for --release")
     p.set_defaults(fn=cmd)
 
 
 def cmd(a) -> None:
+    if a.notes and not a.release:
+        raise SystemExit("--notes goes with --release (the changelog entry)")
     cards = load_cards(a.card)
     flags = {k: v for k, v in (("title", a.title), ("description", a.description),
                                 ("tags", [t.strip() for t in a.tags.split(",")] if a.tags else None)) if v}
     if flags:
         cards["*"] = {**cards.get("*", {}), **flags}
     s = publish(a.runs, repo=a.repo, cards=cards, push=a.push, staging=a.staging, reexport_all=a.reexport_all,
-                with_prompts=a.with_prompts, spec_override=a.spec, prune_legacy=a.prune_legacy, message=a.message)
+                with_prompts=a.with_prompts, spec_override=a.spec, prune_legacy=a.prune_legacy, message=a.message,
+                release=a.release, notes=a.notes)
     if s["problems"] and not a.push:
         raise SystemExit(1)
