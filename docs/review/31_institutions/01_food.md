@@ -12,8 +12,12 @@ distribute and consume, with payment flowing back, in the four regimes. Engine c
 - **A chain needs enclosure.** Forests are open to everyone (`camptypes/forest.py:75`). `start.camp_rights` skips subsistence
   camps (`start.py:453-454`). As things stand, all 24 agents can feed themselves and no institution is needed. Every regime therefore
   starts with one J0 law, a **Forest Licence** (NEW, small; a variant of Licensing Authority, `library.py:2192`, that also gates
-  `before_hunt`). It licenses 2 of the 3 forests to about 8 producers and leaves one thin "common wood" open as a safety valve. That
-  valve is also the survival-share dial.
+  `before_hunt`). It licenses 2 of the 3 forests to 7 producers (5 farmers, 2 hunters) and leaves one "common wood" open as a
+  safety valve, thinned by a forest-action quota (`COMMON_QUOTA: 3` a round, through the existing `set_quota`, `library.py:4668`).
+  That valve is also the survival-share dial.
+- **Sized for the whole population (framework §11a).** Spec dials `forest: {capacity_per_agent: 10, regrowth: 0.8, yield: 4}`
+  make normal licensed output ≈33 food a round against 24 eaten (1.38×). Every regime holds ≥120 food in stores at start (130-140 where centralised), serves
+  all 17 non-producers automatically with per-customer limits, and prices the ration below the lowest income (§3.5).
 - **One supply mechanism shared by all regimes**, in three templates:
   - **Supply Contract** (contract code, NEW, M): an allowance-pulled delivery into a store, paid per unit, with a bond, a notice
     action and renegotiation;
@@ -39,9 +43,9 @@ distribute and consume, with payment flowing back, in the four regimes. Engine c
   set a quota; draw from the granary; admit, expel or vote on payouts.
 - **Channels:** one Market Board (Merchant and Private; public, pull, rate 1, with a posting format the metrics can parse) and one
   Co-op Hall (Cooperative). State uses the shared J0 notices. That is at most 2 food channels in any world.
-- **Blight stress:** plants ×0.5 and game ×0.6, then a lean season (0.6) for 8 rounds. This takes sustainable output from about 29
-  to about 18 food a round against 24 eaten, a deficit of about 6 a round, which stores of 60-100 can bridge (§3.5). Each regime
-  has a different cheater:
+- **Blight stress:** plants ×0.4 and game ×0.5, then a lean season (regrowth ×0.5) for 8 rounds. This takes output from about 33
+  to about 14-19 food a round (mean 17) against 24 eaten, a shortfall of about 60-70 over the spell. Stores of 150-175 at the
+  blight bridge it if released and do not if hoarded or embezzled (§3.5). Each regime has a different cheater:
   - Merchant: the dealer hoards.
   - Private: the firm rations by price and drops suppliers.
   - State: quota evasion and a black market.
@@ -54,7 +58,8 @@ Physics shared by all regimes:
   (`subsistence.py:377-406`).
 - Food in hand spoils 15% a round; food in a store spoils 2% (`subsistence.py:69-70`).
 - A store holds 40 by default, or any capacity given in `start.stores`.
-- Forage yields 3 × stock/capacity per action, at most 2 forest actions a round (`subsistence.py:82`).
+- Forage yields `yield` × stock/capacity per action (3 by default; 4 in these worlds), at most 2 forest actions a round
+  (`subsistence.py:82`, `forest.py:198-200`).
 - The hunt pays at round end, shared within the party (`forest.py` docstring).
 - Taking food out of an institution's store is the routed `withdraw`. The owner's code decides who may; if the code is silent,
   the officers or the office that controls the store may (`subsistence.py:1040-1063`).
@@ -66,10 +71,10 @@ Physics shared by all regimes:
 | Who sets the rule | the J0 licence law; the Registrar issues and revokes licences | the same | the same, plus the Commissioner's quotas | the same; the co-op admits members |
 | **Collect** | none, or the dealer buys by DM | Supply Contract: pulls up to `qty` a round into the company store, pays `price` per unit | Procurement Quota: J0 takes `quota` (above a keep) into the granary and pays the fixed price | Cooperative: pulls each member's food allowance into the treasury; shares are credited |
 | Contract / cancel | none, or the farmer's standing order of food (either side leaves at will) | Supply Contract: notice of 2 rounds, a bond and breach records | statute: only the council amends it; evasion is fined | the co-op code; a member may leave and gives up its shares |
-| **Store** (asset owner) | farmers' pantries (agent stores) and the dealer's store S2 | the company store S2 (cap 150) | the J0 granary S1 (cap 200) | the co-op store S3 and its treasury |
+| **Store** (asset owner) | farmers' pantries (agent stores, 5 × 12) and the dealer's store S2 (60) | the company store S2 (cap 200, 100 at start) and J0's relief store S1 (40) | the J0 granary S1 (cap 250, 130 at start) | the co-op store S3 (cap 250, 130 at start) |
 | Who may draw | each owner | the Shopkeeper office (controls S2; cap by Granary Ration on S2) | the Keeper (Granary Ration cap 6); laws (Relief Act) | the co-op code (emergency meals, payouts); the Steward |
-| **Distribute** / price-setter | spot sales: offers on the Market Board, settled by DM and transfer; price set by each seller; delivery not guaranteed | Provision Subscription (automatic) and counter sales by the Shopkeeper; the Director sets the price, changes take effect after notice | Relief Act tops up everyone short of a meal (free ration); the Keeper makes discretionary draws | Cooperative: emergency meals to members short of food; periodic pro-rata payouts; dues in pennies |
-| **Consume** | buyers eat what they bought | subscribers get a bundle each round | everyone short of a meal gets one | members short of a meal get one |
+| **Distribute** / price-setter | seeded standing orders (every non-producer has one, 1 food for 2₱ a round) plus spot sales on the Market Board, settled by DM and transfer; price set by each seller; delivery not guaranteed | Provision Subscription (automatic, open to all, at most 2 food per subscriber a round) and counter sales by the Shopkeeper; the Director sets the price, changes take effect after notice | Ration Shop (open to all, 1₱ per food, at most 2 per customer a round); Relief Act tops up the hungry and starving; the Keeper makes discretionary draws | Cooperative: emergency meals to members short of food; periodic pro-rata payouts; dues in pennies |
+| **Consume** | buyers eat what they bought | subscribers get their food each round | Ration Shop customers get theirs; Relief tops up the hungry | members short of a meal get one |
 | **Payment back** | buyer to seller, by transfer (trust) | subscriber allowance to company treasury, then to suppliers per unit and to staff as wages | J0 treasury to farmers per unit delivered; taxes from the money subsystem | member dues to co-op treasury, then wages to farmers (Wage Roll) and payouts in food |
 | Automatic each round | the standing orders seeded at start | delivery, payment, subscriptions, wages | quota take and pay, relief | pooling, meals, dues, wages, payouts |
 
@@ -104,14 +109,14 @@ Licence law. *The Grain Dealer* is an agent with a store, not an institution, so
 
 | Role | Tier | Purpose | Automatic routine | Decisions (actions) | Answers to / sees | Pay |
 |---|---|---|---|---|---|---|
-| Farmer ×5 | Haiku ×3, Sonnet, Opus (swap) | Grow the food the town eats and sell it | standing order of 2 food to a seeded customer, whose 3-penny order pays back | post an offer (`post` to `market`); answer DMs and deliver (`transfer` food); cut or keep the standing order (`leave_contract`); store or sell (`transfer` to own `store:`) | no one; sees the board (pull), DMs, own pantry | sales |
-| Hunter ×2 | Haiku | Hunt as a party and sell meat | none | `hunt` with party "red"; post and sell as farmers do | the same | sales |
+| Farmer ×5 | Haiku ×3, Sonnet, Opus (swap) | Grow the food the town eats and sell it | standing orders of 1 food to each of 3 seeded customers, each of whose 2-penny orders pays back | post an offer (`post` to `market`); answer DMs and deliver (`transfer` food); cut or keep the standing order (`leave_contract`); store or sell (`transfer` to own `store:`) | no one; sees the board (pull), DMs, own pantry | sales |
+| Hunter ×2 | Haiku | Hunt as a party and sell meat | standing order of 1 food to one seeded customer, paid 2 penny | `hunt` with party "red"; post and sell as farmers do | the same | sales |
 | Grain Dealer | **Opus** | Buy cheap, store, sell dear | none | bid on the board; buy by DM and transfer; release or hold store S2 (`withdraw`); set the asking price | sees the board, own store level | margin |
 | Registrar | Haiku | Keep the licence register | renewals by fee (automatic) | `revoke_licence` (with reason); answer enquiries | the council; sees the register | J0 wage (money subsystem) |
 
-**Standing contracts.** Per seeded pair (3 pairs): the farmer's standing order of 2 food each round to the customer, and the
-customer's standing order of 3 penny back. These are two independent one-member contracts (`contracts.py:479-503`, `start.wages`
-with `employer: <agent>`, `start.py:368`). There is no notice and no penalty: either side cancels with `leave_contract`, which takes
+**Standing contracts.** Per seeded pair (17 pairs: each farmer has 3 customers, each hunter 1, so every non-producer has one):
+the producer's standing order of 1 food each round to the customer, and the customer's standing order of 2 penny back. These are
+two independent one-member contracts (`contracts.py:479-503`, `start.wages` with `employer: <agent>`, `start.py:368`). There is no notice and no penalty: either side cancels with `leave_contract`, which takes
 effect at round end. The breach is visible only to the two parties, through the standing-order notices. This is deliberate: it is
 the trust baseline.
 
@@ -141,6 +146,8 @@ the trust baseline.
 
 **Failure under blight.**
 - Asking prices jump. Buyers without income starve; the money subsystem must provide wages.
+- Farmers net ≈1.5 each after their meal against 3 orders, so about half the standing orders miss (could-not); ≈8 a round
+  must come from the dealer's store, the farmers' pantries or the board.
 - Fraud rises: prepaid buyers are not delivered to, and food is short.
 - Standing orders get cut, so farmers switch to the board.
 - The dealer hoards, then releases at the peak. Agents demand the Exchange, a price ceiling (unenforceable, §6) or seizure of the
@@ -153,15 +160,15 @@ the trust baseline.
 | Part | Content |
 |---|---|
 | Purpose | Profit from provisioning the town; the owner benefits, subscribers buy convenience and security |
-| Assets | store S2 (cap 150, 70 food at start); treasury 150 penny; the subscription and supply books |
-| Roles | Director (founder; controls the treasury; sets prices and terms); Shopkeeper (controls `store:S2`, draws ≤8 a round for counter sales); Clerk (keeps the books, posts the price on the board, `speak`) |
+| Assets | store S2 (cap 200, 100 food at start); treasury 100 penny; the subscription and supply books |
+| Roles | Director (founder; controls the treasury; sets prices and terms); Shopkeeper (controls `store:S2`, draws ≤30 a round for counter sales, ≤3 per buyer); Clerk (keeps the books, posts the price on the board, `speak`) |
 | Contracts | Supply Contract (5 farmers, 2 hunters); Provision Subscription (open to all); Wage Roll (staff) |
 | Rules | procedure `founder` (the Director alone changes the code); admission `open` (anyone may subscribe; supplier status only by named terms) |
 | Channels | none of its own; posts its price on the shared `market` board; business with suppliers by DM |
 | Records | public in contract state: `terms`, `deliveries`, `owed`, `subscribers`, `stockouts`, `payroll`; store level visible to Director and Shopkeeper only |
 | Accountability | none internal (private); external: Contract Enforcement Act (courts) and the council's laws |
 | Change | **people**: Director hires (adds to WAGES) and fires (expel), staff quit, a new Director by hereditary or else election; **rules**: Director alone; **contracts**: the terms protocol (below); **existence**: dissolve (wind-up pays the treasury to members, `contracts.py:1663`), sell control by passing the Director office; **entrenchment**: none |
-| Capture surface | Director: monopoly price, and choosing who gets food in a stockout. Shopkeeper: the principal-agent gap (counter stock sold privately; the 8/round cap and the draw book limit it) |
+| Capture surface | Director: monopoly price, and choosing who gets food in a stockout. Shopkeeper: the principal-agent gap (counter stock sold privately; the 30/round cap and the draw book limit it) |
 | Failure under blight | supply falls short of subscriptions, giving stockouts. Director raises the price (notice) or rations by join order; suppliers short-deliver and sell on the board at spot prices; the treasury runs dry and wages and supplier pay become owed |
 
 **Contracts (A1's code; contracts.max_laws: 5)**
@@ -175,14 +182,14 @@ the trust baseline.
    - **Renegotiation:** `propose_terms(farmer, qty, price)` by the Director; `accept_terms(n)` by the farmer; effective next round.
    - **Visibility:** terms and deliveries public in the contract's `public`, plus a per-round `notify` to each supplier.
    - **Courts:** under `contracts.enforcement: escrow_court`, breaches are actionable (Contract Enforcement Act, `library.py:1184`).
-2. **Provision Subscription** (NEW). Each subscriber's penny allowance is pulled PRICE (3) a round and BUNDLE (1.5) food goes from S2
-   to the subscriber.
+2. **Provision Subscription** (NEW). Each subscriber's penny allowance is pulled PRICE (2) per food, for the QTY (1) it chose, at
+   most LIMIT (2) a round, and that food goes from S2 to the subscriber. Admission is open; there is no total cap.
    - Stockout: no charge, and the subscriber is told. Order: join order, or `PRIORITY: price`, where subscribers on a dearer tier
      go first; the tier is a decision.
    - `set_price` (Director): takes effect after NOTICE=1 round and is gazetted.
    - Cancel: allowance 0 or `leave_contract`, effective at once. No penalty: consumer exit is free.
-3. **Wage Roll** (`library.py:4810`, via `start.wages`): Shopkeeper 3, Clerk 2.
-4. **Granary Ration** on S2 (OFFICE A1.shopkeeper, CAP 8; `library.py:4742`): the draw book. To verify: is an established
+3. **Wage Roll** (`library.py:4810`, via `start.wages`): Shopkeeper 3, Clerk 2.6 (the floor: 1.25 × the ration's 2.06₱ with levy).
+4. **Granary Ration** on S2 (OFFICE A1.shopkeeper, CAP 30; `library.py:4742`): the draw book. To verify: is an established
    template valid as association code? `start.institutions[].laws` accepts any v2 template (`start.py:376-379`).
 
 **Role cards (Private)**
@@ -190,10 +197,10 @@ the trust baseline.
 | Role | Tier | Automatic | Decisions | Answers to / sees | Pay |
 |---|---|---|---|---|---|
 | Director | **Opus** | all three contracts run | set retail price (`invoke set_price`); propose or end supplier terms (`invoke propose_terms`, `give_notice`); hire or fire (`propose_contract_change` to WAGES, `expel`) | nobody (owner); sees treasury, S2 level, books, board | profit (treasury) |
-| Shopkeeper | Sonnet | none | counter sales: `withdraw` ≤8 from S2, `transfer` food to buyers who paid by DM; report to the Director | Director; sees S2, DMs | wage 3 |
-| Clerk | Haiku | none | post the price line on `market` each round; read the books and flag arrears | Director | wage 2 |
-| Supplier farmer ×5 | Haiku ×3, Sonnet, **Opus** (lead supplier) | allowance pulled, paid per unit | keep, cut or raise the allowance; give notice; accept or refuse terms; sell extra on the board | the contract terms; sees own deliveries | per unit (1.5 penny) |
-| Supplier hunter ×2 | Haiku | the same, qty 2 | the same | the same | the same |
+| Shopkeeper | Sonnet | none | counter sales: `withdraw` ≤30 from S2 (≤3 per buyer), `transfer` food to buyers who paid by DM; report to the Director | Director; sees S2, DMs | wage 3 |
+| Clerk | Haiku | none | post the price line on `market` each round; read the books and flag arrears | Director | wage 2.6 |
+| Supplier farmer ×5 | Haiku ×3, Sonnet, **Opus** (lead supplier) | allowance pulled, paid per unit | keep, cut or raise the allowance; give notice; accept or refuse terms; sell extra on the board | the contract terms; sees own deliveries | per unit (1 penny): ≈4₱ a round |
+| Supplier hunter ×2 | Haiku | the same, qty 3 (lumpy catches: expect ≈2.5) | the same | the same | the same |
 
 **Channels: 0 own.** The company posts on the shared `market` board; supplier dealings run by DM. A private A1 channel is not
 justified: it has 3 staff.
@@ -201,7 +208,8 @@ justified: it has 3 staff.
 **Failure under blight.**
 - Suppliers' holdings fall below KEEP+qty, so deliveries shrink automatically: recorded as short delivery without any act. The
   template must separate "could not" (holdings < qty + KEEP: no breach) from "would not" (allowance cut: breach).
-- Stockouts hit subscribers in join order.
+- S2 drains about 11 a round (inflow ≈7-11 against 17 subscribers); it lasts the lean spell only if the Board keeps running.
+- Stockouts, if they come, hit subscribers in join order.
 - The Director's real choice comes here: raise the price (the poor drop out), cut subscribers, or buy on the board at spot to keep
   faith.
 
@@ -212,35 +220,37 @@ justified: it has 3 staff.
 | Part | Content |
 |---|---|
 | Purpose | No one starves; the state owns the surplus. Beneficiaries: everyone, officials first in practice |
-| Assets | granary S1 (cap 200, 110 food at start); J0 treasury (penny, for procurement); the 2 licensed forests |
+| Assets | granary S1 (cap 250, 130 food at start); J0 treasury (penny, for procurement); the 2 licensed forests |
 | Roles | Food Commissioner (sets quotas and procurement price within statutory bounds); Keeper (controls S1, discretionary draws ≤6); Inspector, who also holds the Registrar seat (licence register, quota book, revokes evaders' licences) |
-| Contracts | Procurement Quota (statute): each farmer's quota taken and paid; Relief Act: universal top-up ration |
+| Contracts | Procurement Quota (statute): each farmer's quota taken and paid; Ration Shop (Board preset, J0 principal): every non-producer seeded; Relief Act: top-up for the hungry and starving |
 | Rules | statutes of J0; amended by the council's procedure (rules subsystem); the Commissioner's parameters by `invoke` within bounds |
 | Channels | none of its own: quota, price and ration notices on the shared J0 `notices` channel (integrator's), petitions to `@J0` |
 | Records | public: quota book (owed, delivered, short, fined), relief register (`library.py:3949`), ration book of Keeper draws (`library.py:4742`), licence register. Private: the granary level, seen only by the Keeper (and the council if it holds an office controlling S1) |
 | Accountability | the council appoints and removes all three (succession by J0.council election); an Audit Office (`library.py:593`) is optional |
 | Change | **people**: council elections and recall; **rules**: the council amends quotas, bounds, relief budget and stages (e.g. Hunger Disenfranchisement, `library.py:4073`); **existence**: repealing the Procurement Quota is privatisation; **entrenchment**: optional constitutional rank for the Relief Act |
 | Capture surface | Keeper: 6 food a round for self and allies, plus knowledge of the level. Commissioner: low quotas for friends, high for rivals. Inspector: selective revocation |
-| Failure under blight | quotas exceed what farmers hold, so shortfalls, fines and evasion follow (sell to a black market before round end, keeping holdings ≤ KEEP); the granary drains at about 24 a round under universal relief; the council cuts relief stages to `starving` or disenfranchises the hungry |
+| Failure under blight | quotas exceed what farmers hold, so shortfalls, fines and evasion follow (sell to a black market before round end, keeping holdings ≤ KEEP); the granary drains about 11 a round (quota ≈7-11 in, shop 17 out, spoilage), from ≈175 to ≈80; the council cuts the shop, relief stages or disenfranchises the hungry |
 
 **Contracts.**
 1. **Procurement Quota** (NEW, polity law; compulsory). At round end, before the ration, J0 takes
-   min(quota, holdings − KEEP=1) from each named farmer into S1 and pays PRICE (1.5) penny per unit from the treasury, or records it
+   min(quota, holdings − KEEP=1) from each named farmer into S1 and pays PRICE (1) penny per unit from the treasury, or records it
    as owed.
    - Shortfall against quota is entered in the quota book. FINE (2 penny) per unit short is charged only where the farmer held the
      food at some point in the round: that detects sale before the take. The fine applies only when `AUDIT` is on.
    - `set_quota(farmer, q)` and `set_price(p)` by J0.commissioner, within [0, MAXQ=6] and [MINP=0.5, MAXP=3], gazetted.
    - Cancel: only by amendment. The farmer's exit is to stop producing (lose income) or to hand back the licence.
-2. **Relief Act** (`STORE: S1, RATION: 1, BUDGET: 24, STAGES: [starving, hungry, fed]`): anyone short of a meal is topped up, the
+2. **Ration Shop** (Board preset, 08 §2.1, with J0 as principal): 1 penny per food, at most 2 per customer a round, open to all;
+   the 17 non-producers are seeded at 1 a round.
+3. **Relief Act** (`STORE: S1, RATION: 1, BUDGET: 12, STAGES: [starving, hungry]`): anyone who missed a meal is topped up, the
    starving first (`library.py:3949-4001`).
-3. **Granary Ration** (`STORE: S1, OFFICE: J0.keeper, CAP: 6`).
-4. Optional: **Food Levy** with `RATE: 0, WITHDRAW_CAP: 2`, which rations private stores (anti-hoarding; `library.py:4003`).
+4. **Granary Ration** (`STORE: S1, OFFICE: J0.keeper, CAP: 6`).
+5. Optional: **Food Levy** with `RATE: 0, WITHDRAW_CAP: 2`, which rations private stores (anti-hoarding; `library.py:4003`).
 
 **Role cards (State)**
 
 | Role | Tier | Automatic | Decisions | Answers to / sees | Pay |
 |---|---|---|---|---|---|
-| Food Commissioner | **Opus** | quota and relief run | set quotas and price (`invoke set_quota`, `set_price`); propose relief changes (`propose`); report on `notices` | council; sees quota book, relief register, not S1 | J0 wage |
+| Food Commissioner | **Opus** | quota, shop and relief run | set quotas and price (`invoke set_quota`, `set_price`); propose relief changes (`propose`); report on `notices` | council; sees quota book, relief register, not S1 | J0 wage |
 | Keeper | **Opus** (or Haiku as swapped seat) | none (relief draws by law) | discretionary `withdraw` ≤6 (feed the sick, officials, or self); publish or withhold the granary level (`post` to `notices`) | council; sees S1 level, ration book | J0 wage |
 | Inspector-Registrar | Haiku | none | `revoke_licence` of evaders; post shortfall lists; prosecute via Penal Code (rules subsystem) | Commissioner | J0 wage |
 | State farmer ×5, hunter ×2 | Haiku ×5, Sonnet, Opus | quota taken and paid | produce more or less; sell surplus or the quota itself on the black market (`post` on board or DM); hold below KEEP | Inspector; sees own quota line | per unit |
@@ -255,16 +265,16 @@ justified: it has 3 staff.
 | Part | Content |
 |---|---|
 | Purpose | Members feed each other; producers are paid in money and in pro-rata food, consumers in security |
-| Assets | store S3 (cap 160, 80 food) is the co-op's reserve. To check: Cooperative pools into the *treasury* (`library.py:4418-4461`), which spoils at 15%, not into a store. Either accept that, or have the Steward move it into S3 (a decision), or make a NEW template variant with STORE (preferred, S). Also: a treasury of 100 penny |
+| Assets | store S3 (cap 250, 130 food) is the co-op's reserve. To check: Cooperative pools into the *treasury* (`library.py:4418-4461`), which spoils at 15%, not into a store. Either accept that, or have the Steward move it into S3 (a decision), or make a NEW template variant with STORE (preferred, S). Also: a treasury of 100 penny |
 | Roles | Steward (elected, term 6: draws from S3 for outsiders and sales; publishes the reserve level); Treasurer (elected: controls the treasury, pays wages); Tallyman (Haiku, appointed: keeps the minutes, admits members after a vote, `speak`) |
-| Contracts | Cooperative (PERIOD 3, PAYOUT 0.6): food pooled by allowance, shares, emergency meals. Member Dues (NEW, S): 2 penny a round from consumer members' allowance; MISSES 3, then expel. Wage Roll: farmers 3 penny |
+| Contracts | Cooperative, store variant (PERIOD 3, PAYOUT 0.5 of the stock above RESERVE 120): food pooled by allowance (farmers 4, hunters 3), shares, emergency meals to every member short of one (no cap). Member Dues (NEW, S): 2 penny a round from consumer members' allowance; MISSES 3, then expel. Wage Roll: farmers 3 penny |
 | Rules | procedure `members` (majority of those voting); admission `closed`: applicants admitted by the Tallyman's `admit_member` after a vote (the admission code is in Member Dues) |
 | Channels | `hall`: members only. The general meeting: motions, minutes, the Steward's reserve report |
 | Records | shares and payout register (public in contract state); minutes (posts in `hall`, append-only); dues book; the S3 level, Steward and Treasurer only unless published |
 | Accountability | officers elected by members; recall by majority (Recall, `library.py:464`, as co-op code, or an office's succession election) |
 | Change | **people**: join and admit, leave (shares forfeited), expel for dues, elect and recall; **rules**: any member proposes a code change, majority; **existence**: dissolve, winding up the treasury to members equally (`contracts.py:1719`); split by founding a rival; **entrenchment**: `two_thirds` for Cooperative changes is a dial |
-| Capture surface | consumers (about 14) outnumber farmers (about 7): they can vote PAYOUT down and dues down, transferring farmers' surplus to themselves. Farmers can respond by cutting allowances (exit within). The Steward is the officer who knows the reserve |
-| Failure under blight | contributions fall; emergency meals drain the reserve at up to 20 a round; negative shares pile up on consumers; farmers' payouts vanish, so farmers cut allowances and sell outside; a motion to suspend payouts or expel non-contributors follows |
+| Capture surface | consumers (17) outnumber producers (7): they can vote PAYOUT down and dues down, transferring farmers' surplus to themselves. Farmers can respond by cutting allowances (exit within). The Steward is the officer who knows the reserve |
+| Failure under blight | contributions fall to ≈7-11 against 17 meals, so the reserve drains about 11 a round (≈140 to ≈45 over the spell); farmers lobby to cut RESERVE so payouts resume; negative shares pile up on consumers; farmers' payouts vanish, so farmers cut allowances and sell outside; a motion to suspend payouts or expel non-contributors follows |
 
 **Role cards (Cooperative)**
 
@@ -281,32 +291,71 @@ justified: it has 3 staff.
 - Justification: 20 members cannot run a general meeting in DMs.
 - Valid business: motions are announced and minuted here (the vote itself is `vote` on the contract proposal).
 
-### 3.5 Calibration and the blight (all regimes; verify by dry run)
+### 3.5 Calibration, scale and the blight (all regimes; verify by dry run)
 
-With N=24, `forest.per_agent: 8` gives 3 forests (`subsistence.py:82`: one per `per_agent` agents), each holding K = 7×24/3 = 56
-plants and 80 game. Two forests are licensed and one is the common wood.
+**Engine basis.** Forests: ceil(N/`per_agent`) of them, plant capacity K = `capacity_per_agent` × N / forests, game K =
+`game.capacity_per_agent` × N / forests (`subsistence.py:788-815`). A forage takes `yield` × S/K, never below the refuge
+(`forest.py:198-200`); plants regrow logistically, S += r·S(1−S/K) − harvest, at round end (`camps.py:270-276`), r = `regrowth` ×
+the season (`subsistence.py:225-249`). Hunts pay by party effort, about 2.1 food per unit for a party of 4 units at full game
+(`forest.py:31`). Spoilage 15% in hand, 2% in a store (`subsistence.py:69-70`). Scheduled shocks cut stocks and force a season
+(`subsistence.py:252-288`). All of these are per-spec dials (`schema.py:797-808`; Millbrook sets some, `millbrook.yaml:73-85`).
 
-- **Five farmers at 2 forage actions on 2 forests:**
-  - Harvest is 10 actions × 3 × s; regrowth is 2 × 0.6 × 56 × s(1−s).
-  - They balance at s ≈ 0.55, giving harvest ≈ 16.5.
-  - Add 2 hunters at ≈ 1.5 food per effort unit with 4 units: ≈ 6.
-  - Add gleaning in the common wood: ≈ 4.
-  - Total ≈ 26-29 a round against 24 eaten plus 2-4 spoiled. The margin is thin, which is what we want: producers matter.
-- **The blight** (`subsistence.shocks: [{round: 10, plants: 0.5, game: 0.6, season: lean, rounds: 8}]`, default lean 0.6):
-  - Regrowth on the licensed forests falls to 0.36 × 56 × 2 = 40 s(1−s), so harvest 30s ≈ 40 s(1−s) gives s ≈ 0.25 and
-    harvest ≈ 7.5.
-  - Hunting gives ≈ 4 and the common wood ≈ 2.
-  - Total ≈ 14-18 a round: a **deficit of about 6-10 a round** for 8 rounds, 50-80 in all.
-  - Starting stores of 70-110 (2% spoilage) bridge it if released, and not if hoarded or embezzled.
-  - Millbrook's lean 0.35 would collapse the licensed forests to the refuge level; avoid it.
+**Why the defaults fail §11a.** At `capacity_per_agent: 7, regrowth: 0.6, yield: 3` (K = 56), five farmers settle at s ≈ 0.6 and
+harvest ≈16; with the hunters (≈7) licensed output is ≈23.5 against 24 eaten. The whole world's plant MSY is only r·7N/4 ≈ 25.
 
-These are mean-field estimates. They ignore the hunt's party lumpiness and agents' effort choices, and are for the dry-run tuner.
+**Dials for every regime** (one set, so regimes differ only in institutions):
+
+```yaml
+subsistence:
+  forest: {per_agent: 8, capacity_per_agent: 10, regrowth: 0.8, yield: 4}   # 3 forests, K = 80 plants each; game default (K 80)
+  seasons: {lean: 0.5}                                                       # p_lean 0.25 as default
+  shocks: [{round: 10, plants: 0.4, game: 0.5, season: lean, rounds: 8}]
+```
+
+The Forest Licence sets `COMMON_QUOTA: 3` forest actions a round on the common wood (`set_quota`, `library.py:4668`; it binds the
+hunt too, `subsistence.py:852-857`). Without it the common wood is as rich as a licensed forest (MSY 16) and the chain is optional.
+
+| Mean-field, 5 farmers × 2 forages + a party of 2 hunters × 2 units (alternating forests) | Normal | Random lean round | Blight (rounds 11-18) |
+|---|---|---|---|
+| Plants from the licensed forests (stock s) | 26 (s ≈ 0.72; 5.2 per farmer) | | 11.6-15 (s ≈ 0.3-0.4) |
+| Game | ≈7 (3.6 per hunter, lumpy) | | ≈4-5 |
+| **Licensed output vs 24 eaten** | **≈33 (1.38×)** | 5th percentile 27, worst 24 (400 seeds) | **14.3 → 19.0, mean 16.7 (0.70×)** |
+| Left for the 17 non-producers after producers eat 7 | ≈26 (1.53× their 17); ≈25 reaches a store | | ≈7-11 |
+| Common wood (quota 3) | ≈9 | | ≈5 |
+
+The blight's cumulative shortfall is ≈60 over the 8 lean rounds and ≈68 (median; 95th percentile 91 with unlucky seasons) until
+output is back above 24 around round 21. Stores grow ≈+5 a round before it, so every regime meets it with 150-175 in stock.
+
+**Scale check per regime** (demand 24 a round, 17 of it through the institution; runway = stores ÷ net drain):
+
+| | Merchant | Private | State | Cooperative |
+|---|---|---|---|---|
+| Producers / terms | 5 farmers, 2 hunters; 17 standing orders of 1 food | the same; Supply 4 per farmer, 3 per hunter (26) | the same; Quota 4 and 3 (26) | the same; allowances 4 and 3 |
+| Normal inflow vs institutional demand | 15 + 2 ordered; ≈9 spare to sell | ≈25 into S2 vs 17 (1.47×) | ≈25 into S1 vs 17 | ≈25 into S3 vs 17 |
+| Stores at start (≥120) | 120: dealer S2 60, 5 pantries × 12 | 140: S2 100, relief S1 40 | 130: S1 | 130: S3 |
+| Runway, everyone idle (stores ÷ 24) | 5 | 5.8 | 5.4 | 5.4 |
+| Stores at the blight → trough if all is released | ≈120 + what the dealer buys | ≈185 → ≈95 (S2 bottoms ≈60) | ≈175 → ≈80 | ≈140 → ≈45 (payouts above RESERVE) |
+| Blight runway (stores ÷ net drain) | ≈15 rounds at a drain of 8 | ≈17 at 11 | ≈16 at 11 | ≈13 at 11 |
+| Fed with zero consumer attention (normal / blight) | 100% / ≈50% (standing orders miss) | 100% / 100% while the Board runs | 100% / 100% while the shop runs | 100% / 100% while S3 lasts |
+| Ration cost vs lowest income | 2₱ order; purse 25₱ (12 rounds); a worker-round at the window ≈5₱ | 2.06₱ with levy vs lowest wage 2.6₱ (1.26×) | 1.05₱ with levy vs lowest wage 2₱ (1.9×) | free against shares; farmers paid 3₱ |
+
+"Zero attention" means consumers do nothing and producers forage and hunt as their role cards say. With everyone idle, nothing is
+produced, and start food (5-8, about 4-5 rounds at 15%) plus the stores carry the world, which passes the 3-round check.
+
+So the blight squeezes everywhere and kills nowhere *by physics*: released stores bottom out at 40-60% of their peak with no
+announced end date. Hunger comes from decisions: the dealer's hoard, the Director's price, the Keeper's draws, the meeting's
+RESERVE vote. Millbrook's lean 0.35 on these dials would push the licensed forests to the refuge; avoid it. Felling shrinks K for
+good (`forest.py:218-220`); the Licence gates felling in the licensed forests, and fells in the common wood count against its quota.
+
+These are mean-field estimates (scratch model of the engine formulas). They ignore within-party lumpiness, hunger multipliers and
+agents' effort choices. **Dry run to confirm:** normal output ≥ 30, hunters' mean delivery ≈ 2.5 on a qty of 3, the store
+trajectories above, and the common wood's yield under the quota.
 
 ## 4. Cross-links (interfaces other subsystems must provide)
 
 | Need | Interface | Provider |
 |---|---|---|
-| Consumer income | every non-producer has ≥3 penny a round from a wage (`start.wages`) or a standing contract; otherwise Merchant and Private starve the poor by construction | Money / Materials / Force |
+| Consumer income | every non-producer has ≥2.6 penny a round (1.25 × the 2₱ ration with a 3% levy) from a wage (`start.wages`) or a standing contract; otherwise Merchant and Private starve the poor by construction | Money / Materials / Force |
 | Producers' spending | something farmers want to buy: materials (timber and stone for a store: 10 + 6, `subsistence.py:96`), protection, press | Materials |
 | Currency | `penny` issued by J0 (`start.currencies`); procurement paid from the J0 treasury, which needs a tax (Payment Levy) | Money |
 | Stores | building a new store costs materials; capacity is otherwise fixed at start | Materials |
@@ -324,10 +373,11 @@ These are mean-field estimates. They ignore the hunt's party lumpiness and agent
 subsistence:
   enabled: true
   start_food: [5, 8]
-  forest: {per_agent: 8}                       # 3 forests at N=24 (two licensed, one common wood)
+  forest: {per_agent: 8, capacity_per_agent: 10, regrowth: 0.8, yield: 4}   # 3 forests at N=24, K 80 (§3.5)
+  seasons: {lean: 0.5}
   shocks:
-    - {round: 10, plants: 0.5, game: 0.6, season: lean, rounds: 8,
-       text: "A blight has struck: half the plants and much of the game are gone; a lean season follows."}
+    - {round: 10, plants: 0.4, game: 0.5, season: lean, rounds: 8,
+       text: "A blight has struck: more than half the plants and half the game are gone; a lean season follows."}
 contracts: {enabled: true, max_laws: 5, enforcement: escrow_court, scripted: false}
 channels: {v2: true, delivery: pull}           # global today; per-channel push/pull is NEW
 institutions: {unified: true, grants: true, succession: true, office_control: true}
@@ -343,7 +393,8 @@ start:
                     succession: {rule: election, electorate: J0.council}}
       laws:
         - template: Forest Licence                       # NEW (Licensing Authority + before_hunt, office registrar)
-          params: {LICENCE: forester, REGISTRAR_RIGHT: J0.registrar, CAMPS: [camp7, camp8], FEE_ITEM: penny, FEE: 2, TERM: 8}
+          params: {LICENCE: forester, REGISTRAR_RIGHT: J0.registrar, CAMPS: [camp7, camp8], FEE_ITEM: penny, FEE: 2, TERM: 8,
+                   COMMON: [camp9], COMMON_QUOTA: 3}
     - id: A1
       name: Provisions Company
       founder: Anselm                                    # Director (Opus)
@@ -356,29 +407,29 @@ start:
         director: {title: Director, holders: [founder], controls: [treasury], powers: [speak],
                    succession: {rule: hereditary, else: election}}
         shopkeeper: {title: Shopkeeper, holders: [Quill], controls: ["store:S2"],
-                     duties: "Sell over the counter: take at most 8 food a round from store S2 for buyers who have paid."}
+                     duties: "Sell over the counter: take at most 30 food a round from store S2, at most 3 per buyer, for buyers who have paid."}
         clerk: {title: Clerk, holders: [Tess], powers: [speak],
                 duties: "Post the Company's price on the market board each round; keep the books."}
       laws:
         - template: Supply Contract                      # NEW
           params: {STORE: S2, ITEM: penny, KEEP: 1, BOND: 5, NOTICE: 2, GRACE: 2, PENALTY: 6, OFFICE: A1.director,
-                   TERMS: {Bryn: [3, 1.5], Cass: [3, 1.5], Dell: [3, 1.5], Edda: [3, 1.5], Fion: [3, 1.5],
-                           Gale: [2, 1.5], Hob: [2, 1.5]}}
+                   TERMS: {Bryn: [4, 1], Cass: [4, 1], Dell: [4, 1], Edda: [4, 1], Fion: [4, 1],
+                           Gale: [3, 1], Hob: [3, 1]}}
         - template: Provision Subscription               # NEW
-          params: {STORE: S2, ITEM: penny, PRICE: 3, BUNDLE: 1.5, NOTICE: 1, PRIORITY: join, OFFICE: A1.director,
+          params: {STORE: S2, ITEM: penny, PRICE: 2, LIMIT: 2, NOTICE: 1, PRIORITY: join, OFFICE: A1.director,
                    STAFF: [Anselm, Quill, Tess]}
         - template: Granary Ration
-          params: {STORE: S2, OFFICE: A1.shopkeeper, CAP: 8}
-      treasury: {penny: 150}
+          params: {STORE: S2, OFFICE: A1.shopkeeper, CAP: 30}
+      treasury: {penny: 100}
   stores:
-    - {id: S1, owner: J0, food: 30, capacity: 80, name: the town relief store}
-    - {id: S2, owner: A1, food: 70, capacity: 150, name: the Company store}
+    - {id: S1, owner: J0, food: 40, capacity: 80, name: the town relief store}
+    - {id: S2, owner: A1, food: 100, capacity: 200, name: the Company store}
   wages:
     - {employer: A1, worker: Quill, item: penny, qty: 3}
-    - {employer: A1, worker: Tess, item: penny, qty: 2}
+    - {employer: A1, worker: Tess, item: penny, qty: 2.6}
   allowances:                                            # NEW section: contract allowances at round 0
-    - {member: Bryn, contract: A1, item: food, qty: 3}   # ... one per supplier
-    - {member: Ula, contract: A1, item: penny, qty: 3}   # ... one per seeded subscriber (about 8 of the consumers)
+    - {member: Bryn, contract: A1, item: food, qty: 4}   # ... one per supplier (hunters 3)
+    - {member: Ula, contract: A1, item: penny, qty: 2}   # ... one per subscriber: all 17 non-producers, 1 food a round
   escrow:                                                # NEW section: bonds at round 0
     - {member: Bryn, contract: A1, item: penny, qty: 5}  # ... one per supplier
   channels:
@@ -395,7 +446,7 @@ start:
     - template: Contract Enforcement Act
       params: {MODE: court, SANCTION: fine, ITEM: penny, FINE: 3, PAY: victim}
     - template: Relief Act                               # a thin public floor (starving only)
-      params: {STORE: S1, RATION: 1, BUDGET: 3, STAGES: [starving]}
+      params: {STORE: S1, RATION: 1, BUDGET: 6, STAGES: [starving]}
 ```
 
 Notes:
@@ -420,35 +471,38 @@ start:
           params: {LICENCE: forester, REGISTRAR_RIGHT: J0.registrar, CAMPS: [camp7, camp8], FEE_ITEM: penny, FEE: 0, TERM: 0}
       treasury: {penny: 250}
   stores:
-    - {id: S1, owner: J0, food: 110, capacity: 200, name: the state granary}
+    - {id: S1, owner: J0, food: 130, capacity: 250, name: the state granary}
   laws:
     - template: Procurement Quota                        # NEW
-      params: {STORE: S1, ITEM: penny, PRICE: 1.5, KEEP: 1, FINE: 2, AUDIT: true, OFFICE: J0.commissioner,
+      params: {STORE: S1, ITEM: penny, PRICE: 1, KEEP: 1, FINE: 2, AUDIT: true, OFFICE: J0.commissioner,
                MAXQ: 6, MINP: 0.5, MAXP: 3,
-               QUOTAS: {Bryn: 3, Cass: 3, Dell: 3, Edda: 3, Fion: 3, Gale: 2, Hob: 2}}
+               QUOTAS: {Bryn: 4, Cass: 4, Dell: 4, Edda: 4, Fion: 4, Gale: 3, Hob: 3}}
+    - template: Ration Shop                              # Board preset, J0 principal (08 §2.1); all 17 non-producers seeded
+      params: {STORE: S1, ITEM: penny, PRICE: 1, LIMIT: 2, OFFICE: J0.commissioner}
     - template: Relief Act
-      params: {STORE: S1, RATION: 1, BUDGET: 24, STAGES: [starving, hungry, fed]}
+      params: {STORE: S1, RATION: 1, BUDGET: 12, STAGES: [starving, hungry]}
     - template: Granary Ration
       params: {STORE: S1, OFFICE: J0.keeper, CAP: 6}
 ```
 
 Merchant and Cooperative use the same pieces.
-- **Merchant:** `start.wages` with `employer: <farmer>, item: food, qty: 2` and `employer: <customer>, worker: <farmer>, item: penny,
-  qty: 3` (both are standing orders, `start.py:368`, `contracts.py:2074`); the dealer's store `{id: S2, owner: Dorin, food: 40,
-  capacity: 120}`; the `market` channel.
-- **Cooperative:** A1 with laws Cooperative (`PERIOD: 3, PAYOUT: 0.6`) and Member Dues (NEW); `start.wages` for farmers; `hall`
-  with `readers: {members: A1}`.
+- **Merchant:** `start.wages` with `employer: <producer>, item: food, qty: 1` and `employer: <customer>, worker: <producer>, item:
+  penny, qty: 2`, 17 pairs (both are standing orders, `start.py:368`, `contracts.py:2074`); the dealer's store `{id: S2, owner:
+  Dorin, food: 60, capacity: 150}`; a pantry per farmer `{owner: <farmer>, food: 12, capacity: 40}`; the `market` channel.
+- **Cooperative:** A1 with laws Cooperative, store variant (`STORE: S3, PERIOD: 3, PAYOUT: 0.5, RESERVE: 120`), and Member Dues
+  (NEW); allowances 4 (farmers) and 3 (hunters); S3 `{food: 130, capacity: 250}`; `start.wages` for farmers; `hall` with `readers:
+  {members: A1}`.
 
 ## 6. Code needed
 
 | # | Piece | Exists today | Size | Library template or engine |
 |---|---|---|---|---|
-| 1 | **Forest Licence**: gate `before_harvest` and `before_hunt` on CAMPS, registrar as an office right, fee and term | Licensing Authority gates harvest only, registrar by class (`library.py:2192-2265`); Forest Territory gates both, but by camp, not licence (`library.py:4606-4640`) | S | template |
+| 1 | **Forest Licence**: gate `before_harvest` and `before_hunt` on CAMPS, registrar as an office right, fee and term; `set_quota` on the COMMON wood each round | Licensing Authority gates harvest only, registrar by class (`library.py:2192-2265`); Forest Territory gates both, but by camp, not licence (`library.py:4606-4640`) | S | template |
 | 2 | **Supply Contract**: per-supplier terms, allowance pull into STORE, unit pay or owed, KEEP, bond, `give_notice`, early-termination penalty, `propose_terms`/`accept_terms`, could-not vs would-not breach | standing orders (one-way, no notice, `contracts.py:479-503`); Day Labour (food wages for harvests, `library.py:4464`); `breach`, `pull`, `forfeit`, `define_action` exist in the contract API | M | template (contract code) |
-| 3 | **Provision Subscription**: pull PRICE, deliver BUNDLE from store, stockout rule, `set_price` with notice | nothing for retail; Granary Charter's FEED loop is the pattern (`library.py:4288-4365`) | S-M | template |
+| 3 | **Provision Subscription**: pull PRICE per unit, deliver the subscriber's QTY (≤ LIMIT) from store, stockout rule, `set_price` with notice | nothing for retail; Granary Charter's FEED loop is the pattern (`library.py:4288-4365`) | S-M | template |
 | 4 | **Procurement Quota**: compulsory per-farmer take into a polity store, paid per unit, shortfall book and fine, office-set bounds | Food Levy takes a proportional share, unpaid (`library.py:4003-4070`); Regulatory Agency shows bounded office parameters (`library.py:2268`) | S-M | template |
 | 5 | **Member Dues and admission** (co-op): penny dues by allowance, expel after misses, `admit_member` | Club dues logic (`contracts.py` TEMPLATES `club`); `admit` in contract code (`contracts.py:1037`) | S | template |
-| 6 | Cooperative variant pooling into a **store** (2% spoilage) instead of the treasury (15%) | Cooperative pools into the treasury (`library.py:4418-4461`) | S | template |
+| 6 | Cooperative variant pooling into a **store** (2% spoilage) instead of the treasury (15%), payouts only from the stock above RESERVE | Cooperative pools into the treasury (`library.py:4418-4461`) | S | template |
 | 7 | `start.allowances` and `start.escrow` sections | missing: `SECTIONS` has neither (`start.py:46`); only wages set allowances (standing orders) | S | engine (start.py) |
 | 8 | **Per-channel push/pull** (`ch["delivery"]`, read in `pulled`) | global `channels.delivery` only (`channels.py:86-87`, `:938-946`). The docstring says pull is the default, but `DEFAULTS` says push (`channels.py:28` vs `:53`) | S-M | engine |
 | 9 | Contract **exit notice** in the engine | `rec["exit"]["notice"]` is stored (`contracts.py:267`) but never read; exit happens at round end. Templates 2 and 3 emulate notice with bonds | M | engine (optional; templates suffice) |
@@ -474,11 +528,13 @@ Gates, run before any model run with scripted bots, seeds 1-2, `contracts.script
    standing orders, subscriptions, quota plus relief, or co-op meals respectively.
 2. **The chain closes:** the S2/S1/S3 level rises before the blight. Supplier payments equal units delivered × price (± owed).
    Money conservation holds, and subscribers' pennies reach farmers within 2 rounds.
-3. **Blight bites, does not wipe out:** with released stores, deaths by round 24 are ≤2 in State and Cooperative. With a hoarded
-   or embezzled store, deaths are >2. The design must show sensitivity to the decision, not only to physics.
-4. **Survival-action share ≤30%:** count harvest, hunt, withdraw, food transfers and food DMs over all actions, before and after
+3. **Scale (framework §11a):** with scripted producers and idle consumers, rounds 1-10: licensed output ≥ 30 a round, the
+   institution's inflow ≥ 21 (1.25 × 17), every non-producer fed every round, stores ≥ 120 throughout.
+4. **Blight bites, does not wipe out:** with released stores, deaths by round 24 are 0 in every regime but Merchant (≤2 there).
+   With a hoarded or embezzled store, deaths are >2. The design must show sensitivity to the decision, not only to physics.
+5. **Survival-action share ≤30%:** count harvest, hunt, withdraw, food transfers and food DMs over all actions, before and after
    the blight. Target ≈15-20% before; the common wood pushes it up after.
-5. **Templates do what they say:** `preview_law` and scripted checks for each NEW template: notice matures, the bond is forfeited
+6. **Templates do what they say:** `preview_law` and scripted checks for each NEW template: notice matures, the bond is forfeited
    on a premature exit, a stockout charges nothing, and the quota fines only food that was held.
 
 Run metrics (per round, per regime):
@@ -532,15 +588,18 @@ Run metrics (per round, per regime):
   are posted only there, and the Company's price is only there.
 - **Visible state.** Suppliers' terms and quota lines are not in state lines today (code #10). Until then each template must
   `notify` every round, which is feed noise. This is a §12 lesson ("agents only use what they can see").
-- **The State regime is the most automatic and may be the least interesting.** Relief at BUDGET 24 makes hunger impossible until
-  the granary empties. The decision points (quota levels, Keeper draws, relief stages) all sit with 3 officials, and the 7
-  farmers' only divergence is evasion. A lower BUDGET (e.g. 12, starving and hungry only) makes rationing a live choice.
-- **Merchant may not be robust.** Consumers without seeded standing orders must act to eat by round 3-5 (start food 5-8 at 15%
-  spoilage lasts about 4-5 rounds). That breaks design check 2 for idle consumers by round 5. I accept it: the framework requires 3
-  rounds, and Merchant is meant to punish passivity. The metric is who starves first.
+- **The State regime is the most automatic and may be the least interesting.** The Ration Shop feeds everyone until the granary
+  empties. The decision points (quota levels, shop price and roll, Keeper draws, relief stages) all sit with 3 officials, and the 7
+  farmers' only divergence is evasion. Relief at BUDGET 12 (starving and hungry only) keeps rationing a live choice.
+- **Merchant is the least robust.** Every non-producer has a seeded standing order (§11a), so normal times feed 100%. But orders
+  are paid from purses (25₱, about 12 rounds) unless consumers earn, and in the blight about half the orders miss: the other half
+  must be bought from the dealer or the board. Merchant still punishes passivity, later and harder. The metric is who starves
+  first.
 - **Model confounds.** I put the Opus seats in the dealer, Director, Commissioner and Keeper, and Steward roles. One Opus farmer per
   regime and an optional Haiku Keeper are the swapped seats. More swaps would help attribution but cost decision quality.
 - **Numbers are mean-field.** §3.5 should be checked by the scripted tuner (Millbrook's method) before any model run.
+- **Richer forests make autarky tempting again.** At yield 4 one forage feeds a forager for about 3 rounds. The common wood's
+  quota is what keeps the chain necessary; if agents repeal it, the institutions become optional. That is a finding, not a bug.
 - **Engine facts that contradict or sharpen the framework:**
   - (a) `start.camp_rights` cannot enclose forests;
   - (b) contract exit notice is not implemented;

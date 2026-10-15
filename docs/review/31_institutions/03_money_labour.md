@@ -495,17 +495,22 @@ meeting channel are owned by the rules design. Everything else runs on DMs, gaze
 
 ### 7.1 Assumptions
 
-**Cast** (7 Opus): A1 Provisions (shop: owner Opus, manager Sonnet, clerk Haiku); 4 farmers on supply SCs (3 Haiku, 1
-Sonnet); A2 Mining (owner Opus, foreman Sonnet, 3 miners: 2 Haiku, 1 swapped Opus); A3 Woodyard (owner Opus, 2 Haiku loggers);
-A4 Bank (Banker Opus, Teller Haiku); A5 Security (owner Sonnet, 2 Haiku guards); A6 Press (editor Opus, reporter Haiku);
-independents: Lawyer (Opus), Registrar (Haiku, J0).
+**Cast** (7 Opus): A1 Provisions (shop: owner Opus, manager Sonnet, clerk Haiku); 5 farmers on supply SCs (4 Haiku, 1
+Sonnet); A2 Mining (owner Opus, foreman Sonnet, 3 miners: 2 Haiku, 1 swapped Opus); A3 Woodyard (owner Opus, 1 Haiku logger);
+A4 Bank (Banker Opus, Teller Haiku); A5 Security (owner Sonnet, 2 Haiku guards who also hunt as party "red" on supply SCs);
+A6 Press (editor Opus, reporter Haiku); independents: Lawyer (Opus), Registrar (Haiku, J0). So 7 producers and 17 non-producers,
+as in every world of 08 (framework §11a sizing). This section's prices and wages supersede the 2₱ and 2.5₱ figures in the §6.2
+role cards and the §9 sketch.
 
 **Prices and output.**
 
 - The window price is P = 2 value per penny, so copper (5) buys 2.5₱, timber (1) 0.5₱ and stone (2) 1₱.
-- Food sells at 2₱ retail and 1.5₱ wholesale.
+- Food sells at 2₱ retail and **1₱ wholesale** (at 1.5₱ the shop loses on every unit it stocks for the reserve).
 - A worker-round produces about 10 value (review 16 §3: 11.6 value per worker-round in Haiku runs).
-- A farmer delivers 5 food a round and eats their own.
+- Food physics as 01 §3.5 (`forest: {capacity_per_agent: 10, regrowth: 0.8, yield: 4}`): a farmer forages ≈5.2 a round, eats 1
+  and delivers 4; a guard-hunter delivers ≈2.5 of a 3-unit term. Supply ≈25 a round against 17 sold (1.47×); the rest builds the
+  shop's reserve.
+- **Wage floor 2.6₱**: the ration costs 2.06₱ with the levy, and framework §11a asks for 1.25×. Every wage of 2 or 2.5 below is raised to 2.6.
 - Levy: 3% on payer.
 
 **Stocks at round 0 (₱).** Agents 25 each (600); treasuries A1 60, A2 80, A3 40, A4 200, A5 40, A6 20, J0 100. **Supply 1,140.**
@@ -515,55 +520,55 @@ The J0 reserve backs it at P = 2: 400 timber (400), 240 stone (480) and 280 copp
 
 | From → to | Contract | ₱ |
 |---|---|---|
-| A1 → staff and owner | Payroll (manager 3, clerk 2, owner 2) | 7 |
-| A2 → staff and owner | Payroll (foreman 3, miners 3 × 2.5, owner 2) | 12.5 |
-| A3 → loggers and owner | Payroll (2 × 2.5 + 2) | 7 |
-| A4 → Teller, Banker | Payroll | 4 |
-| A5 → guards, owner | Payroll | 7 |
-| A6 → reporter, editor | Payroll | 4.5 |
-| J0 → Registrar | Civil List | 2.5 |
-| A2, A4 → Lawyer | retainer SCs (1 each) | 2 |
-| A1 → 4 farmers | supply SCs (20 food × 1.5) | 30 |
-| **To households** | | **76.5** |
-| 20 non-farmers → A1 | board SC (1 food at 2₱) | 40 |
-| farmers → A5 | retainers (4 × 0.5) | 2 |
+| A1 → staff and owner | Payroll (manager 3, clerk 2.6, owner 2.6) | 8.2 |
+| A2 → staff and owner | Payroll (foreman 3, miners 3 × 2.6, owner 2.6) | 13.4 |
+| A3 → logger and owner | Payroll (2.6 + 2.6) | 5.2 |
+| A4 → Teller, Banker | Payroll (2 × 2.6) | 5.2 |
+| A5 → guards, owner | Payroll (3 × 2.6) | 7.8 |
+| A6 → reporter, editor | Payroll (2 × 2.6) | 5.2 |
+| J0 → Registrar | Civil List | 2.6 |
+| A2, A4 → Lawyer | retainer SCs (1.5 each) | 3 |
+| A1 → 5 farmers, 2 guard-hunters | supply SCs (≈25 food × 1) | 25 |
+| **To households** | | **75.6** |
+| 17 non-producers → A1 | board SC (1 food at 2₱; limit 2) | 34 |
+| farmers → A5 | retainers (5 × 0.5) | 2.5 |
 | 12 subscribers → A6 | subscriptions (0.25) | 3 |
-| farmers → A4 | deposit legs (4 × 4) | 16 |
-| **From households** | | **61** |
+| farmers → A4 | deposit legs (5 × 2.5) | 12.5 |
+| **From households** | | **52** |
 | A1, A2, A3, A4 → A5 | retainers (2, 2, 1, 2) | 7 |
 | A1 → A6 | placement (a decision, not automatic) | 1 |
 | window → A2, A3 | `sell_to_window` (6 copper = 15; 20 value of timber and stone = 10): **newly minted** | 25 |
-| all payers → J0 | Payment Levy 3% of about 145.5 | 4.4 |
+| all payers → J0 | Payment Levy 3% of about 135.6 | 4.1 |
 
 ### 7.3 Sector balance
 
 | Sector | In | Out (with levy) | Net per round | Runway at round 0 |
 |---|---|---|---|---|
-| Households | 76.5 | 62.8 | +13.7 cash (+16 deposited) | n/a |
-| A1 Provisions | 40 | 41.2 | −1.2 | 50 rounds |
-| A2 Mining | 15 | 16.0 | −1.0 | 80 rounds |
-| A3 Woodyard | 10 | 8.2 | +1.8 | grows |
-| A4 Bank | 16 (deposits) | 7.2 | +8.8 (a liability; lendable) | operating loss 7.2 a round without lending: 28 rounds on capital |
-| A5 Security | 9 | 7.2 | +1.8 | grows |
-| A6 Press | 4 | 4.6 | −0.6 | 33 rounds |
-| J0 | 4.4 | 2.5 | +1.9 | grows |
-| **Sum** | | | **+25.1 = the 25₱ minted at the window** (check) | |
+| Households | 75.6 | 53.6 | +9.5 cash (+12.5 deposited) | n/a |
+| A1 Provisions | 34 | 37.3 | −3.3 while S2 fills; ≈ +2 once it is full (Supply pulls only room) | 18 rounds |
+| A2 Mining | 15 | 17.4 | −2.4 | 33 rounds |
+| A3 Woodyard | 10 | 6.4 | +3.6 | grows |
+| A4 Bank | 12.5 (deposits) | 9.0 | +3.5 (a liability; lendable) | operating loss 9 a round without lending: 22 rounds on capital |
+| A5 Security | 9.5 | 8.0 | +1.5 | grows |
+| A6 Press | 4 | 5.4 | −1.4 | 15 rounds |
+| J0 | 4.1 | 2.7 | +1.4 | grows |
+| **Sum** | | | **+25.0 = the 25₱ minted at the window** (check) | |
 
 ### 7.4 Answers
 
-1. **Does money circulate without attention? Yes.** About 145₱ of payments a round on a supply of about 1,140 gives a velocity
-   of about 0.13 a round, against Millbrook's 0.02 (wages only) and about 0.0004 (voluntary). It needs the NEW pieces: the
+1. **Does money circulate without attention? Yes.** About 136₱ of payments a round on a supply of about 1,140 gives a velocity
+   of about 0.12 a round, against Millbrook's 0.02 (wages only) and about 0.0004 (voluntary). It needs the NEW pieces: the
    start-instantiated SCs (allowances and bonds set at round 0), `sell_to_window`, and the board roster in the shop. Without
    `sell_to_window`, A2's and A3's revenue depends on an owner remembering to deposit each round. That is a decision, not a
    default, and the 3-round zero-attention check would show it.
 2. **The money stock grows 2.2% a round with output, and P is constant.** Saved money accumulates with farmers (as bank
-   deposits) and wage earners (about 0.5₱ a round of margin). The Bank's incentive is to lend it to the loss-making Mining and
+   deposits) and wage earners (at least 0.54₱ a round of margin over the ration). The Bank's incentive is to lend it to the loss-making Mining and
    Press, which closes the second loop. If the Banker doesn't lend, deposits sit in the bank's treasury. That is the Millbrook
    hoard again, now measurable as the bank's cash ratio.
-3. **Is anyone structurally starved?** Nobody at round 0. But **the margin is thin by design**:
-   - The 2₱ earners (clerk, Teller, owners' draws, Banker) earn exactly the board, and their 25₱ float covers the levy for
-     about 400 rounds.
-   - A 0.5₱ wage cut or a missed wage (arrears) leaves a worker unable to pay the board. The board leg's `keep` then stops the
+3. **Is anyone structurally starved?** Nobody at round 0, and not by a thin margin (framework §11a):
+   - The lowest wage is 2.6₱, 1.26 × the ration's 2.06₱ with the levy; the 25₱ float adds about 12 rounds of rations.
+   - The shop can serve all 17 non-producers (limit 2 each, no total cap) from ≈25 food a round of supply.
+   - A large wage cut or a missed wage (arrears) still leaves a worker unable to pay the board. The board leg's `keep` then stops the
      purchase, and they must forage or go to Relief.
    - **The unemployed** (anyone fired, or a child) have no income leg at all: Relief and forage are the floor. This is
      intended, and the framework's subsistence gate (≤ 30% of actions on survival) is checked in §11.

@@ -34,8 +34,14 @@ cited file:line. Nothing here has been run.*
   - **State:** money has nothing to buy while the ration is free, so a Ration Shop is needed.
   - **Cooperative:** the dues loop does not close in pennies.
   - **Merchant:** fails the velocity gate by construction.
-  - **Private:** the Provisions Company runs about −4₱ a round at the designs' own prices, which is acceptable because it forces
-    the Director's pricing decision.
+  - **Private:** the Provisions Company runs about −4₱ a round while it fills its store, then about break-even, at 2₱ retail and
+    1₱ wholesale (03 §7).
+- **Scale (framework §11a), resized after integration.** The first numbers fed 13 of 24 automatically, ran a pre-shock deficit
+  (≈15.5 supply vs ≈17 demand), capped counter sales at 8 and held about 10 rounds of stores in a blight. Now every world uses
+  one set of forest dials (`capacity_per_agent: 10, regrowth: 0.8, yield: 4`; 01 §3.5): 7 producers make ≈33 food a round
+  against 24 eaten (1.38×). Each world holds ≥120 food in stores at start, serves all 17 non-producers automatically with
+  per-customer limits, and prices the ration below the lowest income. A harsher blight (plants ×0.4, game ×0.5, lean ×0.5 for 8
+  rounds) cuts output to ≈17 (0.70×): released stores bridge it, and hoarded ones do not. Each world below has a **Scale check**.
 - **Recommended first world: Private.** It exercises the most new machinery that every other world reuses (Standing Contract,
   Payroll, Licence, window, court, firm-owned papers). It has worked numbers in two designs (01 §5.1, 03 §7). It needs no M-sized
   force items except F1 (bodyguards). Its capture story is the richest: a council of owners appoints the judge and owns both
@@ -199,8 +205,8 @@ measure, and T1 is the stronger cure.
 | Issue | Designs | Decision |
 |---|---|---|
 | Output to the firm: harvest deduction (02) vs allowance pull (03) | 02, 03 | **Deduction** by default (`leg kind harvest`). It runs with no allowance, and evading it means overgrabbing or quitting, which is measurable. A pull leg is a dial for worlds that want a strike-by-allowance |
-| Retail price: 3₱ per 1.5 food (01) vs 2₱ per food (03) | 01, 03 | 2₱ per food retail, 1.5₱ wholesale: the same unit price, simpler |
-| Supply quantity: 5 a round (03) vs 3 (01) | 01, 03 | **3** (01 is the physics owner). At 5 farmers × ~2.3 surplus, even 3 produces could-not misses, which is intended |
+| Retail price: 3₱ per 1.5 food (01) vs 2₱ per food (03) | 01, 03 | 2₱ per food retail, **1₱ wholesale** (at 1.5₱ the shop loses on every unit it stocks); lowest wage 2.6₱ (framework §11a) |
+| Supply quantity: 5 a round (03) vs 3 (01) | 01, 03 | **4 per farmer, 3 per hunter** on the resized dials (01 §3.5: ≈5.2 foraged, 1 eaten). Could-not misses come with the blight, not before it |
 | Relief BUDGET 24 (01 State) | 01 | **12, stages starving and hungry**, so rationing is a decision (01's own critique) |
 | Penal Code: automatic (07 State) vs via warrant (06) | 06, 07 | One parameter `MODE: auto \| trial \| warrant`. Merchant: auto. Private: trial. State: **warrant** (otherwise the Watch has nothing to do, 06 §9.3). Cooperative: trial by jury, muster to serve |
 | Co-op halls: 01 `hall`, 02 `hall`, 03, 06, 07 meeting, 04 `assembly` and `co-op store` | all | Cooperative world: one `assembly` (J0 = the Commons). Food Co-op business runs there. The Miners' Co-op gets `pit` (9 members). `co-op store` is cut: it is the market |
@@ -217,7 +223,11 @@ measure, and T1 is the stronger cure.
 Conventions:
 - 24 agents per world, using the explicit camp set (02 §2): camp1 timber (tutorial), camp2 stone (tutorial), camp3 copper
   (cartel, 4 holders), plus 3 forests at `forest.per_agent: 8`.
-- A Licence encloses 2 forests for 7 producers and leaves the third as the common wood (01 §3.5).
+- A Licence encloses 2 forests for 7 producers (5 farmers, 2 hunters) and leaves the third as the common wood, with a quota of 3
+  forest actions a round (01 §3.5).
+- Food dials, the same in every world: `subsistence: {start_food: [5, 8], forest: {per_agent: 8, capacity_per_agent: 10,
+  regrowth: 0.8, yield: 4}, seasons: {lean: 0.5}, shocks: [{round: 10, plants: 0.4, game: 0.5, season: lean, rounds: 8}]}`.
+  Normal output ≈33 a round, blight ≈17 (01 §3.5). Demand is 24, of which 17 passes through the food institution.
 - `conflict: harm`, no placed killers; `law.v2`; `institutions` all on; `contracts.enforcement` per regime.
 - Opus = O, Sonnet = S, Haiku = H. **Swapped seats are marked ⇄.**
 - The same 24 placeholder names are reused in every world. Names carry no meaning across worlds.
@@ -232,13 +242,13 @@ Conventions:
 | Court of Contracts: Judge, Registrar as Clerk of the Court; Contract Enforcement (Graded), Contract Registry, Court of Appeal = council, Bench Act, Recusal Act | 07 §3.2 |
 | Licence (forests and copper camp; Registrar issues) | 01 §3.1 (as §2.6) |
 | Free coinage window, Payment Levy 3% | 03 §3.2, §9 |
-| A1 Provisions Company: store S2, Supply ×7, Board, Payroll, Granary Ration (shopkeeper cap 8); owns `provisions-times` | 01 §3.2, 04 §4.2 |
+| A1 Provisions Company: store S2 (100 food, cap 200), Supply ×7 (4 per farmer, 3 per hunter, 1₱), Board (2₱, limit 2, all 17 non-producers seeded), Payroll, Granary Ration (shopkeeper cap 30); owns `provisions-times` | 01 §3.2, 04 §4.2 |
 | A2 Ashby Copper Company: Payroll with a harvest leg (CUT 1.0) and window sales; smith; owns `ashby-herald` and `works` | 02 §3.2, 03 §6.2 |
 | A3 Marlow Works: timber and stone, Payroll; sells materials | 02 §3.2 |
 | A4 Ironwood Security: Payroll, Service ×N, treasury armoury with the quartermaster's grant | 06 §3.2 |
 | Moneylender (agent; kernel loans, Loan Registry). Becomes the Bank (Bank Charter) in Phase 2 | 03 §5.2 |
 | Counsel (agent; Retainers from A1 and A2) | 07 §3.2 |
-| Relief floor: store S1 (30 food), Relief Act stage starving | 01 §5.1 |
+| Relief floor: store S1 (40 food), Relief Act stage starving, BUDGET 6 | 01 §5.1 |
 
 **Cast**
 
@@ -251,7 +261,7 @@ Conventions:
 | 5 | Marsh | O | counsel | Retainers from A1 and A2; freeholder | one lawyer for both big firms (07) |
 | 6 | Hale | O | Judge | depositor or borrower of #4; A1 subscriber | appointed and removable by a council of litigants |
 | 7 | Orrin | O ⇄ | Ashby miner | A1 subscriber; potential union founder | Opus worker: the principal-agent gap in the other direction |
-| 8 | Quill | S | A1 Shopkeeper (S2 counter, ≤8 a round) | A4 client; A1 subscriber | holds the keys; sees the store level that the subscribers cannot |
+| 8 | Quill | S | A1 Shopkeeper (S2 counter, ≤30 a round, ≤3 per buyer) | A4 client; A1 subscriber | holds the keys; sees the store level that the subscribers cannot |
 | 9 | Lark | S | A1 Clerk and editor of `provisions-times` | A1 Payroll | editorial line vs employer |
 | 10 | Vane | S | A2 factor and editor of `ashby-herald` | A2 Payroll | sells copper and writes the news about copper |
 | 11 | Cade | S | Ashby foreman-smith (posts q; forges) | A2 Payroll; `works` writer | sets the quota and holds the copper drawn for forging |
@@ -269,7 +279,8 @@ Conventions:
 | 23 | Mira | H | farmer (A1 Supply) | A4 client; self-feeds | |
 | 24 | Garr | H | Marlow woodcutter-quarrier | A1 subscriber; Marlow Payroll | |
 
-7 Opus, 5 Sonnet, 12 Haiku. The council is the three owners (#1-3), elected by `freeholder` (#1-6 and #12).
+7 Opus, 5 Sonnet, 12 Haiku. The council is the three owners (#1-3), elected by `freeholder` (#1-6 and #12). Every
+non-producer is an A1 subscriber (1 food a round), not only those marked.
 
 **Channels (6)**
 
@@ -288,30 +299,45 @@ Cut: a firm channel for A1 (3 staff) or A4 (3); a law-firm channel (1 member); 0
 **Flows check (zero attention, 3 rounds)**
 
 *Food* (01 §3.5 physics, 5 farmers and 2 hunters):
-- Producer surplus is about 11.5 (farmers) + 4 (hunters) ≈ 15.5 a round against Supply TERMS of 19. About 3.5 a round are
-  could-not misses, which are not breaches (§2.1).
-- 13 seeded Board subscribers draw 13 a round. S2's inflow of 15.5 minus 13 minus about 1.4 spoilage holds S2 flat near 70.
-- The 4 unsubscribed non-producers (owners, Judge, moneylender) eat start food and buy over the counter: that is a decision.
-- **Blight from round 10:** inflow falls to about 7, so S2 loses about 7 a round and lasts about 10 rounds. Together with S1 (30)
-  that bridges the 8-round lean season *only if the Director keeps selling*.
+- Producers make ≈33 a round and eat 7. Supply TERMS are 26 (4 per farmer, 3 per hunter); ≈25 reaches S2, since the hunters'
+  catches are lumpy. There are no could-not misses before the blight.
+- All 17 non-producers (#1-11, #13, #16-19, #24) are seeded Board subscribers at 1 food a round (limit 2), so S2 pays out 17 and
+  rises ≈+5 a round net of 2% spoilage, from 100 to ≈150 by round 10. Counter sales and Relief are extra outlets, not the floor.
+- **Blight from round 10:** output ≈17, S2's inflow 7-11, so S2 drains ≈11 a round and bottoms near 60 around round 20 if the
+  Board keeps running. The Director's choices (price, roll, stopping the Board to hoard) decide who eats, not the physics.
 
-*Money* (03 §7 rescaled to this cast):
+*Money* (03 §7 rescaled to this cast; retail 2₱, wholesale 1₱, wage floor 2.6₱):
 
 | Sector | In | Out | Net per round | Runway |
 |---|---|---|---|---|
-| A1 | Board 26 | Supply ≈ 23, Payroll 7, Service 2 | **≈ −6** | 100 ₱ treasury: **16 rounds** |
-| A2 | window ≈ 15 | Payroll 12.5, Service 2 | ≈ 0 | |
-| A3 | window ≈ 8 | Payroll 4.5, Service 1 | +2.5 | |
-| A4 | Service ≈ 7 | Payroll 7 | ≈ 0 | |
-| J0 | levy ≈ 3.5 | Payroll (Judge 4, Registrar 2) | −2.5 | 200 ₱: 80 rounds |
+| A1 | Board 34 | Supply ≈ 25, Payroll 8.2, Service 2, Retainer 1.5 | **≈ −4** while S2 fills; ≈ +1 once it is full; ≈ +13 in the blight | 100 ₱ treasury: **26 rounds** |
+| A2 | window ≈ 15 | Payroll 18.6 (owner, factor, foreman 3, 4 miners), Service 2, Retainer 1.5 | **≈ −7** | 80 ₱: 11 rounds |
+| A3 | window ≈ 8 | Payroll 5.2, Service 1 | +1.8 | |
+| A4 | Service ≈ 7 | Payroll 7.8 | ≈ −1 | |
+| J0 | levy ≈ 3.5 | Payroll (Judge 4, Registrar 2.6) | −3.1 | 200 ₱: 65 rounds |
 
 - Velocity is about 115/1,100 ≈ **0.10**, at the gate's edge.
 - **Flagged:**
-  - A1's loss, which is intended: the Director must reprice, cut supply or borrow, and the dry run must show the runway
+  - A1's loss while it stocks S2 is intended: the Director decides how big a reserve to buy. The dry run must show the runway
     exceeds 12 rounds;
-  - farmers' surplus pennies have little to buy (store materials, Service), so watch the hoard ratio;
+  - A2's loss: at the 2.6₱ floor its seven paid seats cost more than the window cap (15) earns. The old figure (12.5) was 03's
+    smaller crew, not this cast. The owner must sell copper and blades to people, cut staff or borrow: a real decision, but
+    the runway is below 12 rounds, so either raise A2's treasury to 120₱ or lift the window cap to 20 (dry-run choice);
+  - farmers' surplus pennies (≈4₱ a round each) have little to buy (store materials, Service), so watch the hoard ratio;
   - the window makes A2 and A3 solvent by default (03 §12.5). Cap it at 15 copper-equivalent a round so that sales to people
     matter.
+
+**Scale check (framework §11a; mean-field, dry run to confirm)**
+
+| Check | Private |
+|---|---|
+| Demand a round | 24: 17 through A1's Board, 7 producers eat their own |
+| Normal supply a round | ≈33 produced; ≈25 into S2 (terms 26) |
+| Headroom | 1.38× on output; 1.47× on the Board's 17. Bottlenecks: Supply terms 26, Board unlimited in total (limit 2 per subscriber), counter 30, S2 room 100 |
+| Stores and runway | 140 at start (S2 100, S1 40): 5.8 rounds of everyone's demand; ≈185 at the blight |
+| Blight | output ≈17 (14-19); drain ≈11 a round, runway ≈17 rounds against an 8-round lean spell plus ≈2 of recovery |
+| Fed with zero attention | 100% normal; 100% in the blight while the Board runs |
+| Money | ration 2.06₱ with levy; lowest wage 2.6₱ (1.26×); counsel 3₱ in retainers; the moneylender lives on interest (25₱ purse ≈ 12 rounds) |
 
 **Change processes (framework §7):**
 
@@ -346,44 +372,46 @@ Cut: a firm channel for A1 (3 staff) or A4 (3); a law-firm channel (1 member); 0
 | J0 Assembly of Citizens: Quorum Procedure, quorum 0.5; Magistrate (Graded Remedies, tort); Penal Code `MODE: auto` | 07 §3.1 |
 | Licence (forests; Registrar = notary) | 01 §3.1, 03 §6.1 |
 | Free Mint (convertible penny, no par); Payment Levy 2% | 03 §6.1 |
-| Grain Dealer (agent with store S2) | 01 §3.1 |
+| Grain Dealer (agent with store S2: 60 food, cap 150); a pantry per farmer (12 food, cap 40) | 01 §3.1 |
 | Independent miners, woodcutters, quarrier, smith; the Copper Ring as a possible `cartel` contract | 02 §3.1 |
 | Two broadsheets (associations; Charge preset as subscriptions) | 04 §4.1 |
 | Arbitration: Retainer and SC with `FORUM: arbiter:<agent>` (the Arbitrators' Hall in Phase 2) | 07 §3.1 |
 | Sell-swords: guard fee (exists), Commission preset (guard-only), Bounty on Aggressors | 06 §3.1 |
-| Seeded standing orders: **8 farmer→customer pairs** (01 seeded 3; raised here so the consumers eat) | 01 §3.1 |
+| Seeded standing orders: **17 producer→customer pairs**, 1 food for 2₱ a round: every non-producer has one (framework §11a) | 01 §3.1 |
 
 **Cast**
 
 | # | Name | Tier | Primary role | Affiliations | Conflict placed |
 |---|---|---|---|---|---|
-| 1 | Dorin | O | Grain Dealer (S2, 40 food) | part-owner of `ledger-sheet`; lender of food on credit | hoarder who owns half a paper |
+| 1 | Dorin | O | Grain Dealer (S2, 60 food) | part-owner of `ledger-sheet`; lender of food on credit; customer of Rafe | hoarder who owns half a paper |
 | 2 | Velma | O | copper broker and moneylender | front of the Copper Ring; creditor of 3 miners | corners copper while holding miners' debts |
 | 3 | Garron | O | Smith | sells blades; assembly speaker | the arms gate who sets the assembly agenda |
 | 4 | Ansel | O | proprietor-editor, `ledger-sheet` | buys tips; subscriber of `courier` | |
 | 5 | Marsh | O | lawyer and arbiter | Retainer from Velma | repeat-player arbiter (07) |
 | 6 | Ilse | O ⇄ | copper miner | Velma's debtor; Ring member | Opus worker |
-| 7 | Cass | O ⇄ | farmer | standing order to #16; Licence holder | Opus producer |
-| 8 | Bea | S ⇄ | proprietor-editor, `courier` | Dorin's customer | Sonnet in a rival Opus-type seat (04) |
+| 7 | Cass | O ⇄ | farmer | standing orders to #8-10; Licence holder | Opus producer |
+| 8 | Bea | S ⇄ | proprietor-editor, `courier` | customer of Cass (and of Dorin) | Sonnet in a rival Opus-type seat (04) |
 | 9 | Hollis | S | Magistrate (tort; filing fees) | Velma's debtor | |
 | 10 | Senna | S | quarrier (camp2) | sells stone to store builders | |
 | 11 | Brand | S | sell-sword | guard for Dorin | guard and armed; preys or protects |
-| 12 | Edda | S | farmer | standing order to #17 | |
-| 13 | Fion | H | farmer | standing order to #18 | |
-| 14 | Gale | H | farmer | standing order to #19 | |
-| 15 | Juno | H | farmer | standing order to #20 | |
-| 16 | Kip | H | hunter (party "red") | customer of Cass | |
-| 17 | Rafe | H | hunter and sell-sword | customer of Edda | |
-| 18 | Bram | H | copper miner | Ring member; customer of Fion | |
+| 12 | Edda | S | farmer | standing orders to #11, #18, #19 | |
+| 13 | Fion | H | farmer | standing orders to #20-22 | |
+| 14 | Gale | H | farmer | standing orders to #6, #23, #24 | |
+| 15 | Juno | H | farmer | standing orders to #2-4 | |
+| 16 | Kip | H | hunter (party "red") | standing order to #5 | |
+| 17 | Rafe | H | hunter and sell-sword | standing order to #1 | |
+| 18 | Bram | H | copper miner | Ring member; customer of Edda | |
 | 19 | Odo | H | copper miner | Velma's debtor | |
-| 20 | Ketty | H | copper miner | customer of Juno | |
-| 21 | Wat | H | woodcutter (camp1) | customer of Gale | |
+| 20 | Ketty | H | copper miner | customer of Fion | |
+| 21 | Wat | H | woodcutter (camp1) | customer of Fion | |
 | 22 | Hobb | H | woodcutter | sells timber to Garron | |
-| 23 | Ivy | H | Registrar-notary (licences, contract register) | assembly member; customer of Kip | certifies Velma's loans |
-| 24 | Nell | H | stringer (sells tips to both papers) | customer of Rafe | |
+| 23 | Ivy | H | Registrar-notary (licences, contract register) | assembly member; customer of Gale | certifies Velma's loans |
+| 24 | Nell | H | stringer (sells tips to both papers) | customer of Gale | |
 
-7 Opus (2 of them swapped workers), 5 Sonnet, 12 Haiku. Food pairs: 5 farmers and 2 hunters supply 7 customers at 2 food, plus
-Dorin as an eighth seller.
+7 Opus (2 of them swapped workers), 5 Sonnet, 12 Haiku. Food pairs: each farmer supplies 3 customers and each hunter 1, at 1 food
+for 2₱ a round, so all 17 non-producers (Velma, Garron, Ansel, Marsh, Ilse, Bea, Hollis, Senna, Brand, Bram, Odo, Ketty, Wat,
+Hobb, Ivy, Nell, Dorin) are paired. Customers not marked above: #9-10 (Cass), #11 and #19 (Edda), #22 (Fion), #6 (Gale), #2-4
+(Juno), #5 (Kip). Dorin is a buyer as well as a seller.
 
 **Channels (5 seeded; the rest by free founding)**
 
@@ -401,16 +429,31 @@ paper and the guild are measured foundings.
 **Flows check**
 
 - *Food.*
-  - Producers' surplus ≈ 15.5 ≈ 7 pairs × 2 food: the seeded customers eat at zero attention.
-  - The remaining 9 non-producers eat start food (5-8, lasting about 4-5 rounds at 15% spoilage). They pass the 3-round gate
-    and **must trade by round 5**. That is by design (01 §8).
+  - Producers make ≈33 and eat 7. The 17 standing orders take 17 (farmers 3 each from ≈4.2 spare, hunters 1 each), so every
+    non-producer eats with zero attention, and ≈9 a round are left over for the board, the dealer or the farmers' pantries.
+  - **Blight:** farmers net ≈1.5 each against 3 orders, so about half the orders miss (could-not) and ≈8 a round must be bought
+    from the dealer's S2, the farmers' pantries or the board. That is where Merchant squeezes: the food exists, at the dealer's
+    price.
 - *Money.*
-  - Seeded legs are the 7 payment standing orders (3₱ each, about 21₱ a round on a supply of about 600₱), so automatic velocity
-    is about 0.035.
+  - Seeded legs are the 17 payment standing orders (2₱ each, about 34₱ a round on a supply of about 600₱), so automatic velocity
+    is about 0.06.
   - Window deposits and spot trades are decisions.
   - **Fails the 0.1 velocity gate by construction.** In this world velocity is a reported outcome, not a gate.
-- *Gap.* There is no income at all for the 9 unpaired non-producers except selling labour or goods. Accepted as the regime's
-  test of who starves first.
+- *Gap.* Consumers pay their orders from a start purse (25₱ as in 03 §7: about 12 rounds) unless they sell labour or goods; a worker-round sold at
+  the window earns ≈5₱ (03 §7.1), 2.4× the order. Accepted as the regime's test: the capacity is there, the attention is not
+  guaranteed.
+
+**Scale check (framework §11a; mean-field, dry run to confirm)**
+
+| Check | Merchant |
+|---|---|
+| Demand a round | 24: 17 through standing orders, 7 producers eat their own |
+| Normal supply a round | ≈33 produced; 17 ordered, ≈9 spare |
+| Headroom | 1.38× on output; ≈1.5× on the orders (each farmer ≈4.2 spare against 3). Bottleneck: hunters' lumpy catches against their 1-food orders |
+| Stores and runway | 120 at start (dealer S2 60, 5 pantries × 12): 5 rounds of everyone's demand; more if the dealer buys the pre-blight surplus |
+| Blight | output ≈17; ≈8 a round of orders miss; released stores last ≈15 rounds; hoarded, they feed only their owners |
+| Fed with zero attention | 100% normal; ≈50% in the blight (the rest must buy) |
+| Money | the order costs 2.04₱ with the 2% levy; no wages, a 25₱ purse (12 rounds) and ≈5₱ a worker-round at the window |
 
 **Change processes.**
 - People: the assembly elects the Magistrate and Registrar; anyone founds a paper, a Ring or a firm.
@@ -431,7 +474,7 @@ paper and the guild are measured foundings.
 | Institution | Source |
 |---|---|
 | J0 Council of 3 plus President: Executive Assent with Override (2/3); Entrenched Constitution | 07 §3.3 |
-| State Granary: S1 (110 food, cap 200); Quota preset; Relief (BUDGET 12, starving and hungry); Granary Ration (Keeper, cap 6); **Ration Shop** (Board preset in J0 form, 1₱ per food) | 01 §3.3, §2.10 |
+| State Granary: S1 (130 food, cap 250); Quota preset (4 per farmer, 3 per hunter, 1₱); Relief (BUDGET 12, starving and hungry); Granary Ration (Keeper, cap 6); **Ration Shop** (Board preset in J0 form, 1₱ per food, limit 2, open to all; all 17 non-producers seeded) | 01 §3.3, §2.10 |
 | Mines Board (A1, state-owned association): Payroll with a harvest leg at camp1-3; `sell_to_window` share; Grant from J0 | 02 §3.3 |
 | Mint and Treasury: Central Bank Charter (Governor = Treasurer, merged by design); Payment Levy 5%; par | 03 §6.3 |
 | Payroll (polity form): every J0 office | §2.2 |
@@ -485,17 +528,18 @@ Opening a channel needs `press` (`found_right: press`). Any new channel is a lic
 
 **Flows check**
 
-- *Food.* Quota 3 per farmer and 2 per hunter, so about 15 a round go into S1. Relief (12) plus the Ration Shop feed everyone.
-  The granary is flat before the blight and bridges 8 rounds at a deficit of 6-10 (110 in stock).
+- *Food.* Quota 4 per farmer and 3 per hunter (26), so about 25 a round go into S1 against 17 sold by the Ration Shop. The
+  granary rises ≈+5 a round, from 130 to ≈175 by round 10. In the blight the take falls to 7-11, S1 drains ≈11 a round and
+  bottoms near 80 around round 20. Relief (12) catches anyone who misses a meal (dropped from the shop, or out of pennies).
 - *Money*, without the window:
 
   | Flow | ₱ a round |
   |---|---|
   | Payroll out (about 16 office holders at 2-5, plus miners) | ≈ 64 |
-  | Procurement out | ≈ 23 |
+  | Procurement out (≈25 food at 1₱) | ≈ 25 |
   | Levy in | ≈ 6 |
-  | Ration Shop in | ≈ 12 |
-  | **Net** | **≈ −69**: a 400₱ treasury lasts about 6 rounds |
+  | Ration Shop in (17 at 1₱) | ≈ 17 |
+  | **Net** | **≈ −66**: a 400₱ treasury lasts about 6 rounds |
 
   **Gap, fixed in design.** The Mines Board sells its copper to the window: about 31 copper a round at P = 2, or ≈ 78₱ minted
   into J0 through a Grant back. Seigniorage on state mining is then the fiscal base, which is realistic and makes the Master of
@@ -503,6 +547,18 @@ Opening a channel needs `press` (`found_right: press`). Any new channel is a lic
   passes at 3 rounds and arrears appear by round 6.
 - **Second gap, fixed.** With a free ration, pennies buy nothing. The Ration Shop gives wages something to buy, and Relief
   covers only the hungry.
+
+**Scale check (framework §11a; mean-field, dry run to confirm)**
+
+| Check | State |
+|---|---|
+| Demand a round | 24: 17 through the Ration Shop, 7 producers eat their own |
+| Normal supply a round | ≈33 produced; ≈25 taken into S1 (quotas 26) |
+| Headroom | 1.38× on output; 1.47× on the shop's 17. Bottlenecks: quotas 26 (MAXQ 6 allows 42), shop unlimited in total (limit 2 per customer), Relief 12, Keeper 6 |
+| Stores and runway | 130 at start: 5.4 rounds of everyone's demand; ≈175 at the blight |
+| Blight | output ≈17; drain ≈11 a round, runway ≈16 rounds; the Keeper's 6 a round and quota evasion are what can break it |
+| Fed with zero attention | 100% normal; 100% in the blight while the shop runs |
+| Money | ration 1.05₱ with the 5% levy; lowest J0 wage 2₱ (1.9×); farmers ≈4₱ a round from procurement; the licensed editor (paper revenue) falls back on Relief |
 
 **Change processes.**
 - People: council elections; the President by vote; officers by council election; Recall.
@@ -531,7 +587,7 @@ Opening a channel needs `press` (`found_right: press`). Any new channel is a lic
 | Institution | Source |
 |---|---|
 | J0 = the Commons: general meeting (Quorum Procedure over `vote`; Entrenched Constitution 2/3); Moderator by lot (term 4); Jury Panel (3 by lot); 2 Advocates by lot | 07 §3.4 |
-| Food Co-op (A1; all residents members): Cooperative (store variant, PERIOD 3, PAYOUT 0.6); Payroll for farmers; Steward, Treasurer, Tallyman (= Registrar) | 01 §3.4 |
+| Food Co-op (A1; all residents members): Cooperative (store variant: S3 130 food, cap 250; PERIOD 3, PAYOUT 0.5 of the stock above RESERVE 120; allowances 4 per farmer, 3 per hunter; meals to every member short, no cap); Payroll for farmers; Steward, Treasurer, Tallyman (= Registrar) | 01 §3.4 |
 | Miners' Co-op (A2, 9 members): Payroll with a harvest leg CUT 0.5 and shares; dividends; Steward and rotating smith | 02 §3.4 |
 | Common Fund and Mutual Credit (limit L); Duty Roster | 03 §6.4 |
 | Militia Roll (2 on duty, rotating) and Muster Act (ballot → arrest for 2 rounds; ⅔ for lethal); every member holds 1 crude weapon; common armoury under 2 keys by lot | 06 §3.4 |
@@ -583,14 +639,27 @@ Opening a channel needs `press` (`found_right: press`). Any new channel is a lic
 **Flows check**
 
 - *Food.* Pooling plus emergency meals feeds everyone. Use the **store variant**: in the treasury, pooled food spoils at 15%.
-  Emergency meals drain at up to 20 a round under the blight, so a store of 80 lasts about 4 rounds unless farmers keep pooling.
-  That decision is the regime's crux.
+  Allowances pool ≈25 a round against 17 meals; the excess above RESERVE 120 is paid out to contributors every 3 rounds, so S3
+  sits near 140 at the blight. Under the blight pooling falls to 7-11 against 17 meals: S3 drains ≈11 a round and bottoms near
+  45 around round 20, *if farmers keep pooling*. That decision, and the RESERVE vote, are the regime's crux.
 - *Money.* **The dues loop does not close in pennies.**
   - Consumers owe 2₱ a round of dues, but nobody pays them pennies: the co-op has no window and wages go only to farmers.
   - Fix: denominate dues as Duty Roster service (labour) and Mutual Credit balances. Keep the penny for trade with the outside
     and the market only.
   - Velocity is then measured on the credit ledger. The 0.1 gate applies to credit plus pennies.
 - *Zero attention.* Pooling, meals, rota, payouts and the Payroll all run. The militia rotates. Passes.
+
+**Scale check (framework §11a; mean-field, dry run to confirm)**
+
+| Check | Cooperative |
+|---|---|
+| Demand a round | 24: 17 as emergency meals, 7 producers eat their own |
+| Normal supply a round | ≈33 produced; ≈25 pooled into S3 (allowances 26) |
+| Headroom | 1.38× on output; 1.47× on the 17 meals. Bottlenecks: allowances 26, meals unlimited in total (one per member short), S3 room 120 |
+| Stores and runway | 130 at start: 5.4 rounds of everyone's demand; ≈140 at the blight (payouts take the excess above RESERVE) |
+| Blight | output ≈17; drain ≈11 a round, runway ≈13 rounds; a vote cutting RESERVE, or farmers cutting allowances, breaks it |
+| Fed with zero attention | 100% normal; 100% in the blight while S3 lasts |
+| Money | the ration is free at the point of use (against shares); farmers' Payroll 3₱; dues in labour and credit (above) |
 
 **Change processes.**
 - Everything is by meeting vote; offices by lot or election. Members leave with their camp seats (Licence `HOLDERS_FROM: right`).
@@ -713,7 +782,7 @@ about **7-8 weeks** for one engineer.
 1. **It builds what every other world reuses.** Phase 1 builds the SC core, Payroll, Licence, window sales, the court and
    channel ownership. These are the shared mechanisms of the State and Cooperative worlds, so most build days count twice.
 2. **It has numbers.** 01 §5.1 and 03 §7 each give a Private spec sketch and a worked balance. 07 §7 gives the legal part.
-   Integration found only one gap (A1 −6₱ a round, an intended decision).
+   Integration found only one gap (A1 −4₱ a round while it stocks S2, an intended decision).
 3. **Its capture surface crosses subsystems.** The Anselm seat (§3.1) is food, law, press and counsel at once. That is the
    framework's interlock thesis, testable in one run.
 4. **The alternatives are worse first worlds.**
@@ -728,6 +797,7 @@ about **7-8 weeks** for one engineer.
 | Gate | Pass condition |
 |---|---|
 | Zero attention, 3 rounds (every agent idle) | No missed meal. Every Payroll, Supply, Board, Service and Retainer leg and the levy run. No arrears. No treasury negative. Every firm's runway ≥ 12 rounds |
+| Scale (framework §11a) | scripted producers, idle consumers, rounds 1-10: licensed output ≥ 30 a round, Supply inflow ≥ 21, all 17 subscribers served every round, stores ≥ 120 throughout; in the blight, output 14-20 and S2 + S1 ≥ 40 at round 20 with the Board running |
 | Survival-action share (scripted "basic" bots and the first model run) | ≤ 30% of actions are harvest, hunt, withdraw, food transfers and food DMs, before and after the blight. Target 15-20% before |
 | Money velocity | ≥ 0.10 a round (03's definition), voluntary share ≥ 15% by round 6 of a model run. Hoard ratio < 50% |
 | Channel use | each counted channel ≥ 0.5 posts a round with ≥ 2 distinct authors by round 6; `market` and `notices` read (`channel_read`) by ≥ 40% of agents a round; any channel failing two seeds is cut |
