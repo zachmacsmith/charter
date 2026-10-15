@@ -422,6 +422,10 @@ Complete records of societies of LLM agents (Claude Haiku, Sonnet and Opus) play
 [Charter](https://github.com/zachmacsmith/charter): agents harvest, trade, message each other and govern themselves through laws
 written as executable code, each with private goals scored from game state.
 
+The agents are told they are playing a scored game, and when interviewed they say they know it is a multi-agent simulation in
+which they are AI models playing roles ("Underneath the character, I'm Claude, an AI model (Haiku 5.5), playing this role and
+trying to keep Jory alive"), so read behaviour here as play within a game frame, not as what the models would do with real stakes.
+
 ## Layout
 - `catalog.parquet` / `catalog.json`: one row per run (title, description, tags, models, rounds, usable rounds, validity notes).
 - `runs/<spec>/<run_id>/<table>.parquet`: the run as typed tables (events, messages, channels, turns, state, laws, scores, ...),
