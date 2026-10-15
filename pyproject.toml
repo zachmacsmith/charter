@@ -13,6 +13,7 @@ dependencies = ["pyyaml>=6"]
 
 [project.optional-dependencies]
 api = ["anthropic>=0.70"]          # LLM_BACKEND=api; claude_code needs the `claude` CLI instead
+publish = ["pyarrow>=14", "huggingface_hub>=0.23"]   # charter export --format parquet; charter publish --push (HF_TOKEN)
 dev = ["pytest", "pytest-xdist"]        # python -m pytest -n auto (see README, Tests)
 
 [tool.setuptools.packages.find]
