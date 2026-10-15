@@ -65,6 +65,10 @@ that bumps the major), and the tables below `scores`:
   write-back, `record` from records-<store>.md. Run-scoped stores are not on disk and are not exported.
 - **`attacks`** (minor 5): one row per attack under the harm combat model (conflict.model, docs/review/21_combat.md), from its
   monitor-only `attack_outcome` event: strengths, odds, the roll, the outcome and the target's blow.
+- **`interviews`** (minor 6): every answer stored under `<run>/interviews/` by `python -m charter interview` (charter/interview.py,
+  docs/interview.md): one row per agent, question and sample, with the parsed answer, the prompt's sha and whether the rebuilt
+  context matched the run's recorded prompts. Interviews stored elsewhere (`--out`) are not exported. With `--with-prompts`,
+  `blobs` also holds each interview's whole prompt (kind `interview_prompt`).
 - **`event_types`**: the registry as the exporting code has it, with each type's count in the run (unregistered types seen in
   the log get a row with only `n_events`).
 
@@ -72,7 +76,7 @@ Not yet exported: `state_deltas` (per-round snapshot diffs) and `observer_assess
 
 ## Tables
 
-Dataset schema version **2.5** (`schema_version` 2, `schema_minor` 5). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
+Dataset schema version **2.6** (`schema_version` 2, `schema_minor` 6). Types: `str`, `int`, `float`, `bool`, `json` (JSON text). Every column may be null.
 
 ### `runs`
 
@@ -460,7 +464,7 @@ Dataset schema version **2.5** (`schema_version` 2, `schema_minor` 5). Types: `s
 |---|---|---|
 | `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
 | `blob_sha` | str | sha of the text (16 hex digits) |
-| `kind` | str | prompt |
+| `kind` | str | prompt (a turn prompt), or interview_prompt (an interview's whole prompt: <run>/interviews/*.prompts.jsonl) |
 | `chars` | int | length of the text |
 | `text` | str | the text |
 
@@ -519,6 +523,36 @@ Dataset schema version **2.5** (`schema_version` 2, `schema_minor` 5). Types: `s
 | `counter_effect` | str | kill or wound (of the lead attacker), when it landed |
 | `covert` | bool | an unseen strike (the assassin) |
 | `lawful` | bool | lawful force |
+
+### `interviews`
+
+| column | type | meaning |
+|---|---|---|
+| `run_id` | str | the run's id (run.json run_id, else the directory name; made unique within an export) |
+| `interview_id` | str | the interview (<run>/interviews/<id>.jsonl; charter/interview.py, docs/interview.md) |
+| `round` | int | round (0-based) whose context the agent was asked in |
+| `at` | str | end (after the agent's last call of the round) or start (before its decide call) |
+| `agent` | str | agent asked |
+| `model` | str | model that answered (the agent's own unless the interview set another) |
+| `backend` | str | api, claude_code, or dry (scripted answers, no model) |
+| `question_id` | str | the question's id within the interview (q1, q2, ... or as given) |
+| `question` | str | the question text |
+| `framing` | str | private, public, none or custom (the preamble before the question) |
+| `schema_json` | json | the JSON schema the answer was asked in |
+| `sample` | int | sample index (0..n-1) of repeated asks with the same prompt |
+| `answer` | str | the parsed reply's `answer` field (as text) |
+| `parsed_json` | json | the parsed reply, cleaned to the schema (enum case, numbers) |
+| `raw` | str | the model's raw reply text |
+| `valid` | bool | the reply fits the schema |
+| `error` | str | the call's error, if every attempt failed |
+| `reasoning` | str | thinking text the backend returned (often withheld through the CLI) |
+| `tokens_in` | int | input tokens (usage.input) |
+| `tokens_out` | int | output tokens (usage.output) |
+| `cost_usd` | float | the backend's cost (cc_equiv_usd), else list price x tokens |
+| `prompt_sha` | str | sha of the whole interview prompt (system + conversation + question; joins blobs.blob_sha with --with-prompts) |
+| `system_sha` | str | sha of the system prompt (prompts/system/<sha>.txt of the run) |
+| `context_exact` | bool | the rebuilt context matched every recorded prompt hash of the agent's conversation |
+| `dry` | bool | scripted answers (no model) |
 
 ### `event_types`
 

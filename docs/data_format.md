@@ -281,6 +281,17 @@ law, past}, `institution_escheat` {institution, variant: polity | family | membe
 world state (`k.w["offices"]`, holders and past holders with since, term_end, until and cause), not in the round snapshots, so an
 `offices` table needs a snapshot field first (deferred; the events above carry every change of holder).
 
+### `interviews` (minor 6: one row per agent, question and sample of an interview stored with the run)
+
+Interviews ask agents a question in character at a round, with the exact context they had then, and write nothing back into the
+world or the run's logs: **docs/interview.md** (what context is reproduced and how, the guarantees, the limitations, validating
+question wording). Raw files: `<run>/interviews/<id>.jsonl` (the rows), `<id>.prompts.jsonl` (each distinct interview prompt once:
+system, conversation, interview message) and `<id>.json` (parameters, the reconstruction per agent, totals). The export reads
+`<run>/interviews/` only, so a published run carries the interviews stored in it; columns: docs/export.md. `round` is 0-based
+like every other table; `at` is `end` or `start`; `answer` is the parsed reply's `answer` field as text, `parsed_json` the whole
+parsed reply; `context_exact` false flags a context that differed somewhere from the run's recorded prompt hashes (a run replayed
+under changed code). With `--with-prompts`, `blobs` rows of kind `interview_prompt` hold each whole prompt (`prompt_sha` joins).
+
 ## Layout on Hugging Face (publish's concern, recorded for reference)
 
 `charter publish` (`charter/publish.py`) writes, in one commit to the dataset `zachmacsmith/charter-runs`:
