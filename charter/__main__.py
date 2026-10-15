@@ -3,6 +3,7 @@
   python -m charter generate E3 --seed 4 [--set constitution=council ...]       print / save the drawn world
   python -m charter run E3 --seed 4 [--dry] [--set ...]                          generate, play, score, report -> charter/out/<spec>/E3_seed4_<hash>
   python -m charter resume RUN_DIR [--allow-code-drift]                         continue a stopped or crashed run from its last complete round
+                                                                                 (--allow-code-drift: also when the current code would generate a different world)
   python -m charter rerun RUN_DIR [--out DIR] [--dry-run]                        the run's command again under its recorded git sha (a worktree)
   python -m charter replay RUN_DIR [--to N] [--out DIR]                          re-execute a run from its recorded replies; byte-identical?
   python -m charter rewind RUN_DIR --to N --out NEW_DIR                          a copy of the run after round N, to resume (charter/replay.py)
@@ -192,9 +193,17 @@ def cmd_resume(a):
         inst = generator.generate(saved["spec_source"], saved["seed"], check=False,   # a run made before the schema still resumes
                                   settings=settings)
         inst["run_id"] = saved.get("run_id", out.name)
-        if not _same_instance(out, inst):
-            raise SystemExit(f"{out}: the world generated now differs from instance.json (spec or code changed); cannot resume")
-        source = "regenerated"
+        if _same_instance(out, inst):
+            source = "regenerated"
+        elif getattr(a, "allow_code_drift", False):                   # the world as it was made, played on under the current code
+            inst = saved
+            inst.setdefault("run_id", out.name)
+            inst["settings"] = settings
+            source = "instance.json (--allow-code-drift: the current code would generate a different world)"
+            print(f"[{out.name}] the world generated now differs from instance.json; resuming from instance.json under the current code")
+        else:
+            raise SystemExit(f"{out}: the world generated now differs from instance.json (spec or code changed); cannot resume "
+                             f"(--allow-code-drift resumes the saved world under the current code)")
     else:                                                             # runs from before spec_source: instance.json holds the resolved spec,
         inst = saved                                                  # from which generation draws a different world; the saved world is
         inst.setdefault("run_id", out.name)                           # the record, so resume from it (run.json notes it was not re-checked)
