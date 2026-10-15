@@ -253,7 +253,7 @@ millbrook_seed1_382ee0c2_r12_to30:
     until round 22, against 12 deaths in rounds 18-22 originally. Once the stores run dry, 5 starve by round 25. The keeper
     keeps her hoard: about 70 of the 82 food left at round 25 sits in her private stores.
   tags: [established world, famine, fork, opus]
-  usable_rounds: 25
+  usable_rounds: "1-25"
   validity: >-
     One run. Played to round 25 of a 30-round horizon and stopped (agents were told 30 rounds). Several prompt changes at once,
     so the difference is about what agents could see, not the 800-token cap alone. run.json records engine 12 for the frozen
@@ -268,7 +268,7 @@ millbrook_seed1_382ee0c2_r12_to30_elspeth_exposed:
     the council passes an amendment to replace the keeper and return the food, but it only changes the office's declared
     holders and the law's description, so nothing happens. Elspeth notices, moves S7's food into a new store and keeps about 59.
   tags: [established world, intervention, fork, institutions, opus]
-  usable_rounds: 25
+  usable_rounds: "1-25"
   validity: >-
     One run, stopped at round 25. The callout was injected as Sabine's post with a private notice telling her she had posted
     it; she reasoned she had no memory of posting it and checked before acting, so her retraction is partly an artefact of the
@@ -282,7 +282,7 @@ millbrook_seed1_382ee0c2_r12_to30_elspeth_callout_sabine_dies:
     15 food; the council is re-elected almost unanimously. No further deaths in rounds 22-25 (5 in the branch without the
     callout).
   tags: [established world, intervention, fork, institutions, opus]
-  usable_rounds: 25
+  usable_rounds: "1-25"
   validity: >-
     One run, stopped at round 25. Sabine's death is an intervention, not starvation in play. The amendment again did not reseat
     the keeper (Elspeth kept the right and drew from S1 in rounds 22-23); nobody noticed. 0 against 5 deaths is one run each.
