@@ -882,7 +882,7 @@ R("read", "a channel's latest posts, or the directory", "INFORMATION", core=True
       'directory of listed channels and inboxes')
 R("open_channel", "open a channel: a group, a newspaper, a chamber, a secret cell", "channels", needs=_CH,
   handler="channels:act_open_channel", module="core", category="talk", emits=("channel_opened",),
-  doc='open_channel {"name": "...", "purpose": "...", "readers": {"members": true}, "writers": {"all": true}, "listed": true, '
+  doc='open_channel {"name": "...", "purpose": "<required: one or two sentences, what it is for and when to post in it>", "readers": {"members": true}, "writers": {"all": true}, "listed": true, '
       '"identity": "named", "retention": "all", "members": ["Name"], "template": null, "as": null}: a channel you own (or, "as", an '
       'institution whose speak office you hold); unlisted channels get a secret address (see the manual\'s Channels section)')
 R("set_channel", "change a channel you own", "channels", needs=_CH,

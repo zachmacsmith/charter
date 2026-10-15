@@ -479,6 +479,7 @@ def _ann():
         "channels.square_rate": dict(types=("int",), range=NONNEG),
         "channels.found_right": dict(types=("str", "null")),
         "channels.headlines": dict(types=("int",), range=(1, None)),
+        "channels.writable": dict(types=("bool",)),
         "contracts.scripted": dict(types=("bool",)),
         "contracts.enforcement": dict(types=("str",), enum=("escrow", "escrow_court", "word")),     # P4.4: the enforcement dial
         "contracts.breach_cases": dict(types=("bool",)),                 # W7e (review 11 §4.1): breaches open court cases
@@ -574,7 +575,7 @@ EXTRA = {
     "start": None,                                                    # established worlds (charter/start.py): none = as before
     # wave 9 C, channels v2 (charter/channels.py; review 14 §4.6, D-37): off = byte-identical
     "channels.v2": False, "channels.delivery": "push", "channels.square": "one", "channels.square_rate": 2,
-    "channels.found_right": None, "channels.headlines": 8,
+    "channels.found_right": None, "channels.headlines": 8, "channels.writable": True,
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
@@ -655,6 +656,8 @@ DOCS = {
     "channels.square_rate": "channels.v2: posts per agent per round in a square (0: no limit)",
     "channels.found_right": "channels.v2: the right opening a channel needs without the default code's Press Act (null: anyone)",
     "channels.headlines": "channels.v2 with pull delivery: channels shown with counts and headlines in an agent's state",
+    "channels.writable": "channels.v2: each agent's state lists, every turn, the channels it can post in (beyond the square and "
+                         "inboxes) with each one's purpose and following, and how to post there (default on)",
     "endowment_gini": "target Gini of starting holdings (lognormal values tuned to it)",
     "veto_window": "rounds the Board has to veto a structural or procedural law",
     "fixer_per_round": "patches the Fixer may make per round",
