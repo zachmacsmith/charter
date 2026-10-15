@@ -194,6 +194,12 @@ def test_release_refused_existing_lower_or_malformed(run, tmp_path, hub, version
     assert hub.calls == [] and not (tmp_path / "st").exists()                     # refused before staging or upload
 
 
+def test_changelog_entries_of_a_card_without_a_changelog_is_empty():
+    card = "---\nlicense: cc-by-4.0\n---\n\n# Charter runs\n\nIntro.\n\n## Layout\n- files\n\n## Runs (2)\n| a |\n\n## License\nCC"
+    assert P.changelog_entries(card) == ""                                       # the first release on a pre-release card
+    assert P.changelog_entries(OLD_LOG).startswith("## v1.0 (2026-10-01)")
+
+
 def test_release_ignores_non_semver_tags():
     assert P.latest_release(["v0-legacy-layout", "v1.2", "v1.10", "v1.9.3", "draft"]) == "v1.10"
     assert P.check_release("v0.1", ["v0-legacy-layout"]) is None

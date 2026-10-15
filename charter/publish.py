@@ -468,7 +468,9 @@ def changelog_entries(text: str) -> str:
     """The entries of a CHANGELOG.md (everything from the first '## ' heading), or of a card's '## Changelog' section ('### ')."""
     if not text:
         return ""
-    if "\n## Changelog" in "\n" + text and not text.lstrip().startswith("# Changelog"):   # a dataset card
+    if not text.lstrip().startswith("# Changelog"):                     # a dataset card: only its Changelog section (a card
+        if "\n## Changelog" not in "\n" + text:                         # without one has no entries, not its Layout and Runs)
+            return ""
         sec = ("\n" + text).split("\n## Changelog", 1)[1]
         sec = re.split(r"\n## ", sec, maxsplit=1)[0]
         return re.sub(r"(?m)^### ", "## ", sec).strip() if "### " in sec else ""
