@@ -514,7 +514,24 @@ E("sow", "subsistence", "primitive", "parties", "event", "subsistence", act="far
 E("reap", "subsistence", "primitive", "parties", "event", "subsistence", act="farm", primitive="reap",
   note="to the reaper and the crop's sower (the sower learns who reaped it: natural perception)")
 E("crop_failed", "subsistence", "summary", "parties", "event", "subsistence", note="blight or rot, told to the sower")
-E("plot_cleared", "subsistence", "summary", "public", "event", "subsistence", note="felling cleared a new plot on a fields camp")
+E("plot_cleared", "subsistence", "summary", "public", "event", "subsistence", act="clear", primitive="clear",
+  note="clearing (engine 14: clear, the plot held by the clearer; or felling with forest.clearing) made a new plot on a fields camp")
+E("tend", "subsistence", "primitive", "parties", "event", "subsistence", act="tend", primitive="tend",
+  note="engine 14: a tend of a growing crop, to the tender and the plot's holder")
+E("farm_set", "subsistence", "primitive", "public|parties", "event", "subsistence", act="farm", primitive="set_farm",
+  note="engine 14: a farm setting (allow, disallow, share, deliver: the setter, the holder and those named); plots handed over or "
+       "passed at a holder's death: public")
+E("farm_held", "start", "summary", "public", "event", "subsistence",
+  note="engine 14 (spec start.farms): a starting farm's holder and plots, announced at round 0")
+E("improvement", "subsistence", "primitive", "public|parties", "event", "subsistence", act="improve", primitive="improve",
+  note="engine 14: terraces, irrigation or a shed built (public: works are visible) or a plough made (the maker)")
+E("farm_upkeep", "subsistence", "summary", "parties|monitor", "event", "subsistence", primitive="farm_upkeep",
+  note="engine 14: an improvement's upkeep paid or missed (it decays a level), or a plough broke; to the holder (an institution's "
+       "officers)")
+E("skill", "subsistence", "primitive", "parties", "event", "subsistence", act="practice", primitive="learn",
+  note="engine 14: practice or teaching toward rotation or seed selection, and a skill learnt; to the learner and the teacher")
+E("clearing", "subsistence", "primitive", "parties", "event", "subsistence", act="clear", primitive="clear",
+  note="engine 14: a unit of clearing work (the clearer only); the plot it completes is plot_cleared")
 E("store_built", "subsistence", "primitive", "public", "event", "subsistence", act="build", primitive="build",
   note="a building is visible: who built which store, owned by whom")
 E("store_deposit", "subsistence", "primitive", "parties", "event", "subsistence", primitive="move",

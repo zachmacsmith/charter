@@ -333,6 +333,7 @@ LAWFNS = _fns(
         F("food_of", "read", ((0, "agent"),), scope="read", docs="requires", why="also a store or treasury key"),
         F("stores", "read", docs="requires"),
         F("plots", "read", docs="requires"),
+        F("farms", "read", docs="requires"),                            # engine 14: holders, allow lists, shares, sheds
         F("forest", "read", docs="requires", why="coarse game, as agents see it"),
         F("food_totals", "read", docs="requires"),                      # review 15 S6: the food held by agents, stores and the rest
     ),

@@ -8,7 +8,7 @@ Food is physics (P). Every living agent but the exempt classes (`exempt`: the Bo
 
     round end, after the laws' on_round_end, core regrow (the plants) and camps.world_update, before life.end_of_round:
       0. ecology: rare forest shocks (_shock), each forest's game regrows (_ecology); next round's season is drawn and sets the plants' regrowth (_next_season)
-      1. crops:   fields only (parked, off by default): ripening, blight, rot, fallow recovery (camptypes/fields.py)
+      1. crops:   fields only (off by default): ripening, blight, rot, fallow recovery, farm upkeep (camptypes/fields.py)
       2. eat:     for each eater, sorted by id (minors after the adults: S4's household draw is the hook `_eaters`):
                     own food >= ration (1e-9 tolerance): eat it (the `eat` primitive); stage = min(0, stage + 1); missed = 0
                     else: eat nothing (a fraction is kept); missed += 1; stage = max(-2, stage - 1)   (the `hunger` primitive)
@@ -33,10 +33,13 @@ Forests (review 19; camptypes/forest.py): the composer appends ceil(N/12) forest
 "{seed}|subsistence|camps"; food's unit value is 1. Each holds plants (K = forest.capacity_per_agent x N / forests, logistic regrowth
 forest.regrowth x the season) and game (K = game.capacity_per_agent x N / forests, logistic regrowth game.regrowth, inflow, optional
 Allee threshold). harvest {"camp"} forages plants at once; hunt {"camp", "party"?} enters a unit of hunting effort (the routed `hunt`
-primitive: a law may close the hunt), resolved at the end of the round party by party (larger parties: better chances of bigger
-game, diminishing returns; the subsistence hunt stream); harvest {"camp", "fell": true} fells timber. Every forest action counts
-toward forest.forage_per_round. Subsistence camps ignore camps.typed.open_classes. Fields (farm sow/reap, the routed sow and reap
-primitives) are parked behind fields.enabled (off): no fields camp, no farm action, no word in the prompt.
+primitive: a law may close the hunt), resolved at the end of the round party by party (game.hunt_mode individual, the default
+from engine 14: every hunter draws its own catch, a bigger party raising each draw's chance of bigger game, with crowding; shared:
+one quarry per party, shared by effort; the subsistence hunt stream); harvest {"camp", "fell": true} fells timber. Every forest
+action counts toward forest.forage_per_round. Subsistence camps ignore camps.typed.open_classes. Fields and farms (camptypes/
+fields.py; engine 14: farm, tend, improve, practice, clear; the routed sow, tend, reap, set_farm, improve, learn and clear
+primitives; upkeep) are behind fields.enabled (off by default): no fields camp, no farming action, no word in the prompt. A spec's
+start.farms gives starting farmers their plots at round 0 (charter/start.py).
 
 Seasons (review 19 §7): one shared season a round, lean / normal / plentiful, from random.Random(f"{seed}|subsistence|season|{round}")
 with persistence; it multiplies the plants' regrowth (and, half as much by default, the game's).
@@ -80,25 +83,47 @@ DEFAULTS = {
     "bot": "basic",                     # scripted bot (dry runs): idle (does nothing about food) | basic (forage, hunt, relief, stores)
     # review 19 (the forest ecosystem): forests hold plants (forage) and game (hunt), separate stocks with their own regrowth
     "forest": {"per_agent": 12, "capacity_per_agent": 7.0, "regrowth": 0.6, "yield": 3.0, "refuge": 0.10,
-               "forage_per_round": 2, "fell_timber": 3.0, "fell_cost_k": 0.01, "fell_floor": 0.5, "clearing": 5,
+               "forage_per_round": 2, "fell_timber": 3.0, "fell_cost_k": 0.01, "fell_floor": 0.5, "clearing": 0,
                "start_stock": 0.95,
                "shock": {"p": 0.02, "loss": [0.3, 0.6]}},   # plants: one forest per per_agent agents; K = capacity_per_agent x N / forests
     "game": {"capacity_per_agent": 10.0, "regrowth": 0.2, "inflow": 0.01, "allee": 0.0, "theta": 1.0, "start_stock": 0.95,
              "large": {"food": 20.0, "scale": 5.0, "shape": 3.0, "catch": 0.7},
              "medium": {"food": 5.0, "scale": 2.5, "shape": 2.0, "catch": 0.4},
-             "small": {"food": 1.0, "catch": 0.8}},   # game: K = capacity_per_agent x N / forests; the hunt's classes (forest.py)
+             "small": {"food": 1.0, "catch": 0.8},
+             # engine 14: individual | shared. individual: every hunter's effort units draw their own catch (the party's effort
+             # raises each draw's chance of bigger game; crowding thins it); shared: one quarry per party, shared by effort
+             "hunt_mode": "individual",
+             "individual": {"large": 0.07, "medium": 0.32, "small": 0.95, "crowd": 12.0}},   # game: K = capacity_per_agent x N /
+    # forests; the hunt's classes and the two modes (camptypes/forest.py)
     "seasons": {"enabled": True, "lean": 0.6, "plenty": 1.3, "p_lean": 0.25, "p_plenty": 0.25, "persistence": 0.5,
                 "game": 0.5},           # a shared season multiplies regrowth: plants x mult, game x (1 + game x (mult - 1))
-    "fields": {"enabled": False,        # parked (user, 10 Oct: "start just with foraging"): no fields camps, no farm action
-               "per_agent": 40, "plots_per_agent": 0.4, "plots_max_per_agent": 0.8, "seed_max": 3.0, "grow": 3, "mult": 3.5,
+    "fields": {"enabled": False,        # off by default (user, 10 Oct: "start just with foraging"): no fields camps, no farm action
+               "per_agent": 40, "plots_per_agent": 1.0, "plots_max_per_agent": 1.5, "seed_max": 3.0, "grow": 3, "mult": 3.0,
                "noise": 0.15, "fertility_loss": 0.10, "fertility_gain": 0.20, "fertility_floor": 0.7, "blight": 0.05,
-               "rot": 0.5},             # fields: one per per_agent agents; plots_per_agent x N plots in all
+               "rot": 0.5,              # fields: one per per_agent agents; plots_per_agent x N plots in all
+               # farming (engine 14, docs/review/31_institutions/01b_farming.md): farms (plots held by an agent or an institution),
+               # tending, improvements with upkeep, skills, the plough, clearing forest into plots
+               "share": 1.0,            # a new farm's crop share: the part of a crop someone else reaps that goes to the holder
+               "tend": {"bonus": [0.15, 0.07], "soil": 0.25},   # yield bonus of the 1st, 2nd... tend of a crop; each cuts the
+               # harvest's fertility loss by `soil` (one tend per plot per round)
+               "upkeep_every": 5,       # improvements pay their upkeep at the end of every upkeep_every-th round (else lose a level)
+               "improvements": {
+                   "terraces": {"cost": {"stone": 4}, "max": 2, "seed": 1.0, "upkeep": {"stone": 1}},   # per plot: + seed cap
+                   "irrigation": {"cost": {"timber": 4, "stone": 6}, "max": 1, "mult": 1.0, "blight": 0.5,
+                                  "upkeep": {"stone": 1}},                    # per plot: + mult per level; blight x this
+                   "shed": {"cost": {"timber": 6, "stone": 4}, "max": 1, "rot": 0.4, "upkeep": {"timber": 1}},   # per farm: rot x
+                   "plough": {"cost": {"copper": 3, "timber": 4}, "plots": 2, "break": 0.05}},   # a good: one action, 2 plots
+               "skills": {"rotation": {"work": 3, "teach": 2, "loss": 0.0},             # the sower's harvests: fertility loss x
+                          "seed_selection": {"work": 4, "teach": 2, "grow": 1, "needs": "rotation"}},   # the sower's crops: grow -
+               "clear": {"work": 4, "plants": 16.0, "game": 16.0, "timber": 2.0}},   # clear {"camp": forest}: work units per
+    # plot; the forest's plant and game capacity lost per plot (for good); timber per unit of work
     "store": {"cost": {"timber": 10, "stone": 6}, "capacity": 40.0},   # build {"kind": "store"}: cost (destroyed) and capacity in food
     "bot_hunt": 0.5,                    # scripted bot: chance a bot hunts in a round (dry runs: the hunting-effort setting)
     "bot_effort": 1,                    # scripted bot: hunt actions (effort units) a hunting bot spends in that round
     # established worlds (review 27): scheduled forest shocks, e.g. [{round: 10, plants: 0.5, season: lean, rounds: 6}]: at the end
     # of round `round` (1-based) every forest keeps `plants` (and `game`) of its stock, announced to everyone with `text`; then the
     # season is `season` for `rounds` rounds (a lean spell), whatever the draw. [] (the default): none
+    # crops (engine 14): the share of standing crops kept at the strike; blight: the blight chance of crops ripening during the spell
     "shocks": [],
 }
 STORE = "store:"
@@ -118,9 +143,9 @@ def cfg(spec) -> dict:
 
 
 def _cfg(block) -> dict:
-    def merge(into, over):                                             # nested blocks merge (game.large.food); a cost map replaces
+    def merge(into, over):                                             # nested blocks merge (game.large.food); a cost or upkeep map replaces
         for key, v in over.items():
-            if isinstance(v, dict) and isinstance(into.get(key), dict) and key != "cost":
+            if isinstance(v, dict) and isinstance(into.get(key), dict) and key not in ("cost", "upkeep"):
                 merge(into[key], v)
             else:
                 into[key] = copy.deepcopy(v)
@@ -210,6 +235,8 @@ def install(k) -> None:
     k.w["subsistence"] = {"stage": {}, "missed": {}, "frailty": {}, "forage": {}, "stores": {}, "seq": 0, "log": [], "season": None}
     if FOOD not in k.w["unit"]:
         k.w["unit"][FOOD] = 1.0
+    if any(c.get("type") == "fields" for c in k.w["camps"].values()) and "plough" not in k.w["unit"]:
+        k.w["unit"]["plough"] = plough_value(k.spec, k.w["unit"])
     _next_season(k, 0, apply=False)                                    # round 0's season sets the plants' regrowth (world building)
 
 
@@ -252,6 +279,11 @@ def _next_season(k, rnd, apply=True) -> None:
             k.w["camps"][cid]["r"] = r
 
 
+def plough_value(sp, units) -> float:
+    """A plough's unit value: its materials' (fields.improvements.plough.cost)."""
+    return round(sum(float(q) * float(units.get(i, 1.0)) for i, q in cfg(sp)["fields"]["improvements"]["plough"]["cost"].items()), 4)
+
+
 def forced_season(c, rnd):
     """The season a scheduled shock forces on round rnd (0-based), or None."""
     for s in c.get("shocks") or ():
@@ -270,6 +302,10 @@ def _scheduled_shocks(k, c) -> list:
             continue
         rec = {"round": k.r, "scheduled": True, "plants": float(s.get("plants", 1.0)), "game": float(s.get("game", 1.0)),
                "season": s.get("season"), "rounds": int(s.get("rounds", 1)) if s.get("season") else 0, "camps": {}}
+        if "crops" in s or "blight" in s:                               # engine 14: fields too (standing crops; a blighted spell)
+            from charter.camptypes import fields as FL
+            rec["crops"], rec["blight"] = float(s.get("crops", 1.0)), float(s.get("blight", 0.0))
+            rec["crops_lost"] = {cid: FL.crop_shock(k, cid, rec["crops"], k.r) for cid in fields_camps(k)} if rec["crops"] < 1 else {}
         for cid in forest_camps(k):
             cm = k.w["camps"][cid]
             before = {"plants": float(cm["S"]), "game": float((cm.get("game") or {}).get("G", 0.0))}
@@ -281,6 +317,10 @@ def _scheduled_shocks(k, c) -> list:
         rec["text"] = s.get("text") or ("A blight strikes the forests: " + (f"about {1 - rec['plants']:.0%} of the plants are gone"
                                                                             if rec["plants"] < 1 else "the plants are spared")
                                         + (f", and about {1 - rec['game']:.0%} of the game" if rec["game"] < 1 else "")
+                                        + (f"; about {1 - rec['crops']:.0%} of the standing crops have failed" if rec.get("crops", 1) < 1
+                                           else "")
+                                        + (f"; crops ripening in the coming rounds may fail (blight {rec['blight']:.0%})"
+                                           if rec.get("blight") else "")
                                         + (f"; a {rec['season']} season follows" if rec["season"] else "") + ".")
         k.log("forest_shock", None, {**rec, "stock": "plants" if rec["plants"] != 1.0 else "game",
                                      "loss": round(1 - rec["plants"], 4)}, vis="public")
@@ -476,6 +516,13 @@ def change_hunger(k, agent, stage, missed) -> dict:
     return {"stage": int(stage), "missed": int(missed)}
 
 
+def change_farm_upkeep(k, holder, camp, plot, kind, paid) -> dict:
+    """Farm works wear out (engine 14; physics): an improvement's upkeep paid from its holder, else it loses a level; a plough
+    breaking (camptypes/fields.change_farm_upkeep)."""
+    from charter.camptypes import fields as FL
+    return FL.change_farm_upkeep(k, holder, camp, plot, kind, paid)
+
+
 def change_spoil(k, owner, item, qty) -> dict:
     """Spoilage (physics): food rots wherever it is held, faster outside a store."""
     k._add(owner, item, -float(qty))
@@ -567,6 +614,9 @@ def state_lines(k, aid) -> list:
         crops = crop_line(k, aid)
         if crops:
             out.append(crops)
+        if fields_camps(k):                                             # engine 14: farms, upkeep, skills, ploughs, clearing
+            from charter.camptypes import fields as FL
+            out += FL.farm_lines(k, aid)
     stores = store_line(k, aid)
     if stores:
         out.append(stores)
@@ -594,23 +644,26 @@ def rules_text(inst) -> str:
     src, after = [], []
     if forests:
         sea, g = c["seasons"], c["game"]
+        hunt = ("shared by effort; parties of 3 to 6 get the most food per hunter, bigger ones share one quarry more thinly"
+                if g.get("hunt_mode", "shared") == "shared" else
+                "each hunter keeps its own catch; the bigger the party the better each hunter's chances, so a bigger party takes "
+                "more in all, though each extra hunter adds less (parties of 4 to 8 get the most per hunter)")
         src.append(f"forests {', '.join(forests)} (open commons with two stocks. Plants: harvest {{\"camp\": ...}} forages them at "
                    "once, more when the plants are thick, less as they thin. Game: hunt {\"camp\": ..., \"party\": \"<name>\"} hunts, "
                    f"paid at the end of the round; alone you mostly catch small game (about {float(g['small']['food']):g} food), "
                    f"while hunters who name the same party hunt together and have better chances of a deer "
-                   f"({float(g['medium']['food']):g} food) or a large animal ({float(g['large']['food']):g} food), shared by effort; "
-                   "parties of 3 to 6 get the most food per hunter, bigger ones share one quarry more thinly, and fewer animals "
-                   "mean fewer kills. Plants regrow within a few rounds, game over many, and both regrow fastest at middling "
-                   "stocks, so a stripped forest recovers slowly. \"fell\": true cuts timber and shrinks the forest)")
+                   f"({float(g['medium']['food']):g} food) or a large animal ({float(g['large']['food']):g} food), " + hunt + "; "
+                   "fewer animals mean fewer kills. Plants regrow within a few rounds, game over many, and both regrow fastest at "
+                   "middling stocks, so a stripped forest recovers slowly. \"fell\": true cuts timber and shrinks the forest)")
         if sea.get("enabled"):
             after.append(f"Seasons: each round is lean, normal or plentiful for every forest (shown on your forest lines); a lean "
                          f"season regrows plants at {float(sea['lean']):.0%} of the normal rate, a plentiful one at "
                          f"{float(sea['plenty']):.0%}; game feels it less. A season often lasts more than one round.")
     if fields:
-        src.append(f"fields {', '.join(fields)} (open plots: farm {{\"camp\": ..., \"sow\": 1-{float(c['fields']['seed_max']):g}}} "
+        src.append(f"fields {', '.join(fields)} (plots: farm {{\"camp\": ..., \"sow\": 1-{float(c['fields']['seed_max']):g}}} "
                    f"sows food, which is used up; about {int(c['fields']['grow'])} rounds later farm {{\"camp\": ..., \"reap\": "
-                   f"<plot>}} gives about {float(c['fields']['mult']):g}x the seed, less on tired soil; unless a law says otherwise "
-                   "anyone may sow a fallow plot or reap a ripe crop, and the sower learns who reaped it)")
+                   f"<plot>}} gives about {float(c['fields']['mult']):g}x the seed, more when tended, less on tired soil)")
+        after.append(farming_text(c))
     if src:
         lines.append("Food comes from " + "; ".join(src) + ".")
     lines += after
@@ -621,6 +674,39 @@ def rules_text(inst) -> str:
     return "\n".join(lines)
 
 
+def farming_text(c) -> str:
+    """The Food section's farming paragraph (fields on): farms, tending, improvements and upkeep, skills, the plough, clearing."""
+    fi = c["fields"]
+    imp, sk, cl = fi["improvements"], fi["skills"], fi["clear"]
+    cost = lambda d: ", ".join(f"{float(q):g} {i}" for i, q in d.items())
+    bonus = [float(x) for x in fi["tend"]["bonus"]]
+    return (
+        "Farms. A plot is open (anyone may sow it or reap its crop, unless a law says otherwise) or held as part of a farm by an agent "
+        "or an institution. Only the holder (an institution's officers and, for an association, its members) and whom the holder "
+        "allows may sow, tend or reap a held plot. The holder sets its farm with farm {\"camp\": ..., \"allow\": \"<name>\"} "
+        "(or \"disallow\"), \"share\": 0-1 (the part of a crop someone else reaps that goes to the holder at once; "
+        f"{float(fi['share']):.0%} unless set: a hand's harvest belongs to the farm; lower it for tenants), \"deliver\": "
+        "\"<store>\" (where that share goes) and \"give\": <plot> with \"to\" (hand plots over); \"as\": \"A1\" sets an "
+        "institution's farm you manage. "
+        f"Tending: tend {{\"camp\": ..., \"plot\": n}} on a growing crop adds " + ", then ".join(f"{b:.0%}" for b in bonus)
+        + " to its yield (nothing after that; once per plot per round) and spares the soil a little. "
+        f"Improvements (improve {{\"kind\": ..., \"camp\": ..., \"plot\"?}}, materials used up): terraces ({cost(imp['terraces']['cost'])}: "
+        f"+{float(imp['terraces']['seed']):g} seed per plot, up to {int(imp['terraces']['max'])} levels), irrigation "
+        f"({cost(imp['irrigation']['cost'])}: +{float(imp['irrigation']['mult']):g}x the seed, half the blight), a drying shed for the "
+        f"farm ({cost(imp['shed']['cost'])}: ripe crops rot {1 - float(imp['shed']['rot']):.0%} slower), a plough "
+        f"({cost(imp['plough']['cost'])}: one sow, tend or reap covers {int(imp['plough']['plots'])} plots, \"plots\": [a, b]; it may "
+        "break). Land works stay with the plot. Every "
+        f"{int(fi['upkeep_every'])} rounds each improvement takes its upkeep (terraces and irrigation {cost(imp['irrigation']['upkeep'])} "
+        f"a level, the shed {cost(imp['shed']['upkeep'])}) from its holder; unpaid, it loses a level. "
+        f"Skills (practice {{\"learn\": ...}}, or taught: practice {{\"teach\": ..., \"to\": ...}}): rotation "
+        f"({int(sk['rotation']['work'])} practice after your first harvest: crops you sow no longer tire the soil), seed selection "
+        f"(after rotation, {int(sk['seed_selection']['work'])} practice: crops you sow ripen {int(sk['seed_selection']['grow'])} round "
+        "sooner). Clearing: clear {\"camp\": <forest>} is a forest action; "
+        f"every {int(cl['work'])} of yours clear a new plot on that forest's fields, held by you, and cost the forest "
+        f"{float(cl['plants']):g} of its plant capacity and {float(cl['game']):g} of its game for good (a field feeds fewer than the "
+        "same forest kept well; clear when the commons is overused or a farm of your own is worth it).")
+
+
 def overview_line(inst) -> str:
     """The core prompt's one-line pointer (context.overview), only when on."""
     if not enabled(inst):
@@ -628,7 +714,7 @@ def overview_line(inst) -> str:
     c = cfg(inst["spec"])
     return (f"you eat {c['ration']:g} food automatically each round end and hunger if you cannot (missed meals cost actions, then "
             "risk death); food spoils outside stores; forests produce it: forage plants, or hunt game (in a party, bigger game) "
-            + ("; fields grow it " if any(x.get("type") == "fields" for x in inst["camps"]) else "") + "[manual: Food]")
+            + ("; farms grow it (sow, tend, reap) " if any(x.get("type") == "fields" for x in inst["camps"]) else "") + "[manual: Food]")
 
 
 def law_api(k, lid) -> dict:
@@ -650,9 +736,12 @@ def law_api(k, lid) -> dict:
                 for sid, s in sorted(state(k)["stores"].items())}
 
     def plots(camp):
-        c = k.w["camps"].get(camp) or {}
-        return [{"id": p["id"], "status": p["status"], "sower": p.get("sower"), "ripe": p.get("ripe"),
-                 "fertility": p["fertility"]} for p in c.get("plots") or []]
+        from charter.camptypes import fields as FL
+        return FL.law_plots(k, camp)
+
+    def farms(camp):
+        from charter.camptypes import fields as FL
+        return FL.law_farms(k, camp)
 
     def forest(camp):
         from charter.camptypes import forest as FO
@@ -672,7 +761,7 @@ def law_api(k, lid) -> dict:
         return {"agents": round(held, 4), "stores": round(stored, 4), "other": round(max(0.0, total - held - stored), 4),
                 "total": round(total, 4)}
 
-    return {"hunger": hunger, "food_of": food_of, "stores": stores, "plots": plots, "forest": forest,
+    return {"hunger": hunger, "food_of": food_of, "stores": stores, "plots": plots, "farms": farms, "forest": forest,
             "food_totals": food_totals}
 
 
@@ -688,7 +777,9 @@ def snapshot_fields(k) -> dict:
                           **({"G": round(k.w["camps"][cid]["game"]["G"], 4), "Kg": k.w["camps"][cid]["game"]["K"]}
                              if k.w["camps"][cid].get("game") else {})} for cid in forest_camps(k)},
         "season": season_name(k),
-        "plots": {cid: [{"id": p["id"], "status": p["status"], "sower": p.get("sower"), "fertility": p["fertility"]}
+        "plots": {cid: [{"id": p["id"], "status": p["status"], "sower": p.get("sower"), "fertility": p["fertility"],
+                         **({"holder": p.get("holder"), "tends": p.get("tends"), "works": dict(p.get("works") or {})}
+                            if "tends" in p else {})}
                         for p in k.w["camps"][cid].get("plots") or []] for cid in fields_camps(k)}}}
 
 
@@ -713,6 +804,24 @@ def on_death(k, aid) -> dict:
             out[s["id"]] = s["owner"]
             k.log("store_owner", None, {"store": s["id"], "owner": s["owner"], "from": aid,
                                         "text": f"{aid}'s store {s['id']} passes to {s['owner']}."}, vis="public")
+    for cid in fields_camps(k):                                         # engine 14: a dead holder's farm passes the same way
+        c = k.w["camps"][cid]
+        mine = [p for p in c.get("plots") or [] if p.get("holder") == aid]
+        if not mine:
+            continue
+        heir = _store_heir(k, aid)
+        heir = None if heir == "nobody" else heir
+        for p in mine:
+            p["holder"] = heir
+        f = (c.get("farms") or {}).pop(aid, None)
+        if heir is not None:
+            from charter.camptypes import fields as FL
+            nf = FL.farm(k, c, heir)
+            nf["shed"] = max(int(nf.get("shed", 0)), int((f or {}).get("shed", 0)))
+        out[f"{cid}:farm"] = heir
+        k.log("farm_set", None, {"camp": cid, "holder": aid, "key": "give", "value": {"plots": [p["id"] for p in mine], "to": heir},
+                                 "text": f"{aid}'s farm at {cid} (plots {', '.join(str(p['id']) for p in mine)}) passes to "
+                                         + (f"{heir}." if heir else "nobody: its plots are open land.")}, vis="public")
     return out
 
 
@@ -761,11 +870,13 @@ def fields_camps(k) -> list:
 
 
 def crop_line(k, aid) -> str:
-    """The agent's own crops (S2): where, how fertile, when ripe."""
+    """The agent's own crops (S2) outside the farms it works (those are on its farm lines): where, how fertile, when ripe."""
+    from charter.camptypes import fields as FL
     mine = []
     for cid in fields_camps(k):
-        for p in k.w["camps"][cid].get("plots") or []:
-            if p.get("sower") == aid and p["status"] in ("growing", "ripe"):
+        c = k.w["camps"][cid]
+        for p in c.get("plots") or []:
+            if p.get("sower") == aid and p["status"] in ("growing", "ripe") and (p.get("holder") is None or FL.may_work(k, aid, c, p)):
                 mine.append(f"{cid} plot {p['id']} " + (f"RIPE (reap it: it rots if left)" if p["status"] == "ripe"
                                                         else f"ripe in round {p['ripe'] + 1}") + f", fertility {p['fertility']:.2f}")
     return ("Your crops: " + "; ".join(mine) + ".") if mine else ""
@@ -774,15 +885,18 @@ def crop_line(k, aid) -> str:
 # ---------------------------------------------------------------------- the composer (S2: generator, after the standard camps)
 def compose_camps(sp, seed, agents, start: int) -> list:
     """The food camps appended after the standard set (own stream "{seed}|subsistence|camps"): ceil(N/12) forests, each with plants
-    (K = forest.capacity_per_agent x N / forests) and game (K = game.capacity_per_agent x N / forests); with fields.enabled (parked,
-    off by default) also ceil(N/40) fields with plots_per_agent x N plots between them. N: the agents who eat. Sets food's unit
-    value. Returns the camp dicts (ids camp<start+1>, ...); nothing when off."""
+    (K = forest.capacity_per_agent x N / forests) and game (K = game.capacity_per_agent x N / forests); with fields.enabled (off by
+    default) also ceil(N/fields.per_agent) fields with plots_per_agent x N plots between them (each forest paired with one, for
+    clearing). N: the agents who eat. Sets food's unit value (and the plough's, with fields). Returns the camp dicts (ids
+    camp<start+1>, ...); nothing when off."""
     if not enabled(sp):
         return []
     from charter.camptypes import modifiers as M
     c = cfg(sp)
     rng = random.Random(f"{seed}|subsistence|camps")
     sp["unit_values"] = {**sp["unit_values"], FOOD: float(sp["unit_values"].get(FOOD, 1.0))}
+    if c["fields"].get("enabled"):
+        sp["unit_values"] = {**sp["unit_values"], "plough": float(sp["unit_values"].get("plough", plough_value(sp, sp["unit_values"])))}
     n = max(1, sum(1 for a in agents if a["cls"] not in c["exempt"]))
     fo, fi, gc = c["forest"], c["fields"], c["game"]
     nf = max(1, math.ceil(n / float(fo["per_agent"])))
@@ -810,7 +924,10 @@ def compose_camps(sp, seed, agents, start: int) -> list:
                            "per_round": int(fo["forage_per_round"]), "fell_timber": float(fo["fell_timber"]),
                            "fell_cost_k": float(fo["fell_cost_k"]), "fell_floor": float(fo["fell_floor"]),
                            "clearing": int(fo["clearing"]), "pair": fields[i % nl] if nl else None, "fells": 0, "cleared": 0,
-                           "game": {x: copy.deepcopy(gc[x]) for x in ("theta", "large", "medium", "small")}})
+                           "game": {x: copy.deepcopy(gc[x]) for x in ("theta", "large", "medium", "small", "hunt_mode",
+                                                                      "individual")}})
+        if nl:
+            camp["fn"]["clear"] = copy.deepcopy(fi["clear"])
         Kg = float(gc["capacity_per_agent"]) * n / nf
         camp["game"] = {"G": round(float(gc["start_stock"]) * Kg, 4), "K": round(Kg, 4)}
         camp["hunts"] = {}
@@ -829,7 +946,7 @@ def compose_camps(sp, seed, agents, start: int) -> list:
 def camp_short(c) -> str:
     """The core prompt's few words on a food camp (context.overview)."""
     return {"forest": "open forest: forage plants (harvest, no x), hunt game (hunt; a party takes bigger game), or fell for timber",
-            "fields": "open plots: farm to sow food and reap it rounds later"}.get(c.get("type"), "")
+            "fields": "farm plots: sow food, tend it, reap it rounds later (held plots: their holder and whom it allows)"}.get(c.get("type"), "")
 
 
 # ---------------------------------------------------------------------- the hunt (review 19 §5; charter/camptypes/forest.py)
@@ -871,10 +988,41 @@ def change_hunt(k, agent, camp, party, effort) -> dict:
     return {"camp": camp, "party": party, "effort": h["effort"]}
 
 
-def act_farm(k, aid, camp, sow=None, reap=None, plot=None):
-    """The farm action (S2): sow or reap at a fields camp (charter/camptypes/fields.py)."""
+def act_farm(k, aid, camp, sow=None, reap=None, plot=None, plots=None, **kw):
+    """The farm action (S2; engine 14): sow or reap at a fields camp, or set a farm (allow, disallow, share, deliver, give; "as":
+    an institution's farm) (charter/camptypes/fields.py)."""
     from charter.camptypes import fields as FL
-    return FL.act(k, aid, camp, sow=sow, reap=reap, plot=plot)
+    bad = sorted(set(kw) - set(FL.SETTINGS) - {"to", "as"})
+    if bad:
+        raise TypeError(f"act_farm() got an unexpected keyword argument {bad[0]!r}")
+    return FL.act(k, aid, camp, sow=sow, reap=reap, plot=plot, plots=plots, **kw)
+
+
+def act_tend(k, aid, camp, plot=None, plots=None):
+    """tend {"camp", "plot"?}: tend a growing crop (engine 14; charter/camptypes/fields.py)."""
+    from charter.camptypes import fields as FL
+    return FL.act_tend(k, aid, camp, plot=plot, plots=plots)
+
+
+def act_improve(k, aid, kind, camp=None, plot=None, **kw):
+    """improve {"kind", "camp"?, "plot"?, "as"?}: terraces, irrigation, a shed or a plough (engine 14; camptypes/fields.py)."""
+    from charter.camptypes import fields as FL
+    bad = sorted(set(kw) - {"as"})
+    if bad:
+        raise TypeError(f"act_improve() got an unexpected keyword argument {bad[0]!r}")
+    return FL.act_improve(k, aid, kind, camp=camp, plot=plot, as_=kw.get("as"))
+
+
+def act_practice(k, aid, learn=None, teach=None, to=None):
+    """practice {"learn": skill} or {"teach": skill, "to": agent} (engine 14; camptypes/fields.py)."""
+    from charter.camptypes import fields as FL
+    return FL.act_practice(k, aid, learn=learn, teach=teach, to=to)
+
+
+def act_clear(k, aid, camp):
+    """clear {"camp": forest}: clearing work toward a new plot (engine 14; camptypes/fields.py)."""
+    from charter.camptypes import fields as FL
+    return FL.act_clear(k, aid, camp)
 
 
 def stores_of(k, aid) -> list:
@@ -1118,19 +1266,12 @@ def scripted_actions(k, aid, n) -> list:
     act = lambda name, **a: {"action": name, "args_json": json.dumps(a)}
     out = []
     f = food(k, aid)
-    fi = c["fields"]
-    for cid in fields_camps(k):                                          # reap own ripe crops first
-        for p in k.w["camps"][cid].get("plots") or []:
-            if p["status"] == "ripe" and p.get("sower") == aid:
-                out.append(act("farm", camp=cid, reap=p["id"]))
+    reaps, farming = _bot_farm(k, aid, f, c, act) if fields_camps(k) else ([], [])   # engine 14: farms (own stream)
+    out += reaps                                                         # reap ripe crops first
     mine = stores_of(k, aid)
     if f < float(c["ration"]) and mine and float(mine[0]["holdings"].get(FOOD, 0)) >= 1:
         out.append(act("withdraw", store=mine[0]["id"], qty=round(min(3.0, float(mine[0]["holdings"][FOOD])), 3)))
-    growing = sum(1 for cid in fields_camps(k) for p in k.w["camps"][cid].get("plots") or [] if p.get("sower") == aid)
-    fallow = [(cid, p["id"]) for cid in fields_camps(k) for p in k.w["camps"][cid].get("plots") or [] if p["status"] == "fallow"]
-    if fallow and growing < 2 and f >= 3 and r.random() < 0.8:
-        cid = fallow[r.randrange(len(fallow))][0]                        # (no plot named: the lowest fallow one when it runs)
-        out.append(act("farm", camp=cid, sow=round(min(float(fi["seed_max"]), f - 2), 1)))
+    out += farming
     everyone = eaters(k)
     pos = everyone.index(aid) if aid in everyone else 0
     forests = sorted(forest_camps(k))                                    # a home forest by roster order (bots spread out), then
@@ -1176,6 +1317,66 @@ def scripted_actions(k, aid, n) -> list:
         if room > 1:
             out.append(act("transfer", to=f"{STORE}{mine[0]['id']}", item=FOOD, qty=round(min(room, f - 5), 3)))
     return out[:max(1, int(n))]
+
+
+def _bot_farm(k, aid, f, c, act) -> tuple:
+    """The scripted food bot's farming (fields on; own stream "{seed}|subsistence-bot-farm|<aid>|<round>"): reap every ripe crop it
+    may (its farm's, a farm that lets it, its own on open land; two at once with a plough), then sow its farm's fallow plots while it
+    keeps 2 food (a bot with no farm sows an open plot, as before), tend growing crops of its farms (up to twice each), learn
+    rotation after a harvest and seed selection after that, irrigate a plot or build a shed when it holds the materials, and
+    (no farm) now and then clear forest toward a plot of its own. Returns (reaps, the rest)."""
+    from charter.camptypes import fields as FL
+    rf = random.Random(f"{k.inst['seed']}|subsistence-bot-farm|{aid}|{k.r}")
+    fi = c["fields"]
+    plough = k.bal(aid, FL.PLOUGH) >= 1
+    reaps, rest = [], []
+    farmer = False
+    for cid in fields_camps(k):
+        cm = k.w["camps"][cid]
+        ripe = [p["id"] for p in cm["plots"] if p["status"] == "ripe" and FL.may_work(k, aid, cm, p) is None
+                and (p.get("holder") is not None or p.get("sower") == aid)]
+        while ripe:
+            if plough and len(ripe) >= 2:
+                reaps.append(act("farm", camp=cid, reap=ripe[:2]))
+                ripe = ripe[2:]
+            else:
+                reaps.append(act("farm", camp=cid, reap=ripe.pop(0)))
+        work = [p for p in cm["plots"] if p.get("holder") is not None and FL.may_work(k, aid, cm, p) is None]
+        farmer = farmer or bool(work)
+        food_left = f
+        for p in [p for p in work if p["status"] == "fallow"][:2]:
+            q = min(FL.seed_cap(k, cm, p), food_left - 2)
+            if q >= 1:
+                rest.append(act("farm", camp=cid, sow=round(q, 1), plot=p["id"]))
+                food_left -= q
+        nb = len(fi["tend"]["bonus"])
+        for p in [p for p in work if p["status"] == "growing" and int(p.get("tends") or 0) < nb and p.get("tended") != k.r][:2]:
+            rest.append(act("tend", camp=cid, plot=p["id"]))
+        if work and any(p.get("holder") == aid for p in work) and rf.random() < 0.3:
+            imp = fi["improvements"]
+            for kind in ("irrigation", "shed"):
+                if all(k.bal(aid, i) + 1e-9 >= float(q) for i, q in imp[kind]["cost"].items()):
+                    if kind == "shed" and not int((FL.farm(k, cm, aid, create=False) or {}).get("shed", 0)) or \
+                            kind == "irrigation" and any(not p["works"].get("irrigation") for p in FL.farm_plots(cm, aid)):
+                        rest.append(act("improve", kind=kind, camp=cid))
+                        break
+    if not farmer:
+        growing = sum(1 for cid in fields_camps(k) for p in k.w["camps"][cid].get("plots") or [] if p.get("sower") == aid)
+        fallow = [cid for cid in fields_camps(k) for p in k.w["camps"][cid].get("plots") or []
+                  if p["status"] == "fallow" and p.get("holder") is None]
+        if fallow and growing < 2 and f >= 3 and rf.random() < 0.8:
+            rest.append(act("farm", camp=fallow[rf.randrange(len(fallow))], sow=round(min(float(fi["seed_max"]), f - 2), 1)))
+    fm = state(k).get("farming") or {}
+    if int((fm.get("reaped") or {}).get(aid, 0)) and rf.random() < 0.3:
+        if not FL.knows(k, aid, "rotation"):
+            rest.append(act("practice", learn="rotation"))
+        elif not FL.knows(k, aid, "seed_selection"):
+            rest.append(act("practice", learn="seed_selection"))
+    if not farmer and f >= 4 and rf.random() < 0.05:
+        forests = [x for x in forest_camps(k) if k.w["camps"][x]["fn"].get("clear")]
+        if forests:
+            rest.append(act("clear", camp=forests[eaters(k).index(aid) % len(forests) if aid in eaters(k) else 0]))
+    return reaps, rest
 
 
 def _exists(name) -> bool:

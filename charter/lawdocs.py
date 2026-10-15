@@ -498,7 +498,12 @@ E += [
     ("stores", "reads", "Read", "stores()", "every food store: id -> owner, food held, capacity. A law of the institution owning a "
      "store moves food out of it with move(\"store:<id>\", ...); its before_withdraw(p, chain) decides who else may withdraw "
      "(p: agent, store, owner, qty; True admits, False refuses; when its code says nothing, only its officers may).", "prompt", "common"),
-    ("plots", "reads", "Read", "plots(camp)", "a fields camp's plots: id, status (fallow, growing, ripe), sower, ripe round, fertility.",
+    ("plots", "reads", "Read", "plots(camp)", "a fields camp's plots: id, status (fallow, growing, ripe), holder (None: open land), "
+     "sower, ripe round, fertility, tends of the crop, works (terraces, irrigation levels). before_sow / before_tend / before_reap "
+     "(p: agent, camp, plot) can refuse any step on any plot.", "prompt", "common"),
+    ("farms", "reads", "Read", "farms(camp)", "a fields camp's farms: holder -> plots, allow (who else may work it), share (the "
+     "part of others' harvests paid to the holder), deliver (its store), shed. before_set_farm (p: agent, camp, holder, key, "
+     "value) gates every farm setting and hand-over; before_clear (p: agent, camp, fields) clearing forest into plots.",
      "prompt", "common"),
     ("forest", "reads", "Read", "forest(camp)", "a forest: plants (share of capacity), game (\"plentiful\", \"fair\", \"scarce\" or "
      "\"very scarce\", as hunters see it), the season and hunters entered this round (None if not a forest). A law can close the "
@@ -507,7 +512,7 @@ E += [
     ("food_totals", "reads", "Read", "food_totals()", "the world's food: held by agents who eat, in stores, elsewhere (treasuries, "
      "escrows, estates) and in total.", "prompt", "common"),
 ]
-REQUIRES.update({n: (lambda spec: bool((spec.get("subsistence") or {}).get("enabled"))) for n in ("hunger", "food_of", "stores", "plots", "forest", "food_totals")})
+REQUIRES.update({n: (lambda spec: bool((spec.get("subsistence") or {}).get("enabled"))) for n in ("hunger", "food_of", "stores", "plots", "farms", "forest", "food_totals")})
 # contracts (charter/contracts.py, P4.3): documented only in worlds with contracts on (OPTIONAL), for the code of a contract
 E += [
     ("pull", "contracts", "Contracts", "pull(member, item, qty)", "a contract's law only: takes qty of item from a member into its "

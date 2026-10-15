@@ -527,13 +527,47 @@ R("hunt", "hunt game in a forest, alone or in a party", "PRODUCE", core=True,
   aliases={"forest": "camp", "group": "party", "band": "party", "with": "party", "team": "party"},
   doc='hunt {"camp": "camp6", "party": "red"}: one unit of hunting effort at a forest this round (a forest action), paid at the '
       'end of the round; everyone who names the same party there hunts with you (no party: alone). Alone you mostly catch small '
-      'game; a party of 3 to 6 has good chances of a deer or a large animal, shared by effort')
-R("farm", "sow food on open fields, reap it rounds later", "PRODUCE", core=True,
+      'game; in a party of 3 to 8 the chances of a deer or a large animal are good (the manual\'s Food section says how a party\'s '
+      'catch is divided)')
+R("farm", "sow food on fields, reap it rounds later; set your farm", "PRODUCE", core=True,
   needs=("mod:subsistence", "camp:fields", "notcls:board", "notcls:fixer"),
-  handler="subsistence:act_farm", module="subsistence", category="productive", emits=("sow", "reap"),
-  aliases={"field": "camp", "fields": "camp", "seed": "sow", "qty": "sow", "amount": "sow", "harvest": "reap"},
-  doc='farm {"camp": "camp8", "sow": 2, "plot": null}: sow that much of your food (1 or more) on a fallow plot of an open fields '
-      'camp (the seed is used up); farm {"camp": "camp8", "reap": 4}: reap a ripe crop (about 3.5x its seed, less on tired soil)')
+  handler="subsistence:act_farm", module="subsistence", category="productive", emits=("sow", "reap", "farm_set"),
+  aliases={"field": "camp", "fields": "camp", "seed": "sow", "qty": "sow", "amount": "sow", "harvest": "reap", "permit": "allow",
+           "forbid": "disallow", "for": "as", "institution": "as", "store": "deliver", "plot_ids": "plots"},
+  doc='farm {"camp": "camp8", "sow": 2, "plot": null}: sow that much of your food (1 up to the plot\'s seed cap) on a fallow plot '
+      'you may work (yours first, then a farm that lets you, then an open plot; the seed is used up); farm {"camp": "camp8", '
+      '"reap": 4}: reap a ripe crop (a multiple of its seed, more when tended, less on tired soil; another\'s farm takes its share). '
+      'With a plough, "plots": [a, b] works two plots in one action. A holder sets its farm: farm {"camp": "camp8", "allow": '
+      '"<name>"} (or "disallow"), "share": 0-1 (the part of others\' harvests that goes to you), "deliver": "<your store>", "give": '
+      '<plot> with "to": "<name or institution>"; add "as": "A1" for an institution\'s farm you manage')
+R("tend", "tend a growing crop: a bigger harvest", "PRODUCE", core=True,
+  needs=("mod:subsistence", "camp:fields", "notcls:board", "notcls:fixer"),
+  handler="subsistence:act_tend", module="subsistence", category="productive", emits=("tend",),
+  aliases={"field": "camp", "fields": "camp", "crop": "plot", "plot_ids": "plots"},
+  doc='tend {"camp": "camp8", "plot": 3}: work a growing crop on a plot you may work (your farm, a farm that lets you, or open '
+      'land): the first tends of a crop raise its yield, less each time, then nothing (the manual\'s Food section has the numbers); '
+      'once per plot per round; it also spares the soil. No plot: the crop of yours that gains most')
+R("improve", "improve a farm: terraces, irrigation, a drying shed; make a plough", "PRODUCE", core=True,
+  needs=("mod:subsistence", "camp:fields", "notcls:board", "notcls:fixer"),
+  handler="subsistence:act_improve", module="subsistence", category="productive", emits=("improvement",),
+  aliases={"type": "kind", "what": "kind", "field": "camp", "fields": "camp", "for": "as", "institution": "as"},
+  doc='improve {"kind": "irrigation", "camp": "camp8", "plot": 3}: build on your farm, paid in materials (used up): terraces (a '
+      'plot takes more seed), irrigation (a plot yields more, less blight), shed (the farm\'s ripe crops rot slower), or plough '
+      '(no camp: a tool in your hands; one farm action covers 2 plots; it may break). Works need upkeep in materials every few rounds '
+      'from the holder, or they decay; "as": "A1" for an institution\'s farm you manage')
+R("practice", "learn or teach a farming skill (rotation, seed selection)", "PRODUCE", core=True,
+  needs=("mod:subsistence", "camp:fields", "notcls:board", "notcls:fixer"),
+  handler="subsistence:act_practice", module="subsistence", category="productive", emits=("skill",),
+  aliases={"skill": "learn", "student": "to", "agent": "to"},
+  doc='practice {"learn": "rotation"}: one unit of practice toward a farming skill (rotation, after your first harvest: crops you sow '
+      'no longer tire the soil; seed selection, after rotation: crops you sow ripen a round sooner); practice {"teach": "rotation", '
+      '"to": "<name>"}: teach a skill you know (worth several units of practice)')
+R("clear", "clear forest into a field plot of your own", "PRODUCE", core=True,
+  needs=("mod:subsistence", "camp:forest", "camp:fields", "notcls:board", "notcls:fixer"),
+  handler="subsistence:act_clear", module="subsistence", category="productive", emits=("clearing", "plot_cleared"),
+  aliases={"forest": "camp"},
+  doc='clear {"camp": "camp6"}: a unit of clearing work at a forest (a forest action; you cut some timber); after a few units a new '
+      'plot on that forest\'s fields is yours, and the forest shrinks for good (its plants and game)')
 R("build", "build a food store: food keeps there", "PRODUCE", core=True, needs=("mod:subsistence", "notcls:board", "notcls:fixer"),
   handler="subsistence:act_build", module="subsistence", category="productive", emits=("store_built",),
   aliases={"type": "kind", "what": "kind", "for": "owner", "institution": "owner"},
@@ -979,6 +1013,7 @@ CORE_SURFACE = (
     "manual", "manual_search", "recent", "read_law", "preview_law", "legal_position", "read_library", "read_file",   # look-ups
     "write_scratchpad", "write_file",                                   # memory
     "harvest", "hunt", "farm", "build", "withdraw",                     # produce (hunt, farm, build, withdraw: subsistence)
+    "tend", "improve", "practice", "clear",                             # engine 14: farming (only where fields exist)
     "propose", "amend", "vote", "invoke",                               # law; invoke: offices a law or contract defines
     "create_contract", "join_contract", "leave_contract", "propose_contract_change", "deposit_escrow", "set_allowance",   # institutions
     "attack", "forge", "fortify",                                       # force (where conflict is on)
@@ -1079,7 +1114,8 @@ ACTIONS_ORDER = (
     "farm", "build", "withdraw", "hunt",                                # review 15 (subsistence; hunt: review 19)
     "conceive",                                                         # review 15 S4 (pairs)
     "recall",                                                           # review 20 (history mode)
-    "craft", "watch")                                                   # the harm combat model (docs/review/21_combat.md)
+    "craft", "watch",                                                   # the harm combat model (docs/review/21_combat.md)
+    "tend", "improve", "practice", "clear")                             # engine 14: farming
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -1101,7 +1137,8 @@ DOC_ORDER = (
     "farm", "build", "withdraw", "hunt",                                # review 15 (subsistence; hunt: review 19)
     "conceive",                                                         # review 15 S4 (pairs)
     "recall",                                                           # review 20 (history mode)
-    "craft", "watch")                                                   # the harm combat model (docs/review/21_combat.md)
+    "craft", "watch",                                                   # the harm combat model (docs/review/21_combat.md)
+    "tend", "improve", "practice", "clear")                             # engine 14: farming
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 
@@ -1110,8 +1147,8 @@ if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
 # Refused while hungry (fed only), and allowed while starving (default: hungry allowed, starving refused). Vote stays open to the
 # starving (user decision U14: a polity may restrict it by law, with the hunger(agent) read).
 HUNGRY_REFUSED = ("attack", "join_attack", "contract", "found", "create_contract", "create_channel", "open_channel", "propose", "amend",
-                  "commission", "build", "fortify", "forge", "invest", "contribute", "buy_initiative")
-STARVING_OK = ("transfer", "reply", "dm", "post", "channel_post", "send", "harvest", "hunt", "farm", "withdraw", "join", "leave",
+                  "commission", "build", "fortify", "forge", "invest", "contribute", "buy_initiative", "improve")
+STARVING_OK = ("transfer", "reply", "dm", "post", "channel_post", "send", "harvest", "hunt", "farm", "tend", "withdraw", "join", "leave",
                "join_contract", "leave_contract", "authorize", "revoke_authorization", "standing_order", "bequest", "vote",
                "accept_loan", "repay_loan", "write_scratchpad")
 

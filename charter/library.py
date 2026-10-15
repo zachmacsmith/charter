@@ -3910,8 +3910,9 @@ the pact's rules into the same code (guarded by in_force()) or propose them once
 # them: `food_templates(x)` gives those whose `needs` hold in a world (subsistence, pairs, contracts, law.v2), and only those worlds
 # list them (catalogue_text where the toolkit is listed; read_library where subsistence is on). kind "law": a polity's law (enact or
 # propose it); kind "contract": an association's code (found it with create_contract). Every template uses only the law API:
-# tests/test_subsistence_law.py enacts each one in a scripted world and checks its effect. Deferred with farming (parked, D-41):
-# Tillers' Right, Tenancy, School.
+# tests/test_subsistence_law.py enacts each one in a scripted world and checks its effect. Still deferred (farming itself is built,
+# engine 14, docs/review/31_institutions/01b_farming.md, but its law and contract templates are not): Tillers' Right, Tenancy,
+# School, and the subscription contract.
 FOOD_TEMPLATES: dict[str, dict] = {}
 FOOD_NEEDS = ("subsistence", "pairs", "contracts", "law.v2")
 

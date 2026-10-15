@@ -62,14 +62,16 @@ SOURCES_SINKS = {
     "mint": ("economy.do_mint", "jurisdictions.mint", "interventions._mint",
              "conflict.install", "conflict.start_round", "conflict.resolve_attacks"),   # coins; starting arms; forts back to stone
     "harvest": ("economy.do_harvest", "framework.pay_yield",                            # yields (camp stock is not an account)
-                "fields.change_reap"),                                                    # review 15 S2: a reaped crop
+                "fields.change_reap",                                                     # review 15 S2: a reaped crop
+                "fields.change_clear", "fields.change_improve"),                          # engine 14: clearing's timber; a plough
     "burn": ("economy.do_burn", "interventions._burn"),
     "destroy": ("economy.do_destroy", "actions._harvest", "framework.harvest_action", "resources.pay",
                 "resources.upkeep_start_round", "conflict._take", "conflict._spoils", "conflict.act_forge",
                 "conflict.act_fortify", "conflict.act_buy_initiative",                  # consumed, spent, destroyed or converted
                 "conflict.fort_change", "economy.do_convert", "conflict.commit", "conflict.pledge",
                 "conflict._release_pledge",         # P2.4a: stone into and out of forts, forging, weapons committed/pledged/returned
-                "subsistence.change_build"),        # review 15 S3: a store's materials
+                "subsistence.change_build",         # review 15 S3: a store's materials
+                "fields.change_improve", "fields.change_farm_upkeep"),   # engine 14: improvements' materials, upkeep, broken ploughs
     "eat": ("subsistence.change_eat",),                                 # review 15 S1: the ration (food eaten)
     "spoil": ("subsistence.change_spoil",),                             # review 15 S1: food spoiling in every account
     "provision": ("subsistence.change_provision",),                     # a Maker's child's starting food (user, 10 Oct)

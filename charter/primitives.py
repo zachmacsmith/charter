@@ -158,6 +158,7 @@ PARAM_SAMPLES = {
     "channel": "guild",                                                                                   # wave 9 C: set_channel
     "dir": "chronicle", "path": "people/", "access": "read",                                             # directories
     "missed": 1, "plot": 2, "store_id": "S1", "party": "red", "effort": 1,                               # subsistence (review 15, 19)
+    "fields": "camp9", "holder": "a1", "skill": "rotation", "teacher": "a2", "work": 1,                 # engine 14: farming
 }
 
 
@@ -821,7 +822,44 @@ _ROWS = [
       parties=("agent",), agent_params=("agent",), event="reap", causes=("agent",), reads=("plots",),
       sites=("camptypes.fields:change_reap", "camptypes.fields:act"),
       why={"compel": _LNA, "gate": "law.v2: before_reap gates it (a Tillers' Right refuses a non-sower: review 15 U1, S6)"},
-      notes="the crop becomes the reaper's food; the sower learns who reaped it (natural perception, E)"),
+      notes="the crop becomes the reaper's food, less the farm's share when another holds the plot (paid to the holder at once); the "
+            "sower and the holder learn who reaped it (natural perception, E)"),
+    # engine 14: farming (docs/review/31_institutions/01b_farming.md). Holdings are physics' residual (the holder and whom it allows
+    # work a held plot); every step is routed so land, labour and licensing law can govern it
+    P("tend", "subsistence", "status", ("agent", "camp", "plot"), "camptypes.fields:change_tend", routed=True, subject="agent",
+      parties=("agent",), agent_params=("agent",), event="tend", causes=("agent",), reads=("plots", "farms"),
+      sites=("camptypes.fields:change_tend", "camptypes.fields:act_tend"),
+      why={"compel": _LNA, "gate": "law.v2: before_tend gates it (who may work which land: labour and land law)"},
+      notes="one tend of a growing crop: a yield bonus with diminishing returns (fields.tend.bonus) and soil care at its harvest"),
+    P("set_farm", "subsistence", "rule", ("agent", "camp", "holder", "key", "value"), "camptypes.fields:change_set_farm", routed=True,
+      subject="agent", parties=("agent",), agent_params=("agent",), event="farm_set", causes=("agent",), reads=("farms",),
+      sites=("camptypes.fields:change_set_farm", "camptypes.fields:set_farm"),
+      why={"compel": _LNA, "gate": "law.v2: before_set_farm gates it (land registries, tenancy law, transfer taxes)"},
+      notes="a holder's farm setting: allow / disallow (who else works it), share (the crop share of others' harvests paid to the "
+            "holder), deliver (the holder's store for it), give (plots to a new holder; land works go with them)"),
+    P("improve", "subsistence", "create", ("agent", "camp", "plot", "kind", "holder"), "camptypes.fields:change_improve", routed=True,
+      subject="agent", parties=("agent",), agent_params=("agent",), event="improvement", causes=("agent",), reads=("plots", "farms"),
+      sites=("camptypes.fields:change_improve", "camptypes.fields:act_improve"),
+      why={"compel": _LNA, "gate": "law.v2: before_improve gates it (building permits, land law)"},
+      notes="terraces or irrigation on a held plot, a farm's shed, or a plough (a good): the maker's materials are used up"),
+    P("learn", "subsistence", "status", ("agent", "skill", "teacher", "work"), "camptypes.fields:change_learn", routed=True,
+      subject="agent", parties=("agent", "teacher"), agent_params=("agent", "teacher"), event="skill", causes=("agent",),
+      sites=("camptypes.fields:change_learn", "camptypes.fields:act_practice"),
+      why={"compel": _LNA, "gate": "law.v2: before_learn gates it (teaching licences, guild rules)"},
+      notes="practice (the learner's own) or teaching (a teacher who knows the skill) toward rotation or seed selection"),
+    P("clear", "subsistence", "create", ("agent", "camp", "fields"), "camptypes.fields:change_clear", routed=True, subject="agent",
+      parties=("agent",), agent_params=("agent",), event="clearing", causes=("agent",), reads=("forest", "plots"),
+      sites=("camptypes.fields:change_clear", "camptypes.fields:act_clear"),
+      why={"compel": _LNA, "gate": "law.v2: before_clear gates it (who may clear which forest); the forest's camp rules count it as "
+                                    "a forest action"},
+      notes="one unit of clearing work: timber to the clearer; every fields.clear.work units the forest loses plant and game capacity "
+            "for good and its fields gain a plot held by the clearer"),
+    P("farm_upkeep", "subsistence", "destroy", ("holder", "camp", "plot", "kind", "paid"), "subsistence:change_farm_upkeep",
+      routed=True, subject="holder", parties=("holder",), agent_params=("holder",), before=False, blockable=False,
+      event="farm_upkeep", causes=("world",), sites=("subsistence:change_farm_upkeep", "camptypes.fields:change_farm_upkeep",
+                                                      "camptypes.fields:_upkeep", "camptypes.fields:_plough_wear"),
+      why={"gate": _PHYS},
+      notes="works wear out: an improvement's upkeep paid from its holder's account, else it loses a level; a plough breaking"),
     # review 15 S3: buildings (stores; irrigation and repair come with the ladder, S11)
     P("build", "subsistence", "create", ("agent", "kind", "owner", "store_id"), "subsistence:change_build", routed=True,
       subject="agent", parties=("agent",), agent_params=("agent",), event="store_built", causes=("agent",), reads=("stores",),
@@ -930,7 +968,8 @@ ACTION_PRIMITIVES = {
     "dir_list": LOOKUP, "dir_read": LOOKUP, "dir_search": LOOKUP, "dir_write": ("dir_write",), "dir_edit": ("dir_write",),
     "dir_move": ("dir_write",), "dir_delete": ("dir_write",), "dir_grant": ("dir_grant",),
     # subsistence (review 15): farm sows or reaps (its first primitive depends on its arguments: ANY_FIRST)
-    "farm": ("sow", "reap"), "build": ("build",), "withdraw": ("withdraw", "move"), "hunt": ("hunt", "move"),
+    "farm": ("sow", "reap", "set_farm"), "build": ("build",), "withdraw": ("withdraw", "move"), "hunt": ("hunt", "move"),
+    "tend": ("tend",), "improve": ("improve",), "practice": ("learn",), "clear": ("clear",),   # engine 14: farming
     "conceive": ("conceive",),                                          # review 15 S4: an offer changes nothing; a match conceives
 }
 
@@ -963,7 +1002,8 @@ TIER_OF = {
     "P": ("regrow", "drift", "set_camp_state", "create_camp", "settle_project", "begin_life", "end_life", "default_loan",
           "close_ballot", "deauthorize",           # world causes, time, ballots counted as cast, consent (K-2: the grantor may revoke)
           "demand_tribute",                        # unrouted: to route as blockable=False, after-hooks only
-          "eat", "hunger", "spoil", "provision"),  # review 15 S1: the ration, hunger and spoilage; a child's food
+          "eat", "hunger", "spoil", "provision",   # review 15 S1: the ration, hunger and spoilage; a child's food
+          "farm_upkeep"),                          # engine 14: improvements wear out
     "E": ("write_note", "use_power"),
     "X": ("set_role", "set_goal", "suspend_law", "request_fix"),
     "L": ("move", "harvest", "mint", "burn", "create_currency", "convert", "destroy", "grant_right", "revoke_right",
@@ -985,6 +1025,7 @@ TIER_OF = {
           "dir_write", "dir_grant",                                    # directories
           "set_channel",                                               # wave 9 C (channels.v2)
           "sow", "reap",                                               # review 15 S2: who may sow or reap a plot is law (U1)
+          "tend", "set_farm", "improve", "learn", "clear",             # engine 14: farming (land, labour, licensing law)
           "build", "withdraw", "hunt",                                 # review 15 S3: a store (a building permit is law); who
                                                                          # takes food out of an institution's store (its code)
           "conceive"),                                                 # review 15 S4: who may have children with whom is law
