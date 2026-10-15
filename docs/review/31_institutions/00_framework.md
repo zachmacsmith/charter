@@ -112,6 +112,24 @@ sets the rules); a few swapped seats (an Opus worker, a Haiku officer) so model 
 5. Its channels carry real business (or it has none).
 6. Every role can be refilled and every rule changed through some in-game process.
 
+## 11a. Scale: institutions must be able to sustain the whole population
+
+Added after the first designs (user, 15 Oct): the Private world's Provisions Company fed 13 of 24 automatically, ran a deficit
+before any shock, and capped counter sales at 8 a round. Institutions sized to thin margins make scarcity the baseline; the worlds
+need the opposite. Rules:
+
+- **Capacity ≥ 1.25 × population demand in normal times**, for every stage of every chain (produce, collect, store, distribute)
+  and for money (wages that can buy the ration). List each bottleneck with its number.
+- **Stores** hold at least **5 rounds of the whole population's demand** (≈ 120 food for 24 agents), spread across institutions
+  as the regime dictates.
+- **Distribution scales with population**: anyone may subscribe or be served; limits are per customer, not a small total cap.
+- **Producers' physics** (forest capacity, yields, number of licensed producers) are set so that normal output covers demand with
+  the 1.25 headroom; use spec dials (subsistence yields and forest capacity) rather than thin margins.
+- **Scarcity comes from shocks, prices, distribution choices and capture**, not from undersized institutions. Size shocks against
+  the baseline so a blight squeezes (a real choice about who eats) without making collapse inevitable.
+- Every world's flows check shows: total supply vs demand per round, store runway in rounds, and the share of the population fed
+  with zero attention (target: 100% in normal times).
+
 ## 12. Lessons the designs must respect
 
 - Agents only use what they can see each turn (Millbrook's clipped state; channels shown once). Role cards, contracts and
