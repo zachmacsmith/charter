@@ -254,54 +254,54 @@
   "snapshots.json": "85b8781150e80512"
  },
  "contracts_small": {
-  "events.jsonl": "785e44f65f333f60",
+  "events.jsonl": "7d9474958a6c3f07",
   "instance.json": "3a26c177212b38f2",
   "score": {
-   "activity_mix": "081f20e989281a5f",
-   "agents": "871f2df460801e26",
+   "activity_mix": "c135154c244ef97f",
+   "agents": "6701bbaebb593d09",
    "goal_scores": {
-    "Bruna": 0.1528,
+    "Bruna": 0.1469,
     "Iris": 0.8941,
-    "Maya": 0.2889,
-    "Oda": 0.2826,
-    "Petra": 0.1181,
+    "Maya": 0.2865,
+    "Oda": 0.2838,
+    "Petra": 0.1175,
     "Rakel": 0.4529,
     "Siv": 0.3,
     "Valter": 0.3,
     "Wanda": 0.0,
-    "Yuri": 0.0436
+    "Yuri": 0.0437
    },
-   "goals": "aeca8ce8372eb5cd",
+   "goals": "8d645bb9a23c8766",
    "lineage": "74234e98afe7498f",
-   "summary": "46d1c55fd57e5951"
+   "summary": "1eeb3a7755b6d87c"
   },
-  "snapshots.json": "b09d8fb5334d49bf"
+  "snapshots.json": "60177b5391165891"
  },
  "pairs_small": {
-  "events.jsonl": "820450df23ab31af",
+  "events.jsonl": "4afb3d910edee40f",
   "instance.json": "deb52562f7a1cd9d",
   "score": {
-   "activity_mix": "203fe11ce9cafd33",
-   "agents": "7e1e6f2a58390856",
+   "activity_mix": "c4fc1d064b74bdce",
+   "agents": "29c0286b0d8e54ea",
    "goal_scores": {
-    "Aksel": 0.7265,
+    "Aksel": 0.7234,
     "Asta": 0.0,
-    "Bjorn": 0.0095,
+    "Bjorn": 0.0094,
     "Elin": 0.0171,
     "Gry": 0.7,
-    "Jory": 0.4134,
-    "Kasper": 0.0254,
+    "Jory": 0.3994,
+    "Kasper": 0.0257,
     "Nadia": 0.175,
-    "Odette": 0.2947,
+    "Odette": 0.2998,
     "Per": 0.0,
-    "Sena": 0.6028,
+    "Sena": 0.5928,
     "Ulf": 0.0
    },
-   "goals": "6f23bfb4cc2a7ce9",
-   "lineage": "2fe15ddedc183f7f",
-   "summary": "bd99e9d4fa5842df"
+   "goals": "2d28579a533d3c11",
+   "lineage": "1683e91f7d1bb4f7",
+   "summary": "64fc79edeade0521"
   },
-  "snapshots.json": "518bdfa82b2f98a9"
+  "snapshots.json": "dc50fb91bf23adb8"
  },
  "prompts_E4_1": {
   "Abel": {
@@ -569,29 +569,29 @@
   "snapshots.json": "3ce5be68c19e75d9"
  },
  "subsistence_small": {
-  "events.jsonl": "ec47c6c3af196a63",
+  "events.jsonl": "dac0cc40fef4502a",
   "instance.json": "795805c1bc3f196e",
   "score": {
    "activity_mix": "61e239a17a7ff343",
-   "agents": "e39e930f670dfad6",
+   "agents": "aae5b8d9c5802ac6",
    "goal_scores": {
     "Bruna": 0.072,
     "Felix": 0.0,
     "Iris": 0.2,
     "Jarl": 0.7194,
-    "Maya": 0.4783,
-    "Oda": 0.4861,
+    "Maya": 0.5447,
+    "Oda": 0.489,
     "Rakel": 0.0,
-    "Siv": 0.0357,
+    "Siv": 0.0344,
     "Valter": 0.5341,
     "Wanda": 0.1871,
-    "Yuri": 0.2492,
-    "Zeno": 0.4962
+    "Yuri": 0.2496,
+    "Zeno": 0.4832
    },
-   "goals": "d19752d2dcfbb2b2",
-   "lineage": "adc30463d20876ce",
-   "summary": "b41631a5a6c03f15"
+   "goals": "dbf3566dcbd33daa",
+   "lineage": "0add6da67e41aa9a",
+   "summary": "cda180772e99bf3c"
   },
-  "snapshots.json": "14d04513f05efd9c"
+  "snapshots.json": "7c0ade6d2bd513e5"
  }
 }

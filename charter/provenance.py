@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 10
+ENGINE_VERSION = 11
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -90,6 +90,10 @@ ENGINE_FLIPS = {
          "note": "review 23 scoring fixes: Wealth, Hoard, Lineage Wealth count food in own stores; Rank and Kingmaker rank the "
                  "living only; Dynasty against the largest line, Populator against the start (and their texts drop the cap); "
                  "made on wp/survival-exp, parallel to 8 and 9 (merged after them)"},
+    11: {"commits": ["a0a405476aacb8650d0a414490200d0ff57dca08"],
+         "flips": [],
+         "note": "contracts.scope_api reads the association record live: a contract's members() sees agents who joined after the "
+                 "first dry run (behaviour fix, not a default; reproducible only by rerun)"},
 }
 
 
