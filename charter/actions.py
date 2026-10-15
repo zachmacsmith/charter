@@ -526,7 +526,15 @@ def _pay_tribute(k, aid, item, qty):
     return f"Paid {took:g} {item} toward tribute {t['id']}" + (" (now paid in full)." if t["status"] == "met" else ".")
 
 
-def _transfer(k, aid, to, item, qty, memo=None):
+def _transfer(k, aid, to, item, qty, memo=None, **kw):
+    as_ = kw.pop("as", None)
+    if kw:
+        raise TypeError(f"_transfer() got an unexpected keyword argument {sorted(kw)[0]!r}")
+    if as_ is not None and as_ != aid:                                 # established worlds: pay as an office of an institution
+        from charter import institutions as IN
+        if memo is not None and not D.v2(k):
+            raise TypeError("_transfer() got an unexpected keyword argument 'memo'")
+        return IN.pay_as(k, aid, str(as_), to, item, qty, memo=D.memo_text(memo) if memo is not None else None)
     if memo is not None and not D.v2(k):                               # W6a: a purpose memo exists only under law.v2 (off: as before)
         raise TypeError("_transfer() got an unexpected keyword argument 'memo'")
     if isinstance(to, str) and to.startswith("store:") and "subsistence" in k.w:   # review 15 S3: a deposit in a food store
@@ -1242,6 +1250,7 @@ def library_index(inst) -> dict:
         out.update({e["name"]: e["doc"] for e in LB.CONTRACT_TEMPLATES.values()})   # Founding) wherever contracts can be founded
     if FT.on("subsistence", inst["spec"]):                              # review 15 S6: the food and family templates whose needs hold
         out.update({e["name"]: e["doc"] for e in LB.food_templates(inst)})
+    out.update({e["name"]: e["doc"] for e in LB.established_templates(inst)})   # review 27: only with institutions.office_control
     if LB.settings(inst)["access"] != "none" and LB.edition(inst) == 2:
         out.update({b: GR.intent(LB.BLOCKS[b]["code"]) or "a building block" for b in LB.BLOCKS})
     return out

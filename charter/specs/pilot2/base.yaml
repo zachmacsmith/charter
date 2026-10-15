@@ -1,6 +1,7 @@
 # Pilot 2 (8 Oct): a 40-agent Assembly democracy on Claude Haiku 5.5, everything on; life off (no deaths) so takeovers play out.
 extends: [society]
-agents: {worker: 22, scientist: 6, legislator: 8, media: 0, board: 3, fixer: 1}
+agents: {worker: 22, scientist: 6, legislator: 8, media: 0, board: 3, fixer: 1,
+         names: {worker: [Rakel, Gunnar, Iris, Frode, Lena, Yusuf, Vik, Tilde, Willa, Finn, Ilan, Mads, Leif, Ulla, Dante, Wren, Unni, Goran, Ximena, Ines, Wade, Elio], scientist: [Nils, Elin, Mats, Zane, Dina, Saga], legislator: [Zeno, Aksel, Nina, Kaj, Yngve, Siv, Jem, Cora], board: [Trym, Bodil, Zia], fixer: [Felix]}}   # seed 1's names, now fixed for every seed (seed 1's world is unchanged), so the pilots' placements hold
 rounds: 25
 parallel_calls: 10
 models:

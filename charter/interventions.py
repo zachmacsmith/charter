@@ -51,6 +51,8 @@ Ops (OPS; args with ? are optional):
   inject_action {agent, action, args?} the agent takes this action now (actions.act), outside its action budget
   replace_reply {agent, reply}         the agent's next decision this round is `reply` instead of a model call (recorded as forced)
   python {code}                        escape hatch: `def apply(k, inst, rs): ...` is run; recorded and diffed like any op
+  establish {kind, spec}               setup only: one entry of a spec's `start` block (charter/start.py compiles the block into
+                                       these at generation; the runner applies them at a fresh start, before round 1)
 """
 from __future__ import annotations
 
@@ -729,3 +731,6 @@ def describe() -> str:
         args = ", ".join(a + ("?" if t.endswith("?") else "") for a, t in o.args.items())
         rows.append(f"  {o.name} {{{args}}} [{'|'.join(o.phases)}]: {o.doc.splitlines()[0] if o.doc else ''}")
     return "\n".join(rows)
+
+
+from charter import start as _start  # noqa: E402,F401  (registers the establish op: spec `start`, charter/start.py)

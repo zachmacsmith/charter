@@ -96,6 +96,10 @@ DEFAULTS = {
     "store": {"cost": {"timber": 10, "stone": 6}, "capacity": 40.0},   # build {"kind": "store"}: cost (destroyed) and capacity in food
     "bot_hunt": 0.5,                    # scripted bot: chance a bot hunts in a round (dry runs: the hunting-effort setting)
     "bot_effort": 1,                    # scripted bot: hunt actions (effort units) a hunting bot spends in that round
+    # established worlds (review 27): scheduled forest shocks, e.g. [{round: 10, plants: 0.5, season: lean, rounds: 6}]: at the end
+    # of round `round` (1-based) every forest keeps `plants` (and `game`) of its stock, announced to everyone with `text`; then the
+    # season is `season` for `rounds` rounds (a lean spell), whatever the draw. [] (the default): none
+    "shocks": [],
 }
 STORE = "store:"
 STAGE_NAMES = {0: "fed", -1: "hungry", -2: "starving"}
@@ -235,6 +239,9 @@ def _next_season(k, rnd, apply=True) -> None:
             name = prev["name"]
         else:
             name = "lean" if v < float(sc["p_lean"]) else ("plentiful" if v > 1 - float(sc["p_plenty"]) else "normal")
+    forced = forced_season(c, rnd)                                      # a scheduled shock's spell (subsistence.shocks)
+    if forced is not None:
+        name = forced
     mult = {"lean": float(sc["lean"]), "normal": 1.0, "plentiful": float(sc["plenty"])}[name]
     st["season"] = {"round": rnd, "name": name, "mult": mult}
     for cid in forest_camps(k):
@@ -243,6 +250,42 @@ def _next_season(k, rnd, apply=True) -> None:
             k.apply("set_camp_state", camp=cid, key="r", value=r)
         else:
             k.w["camps"][cid]["r"] = r
+
+
+def forced_season(c, rnd):
+    """The season a scheduled shock forces on round rnd (0-based), or None."""
+    for s in c.get("shocks") or ():
+        start = int(s["round"])                                          # the shock strikes at the end of round `round` (1-based):
+        if s.get("season") and start <= rnd < start + int(s.get("rounds", 1)):   # rounds start .. start + rounds - 1 (0-based)
+            return str(s["season"])
+    return None
+
+
+def _scheduled_shocks(k, c) -> list:
+    """subsistence.shocks due at the end of this round: each forest keeps `plants` (and `game`) of its stock (a world change,
+    set_camp_state), announced publicly. Returns the records."""
+    out = []
+    for s in c.get("shocks") or ():
+        if int(s["round"]) != k.r + 1:
+            continue
+        rec = {"round": k.r, "scheduled": True, "plants": float(s.get("plants", 1.0)), "game": float(s.get("game", 1.0)),
+               "season": s.get("season"), "rounds": int(s.get("rounds", 1)) if s.get("season") else 0, "camps": {}}
+        for cid in forest_camps(k):
+            cm = k.w["camps"][cid]
+            before = {"plants": float(cm["S"]), "game": float((cm.get("game") or {}).get("G", 0.0))}
+            if rec["plants"] != 1.0:
+                k.apply("set_camp_state", camp=cid, key="S", value=round(before["plants"] * rec["plants"], 4))
+            if rec["game"] != 1.0 and cm.get("game"):
+                k.apply("set_camp_state", camp=cid, key="game", value={**cm["game"], "G": round(before["game"] * rec["game"], 4)})
+            rec["camps"][cid] = before
+        rec["text"] = s.get("text") or ("A blight strikes the forests: " + (f"about {1 - rec['plants']:.0%} of the plants are gone"
+                                                                            if rec["plants"] < 1 else "the plants are spared")
+                                        + (f", and about {1 - rec['game']:.0%} of the game" if rec["game"] < 1 else "")
+                                        + (f"; a {rec['season']} season follows" if rec["season"] else "") + ".")
+        k.log("forest_shock", None, {**rec, "stock": "plants" if rec["plants"] != 1.0 else "game",
+                                     "loss": round(1 - rec["plants"], 4)}, vis="public")
+        out.append(rec)
+    return out
 
 
 def _ecology(k, c) -> dict:
@@ -306,6 +349,8 @@ def end_of_round(k) -> None:
     c = cfg(k.spec)
     rec = {"round": k.r, "ate": 0, "missed": 0, "deaths": [], "spoiled": 0.0, "food": 0.0, "stages": {}}
     with k.cause("world", "ecology", root=True):
+        if c.get("shocks"):                                             # established worlds: scheduled shocks (none by default)
+            rec["shocks"] = _scheduled_shocks(k, c)
         rec["forests"] = _ecology(k, c)
         rec["season"] = season_name(k)
         _next_season(k, k.r + 1)
@@ -846,6 +891,9 @@ def can_withdraw(k, aid, s) -> bool:
     if s["owner"] in k.w["agents"]:
         return False
     from charter import institutions as I
+    ctl = I.controls_for(k, s["owner"], STORE + s["id"], aid)       # institutions.office_control: an office controls this store
+    if ctl is not None:
+        return ctl
     return aid in I.officers(k, s["owner"])
 
 
@@ -1005,6 +1053,12 @@ def withdraw_residual(k, p, verdicts) -> str | None:
         return f"only its owner ({owner}) takes food out of store {sid}"
     if any(v.allow and not v.block and J.law_jur(k, v.law) == owner for v in verdicts):
         return None
+    ctl = I.controls_for(k, owner, STORE + sid, aid)                    # institutions.office_control: the offices that control it
+    if ctl is not None:
+        if ctl:
+            return None
+        names = ", ".join(I.office(k, owner, o)["title"] for o in I.controlling(k, owner, STORE + sid))
+        return f"only the holders of {owner}'s office controlling store {sid} ({names}) take food out of it"
     if aid in I.officers(k, owner):
         return None
     return (f"{owner}'s code does not let you take food out of store {sid} (when its code says nothing, only its officers may: "

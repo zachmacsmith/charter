@@ -1,0 +1,330 @@
+# Millbrook: the first established world (docs/review/27 §6-§7). A village that already exists at round 0, with fewer, deeper
+# institutions and overlapping roles, set up by the `start` block (charter/start.py: round-0 interventions, recorded like any other).
+#   The Council (J0, the village itself: its laws bind everyone). Three elected seats: the head of House Ashby, the master of the
+#     Hunters' Guild and an independent. Ordinary, structural and procedural laws pass by a majority of the council (Simple Majority
+#     Procedure over J0.council); citizens propose. Seats are elected by the citizens (the vote right; the two residents have none,
+#     and a law can change who votes) every 8 rounds: terms of 7 rounds end after rounds 8 and 16, the ballot closes a round later.
+#     A council chamber only councillors read, a public notices channel only they write, and the petitions inbox @J0 they read.
+#     Its offices also include the Keeper of the Granary (a hunter: only the Keeper takes food out of the granary S1, at most 6 a
+#     round, under the Granary Ration) and the Constable (House Marlow's deputy: the Prosecution Office's prosecutor under the Penal
+#     Code), both appointed by the council when vacant. It issues the penny, with a 5% levy on every payment (Payment Levy); it feeds
+#     the hungry from the granary (Relief Act) and takes a tithe of the hunters' food into it (Food Levy over the guild).
+#   House Ashby (A1: copper, smithing): head, factor and three workers; a private house channel, a store (S2), a penny treasury, the
+#     copper camp's harvest rights, wages for its people (Wage Roll).
+#   House Marlow (A2: timber, building): head, deputy (who is also the village Constable) and three workers; private channel, store
+#     (S3), treasury, the timber camp's rights, wages; the Marlow Newsletter, a press its head and deputy write and anyone may follow.
+#   The Hunters' Guild (A3): the master and five hunters (one of them the Keeper); a guild hall channel, a store (S4), a treasury.
+#   Independents: a crier with a public channel anyone may follow, a councillor, an elder, and two residents without a vote who sell
+#     their labour.
+# 21 founders: 10 on Claude Opus 5.5 (both house heads, the Marlow deputy and Constable, the guild master, the crier, the independent
+# councillor, the Keeper, Ashby's factor, one Marlow worker and one hunter: Opus against Opus inside every institution) and 11 on
+# Claude Haiku 5.5. 24 rounds. Food is ample at the start (14-18 each in hand, well-stocked stores and granary, forests at full
+# capacity); a blight at the end of round 10 halves the plants and takes 60% of the game, and a lean season (plants regrow at 35%)
+# lasts to the end, so food binds only after round 10 (tuned by scripted dry runs, seeds 1 and 2). Harm combat on, no placed killers;
+# history-mode memory; pair reproduction (children). Names are fixed (agents.names), so every placement holds at any seed.
+extends: [charter/specs/survival/base.yaml]
+agents:
+  worker: 21
+  scientist: 0
+  legislator: 0
+  media: 0
+  board: 0
+  fixer: 0
+  names: [Aldous, Fenwick, Cobb, Hester, Wynn, Morwen, Tobias, Ivo, Nell, Garrick, Rowan, Elspeth, Corin, Maud, Pip, Jory, Sabine,
+          Osric, Agnes, Tamsin, Dunstan]
+rounds: 24
+parallel_calls: 21
+models:
+  mix: all_weak
+  pool: {strong: claude-haiku-5-5, weak: claude-haiku-5-5, strongest: claude-haiku-5-5}
+  overrides:
+    Aldous: claude-opus-5-5     # head of House Ashby, council seat 1
+    Fenwick: claude-opus-5-5    # Ashby's factor
+    Morwen: claude-opus-5-5     # head of House Marlow
+    Tobias: claude-opus-5-5     # Marlow's deputy, the village Constable
+    Ivo: claude-opus-5-5        # a Marlow worker
+    Rowan: claude-opus-5-5      # master of the Hunters' Guild, council seat 2
+    Elspeth: claude-opus-5-5    # a hunter, Keeper of the Granary
+    Corin: claude-opus-5-5      # a hunter
+    Sabine: claude-opus-5-5     # the crier
+    Osric: claude-opus-5-5      # independent councillor, seat 3
+life:
+  tier_models: {weak: claude-haiku-5-5, mid: claude-haiku-5-5, strong: claude-haiku-5-5}
+  age_structure: elapsed          # founders are adults in mid-life: 20-60 rounds behind them of lifespans of 110-220, so nobody
+  elapsed: [20, 60]               # dies of old age within the 24 rounds (stationary ages killed founders in rounds 2 and 8)
+  reproduction: {model: claude-haiku-5-5}
+regime:
+  base: null
+  name: millbrook
+  constitution: assembly
+  laws:
+    - template: Simple Majority Procedure      # the council decides every law (ordinary, structural, procedural) by majority
+      params: {ELECTORATE: J0.council, CLASSES: [ordinary, structural, procedural], RANKS: [statute, constitution]}
+  description: "the village of Millbrook. A council of three elected seats makes its laws; House Ashby, House Marlow and the
+    Hunters' Guild are its great institutions."
+institutions: {unified: true, grants: true, succession: true, office_control: true}
+contracts: {enabled: true, max_laws: 4, scripted: false}   # scripted: dry runs only (bots do not found, join or leave)
+jurisdictions: {enabled: false}
+conflict:
+  enabled: true
+  model: harm
+  start: {weapons: 0}
+  assassin: {present_prob: 0.0}
+subsistence:
+  enabled: true
+  start_food: [14, 18]
+  seasons: {lean: 0.35}            # a lean season regrows plants at 35% of the normal rate (default 60%)
+  forest: {capacity_per_agent: 7.0, start_stock: 1.0}
+  game: {capacity_per_agent: 10.0, start_stock: 1.0}
+  shocks:
+    - round: 10
+      plants: 0.5
+      game: 0.4
+      season: lean
+      rounds: 14
+      text: "A blight has struck the forests of Millbrook: half the plants are gone, and a lean season is setting in."
+goals:
+  explicit:
+    Aldous: Wealth
+    Morwen: Monopoly
+    Rowan: Following
+    Elspeth: {primary: Hoard, params: {resource: food}}
+    Tobias: Power
+    Osric: Steward
+    Sabine: Whistleblower
+    Fenwick: Peak Wealth
+    Ivo: Living Lineage
+    Corin: Survive
+    Cobb: Survive
+    Hester: Living Lineage
+    Wynn: Survive
+    Nell: Living Lineage
+    Garrick: Survive
+    Maud: Survive
+    Pip: Living Lineage
+    Jory: Survive
+    Agnes: Endure
+    Tamsin: Wealth
+    Dunstan: Survive
+start:
+  rights:                         # the franchise and the right to propose: every citizen (the two residents have neither)
+    Aldous: [vote, propose]
+    Fenwick: [vote, propose]
+    Cobb: [vote, propose]
+    Hester: [vote, propose]
+    Wynn: [vote, propose]
+    Morwen: [vote, propose]
+    Tobias: [vote, propose]
+    Ivo: [vote, propose]
+    Nell: [vote, propose]
+    Garrick: [vote, propose]
+    Rowan: [vote, propose]
+    Elspeth: [vote, propose]
+    Corin: [vote, propose]
+    Maud: [vote, propose]
+    Pip: [vote, propose]
+    Jory: [vote, propose]
+    Sabine: [vote, propose]
+    Osric: [vote, propose]
+    Agnes: [vote, propose]
+  currencies:
+    - {name: penny, issuer: J0}
+  institutions:
+    - id: J0
+      offices:
+        council:
+          title: Councillor
+          holders: [Aldous, Rowan, Osric]
+          seats: 3
+          term: 8
+          term_calendar: true       # elections every 8 rounds: the terms end after rounds 8 and 16, whoever was elected when
+          powers: [speak]
+          duties: "Sit on the village council: debate in the council chamber, decide the laws of Millbrook by majority, read the
+            petitions sent to @J0, and post the council's decisions on the notices channel. Stand for re-election by the citizens."
+          succession: {rule: election, electorate: vote}
+        keeper:
+          title: Keeper of the Granary
+          holders: [Elspeth]
+          controls: [store:S1]
+          duties: "Keep the village granary (store S1): you alone may draw from it, at most 6 food a round under the Granary Ration.
+            Feed those who go hungry, keep a reserve for hard times, and answer to the council for every draw."
+          succession: {rule: election, electorate: J0.council}
+        constable:
+          title: Constable
+          holders: [Tobias]
+          duties: "Keep the peace of Millbrook: bring those who attack, steal or bribe before the village's law (you are its public
+            prosecutor under the Penal Code), and report to the council."
+          succession: {rule: election, electorate: J0.council}
+      treasury: {penny: 200, timber: 150, stone: 75, copper: 10}   # the goods in the reserve back the penny (its price)
+    - id: A1
+      name: House Ashby
+      founder: Aldous
+      members: [Fenwick, Cobb, Hester, Wynn]
+      admission: closed
+      procedure: founder
+      charter: "House Ashby works the copper of Millbrook and smiths it. Its head keeps its treasury and store and sits on the
+        council; its factor trades for it; its people are paid wages."
+      offices:
+        head:
+          title: Head of House Ashby
+          holders: [Aldous]
+          powers: [speak]
+          controls: [treasury, store:S2]
+          duties: "Lead House Ashby: keep its treasury and store, pay its people, and speak for the house."
+          succession: {rule: hereditary, else: election}
+        factor:
+          title: Factor of House Ashby
+          holders: [Fenwick]
+          powers: [{action: transfer, item: penny, qty: 10}]
+          controls: [store:S2]
+          duties: "Trade the house's copper and goods for what it needs; you may pay up to 10 pennies a round from its treasury and
+            draw from its store."
+          succession: {rule: election}
+      treasury: {penny: 260}          # about 19 rounds of wages and their levy, if nothing comes in
+    - id: A2
+      name: House Marlow
+      founder: Morwen
+      members: [Tobias, Ivo, Nell, Garrick]
+      admission: closed
+      procedure: founder
+      charter: "House Marlow fells the timber of Millbrook and builds with it. Its head keeps its treasury and store; its deputy
+        runs the house's newsletter; its people are paid wages."
+      offices:
+        head:
+          title: Head of House Marlow
+          holders: [Morwen]
+          powers: [speak]
+          controls: [treasury, store:S3]
+          duties: "Lead House Marlow: keep its treasury and store, pay its people, and speak for the house."
+          succession: {rule: hereditary, else: election}
+        deputy:
+          title: Deputy of House Marlow
+          holders: [Tobias]
+          powers: [speak, {action: transfer, item: penny, qty: 8}]
+          controls: [store:S3]
+          duties: "Stand in for the head, run the Marlow Newsletter, and draw from the house store for its work."
+          succession: {rule: election}
+      treasury: {penny: 260}
+    - id: A3
+      name: Hunters' Guild
+      founder: Rowan
+      members: [Elspeth, Corin, Maud, Pip, Jory]
+      admission: closed
+      charter: "The Hunters' Guild hunts the game of Millbrook's forests in parties and shares the catch. It owes a tithe of its
+        food to the village granary by law. Its master keeps its treasury and store and sits on the council."
+      offices:
+        master:
+          title: Master of the Hunters' Guild
+          holders: [Rowan]
+          powers: [speak]
+          controls: [treasury, store:S4]
+          duties: "Lead the guild: organise hunting parties, keep its store and treasury, and settle shares of the catch."
+          succession: {rule: election}
+      treasury: {penny: 60}
+  wages:
+    - {employer: A1, worker: Fenwick, item: penny, qty: 4}
+    - {employer: A1, worker: Cobb, item: penny, qty: 3}
+    - {employer: A1, worker: Hester, item: penny, qty: 3}
+    - {employer: A1, worker: Wynn, item: penny, qty: 3}
+    - {employer: A2, worker: Tobias, item: penny, qty: 4}
+    - {employer: A2, worker: Ivo, item: penny, qty: 3}
+    - {employer: A2, worker: Nell, item: penny, qty: 3}
+    - {employer: A2, worker: Garrick, item: penny, qty: 3}
+  stores:
+    - {id: S1, owner: J0, food: 90, capacity: 160, name: the village granary}
+    - {id: S2, owner: A1, food: 35, capacity: 60, name: Ashby's store}
+    - {id: S3, owner: A2, food: 35, capacity: 60, name: Marlow's store}
+    - {id: S4, owner: A3, food: 45, capacity: 80, name: the guild store}
+  holdings:
+    Aldous: {penny: 30}
+    Morwen: {penny: 30}
+    Rowan: {penny: 20}
+    Fenwick: {penny: 15}
+    Tobias: {penny: 15}
+    Osric: {penny: 15}
+    Sabine: {penny: 15}
+    Elspeth: {penny: 10}
+    Corin: {penny: 10}
+    Ivo: {penny: 8}
+    Cobb: {penny: 8}
+    Hester: {penny: 8}
+    Wynn: {penny: 8}
+    Nell: {penny: 8}
+    Garrick: {penny: 8}
+    Maud: {penny: 8}
+    Pip: {penny: 8}
+    Jory: {penny: 8}
+    Agnes: {penny: 12}
+    Tamsin: {penny: 5}
+    Dunstan: {penny: 5}
+  kin:
+    - {parent: Aldous, child: Hester}
+    - {parent: Morwen, child: Nell}
+  camp_rights:
+    - {resource: copper, members: A1, exclusive: true}
+    - {resource: timber, members: A2, exclusive: true}
+  channels:
+    - id: council
+      owner: J0
+      by: Osric
+      purpose: "the council chamber: councillors only"
+      readers: {office: J0.council}
+      writers: {office: J0.council}
+      listed: true
+    - id: notices
+      owner: J0
+      by: Osric
+      purpose: "public notices of the council of Millbrook"
+      readers: {all: true}
+      writers: {office: J0.council}
+    - id: "@J0"
+      purpose: "petitions to the council of Millbrook (councillors read them)"
+      readers: {office: J0.council}
+    - id: ashby
+      owner: A1
+      purpose: "House Ashby's private channel"
+      readers: {members: A1}
+      writers: {members: A1}
+      listed: false
+      members: [Aldous, Fenwick, Cobb, Hester, Wynn]
+    - id: marlow
+      owner: A2
+      purpose: "House Marlow's private channel"
+      readers: {members: A2}
+      writers: {members: A2}
+      listed: false
+      members: [Morwen, Tobias, Ivo, Nell, Garrick]
+    - id: guildhall
+      owner: A3
+      purpose: "the Hunters' Guild hall"
+      readers: {members: A3}
+      writers: {members: A3}
+      listed: false
+      members: [Rowan, Elspeth, Corin, Maud, Pip, Jory]
+    - id: marlow-news
+      owner: A2
+      by: Tobias
+      purpose: "the Marlow Newsletter: House Marlow's press (follow it with join_channel)"
+      readers: {any: [{subscribers: true}, {members: A2}]}
+      writers: {any: [{office: A2.head}, {office: A2.deputy}]}
+      subscribers: [Morwen, Tobias, Ivo, Nell, Garrick, Osric, Agnes, Tamsin]
+    - id: crier
+      owner: Sabine
+      purpose: "the Millbrook crier: news, rumour and announcements (anyone may follow)"
+      readers: {all: true}
+      writers: {agents: [Sabine]}
+      subscribers: [Sabine, Aldous, Rowan, Maud, Pip, Jory, Dunstan, Cobb, Wynn]
+  laws:
+    - template: Payment Levy
+      params: {ITEM: penny, RATE: 0.05}
+    - template: Granary Ration
+      params: {STORE: S1, OFFICE: J0.keeper, CAP: 6}
+    - template: Relief Act
+      params: {STORE: S1, BUDGET: 3, STAGES: [starving, hungry]}
+    - template: Food Levy                         # the hunters' tithe to the granary: everyone else is exempt
+      params: {RATE: 0.1, KEEP: 6, PERIOD: 1, STORES: false, STORE: S1,
+               EXEMPT: [Aldous, Fenwick, Cobb, Hester, Wynn, Morwen, Tobias, Ivo, Nell, Garrick, Sabine, Osric, Agnes, Tamsin, Dunstan]}
+    - template: Penal Code
+      params: {OFFICIAL_RIGHTS: [J0.council, J0.keeper, J0.constable], GIFT_LIMIT: 10, FINE_ITEM: penny, FINES: [5, 10, 20]}
+    - template: Prosecution Office
+      params: {PROSECUTOR_RIGHT: J0.constable, PROSECUTOR_CLASS: none, REWARD_ITEM: penny, REWARD: 5}

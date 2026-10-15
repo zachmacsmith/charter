@@ -1,7 +1,8 @@
 # A short, fast-generations society: 20 rounds, all Opus, multi-class agents, 2 Makers and 2 Media, lifespans of 5-10 rounds.
 extends: [society]
 agents: {worker: 4, scientist: 1, legislator: 1, "legislator+scientist": 2, "worker+scientist": 1, "worker+legislator": 1,
-         board: 2, fixer: 1}
+         board: 2, fixer: 1,
+         names: {worker: [Kasper, Greta, Hugo, Hal], scientist: [Finn], legislator: [Sena], board: [Ole, Abel], fixer: [Erik], "legislator+scientist": [Ada, Zeno], "worker+scientist": [Fen], "worker+legislator": [Oda]}}   # seed 1's names, now fixed for every seed (seed 1's world is unchanged)
 rounds: 20
 models:
   mix: balanced

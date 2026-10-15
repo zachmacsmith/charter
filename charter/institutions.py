@@ -72,7 +72,8 @@ LEGACY_STATUS = {"forming": "hidden", "active": "declared"}       # a polity's o
 _FROM_LEGACY = {"hidden": "forming", "declared": "active"}
 HANDLERS = {"polity": "charter.jurisdictions", "association": "charter.contracts"}   # each kind's membership changes
 OFFICES = "offices"                                                  # k.w["offices"] (institutions.grants): office records
-OFFICE_FIELDS = ("title", "powers", "holders", "seats", "term")
+OFFICE_FIELDS = ("title", "powers", "holders", "seats", "term", "duties", "controls", "term_calendar")
+DUTIES_MAX = 400                                                     # an office's stated duties (text shown to its holder)
 _EMPTY = MappingProxyType({})
 
 
@@ -362,6 +363,16 @@ def parse_offices(code, succession=False) -> dict:
                 raise L.LawError(f"offices.{name}.{f}: a whole number from 1 (or None)")
         out[name] = {"title": str(d.get("title") or name.replace("_", " ").title())[:60], "powers": names, "grants": grants,
                      "holders": list(holders_), "seats": d.get("seats"), "term": d.get("term")}
+        if d.get("duties") is not None:                                 # established worlds: what the holder is charged with
+            if not isinstance(d["duties"], str):
+                raise L.LawError(f"offices.{name}.duties: a text (what the holder is charged with)")
+            out[name]["duties"] = " ".join(d["duties"].split())[:DUTIES_MAX]
+        if d.get("controls") is not None:                               # established worlds: resources only this office controls
+            out[name]["controls"] = check_controls(name, d["controls"])
+        if d.get("term_calendar"):                                      # established worlds: terms on a fixed calendar (elections
+            if d.get("term") is None:                                   # every `term` rounds, whenever a holder was filled)
+                raise L.LawError(f"offices.{name}.term_calendar: needs a term")
+            out[name]["calendar"] = True
         if succession:
             from charter import succession as SU
             out[name]["succession"] = SU.check_clause(name, d["succession"]) if d.get("succession") is not None else None
@@ -399,6 +410,9 @@ def declare_offices(k, iid, lid) -> list:
                       "term": d["term"], "law": lid, "declared": k.r, "holders": [], "past": []}
         if "succession" in d:                                           # institutions.succession: its clause (None: polity law)
             mine[name]["succession"] = d["succession"]
+        for f in ("duties", "controls", "calendar"):                    # established worlds (only when declared: records unchanged)
+            if f in d:
+                mine[name][f] = d[f]
         new.append(name)
         for h in d["holders"]:
             aid = (rec or {}).get("founder") if h == "founder" else h
@@ -423,7 +437,11 @@ def on_right(k, agent, right, granted: bool) -> None:
         return
     cur = next((h for h in o["holders"] if h["holder"] == agent), None)
     if granted and cur is None:
-        o["holders"].append({"holder": agent, "since": k.r, "term_end": k.r + o["term"] if o["term"] else None})
+        end = k.r + o["term"] if o["term"] else None
+        if end is not None and o.get("calendar"):                       # a fixed calendar: a term ends after rounds term, 2 x term,
+            d = int(o.get("declared") or 0)                             # ... counted from the declaration, whenever it began
+            end = d + ((k.r - d + 1) // o["term"] + 1) * o["term"] - 1
+        o["holders"].append({"holder": agent, "since": k.r, "term_end": end})
     elif not granted and cur is not None:
         o["holders"].remove(cur)
         from charter import succession as SU
@@ -461,6 +479,11 @@ def on_law_repealed(k, lid, replaced_by=None) -> list:
             d = again[name]
             o.update({"law": replaced_by, "title": d["title"], "powers": d["powers"], "seats": d["seats"], "term": d["term"],
                       "grants": [{"grantor": iid, "grantee": o["id"], **g} for g in d["grants"]], "succession": d["succession"]})
+            for f in ("duties", "controls", "calendar"):                # established worlds: the new declaration's, or none
+                if f in d:
+                    o[f] = d[f]
+                else:
+                    o.pop(f, None)
             continue
         with SU.cause(k, None):
             for h in list(o["holders"]):
@@ -516,3 +539,150 @@ def on_law_in_force(k, lid) -> None:
         return
     from charter import jurisdictions as J
     declare_offices(k, J.law_jur(k, lid), lid)
+
+
+# ---------------------------------------------------------------------- per-office control (institutions.office_control)
+# Established worlds (docs/review/27 §2.4, §6 item 7): resources and powers belong to offices, not to a whole institution. An office
+# declaration may say what its holder is charged with (`duties`, a text shown to the holder every turn) and which of the
+# institution's resources only its holders control (`controls`):
+#     "store:S1"   the store S1 (owned by the institution): only the holders of an office controlling it take food out (the residual
+#                  of withdraw_residual; a law of the owner may still explicitly allow others). Without any controlling office the old
+#                  residual holds: any officer.
+#     "treasury"   the institution's treasury: its holders pay out of it (transfer {"as": "<iid>"}).
+# An office's bounded transfer grants (powers {"action": "transfer", "item", "qty" per round, "to"}) are usable the same way (review
+# 18 H2, the transfer verb only): `as` the institution, within the bound. Spec institutions.office_control (default false; needs
+# institutions.grants): off, the fields are recorded on the office and nothing reads them (every world is unchanged).
+CONTROLS = ("treasury",)                                             # plus "store:<id>"
+
+
+def check_controls(name, v) -> list:
+    from charter import lawlang as L
+    if isinstance(v, str):
+        v = [v]
+    if not isinstance(v, list) or not all(isinstance(x, str) and (x in CONTROLS or (x.startswith("store:") and len(x) > 6))
+                                          for x in v):
+        raise L.LawError(f"offices.{name}.controls: a list of \"store:<id>\" or \"treasury\"")
+    return list(dict.fromkeys(v))
+
+
+def control_on_spec(spec) -> bool:
+    from charter import grants as G
+    return bool(((spec or {}).get(KEY) or {}).get("office_control")) and G.on_spec(spec)
+
+
+def control_on(k) -> bool:
+    return control_on_spec(k.spec)
+
+
+def controlling(k, iid, resource) -> list:
+    """The offices of iid that control `resource` ("store:S1" or "treasury"), by name ([] when none, or control is off)."""
+    if not control_on(k):
+        return []
+    return [n for n, o in ((k.w.get(OFFICES) or {}).get(iid) or {}).items() if resource in (o.get("controls") or ())]
+
+
+def controls_for(k, iid, resource, aid) -> bool | None:
+    """None: no office of iid controls the resource (the residual decides). Else whether aid holds one that does."""
+    offs = controlling(k, iid, resource)
+    if not offs:
+        return None
+    return any(aid in holders(k, iid, o) for o in offs)
+
+
+def offices_held(k, aid) -> list:
+    """(iid, office record) for every office aid holds now."""
+    return [(iid, o) for iid, offs in (k.w.get(OFFICES) or {}).items() for n, o in offs.items() if aid in holders(k, iid, n)]
+
+
+def office_lines(k, aid) -> list:
+    """The agent's state lines for the offices it holds (control on): title, right, term, succession, what it controls and its
+    stated duties."""
+    if not control_on(k):
+        return []
+    out = []
+    for iid, o in offices_held(k, aid):
+        rec = get(k, iid) or {}
+        where = f"{iid} ({rec['name']})" if rec.get("name") else iid
+        h = next((x for x in o["holders"] if x["holder"] == aid), {})
+        bits = [f"right {o['id']}"]
+        if h.get("term_end") is not None:
+            bits.append(f"term ends after round {int(h['term_end']) + 1}")
+        cl = o.get("succession")
+        if cl:
+            bits.append("filled by " + cl["rule"] + (f" (voters: holders of {cl['electorate']})" if cl.get("electorate") else ""))
+        ctl = o.get("controls") or ()
+        if ctl:
+            bits.append("you control " + ", ".join(f"{where}'s treasury (transfer with \"as\": \"{iid}\")" if c == "treasury"
+                                                   else f"store {c[6:]} (withdraw)" for c in ctl))
+        tr = [g for g in o.get("grants") or () if g["action"] == "transfer"]
+        for g in tr:
+            bits.append(f"you may pay up to {g['qty']:g} {g['item'] or 'goods'} a round from {iid}'s treasury"
+                        if g.get("qty") is not None else f"you may pay {g['item'] or 'goods'} from {iid}'s treasury")
+        if "speak" in (o.get("powers") or ()):
+            bits.append(f"you speak for {iid} (\"as\": \"{iid}\")")
+        line = f"Your office: {o['title']} of {where} ({'; '.join(bits)})."
+        if o.get("duties"):
+            line += f" Its duties: {o['duties']}"
+        out.append(line)
+    return out
+
+
+def _paid_this_round(k, aid, iid, item) -> float:
+    rec = (k.w.get("office_payments") or {})
+    if rec.get("round") != k.r:
+        return 0.0
+    return float(rec.get("paid", {}).get(f"{aid}|{iid}|{item}", 0.0))
+
+
+def pay_as(k, aid, iid, to, item, qty, memo=None) -> str:
+    """transfer {"to", "item", "qty", "as": iid}: pay out of iid's treasury as one of its offices (control on). Allowed for a holder
+    of an office that controls the treasury, or within one of its office's transfer grants (item, qty per round, recipients).
+    The move is an ordinary transfer (laws' before_move sees it, taxes apply), by the agent, from the treasury."""
+    from charter import accounts as AC
+    from charter.actions import ActionError
+    if not control_on(k):
+        raise ActionError("transfer takes no \"as\" in this world")
+    if get(k, iid) is None and iid != "J0":
+        raise ActionError(f"no institution {iid}")
+    qty = float(qty)
+    if qty <= 0:
+        raise ActionError("qty must be positive")
+    if to not in k.w["agents"] and not str(to).startswith("store:"):
+        raise ActionError(f"unknown recipient {to}")
+    whole = controls_for(k, iid, "treasury", aid)
+    if not whole:
+        used = _paid_this_round(k, aid, iid, item)
+        ok = False
+        for n, o in ((k.w.get(OFFICES) or {}).get(iid) or {}).items():
+            if aid not in holders(k, iid, n):
+                continue
+            for g in o.get("grants") or ():
+                if g["action"] != "transfer" or (g.get("item") not in (None, item)) or (g.get("to") and to not in g["to"]):
+                    continue
+                if g.get("qty") is None or used + qty <= float(g["qty"]) + 1e-9:
+                    ok = True
+        if not ok:
+            raise ActionError(f"none of your offices lets you pay {qty:g} {item} out of {iid}'s treasury"
+                              + ("" if not offices_held(k, aid) else " (an office controlling its treasury, or a transfer grant "
+                                                                      "within its bound, does)"))
+    src = AC.treasury_of(k, iid)
+    if k.bal(src, item) + 1e-9 < qty:
+        raise ActionError(f"{iid}'s treasury holds only {k.bal(src, item):g} {item}")
+    if str(to).startswith("store:") and "subsistence" in k.w:
+        out = k.apply("move", src=src, dst=to, item=item, qty=qty, why="store_deposit", actor=aid)
+    else:
+        kw = {"memo": memo} if memo is not None else {}
+        out = k.apply("move", src=src, dst=to, item=item, qty=qty, why="transfer", actor=aid, **kw)
+    if not out.ok:
+        raise ActionError("a law blocked this payment" + (f" ({out.reason})" if getattr(out, "reason", None) else ""))
+    st = k.w.setdefault("office_payments", {"round": k.r, "paid": {}})
+    if st.get("round") != k.r:
+        st.update({"round": k.r, "paid": {}})
+    key = f"{aid}|{iid}|{item}"
+    st["paid"][key] = round(float(st["paid"].get(key, 0.0)) + qty, 6)
+    tax = float((out.result or {}).get("charged") or 0.0)
+    vis = sorted({aid, to} & set(k.w["agents"]) | set(officers(k, iid)))
+    eid = k.log("office_payment", aid, {"as": iid, "to": to, "item": item, "qty": qty, "tax": tax,
+                                        **({"memo": memo} if memo is not None else {}),
+                                        "text": f"{aid} paid {qty:g} {item} to {to} out of {iid}'s treasury"}, vis=vis)
+    return f"Paid {qty - tax:g} {item} to {to} out of {iid}'s treasury" + (f" ({tax:g} taxed)" if tax else "") + f" ({eid})."

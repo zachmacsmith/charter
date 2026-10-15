@@ -196,6 +196,9 @@ def action_doc(name: str, inst: dict, a: dict, f: dict | None = None) -> str:
                 'e.g. "choice": ["b", "a", "c"], best first')
     if name == "transfer" and ((inst.get("spec") or {}).get("law") or {}).get("v2"):   # W6a: law.v2's purpose memo
         doc += '; add "memo": "wage" (a short purpose: wage, sale, gift, loan, ...) that laws can read'
+    if name == "transfer" and ((inst.get("spec") or {}).get("institutions") or {}).get("office_control"):   # established worlds
+        doc += ('; an office holder pays out of its institution\'s treasury with "as": "<institution>" (an office that controls '
+                'the treasury, or a transfer power within its bound)')
     return doc
 
 
@@ -663,6 +666,8 @@ def state_view(k, aid: str) -> str:
         return []
     for part in FT.merge("state_lines", {"channels": channels, "archive_reminder": archive_reminder}, k, aid):
         lines += part                                                   # credit, channels, projects ... media2 (features.TAILS order)
+    from charter import institutions as _IN                              # established worlds: the offices held and their duties
+    lines += _IN.office_lines(k, aid)                                    # (institutions.office_control; off: none)
     return "\n".join(lines)
 
 

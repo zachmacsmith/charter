@@ -399,6 +399,10 @@ def main(argv=None):
     from charter import schema
     p = sub.add_parser("spec", help="spec check SPEC.. [--set k=v] | spec docs [--out F] (charter/schema.py)")
     schema.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(schema.cmd(a)))
+    p = sub.add_parser("start-check", help="start-check RUN_DIR: the lived-institution checks of a run with a start block "
+                                           "(charter/start.py, docs/review/27 §7.2)")
+    p.add_argument("run")
+    p.set_defaults(fn=lambda a: print(__import__("charter.start", fromlist=["lived_text"]).lived_text(a.run)))
     a = ap.parse_args(argv)
     a.fn(a)
 

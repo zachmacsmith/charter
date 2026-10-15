@@ -4684,6 +4684,157 @@ recovers about half of what open access loses), scaled down as plants or game de
 scarce. The quota (set_quota) counts the members of this polity only.""", fires="on_round_start")
 
 
+# ====================================================================== established-world templates (docs/review/27 §6 items 3-4, §7.3)
+# Laws a starting world (spec `start`, charter/start.py) is built from, usable by agents too: offices with duties, terms and
+# succession; a granary under a ration; a levy on payments in a currency; a wage roll. Kept apart from TOOLKIT (whose catalogue
+# every toolkit world lists) and listed only where institutions.office_control is on, so no other world's prompt changes.
+ESTABLISHED: dict[str, dict] = {}
+ESTABLISHED_NEEDS = ("law.v2", "institutions.grants", "subsistence", "contracts")
+
+
+def established_template(name, kind, topic, src, doc, fires, needs=("institutions.grants",)):
+    assert name not in LIB and name not in TOOLKIT and name not in FOOD_TEMPLATES and name not in ESTABLISHED, name
+    assert kind in ("law", "contract") and set(needs) <= set(ESTABLISHED_NEEDS), name
+    src = src.strip() + "\n"
+    tree = L.check(src, v2=True)
+    needs = tuple(dict.fromkeys(("law.v2",) + tuple(needs) + (("contracts",) if kind == "contract" else ())))
+    ESTABLISHED[name] = {"name": name, "category": "toolkit", "kind": kind, "edition": 2, "family": "established", "topic": topic,
+                         "rank": "bylaw" if kind == "contract" else (L.declared(tree, "rank") or "statute"),
+                         "doc": " ".join(doc.split()), "fires": fires, "needs": needs, "code": src, "sha": _sha(src)}
+
+
+def established_templates(x=None) -> list:
+    """The established-world templates listed in x (every one when x is None): only where institutions.office_control is on and
+    each template's needs hold."""
+    if x is None:
+        return list(ESTABLISHED.values())
+    from charter import features as FT
+    from charter import grants as G
+    from charter import institutions as IN
+    sp = getattr(x, "spec", None)
+    if sp is None and isinstance(x, dict):
+        sp = x["spec"] if isinstance(x.get("spec"), dict) else x
+    sp = sp or {}
+    if not IN.control_on_spec(sp):
+        return []
+    test = {"law.v2": lambda: bool((sp.get("law") or {}).get("v2")), "institutions.grants": lambda: G.on_spec(sp),
+            "subsistence": lambda: FT.on("subsistence", sp), "contracts": lambda: FT.on("contracts", sp)}
+    return [e for e in ESTABLISHED.values() if all(test[n]() for n in e["needs"])]
+
+
+def v2_templates() -> dict:
+    """Every law.v2 template by name: the toolkit, the food and family templates and the established-world templates."""
+    return {**TOOLKIT, **FOOD_TEMPLATES, **ESTABLISHED}
+
+
+established_template("Offices Act", "law", "offices", '''
+title = "Offices Act"
+intent = "Establishes the offices in `offices`. Each has a title; duties (what its holder is charged with, shown to the holder every turn); what it controls (\\"store:<id>\\": only its holders take food out of that store; \\"treasury\\": its holders pay out of the institution's treasury); its powers (\\"speak\\" to speak for the institution, or bounded payments); its holders; its seats; a term in rounds; and how it is filled when vacant (succession: election by the members, or by the holders of a right named as electorate, such as the council for an appointment; designation, seniority, lot, hereditary or none). The list of offices is public."
+rank = "statute"
+offices = {}
+
+def on_enact():
+    public["offices"] = sorted([o.get("title", name) + " (" + name + ")" for name, o in offices.items()])
+''', doc="""Offices as law: the positions of an institution with their stated duties, what each controls, terms and succession
+(review 27 §6 item 4). Enacted by a polity, or put in an association's code; repealing it abolishes its offices.""",
+                     fires="on_enact")
+
+established_template("Granary Ration", "law", "ration", '''
+title = "Granary Ration"
+intent = "The store STORE is the community's granary. Only holders of OFFICE take food out of it, at most CAP food a round each; each draw is entered in a public ration book. What a holder draws is meant for those the office feeds."
+rank = "statute"
+STORE = "S1"
+OFFICE = "J0.keeper"
+CAP = 6
+
+def ours(p):
+    return p["store"] == STORE.replace("store:", "")
+
+def drawn_now():
+    if state.get("round") != round():
+        return {}
+    return state.get("drawn", {})
+
+def before_withdraw(p, chain):
+    if not ours(p):
+        return None
+    if not has(p["agent"], OFFICE):
+        return {"block": True, "reason": "the Granary Ration: only the holder of " + OFFICE + " draws from store " + p["store"]}
+    if drawn_now().get(p["agent"], 0) + p["qty"] > CAP + 0.000001:
+        return {"block": True, "reason": "the Granary Ration: at most " + str(CAP) + " food a round"}
+    return None
+
+def after_withdraw(p, chain):
+    if not ours(p):
+        return
+    if state.get("round") != round():
+        state["round"] = round()
+        state["drawn"] = {}
+    state["drawn"][p["agent"]] = state["drawn"].get(p["agent"], 0) + p["qty"]
+    book = public.setdefault("draws", [])
+    book.append({"round": round() + 1, "by": p["agent"], "qty": round_to(p["qty"], 3)})
+    if len(book) > 30:
+        book.pop(0)
+''', doc="""A granary under a ration: one office alone draws from a polity's store, capped per round, every draw public. With
+institutions.office_control the office's `controls` already reserve the store to it; this law adds the cap and the book.""",
+                     fires="before_withdraw", needs=("institutions.grants", "subsistence"))
+
+established_template("Payment Levy", "law", "levy", '''
+title = "Payment Levy"
+intent = "Every payment in ITEM from one party to another (a transfer, a wage, any law's or contract's payment) owes RATE of it to the treasury, charged to the payer on top of the payment. Payments into or out of the treasury itself pay nothing. What is collected is published by round."
+rank = "statute"
+ITEM = "penny"
+RATE = 0.05
+
+def levied(p):
+    if p["item"] != ITEM or p["src"] == None or p["dst"] == None:
+        return False
+    if p["src"] == treasury() or p["dst"] == treasury():
+        return False
+    w = str(p["why"])
+    return w == "transfer" or w.startswith("law:")
+
+def before_move(p, chain):
+    if levied(p):
+        return round_to(RATE * p["qty"], 4)
+    return None
+
+def after_move(p, chain):
+    if levied(p):
+        row = public.setdefault("collected", {})
+        key = str(round() + 1)
+        row[key] = round_to(row.get(key, 0) + RATE * p["qty"], 4)
+''', doc="""A levy on payments in one currency (wages, trade, gifts), charged to the payer into the treasury: what a council's
+money brings in, published by round.""", fires="before_move")
+
+established_template("Wage Roll", "contract", "wages", '''
+title = "Wage Roll"
+intent = "Wages: every EVERY rounds, at the end of the round, the contract pays each worker named in WAGES their wage in ITEM out of its treasury, while they are a member and the treasury holds it. A wage it cannot pay is recorded as owed. The payroll is public."
+ITEM = "penny"
+WAGES = {}
+EVERY = 1
+
+def on_round_end(r):
+    if (r + 1) % EVERY != 0:
+        return
+    alive = agents()
+    mine = members()
+    paid = {}
+    owed = public.get("owed", {})
+    for a in sorted(WAGES):
+        q = WAGES[a]
+        if a not in mine or a not in alive:
+            continue
+        if balance(treasury(), ITEM) + 0.000001 >= q and move(treasury(), a, ITEM, q):
+            paid[a] = q
+        else:
+            owed[a] = owed.get(a, 0) + q
+    public["owed"] = owed
+    public["payroll"] = {"round": r + 1, "paid": paid}
+''', doc="""Standing wages paid by an association (a house, a guild, a firm) out of its treasury to the members it names; unpaid
+wages are owed, publicly.""", fires="on_round_end")
+
+
 # ---------------------------------------------------------------------- edition lookups
 def settings(x=None) -> dict:
     """{edition, access} of a kernel, an instance or a spec (None: edition 1, access none)."""
@@ -4707,6 +4858,8 @@ def code(name: str, x=None) -> str:
         return CONTRACT_TEMPLATES[name]["code"]
     if name in FOOD_TEMPLATES:                                          # review 15 S6: food and family templates
         return FOOD_TEMPLATES[name]["code"]
+    if name in ESTABLISHED:                                             # review 27: established-world templates
+        return ESTABLISHED[name]["code"]
     if name in LIB2 and edition(x) == 2:
         return LIB2[name]["code"]
     return LIB[name]["code"]
@@ -4767,6 +4920,8 @@ def info2(name: str, x=None) -> dict:
         return {**TOOLKIT[name], **classify_code(TOOLKIT[name]["code"]), "params": params(name)}
     if name in FOOD_TEMPLATES:
         return {**FOOD_TEMPLATES[name], **classify_code(FOOD_TEMPLATES[name]["code"]), "params": params(name)}
+    if name in ESTABLISHED:
+        return {**ESTABLISHED[name], **classify_code(ESTABLISHED[name]["code"]), "params": params(name)}
     if name in LIB2 and edition(x) == 2:
         return {**LIB2[name], **classify_code(LIB2[name]["code"]), "gap": GAPS.get(name, "")}
     return info(name)
@@ -4807,6 +4962,14 @@ def catalogue_text(x=None) -> str:
                 ps = ", ".join(f"{k}={v!r}" for k, v in params(e["name"]).items())
                 parts.append(f"- {e['name']} ({'contract' if e['kind'] == 'contract' else 'law'}, food/{e['topic']}): {e['doc']} "
                              f"Parameters: {ps or 'none'}.\n```python\n{e['code']}```")
+        est = established_templates(x)                                  # review 27: only where institutions.office_control is on
+        if est:
+            parts.append("Templates for offices and established institutions (copy one and change its top-level constants: a law to "
+                         "propose, or a contract's code to found with create_contract):")
+            for e in est:
+                ps = ", ".join(f"{k}={v!r}" for k, v in params(e["name"]).items())
+                parts.append(f"- {e['name']} ({'contract' if e['kind'] == 'contract' else 'law'}, established/{e['topic']}): "
+                             f"{e['doc']} Parameters: {ps or 'none'}.\n```python\n{e['code']}```")
     return "\n".join(parts)
 
 
@@ -4825,7 +4988,7 @@ def instantiate(name: str, params: dict | None = None, x=None, rank: str | None 
     """A copy of library law `name` (in the edition of x; a toolkit template as it is) with top-level constants replaced: params
     {NAME: value}. Only names assigned a constant at the top level can be set; the result is checked like any law. rank: the copy's
     declared rank (law.v2), replacing or adding its `rank = "..."` line."""
-    return set_constants(code(name, x), params, name, rank, v2=name in TOOLKIT or name in FOOD_TEMPLATES)
+    return set_constants(code(name, x), params, name, rank, v2=name in TOOLKIT or name in FOOD_TEMPLATES or name in ESTABLISHED)
 
 
 def set_constants(src: str, params: dict | None = None, name: str = "the law", rank: str | None = None, v2: bool = False) -> str:
