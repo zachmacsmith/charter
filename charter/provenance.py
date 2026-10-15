@@ -100,7 +100,7 @@ ENGINE_FLIPS = {
                  "calendars, institutions.office_control (default false), election electorates, subsistence.shocks (default []), "
                  "agents.names; all opt-in: no default changes"},
     13: {"commits": ["f9e53282c0aa455ed2074bf5b48d26538b2e386e"],
-         "flips": [],
+         "flips": [("charter.context.DEFAULTS", ("budgets", "state"), 800, 1500)],
          "note": "channel purposes and prompt changes: the state lists channels an agent can post in; opening a channel needs a "
                  "purpose; starvation reads as starvation; soft context budgets (state 1500); the Press Act only where "
                  "channels.found_right is set (behaviour, not a default; prompts differ from earlier versions)"},

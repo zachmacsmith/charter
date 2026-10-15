@@ -132,7 +132,7 @@ def test_infer_version_from_git_history():
     s = ST.infer(PV.ENGINE_FLIPS[3]["commits"][0])                       # version 3 without version 2's flip
     assert s["engine_version"] == 3 and s["defaults"] == {"charter.channels.DEFAULTS": {"delivery": "pull"}}
     assert ST.patches(s) == {"charter.channels.DEFAULTS": {"delivery": "pull"},
-                             "charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}},
+                             "charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}, "budgets": {"state": 800}},
                              "charter.conflict.DEFAULTS": {"model": "disable"},
                              "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0},
                              "charter.goals.SCORING_DEFAULTS": {"fixes": False}}
@@ -145,14 +145,14 @@ def test_infer_version_from_git_history():
 
 def test_patches_revert_later_flips_only_where_the_snapshot_is_silent():
     p = ST.patches({"engine_version": 3, "defaults": {}})
-    assert p == {"charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}},
+    assert p == {"charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}, "budgets": {"state": 800}},
                  "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}}
     p = ST.patches({"engine_version": 1, "defaults": {"charter.context.DEFAULTS": {"memory_text": "v2"}}})
     assert p == {"charter.channels.DEFAULTS": {"delivery": "pull"},
-                 "charter.context.DEFAULTS": {"dm_delta": False, "history": {"enabled": False}},
+                 "charter.context.DEFAULTS": {"dm_delta": False, "history": {"enabled": False}, "budgets": {"state": 800}},
                  "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}}
-    assert ST.patches({"engine_version": 7, "defaults": {}}) == {"charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}}
-    assert ST.patches({"engine_version": 9, "defaults": {}}) == {"charter.goals.SCORING_DEFAULTS": {"fixes": False}}           # engine 10: review 23's scoring fixes
+    assert ST.patches({"engine_version": 7, "defaults": {}}) == {"charter.context.DEFAULTS": {"budgets": {"state": 800}}, "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}}
+    assert ST.patches({"engine_version": 9, "defaults": {}}) == {"charter.context.DEFAULTS": {"budgets": {"state": 800}}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}}           # engine 10: review 23's scoring fixes
     with ST.use({"engine_version": 1, "defaults": {}}):
         assert CX.DEFAULTS["memory_text"] == "v1" and CX.cfg({})["dm_delta"] is False
         assert CX.DEFAULTS["history"]["enabled"] is False and CX.DEFAULTS["history"]["chunk"] == 3   # the rest of the block kept
