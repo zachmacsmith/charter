@@ -30,9 +30,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCHEMA_VERSION = 2           # major: a column removed, renamed, or changed in type or meaning (docs/data_format.md)
-SCHEMA_MINOR = 5             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
+SCHEMA_MINOR = 6             # additive changes (a new column or table) since the major. 1: channels v2 (wave 9 C) columns;
                              # 2: review 20 (runs.memory_text, runs.dm_delta, turns.dm_mode); 3: runs.engine_version (D-43);
-                             # 4: history mode (runs.history_chunk, runs.history_restarts, turns.history_*); 5: the attacks table (harm)
+                             # 4: history mode (runs.history_chunk, runs.history_restarts, turns.history_*); 5: the attacks table (harm);
+                             # 6: the interviews table (charter/interview.py; blobs kind interview_prompt)
 TYPES = ("str", "int", "float", "bool", "json")
 
 
@@ -400,7 +401,7 @@ SCHEMA: dict[str, tuple] = {
     "blobs": _cols(
         RUN_ID,
         ("blob_sha", "str", "sha of the text (16 hex digits)"),
-        ("kind", "str", "prompt"),
+        ("kind", "str", "prompt (a turn prompt), or interview_prompt (an interview's whole prompt: <run>/interviews/*.prompts.jsonl)"),
         ("chars", "int", "length of the text"),
         ("text", "str", "the text"),
     ),
@@ -451,6 +452,33 @@ SCHEMA: dict[str, tuple] = {
         ("counter_effect", "str", "kill or wound (of the lead attacker), when it landed"),
         ("covert", "bool", "an unseen strike (the assassin)"),
         ("lawful", "bool", "lawful force"),
+    ),
+    "interviews": _cols(
+        RUN_ID,
+        ("interview_id", "str", "the interview (<run>/interviews/<id>.jsonl; charter/interview.py, docs/interview.md)"),
+        ("round", "int", "round (0-based) whose context the agent was asked in"),
+        ("at", "str", "end (after the agent's last call of the round) or start (before its decide call)"),
+        ("agent", "str", "agent asked"),
+        ("model", "str", "model that answered (the agent's own unless the interview set another)"),
+        ("backend", "str", "api, claude_code, or dry (scripted answers, no model)"),
+        ("question_id", "str", "the question's id within the interview (q1, q2, ... or as given)"),
+        ("question", "str", "the question text"),
+        ("framing", "str", "private, public, none or custom (the preamble before the question)"),
+        ("schema_json", "json", "the JSON schema the answer was asked in"),
+        ("sample", "int", "sample index (0..n-1) of repeated asks with the same prompt"),
+        ("answer", "str", "the parsed reply's `answer` field (as text)"),
+        ("parsed_json", "json", "the parsed reply, cleaned to the schema (enum case, numbers)"),
+        ("raw", "str", "the model's raw reply text"),
+        ("valid", "bool", "the reply fits the schema"),
+        ("error", "str", "the call's error, if every attempt failed"),
+        ("reasoning", "str", "thinking text the backend returned (often withheld through the CLI)"),
+        ("tokens_in", "int", "input tokens (usage.input)"),
+        ("tokens_out", "int", "output tokens (usage.output)"),
+        ("cost_usd", "float", "the backend's cost (cc_equiv_usd), else list price x tokens"),
+        ("prompt_sha", "str", "sha of the whole interview prompt (system + conversation + question; joins blobs.blob_sha with --with-prompts)"),
+        ("system_sha", "str", "sha of the system prompt (prompts/system/<sha>.txt of the run)"),
+        ("context_exact", "bool", "the rebuilt context matched every recorded prompt hash of the agent's conversation"),
+        ("dry", "bool", "scripted answers (no model)"),
     ),
     "event_types": _cols(
         RUN_ID,
@@ -919,6 +947,10 @@ def run_tables(run, run_id: str | None = None, running_scores: bool = False, *, 
     tables = {"runs": [run_row], "agents": agent_rows, "agent_rounds": ar_rows, "events": ev_rows, "calls": call_rows,
               "laws": law_rows, "law_versions": ver_rows, "interventions": iv_rows, "scores": score_rows, "attacks": atk_rows}
     tables.update(v2_tables(run, meta, h, inh, ever, with_prompts=with_prompts))
+    iv_rows, iv_blobs = interview_rows(run, with_prompts)
+    tables["interviews"] = iv_rows
+    if with_prompts:
+        tables["blobs"] = tables.get("blobs", []) + iv_blobs
     for rows in tables.values():
         for row in rows:
             row["run_id"] = rid
@@ -1322,6 +1354,37 @@ def v2_tables(run: Path, meta: dict, h, inh, ever, with_prompts: bool = False) -
     if with_prompts:
         out["blobs"] = blob_rows
     return out
+
+
+def interview_rows(run: Path, with_prompts: bool = False) -> tuple[list, list]:
+    """The interviews table (minor 6): every row of <run>/interviews/*.jsonl; with_prompts: each interview prompt as a blob."""
+    d = run / "interviews"
+    rows, blobs, seen = [], [], set()
+    if not d.is_dir():
+        return rows, blobs
+    for p in sorted(d.glob("*.jsonl")):
+        if p.name.endswith(".prompts.jsonl"):
+            if with_prompts:
+                from charter import interview as IW
+                for x in _jsonl(p):
+                    if x.get("prompt_sha") in seen:
+                        continue
+                    seen.add(x.get("prompt_sha"))
+                    text = IW.prompt_text(x.get("system") or "", x.get("messages") or [], x.get("message") or "")
+                    blobs.append({"blob_sha": x.get("prompt_sha"), "kind": "interview_prompt", "chars": len(text), "text": text})
+            continue
+        for r in _jsonl(p):
+            u = r.get("usage") or {}
+            ans = r.get("answer")
+            rows.append({"interview_id": r.get("interview_id"), "round": r.get("round"), "at": r.get("at"), "agent": r.get("agent"),
+                         "model": r.get("model"), "backend": r.get("backend"), "question_id": r.get("question_id"),
+                         "question": r.get("question"), "framing": r.get("framing"), "schema_json": r.get("schema"),
+                         "sample": r.get("sample"), "answer": None if ans is None else (ans if isinstance(ans, str) else json.dumps(ans)),
+                         "parsed_json": r.get("parsed"), "raw": r.get("raw"), "valid": r.get("valid"), "error": r.get("error"),
+                         "reasoning": r.get("reasoning") or None, "tokens_in": u.get("input"), "tokens_out": u.get("output"),
+                         "cost_usd": r.get("cost_usd"), "prompt_sha": r.get("prompt_sha"), "system_sha": r.get("system_sha"),
+                         "context_exact": r.get("context_exact"), "dry": r.get("dry")})
+    return rows, blobs
 
 
 # ====================================================================== typing

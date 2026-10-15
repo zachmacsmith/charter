@@ -8,6 +8,8 @@
   python -m charter rewind RUN_DIR --to N --out NEW_DIR                          a copy of the run after round N, to resume (charter/replay.py)
   python -m charter fork RUN_DIR --at N --apply iv.yaml [--replicates K] [--out DIR]   branch at round N with interventions, play on live
   python -m charter branches RUN_DIR                                             the lineage tree of rewinds and forks
+  python -m charter interview RUN_DIR --round N --question "..." [--n 3] [--schema yes_no_conf] [--dry]   ask agents in character at
+                         round N with their exact context; nothing written back (charter/interview.py; docs/interview.md)
   python -m charter export RUN_DIR [RUN_DIR...] --out DIR [--format parquet|csv]  long-format analysis tables (docs/export.md)
   python -m charter publish RUN_DIR [RUN_DIR...] [--card CARD] [--push]           export + raw archive + catalog to the HF dataset
   python -m charter score RUN_DIR                                                (re)score a run
@@ -380,6 +382,7 @@ def main(argv=None):
     __import__("charter.export", fromlist=["add_command"]).add_command(sub)     # export RUN.. --out DIR [--format parquet|csv]
     __import__("charter.publish", fromlist=["add_command"]).add_command(sub)    # publish RUN.. --repo OWNER/NAME [--push]
     __import__("charter.rerun", fromlist=["add_command"]).add_command(sub)      # rerun RUN [--out DIR] [--dry-run]: its own code
+    __import__("charter.interview", fromlist=["add_command"]).add_command(sub)  # interview RUN --round N --question ..: in character
     from charter import preview
     p = sub.add_parser("preview", help="render what agents see, with token counts (charter/preview.py)")
     preview.add_arguments(p); p.set_defaults(fn=lambda a: sys.exit(preview.cmd(a)))
