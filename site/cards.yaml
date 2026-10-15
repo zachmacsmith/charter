@@ -110,3 +110,10 @@ grand35_seed35_3f0238c6:
   featured: true
   usable_rounds: 1-46
   validity: Paused at round 46 of 100 (session limit); the run may resume.
+
+ashwood_seed1_cb354900:
+  title: Ashwood, a state of nature
+  description: >-
+    Thirty-eight agents (Haiku, Sonnet and Opus) start with no constitution, no jurisdiction and no laws, and anyone can attack
+    anyone; the only way out is to found and declare a jurisdiction. Sixty rounds later no law has passed (0 of 2 proposed).
+  tags: [state of nature, anarchy, food camps, 60 rounds]

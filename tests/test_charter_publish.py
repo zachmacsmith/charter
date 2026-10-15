@@ -95,3 +95,18 @@ def test_load_cards(tmp_path):
     assert P.load_cards(tmp_path / "one.json") == {"*": {"title": "T"}}
     assert P.load_cards(tmp_path / "many.yaml") == {"r1": {"title": "A"}, "r2": {"tags": ["x"]}}
     assert P.parse_rounds("rounds 1–23") == [1, 23] and P.parse_rounds(None) is None
+
+
+def test_stories_only_publish_checks_the_catalog(tmp_path, monkeypatch):
+    monkeypatch.setattr(P, "remote_catalog", lambda repo, revision=None: [{"run_id": "r1"}])
+    (tmp_path / "stories.yaml").write_text(
+        "- {title: A, subtitle: B, quote: C, agent: Ann, run_id: r1, mood: happy, extra: dropped}\n"
+        "- {title: D, quote: E, agent: Bo, run_id: gone}\n")
+    stories = P.load_stories(tmp_path / "stories.yaml")
+    assert "extra" not in stories[0]
+    s = P.publish([], repo="me/data", staging=tmp_path / "st", stories=stories, **QUIET)
+    assert json.loads((tmp_path / "st" / "stories.json").read_text())["stories"][0]["agent"] == "Ann"
+    assert any("missing subtitle" in p for p in s["problems"]) and any("gone is not in the catalog" in p for p in s["problems"])
+    monkeypatch.setattr(P, "_api", lambda: pytest.fail("no upload with problems"))
+    with pytest.raises(SystemExit):
+        P.publish([], repo="me/data", staging=tmp_path / "st2", stories=stories, push=True, **QUIET)

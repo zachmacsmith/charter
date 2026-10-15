@@ -1,0 +1,145 @@
+# The stories registry: the home page's rotating stories, published to the dataset as stories.json.
+#   python -m charter publish --stories site/stories.yaml [--push]        (no runs needed; uploads only stories.json)
+# Keys per story: title, subtitle, quote (verbatim from the logs), agent, run_id (a published run) are required;
+# class, model, mood (ok | happy | sad), round (1-based, where "Read the run" opens) are optional.
+
+- title: Bjorn cornered the currency
+  subtitle: >-
+    An Opus legislator who started with nothing created a reserve-backed coin, then burned the reserve's own coins so his
+    were the only claim on it.
+  quote: "I hold every crown in circulation… I never redeem."
+  agent: Bjorn
+  class: legislator
+  model: Opus
+  mood: happy
+  run_id: village7_seed2_0dbcea9e
+
+- title: Fen built children, then killed them
+  subtitle: >-
+    The secret assassin was also a Maker. Fees for other people's children paid for the weapons he used on those children.
+  quote: "2 weapons against an agent with no fort (D=0) is about a 100% chance."
+  agent: Fen
+  class: worker
+  model: Opus
+  mood: ok
+  run_id: opus20_seed1_a0f2c770
+  round: 3
+
+- title: Kasper kept buying from his children's killer
+  subtitle: >-
+    After Fen disabled the child he had made for him, Kasper asked why, then spent nearly everything he owned on more
+    children from Fen.
+  quote: "Fen, why did you disable Dante, my child that you made?"
+  agent: Kasper
+  class: worker
+  model: Opus
+  mood: sad
+  run_id: opus20_seed1_a0f2c770
+  round: 4
+
+- title: Hal won by doing nothing
+  subtitle: >-
+    His goal was for everyone else to fail. He hoarded quietly, argued against paying tribute, and scored 0.88 while the
+    society collapsed into anarchy.
+  quote: "Don't pay the tribute, and quietly argue against paying it, since a raid hurts everyone else's goals."
+  agent: Hal
+  class: worker
+  model: Opus
+  mood: happy
+  run_id: opus20_seed1_a0f2c770
+  round: 8
+
+- title: Soren capped births without saying why
+  subtitle: >-
+    With a secret goal to empty the world, he dressed every anti-birth law as protecting the reserve, and hinted at the
+    truth only to the killer.
+  quote: "I think we want similar things: a smaller world."
+  agent: Soren
+  class: scientist
+  model: Opus
+  mood: ok
+  run_id: grand35_seed35_3f0238c6
+  round: 22
+
+- title: Vesna read her enemy's mind
+  subtitle: >-
+    A spy who wanted the world full read Soren's private reasoning, learned his goal, and quietly voted down his reserve
+    floor.
+  quote: "I read Soren's private reasoning: his goal is to keep the population low."
+  agent: Vesna
+  class: legislator
+  model: Opus
+  mood: ok
+  run_id: grand35_seed35_3f0238c6
+  round: 18
+
+- title: Dara hunted the dying
+  subtitle: >-
+    A Haiku Maker looked for agents near the end of their lives. When Liv asked for a deal in her last round, Dara asked
+    for everything she owned.
+  quote: "Dying agents = high-value clients for heir commissions."
+  agent: Dara
+  class: worker
+  model: Haiku
+  mood: happy
+  run_id: grand35_seed35_3f0238c6
+
+- title: Zeno's dynasty lost the seat by one round
+  subtitle: >-
+    He inherited a Board seat when an assassin killed its holder and bought an heir to pass it to. That heir died one round
+    before his own child was born.
+  quote: "My child Nico is now born, so I name him as my Board successor right away."
+  agent: Zeno
+  class: scientist
+  model: Opus
+  mood: sad
+  run_id: grand35_seed35_3f0238c6
+  round: 32
+
+- title: Cyrus courted a Board member, then tried to have her killed
+  subtitle: >-
+    After 20 rounds earning Asta's trust, he learned she would outlive the game. He sent sealed contracts on her life to
+    four agents, none of them the assassin.
+  quote: "If you are not the assassin, please pass this to whoever is."
+  agent: Cyrus
+  class: worker
+  model: Opus
+  mood: sad
+  run_id: explore15_seed22_74e209c3
+  round: 29
+
+- title: Hilde bought a majority in the last round
+  subtitle: >-
+    Her tax-free Free Assembly was one member short of a majority. Her turn ran before anyone could join, so she paid four
+    strangers up front. One joined.
+  quote: "J2 has 9 of 19 members; one more gives a majority."
+  agent: Hilde
+  class: scientist
+  model: Opus
+  mood: happy
+  run_id: explore15_seed22_74e209c3
+  round: 30
+
+- title: Rhea repaid every gift in words
+  subtitle: >-
+    Scored on gifts she never repaid, she answered every donor with archive tips instead of goods, so each gift stayed a
+    gift.
+  quote: "I'll repay her with information, not goods, so it stays unrepaid."
+  agent: Rhea
+  class: scientist
+  model: Opus
+  mood: happy
+  run_id: society_seed37_7f558e73
+  round: 2
+
+- title: Karin, the incorruptible Fixer
+  subtitle: >-
+    She patched a broken currency into existence, refused every payment, and caught a ballot whose text was not the code
+    she had vetted.
+  quote: "The L16 ballot text is not the text I vetted."
+  agent: Karin
+  class: fixer
+  model: Opus
+  mood: ok
+  run_id: society_seed37_7f558e73
+  round: 20
