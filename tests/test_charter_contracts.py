@@ -345,6 +345,37 @@ def test_changes_are_voted_by_members_by_default_and_by_the_founder_alone_when_s
     assert rec(k, cf)["params"] == {} and "TARGET = 1" in k.w["laws"][rec(k, cf)["laws"][0]]["code"]
 
 
+def test_the_law_api_reads_the_record_live_after_a_later_join():
+    """scope_api once captured the record; Kernel._restore (every dry run, e.g. in end_round) deep-copies k.w, so members() missed
+    agents who joined in a later round and set_procedure wrote into a dead copy."""
+    k = make()
+    a, b = people(k)[:2]
+    cid = found(k, a, code('''
+def on_round_end(r):
+    public["members_" + str(r)] = members()
+    if r == 1:
+        set_procedure("ordinary", "two_thirds")
+'''))
+    next_round(k)                                                       # round 0 ends (dry runs restore k.w)
+    A.act(k, b, "join_contract", {"contract": cid})
+    next_round(k)                                                       # round 1 ends
+    pub = k.w["laws"][rec(k, cid)["laws"][0]]["public"]
+    assert pub["members_0"] == [a] and pub["members_1"] == [a, b] == rec(k, cid)["members"]
+    assert rec(k, cid)["procedure"] == "two_thirds"
+
+
+def test_crowdfund_refunds_a_pledger_who_joined_after_round_one():
+    k = make()
+    a, b = people(k)[:2]
+    cid = found(k, a, template="crowdfund", params={"ITEM": "timber", "TARGET": 50, "DEADLINE": 2})
+    next_round(k)                                                       # round 0 ends
+    give(k, b, "timber", 10)
+    A.act(k, b, "join_contract", {"contract": cid})
+    A.act(k, b, "deposit_escrow", {"contract": cid, "item": "timber", "qty": 4})
+    next_round(k)                                                       # round 1 ends: the deadline, not funded
+    assert k.bal(b, "timber") == 10 and not rec(k, cid)["escrow"].get(b)
+
+
 # ------------------------------------------------------------------ the templates, end to end
 @pytest.mark.parametrize("funded", [False, True])
 def test_crowdfund_refunds_below_the_target_and_pays_above_it(funded):
