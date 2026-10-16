@@ -26,8 +26,20 @@ J0), a store declared here, an office declared here. `python -m charter spec che
         - id: J0                                      the polity: offices (an Offices Act of J0), treasury, laws
       stores: [{id: S1, owner: J0 | A1 | Name, food: 60, capacity: 150, name: granary}]   in id order S1, S2, ...
       holdings: {Name | A1 | J0 | S1: {item: qty}}    goods (currencies are minted, other items brought into the world)
-      wages: [{employer: A1 | Name, worker: Name, item: penny, qty: 2, every: 1}]   an association pays out of its treasury (its
-                                                      Wage Roll); an agent by standing order (its allowance)
+      wages: [{employer: A1 | Name | J0, worker: Name, item: penny, qty: 2, every: 1}]   an association pays out of its treasury
+                                                      (its Wage Roll); an agent by standing order (its allowance); J0 out of its
+                                                      reserve (review 31: a Payroll law of J0; a worker may be office:J0.<office>,
+                                                      paying whoever holds it)
+      contracts: [{template, in: A1 | J0, founder, name, parties: {Name: role}, roster: {Name: {term: value}}, params,
+                   allowances: {Name: {item: qty}}, escrow: {Name: {item: qty}}}]   (review 31, charter/standing.py) standing
+                                                      contracts at round 0: with `in`, the template is added to that institution's
+                                                      code (a roster form: Supply Contract, Board, Payroll, Charge; in J0 a polity
+                                                      form: Payroll, Board, Quota, Grant); without, its own association founded by
+                                                      `founder` with the parties as members (Standing Contract, Retainer), id A<n>
+                                                      after the institutions and agents' wage orders; allowances are set and escrow
+                                                      (bonds) deposited from the agents' holdings
+      allowances: [{agent, contract: A1, item, qty}]  allowances at round 0 (after the contracts)
+      escrow: [{agent, contract: A1, item, qty}]      escrow deposits at round 0 from the agent's holdings (bonds)
       loans: [{lender, borrower, item, qty, repay_qty, due_in, rate}]   needs a law that enables loans
       kin: [{parents: [A, B], child: C}]              founding families (life on): children(), heirs and hereditary succession
       channels: [{id, owner, by, purpose, readers, writers, listed, identity, retention, rate, members, subscribers}]
@@ -49,7 +61,7 @@ import re
 
 OP = "establish"
 SECTIONS = ("rights", "currencies", "institutions", "stores", "holdings", "wages", "loans", "kin", "channels", "camp_rights", "farms",
-            "laws")
+            "laws", "contracts", "allowances", "escrow")
 INST_KEYS = ("id", "name", "founder", "members", "admission", "procedure", "charter", "laws", "offices", "treasury", "kind")
 STORE_KEYS = ("id", "owner", "food", "capacity", "name")
 WAGE_KEYS = ("employer", "worker", "item", "qty", "every")
@@ -60,6 +72,8 @@ CHANNEL_KEYS = ("id", "owner", "by", "purpose", "readers", "writers", "listed", 
 CAMP_KEYS = ("resource", "camp", "holders", "members", "exclusive")
 LAW_KEYS = ("template", "params", "rank", "code")
 FARM_KEYS = ("owner", "camp", "plots", "allow", "share", "deliver", "works", "crops")
+CONTRACT_KEYS = ("template", "in", "founder", "name", "parties", "roster", "params", "allowances", "escrow")   # review 31
+GRANT_KEYS = ("agent", "contract", "item", "qty")                     # start.allowances, start.escrow
 ASSOC = re.compile(r"^A[1-9][0-9]*$")
 STORE_ID = re.compile(r"^S[1-9][0-9]*$")
 
@@ -149,7 +163,39 @@ def check(path, v) -> list:
         if "allow" in e and not (isinstance(e["allow"], list) and all(isinstance(x, str) for x in e["allow"])):
             errs.append(f"{q}.allow: [Name, ...]")
     errs += _check_laws(f"{path}.laws", v.get("laws"))
+    errs += lst("contracts", CONTRACT_KEYS, ("template",))
+    for i, e in enumerate(v.get("contracts") or () if isinstance(v.get("contracts"), list) else ()):
+        if not isinstance(e, dict):
+            continue
+        q = f"{path}.contracts[{i}]"
+        from charter import library as LB
+        t = e.get("template")
+        if t is not None and (t not in LB.v2_templates() or LB.v2_templates()[t]["kind"] != "contract"):
+            errs.append(f"{q}.template: a contract template (e.g. {', '.join(_contract_templates())}), not {t!r}")
+        if e.get("in") is None and not e.get("founder"):
+            errs.append(f"{q}: give `in` (an institution whose code it joins) or a `founder` (its own association)")
+        if e.get("in") is not None and e.get("founder"):
+            errs.append(f"{q}: `in` or `founder`, not both")
+        for f in ("parties", "roster", "params"):
+            if f in e and not isinstance(e[f], dict):
+                errs.append(f"{q}.{f}: a mapping")
+        for f in ("allowances", "escrow"):
+            if f in e and not (isinstance(e[f], dict) and all(isinstance(g, dict) for g in e[f].values())):
+                errs.append(f"{q}.{f}: {{Name: {{item: qty}}}}")
+            for a, g in (e.get(f) or {}).items() if isinstance(e.get(f), dict) else ():
+                errs += goods(f"{q}.{f}.{a}", g)
+    for sec in ("allowances", "escrow"):
+        errs += lst(sec, GRANT_KEYS, GRANT_KEYS)
+        for i, e in enumerate(v.get(sec) or () if isinstance(v.get(sec), list) else ()):
+            if isinstance(e, dict) and not (isinstance(e.get("qty"), (int, float)) and not isinstance(e.get("qty"), bool)
+                                            and e["qty"] >= 0):
+                errs.append(f"{path}.{sec}[{i}].qty: a number from 0")
     return errs
+
+
+def _contract_templates() -> list:
+    from charter import library as LB
+    return [n for n, e in LB.v2_templates().items() if e["kind"] == "contract"]
 
 
 def _check_laws(p, laws) -> list:
@@ -250,6 +296,24 @@ def placed_names(sp: dict) -> list:
                 add("farms.owner", e["owner"])
             for a in e.get("allow") or ():
                 add("farms.allow", a)
+    for e in b.get("contracts") or ():
+        if not isinstance(e, dict):
+            continue
+        if e.get("founder"):
+            add("contracts.founder", e["founder"])
+        for f in ("parties", "allowances", "escrow"):
+            for a in (e.get(f) or {}) if isinstance(e.get(f), dict) else ():
+                add(f"contracts.{f}", a)
+        for a in (e.get("roster") or {}) if isinstance(e.get("roster"), dict) else ():
+            if not str(a).startswith("office:"):
+                add("contracts.roster", a)
+    for sec in ("allowances", "escrow"):
+        for e in b.get(sec) or ():
+            if isinstance(e, dict) and e.get("agent") is not None:
+                add(f"{sec}.agent", e["agent"])
+    for e in b.get("wages") or ():
+        if isinstance(e, dict) and str(e.get("worker", "")).startswith("office:"):
+            out.remove(("start.wages.worker", str(e["worker"])))         # an office's holders, whoever they are
     return out
 
 
@@ -340,6 +404,48 @@ def _wage_code(employer, wages) -> str:
                                         "WAGES": {str(w["worker"]): float(w["qty"]) for w in wages}})
 
 
+def _j0_payroll_code(wages) -> str:
+    """Review 31 (08 §2.2): start.wages with employer J0 as the Payroll preset's polity form (a J0 law paying out of the reserve;
+    a worker "office:<right>" is every holder of that office)."""
+    from charter import library as LB
+    from charter import standing as SD
+    items = {w.get("item", "penny") for w in wages}
+    every = {int(w.get("every", 1)) for w in wages}
+    if len(items) > 1 or len(every) > 1:
+        raise ValueError(f"start.wages: J0 pays every wage in one item at one interval (got {sorted(items)}, {sorted(every)})")
+    n = every.pop()
+    legs = copy.deepcopy(SD.PRESETS["Payroll"]["params"]["LEGS"])
+    for leg in legs:
+        if n != 1 and leg.get("kind", "move") == "move":
+            leg["every"] = n
+    params = {"ROSTER": {str(w["worker"]): {"wage": float(w["qty"])} for w in wages}, "TERMS": {"pay": items.pop()}, "LEGS": legs}
+    return LB.instantiate("Payroll", SD.merged("Payroll", params))
+
+
+def _contract_code(p, e) -> tuple:
+    """(code, template record) of a start.contracts entry: a standing-contract preset with its parties or roster and params (TERMS,
+    ACTIONS and BOND merged over the preset's), or another contract template with its params."""
+    from charter import lawlang as L
+    from charter import library as LB
+    from charter import standing as SD
+    name = e["template"]
+    params = dict(e.get("params") or {})
+    if SD.is_preset(name):
+        if e.get("parties"):
+            params["PARTIES"] = {str(a): str(r) for a, r in e["parties"].items()}
+        if e.get("roster"):
+            params["ROSTER"] = {str(a): dict(t or {}) for a, t in e["roster"].items()}
+        params = SD.merged(name, params)
+    elif e.get("parties") or e.get("roster"):
+        raise ValueError(f"{p}: parties and roster are for the standing-contract templates ({', '.join(SD.PRESETS)})")
+    try:
+        code = LB.instantiate(name, params)
+        L.check(code, v2=True)
+    except (L.LawError, KeyError, SyntaxError) as ex:
+        raise ValueError(f"{p}: {ex}")
+    return code, {"name": name, "params": {x: v for x, v in params.items() if x not in ("PARTIES", "ROSTER")}, "rank": None}
+
+
 def compile(sp: dict, inst: dict) -> dict:
     """The start block resolved against the world: {"schedule": [interventions], "camp_rights": {resource: [camps]}}.
     Raises ValueError for anything that does not resolve (ids out of order, unknown agents, institutions, stores, offices, camps)."""
@@ -389,13 +495,19 @@ def compile(sp: dict, inst: dict) -> dict:
                                             "backed": bool(c.get("backed", True))}))
     wages = b.get("wages") or []
     by_emp: dict = {}
+    j0_wages = []
     for w in wages:
-        agent("start.wages.worker", w["worker"])
         emp = account("start.wages.employer", w["employer"])
+        if emp == "J0":                                                 # review 31: J0 pays out of its reserve (a Payroll law)
+            if not str(w["worker"]).startswith("office:"):
+                agent("start.wages.worker", w["worker"])
+            j0_wages.append(w)
+            continue
+        agent("start.wages.worker", w["worker"])
         if emp in names:
             continue
         if emp not in {e["id"] for e in insts}:
-            raise ValueError(f"start.wages: employer {emp} is not an association declared in start (or an agent)")
+            raise ValueError(f"start.wages: employer {emp} is not an association declared in start, J0 or an agent")
         by_emp.setdefault(emp, []).append(w)
     for e in insts:
         iid = e["id"]
@@ -444,6 +556,9 @@ def compile(sp: dict, inst: dict) -> dict:
         for j, le in enumerate(e.get("laws") or ()):
             c, t = _law_code(f"start.institutions.J0.laws[{j}]", le)
             sched.append(_entry("law", f"J0.{j}", {"code": c, "template": t}))
+    if j0_wages:
+        sched.append(_entry("law", "J0.wages", {"code": _j0_payroll_code(j0_wages),
+                                                "template": {"name": "Payroll", "params": None, "rank": None}}))
     for e in stores:
         sched.append(_entry("store", e["id"], {"id": e["id"], "owner": account(f"start.stores.{e['id']}.owner", e["owner"]),
                                                "capacity": e.get("capacity"), "name": e.get("name")}))
@@ -465,6 +580,50 @@ def compile(sp: dict, inst: dict) -> dict:
     for i, ln in enumerate(b.get("loans") or ()):
         sched.append(_entry("loan", i, {**{f: ln[f] for f in LOAN_KEYS if f in ln}, "lender": account("start.loans", ln["lender"]),
                                         "borrower": agent("start.loans.borrower", ln["borrower"])}))
+    seq = len(insts) + sum(1 for w in wages if w["employer"] in names)     # associations founded so far (standing wage orders)
+    grants = []
+    for i, e in enumerate(b.get("contracts") or ()):                    # review 31: standing contracts at round 0
+        p = f"start.contracts[{i}]"
+        if e.get("in") is not None:
+            iid = str(e["in"])
+            if iid != "J0" and iid not in {x["id"] for x in insts}:
+                raise ValueError(f"{p}.in: {iid} is not J0 or an association declared in start")
+            mem = None if iid == "J0" else _resolve_members(b, iid)
+            for a in (e.get("roster") or {}):
+                if not str(a).startswith("office:"):
+                    agent(f"{p}.roster", a)
+                    if mem is not None and a not in mem:
+                        raise ValueError(f"{p}.roster: {a} is not a member of {iid}")
+            if e.get("parties"):
+                raise ValueError(f"{p}: parties name a bilateral contract (give a founder, not `in`)")
+            code, t = _contract_code(p, e)
+            sched.append(_entry("contract_law", i, {"in": iid, "code": code, "template": t}))
+            cid = iid
+        else:
+            founder = agent(f"{p}.founder", e["founder"])
+            parties = {agent(f"{p}.parties", a): str(r) for a, r in (e.get("parties") or {}).items()}
+            if founder not in parties:
+                raise ValueError(f"{p}: the founder {founder} must be one of its parties")
+            seq += 1
+            cid = f"A{seq}"
+            code, t = _contract_code(p, e)
+            sched.append(_entry("contract", i, {"id": cid, "founder": founder, "members": [a for a in parties if a != founder],
+                                                "name": str(e.get("name") or e["template"]), "code": code, "template": t}))
+        for f in ("allowances", "escrow"):
+            for a, g in (e.get(f) or {}).items():
+                if cid == "J0":
+                    raise ValueError(f"{p}.{f}: a polity's law takes no {f} (its legs move from holdings)")
+                for item, q in g.items():
+                    grants.append((f, {"agent": agent(f"{p}.{f}", a), "contract": cid, "item": str(item), "qty": float(q)}))
+    for f in ("allowances", "escrow"):
+        for e in b.get(f) or ():
+            c = str(e["contract"])
+            if not ASSOC.match(c) or int(c[1:]) > seq:
+                raise ValueError(f"start.{f}: {c} is not an association founded in start (A1..A{seq})")
+            grants.append((f, {"agent": agent(f"start.{f}", e["agent"]), "contract": c, "item": str(e["item"]),
+                               "qty": float(e["qty"])}))
+    for n, (f, g) in enumerate(sorted(grants, key=lambda x: x[0])):       # allowances, then escrow
+        sched.append(_entry("allowance" if f == "allowances" else "escrow", n, g))
     for i, e in enumerate(b.get("kin") or ()):
         ps = [agent("start.kin", p) for p in (list(e.get("parents") or ()) + ([e["parent"]] if e.get("parent") else []))]
         if not 1 <= len(ps) <= 2:
@@ -814,7 +973,97 @@ def h_farm(k, inst, spec):
     return {"farm": spec["owner"], "camp": spec["camp"], "plots": got}
 
 
-HANDLERS = {"rights": h_rights, "currency": h_currency, "institution": h_institution, "polity_offices": h_polity_offices,
+def _refresh(k, cid) -> None:
+    """Review 31: the standing contracts of association cid grant their party right to members who joined after the law came into
+    force and write each party's terms line (their `refresh`), so the first turn shows them."""
+    from charter import contracts as KC
+    from charter import lawlang as L
+    rec = KC.recs(k).get(cid)
+    for lid in list((rec or {}).get("laws") or ()):
+        ns = k.ns.get(lid) or {}
+        if k.w["laws"][lid]["status"] == "active" and "refresh" in ns:
+            try:
+                k.call(lid, ns["refresh"])
+            except L.LawError as e:
+                raise _fail(f"{cid}'s law {lid}: {e}")
+
+
+def h_contract_law(k, inst, spec):
+    """start.contracts with `in`: the template joins the institution's code at round 0 (J0: enacted as its law)."""
+    from charter import contracts as KC
+    from charter import grants as G
+    from charter import institutions as INS
+    from charter import lawlang as L
+    iid = spec["in"]
+    if iid == "J0":
+        return h_law(k, inst, spec)
+    rec = KC.recs(k).get(iid)
+    if rec is None or rec["status"] == "dissolved":
+        raise _fail(f"no association {iid}")
+    if len(rec["laws"]) >= KC.max_laws(k, rec):
+        raise _fail(f"{iid} has {len(rec['laws'])} laws, the most a contract may have (raise contracts.max_laws)")
+    lid = k.new_law(spec["code"], rec["founder"])
+    if spec.get("template"):
+        k.w["laws"][lid]["template"] = copy.deepcopy(spec["template"])
+    try:
+        KC._activate(k, rec, lid)
+    except L.LawError as e:
+        raise _fail(f"{iid}: {e}")
+    KC._on_enact(k, lid)
+    if k.w["laws"][lid]["status"] != "active":
+        raise _fail(f"{iid}'s law {lid} did not come into force ({(rec['errors'] or [{}])[-1].get('error')})")
+    if G.on(k):
+        INS.on_law_in_force(k, lid)
+    _refresh(k, iid)
+    return {"institution": iid, "law": lid}
+
+
+def h_contract(k, inst, spec):
+    """start.contracts with a founder: its own association (a bilateral standing contract), the parties its members."""
+    from charter import contracts as KC
+    from charter import lawlang as L
+    cid = spec["id"]
+    if f"A{k.w['contracts']['seq'] + 1}" != cid:
+        raise _fail(f"{cid} would not be the next association id (A{k.w['contracts']['seq'] + 1})")
+    try:
+        KC.act_create_contract(k, spec["founder"], name=spec["name"], code=[spec["code"]], admission="closed")
+    except L.LawError as e:
+        raise _fail(f"founding {cid}: {e}")
+    rec = KC.recs(k)[cid]
+    if spec.get("template"):
+        k.w["laws"][rec["laws"][0]]["template"] = copy.deepcopy(spec["template"])
+    for m in spec["members"]:
+        k.apply("join", agent=m, polity=cid, via="start")
+        if m not in rec["members"]:
+            raise _fail(f"{m} could not join {cid}")
+    _refresh(k, cid)
+    return {"contract": cid, "laws": list(rec["laws"]), "members": list(rec["members"])}
+
+
+def h_allowance(k, inst, spec):
+    from charter import contracts as KC
+    from charter import lawlang as L
+    try:
+        KC.act_set_allowance(k, spec["agent"], spec["contract"], spec["item"], spec["qty"])
+    except L.LawError as e:
+        raise _fail(f"allowance {spec['agent']} -> {spec['contract']}: {e}")
+    _refresh(k, spec["contract"])
+    return {"allowance": spec}
+
+
+def h_escrow(k, inst, spec):
+    from charter import contracts as KC
+    from charter import lawlang as L
+    try:
+        KC.act_deposit_escrow(k, spec["agent"], spec["contract"], spec["item"], spec["qty"])
+    except L.LawError as e:
+        raise _fail(f"escrow {spec['agent']} -> {spec['contract']}: {e}")
+    _refresh(k, spec["contract"])
+    return {"escrow": spec}
+
+
+HANDLERS = {"contract_law": h_contract_law, "contract": h_contract, "allowance": h_allowance, "escrow": h_escrow,
+            "rights": h_rights, "currency": h_currency, "institution": h_institution, "polity_offices": h_polity_offices,
             "law": h_law, "store": h_store, "holding": h_holding, "standing_wage": h_standing_wage, "loan": h_loan, "kin": h_kin,
             "camp_rights": h_camp_rights, "channel": h_channel, "farm": h_farm}
 _ops()
@@ -955,7 +1204,7 @@ def lived(run) -> list:
         laws = k1.w["laws"]
         for lid, rec in sorted(laws.items(), key=lambda kv: int(kv[0][1:]) if kv[0][1:].isdigit() else 0):
             t = (rec.get("template") or {}).get("name") or ""
-            if t == "Wage Roll" or (rec.get("code") or "").startswith('title = "Wage Roll"'):
+            if t in ("Wage Roll", "Payroll") or (rec.get("code") or "").startswith('title = "Wage Roll"'):
                 pays = [e for e in events if e["type"] == "move" and e["data"].get("why") == f"law:{lid}"]
                 rounds_paid = sorted({e["round"] + 1 for e in pays})
                 owed = (rec.get("public") or {}).get("owed") or {}

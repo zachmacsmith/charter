@@ -634,6 +634,15 @@ def _paid_this_round(k, aid, iid, item) -> float:
     return float(rec.get("paid", {}).get(f"{aid}|{iid}|{item}", 0.0))
 
 
+def _office_paid(k, aid, iid, item, qty) -> None:
+    """What aid has paid out of iid's treasury this round (the transfer grants' per-round bound)."""
+    st = k.w.setdefault("office_payments", {"round": k.r, "paid": {}})
+    if st.get("round") != k.r:
+        st.update({"round": k.r, "paid": {}})
+    key = f"{aid}|{iid}|{item}"
+    st["paid"][key] = round(float(st["paid"].get(key, 0.0)) + qty, 6)
+
+
 def pay_as(k, aid, iid, to, item, qty, memo=None) -> str:
     """transfer {"to", "item", "qty", "as": iid}: pay out of iid's treasury as one of its offices (control on). Allowed for a holder
     of an office that controls the treasury, or within one of its office's transfer grants (item, qty per round, recipients).
@@ -647,7 +656,9 @@ def pay_as(k, aid, iid, to, item, qty, memo=None) -> str:
     qty = float(qty)
     if qty <= 0:
         raise ActionError("qty must be positive")
-    if to not in k.w["agents"] and not str(to).startswith("store:"):
+    from charter import contracts as KC
+    to_inst = KC.institution_payee(k, to)                               # review 31 (08 §2.2): another institution's treasury
+    if to not in k.w["agents"] and not str(to).startswith("store:") and to_inst is None:
         raise ActionError(f"unknown recipient {to}")
     whole = controls_for(k, iid, "treasury", aid)
     if not whole:
@@ -668,6 +679,11 @@ def pay_as(k, aid, iid, to, item, qty, memo=None) -> str:
     src = AC.treasury_of(k, iid)
     if k.bal(src, item) + 1e-9 < qty:
         raise ActionError(f"{iid}'s treasury holds only {k.bal(src, item):g} {item}")
+    if to_inst is not None:                                             # an ordinary transfer into the other treasury
+        from charter.actions import pay_institution
+        out = pay_institution(k, aid, to_inst, item, qty, memo=memo, src=src, as_=iid)
+        _office_paid(k, aid, iid, item, qty)
+        return out
     if str(to).startswith("store:") and "subsistence" in k.w:
         out = k.apply("move", src=src, dst=to, item=item, qty=qty, why="store_deposit", actor=aid)
     else:
@@ -675,11 +691,7 @@ def pay_as(k, aid, iid, to, item, qty, memo=None) -> str:
         out = k.apply("move", src=src, dst=to, item=item, qty=qty, why="transfer", actor=aid, **kw)
     if not out.ok:
         raise ActionError("a law blocked this payment" + (f" ({out.reason})" if getattr(out, "reason", None) else ""))
-    st = k.w.setdefault("office_payments", {"round": k.r, "paid": {}})
-    if st.get("round") != k.r:
-        st.update({"round": k.r, "paid": {}})
-    key = f"{aid}|{iid}|{item}"
-    st["paid"][key] = round(float(st["paid"].get(key, 0.0)) + qty, 6)
+    _office_paid(k, aid, iid, item, qty)
     tax = float((out.result or {}).get("charged") or 0.0)
     vis = sorted({aid, to} & set(k.w["agents"]) | set(officers(k, iid)))
     eid = k.log("office_payment", aid, {"as": iid, "to": to, "item": item, "qty": qty, "tax": tax,
