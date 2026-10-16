@@ -1,0 +1,7 @@
+# Millbrook with no private goals (goals.none): the same village, institutions, offices, cast and models (10 Opus, 11 Haiku),
+# temperaments kept; no agent has a private goal and no prompt mentions goals or scores. Compare with millbrook.yaml (and its
+# engine-13 fork from round 12): what the established institutions do when nobody is pursuing a placed aim.
+extends: [millbrook]
+goals: {none: true}
+chronicle:
+  namespace: millbrook_nogoal
