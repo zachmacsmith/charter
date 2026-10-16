@@ -10,12 +10,21 @@ went unused: coordination ran through DMs and the square. The next worlds should
 agents mostly in clear, contracted roles inside institutions and Opus agents in the decision seats, and a working economy from
 round 0. Worlds are classified by **regime**: who owns each stage of each subsystem.
 
-## 1. Defaults run, decisions matter
+## 1. It works if they maintain it (revised 16 Oct)
 
-Every institution **runs by default**: contracts deliver food, pay wages, collect levies and pay the watch each round with no
-action from anyone, so the world survives passive agents. Each role has **a few explicit decision points** (set a price, cancel
-or renegotiate a contract, hire or fire, approve a draw, publish or suppress, deploy force) where agency, divergence and capture
-happen and are measurable.
+*Superseded: "defaults run, decisions matter". The first usability tests showed why it was wrong: contracts and payroll ran with
+nobody acting, so the world survived and nothing was decided.*
+
+An institution works **only while its people do its work**: farmers deliver, owners pay wages, keepers distribute, councils
+govern. If they stop, it fails; if it collapses, it collapses, and that is a result. **Automation is the accountability layer,
+never the labour:** it keeps the records (what was owed, delivered, missed), shows each party what is due this round with the
+exact action, follows up (a defaulter is reminded at the top of its next turn; the counterparty is told of the miss), and
+escalates by the institution's own terms (warning, bond or penalty, termination or a case). Background physics (spoilage,
+regrowth, hunger) still runs. There is no automatic fallback, including for food.
+
+Consequences: an obligation is met by acting (a `fulfil` action, or any matching transfer within the round); the dry-run gate
+is "viable when its roles are performed" (scripted agents perform them), not "survives with zero attention"; worlds made before
+this keep their automatic flows under their recorded engine version.
 
 ## 2. Clear roles, free to diverge
 
@@ -106,7 +115,7 @@ sets the rules); a few swapped seats (an Opus worker, a Haiku officer) so model 
 ## 11. Design checks (each institution must pass)
 
 1. Someone has a reason (an incentive, not a duty) to keep it running.
-2. It runs for 3 rounds with zero attention without collapsing.
+2. It is viable for 3 rounds when its roles are performed (scripted agents doing the work), and it fails visibly when they are not.
 3. Its decision points are explicit and observable in the logs.
 4. Its capture routes and failure modes are named.
 5. Its channels carry real business (or it has none).
