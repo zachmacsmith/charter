@@ -135,6 +135,10 @@ def _act(k, aid: str, name: str, args: dict) -> str:
         hidden_here.add("legal_position")
     if "contracts" not in k.w:                                          # P4.3: contracts off = unknown
         hidden_here |= set(CONTRACT_ACTIONS)
+    else:
+        from charter import obligations as _OB                          # manual obligations: fulfil (contracts.obligations)
+        if not _OB.fulfil_on(k):
+            hidden_here.add("fulfil")
     if not DR.enabled(k):                                              # directories: only where some directory is provisioned
         hidden_here |= set(DR.ACTIONS)
     hidden_here |= AR.hidden(k.spec)                                   # review 14 A: the design arm's flags (none by default)
@@ -190,6 +194,9 @@ def _act(k, aid: str, name: str, args: dict) -> str:
             if ref:
                 name, args = "create_agent", {"commission": ref}
     fn = AR.resolve(CH.OVERRIDES[name] if name in CH.OVERRIDES and CH.on(k) else AR.REG[name].handler)   # channels.v2: post ...
+    forgiving = _forgiving(k)
+    if forgiving:
+        args = _forgive(k, aid, name, args)
     args = _normalise_args(name, args)
     if name == "veto" and isinstance(args, dict):                      # {"should_veto": false} means: no veto
         flag = args.get("should_veto", args.get("veto", True))
@@ -215,11 +222,81 @@ def _act(k, aid: str, name: str, args: dict) -> str:
     try:
         return fn(k, aid, **(args or {}))
     except TypeError as e:
+        if forgiving:
+            raise ActionError(_plain_type_error(name, e, fn)) from None
         raise ActionError(f"bad arguments for {name}: {_as_before(e, fn, name)}")
     except L.LawError as e:
         raise ActionError(str(e))
     except (ValueError, KeyError, AttributeError, IndexError) as e:     # a malformed argument must fail the action, never the run
         raise ActionError(f"bad arguments for {name}: {type(e).__name__}: {e}")
+
+
+def _forgiving(k) -> bool:
+    from charter import laweffects as LE
+    return bool(LE.setting(k.spec, "actions.forgiving"))
+
+
+def _forgive(k, aid, name, args):
+    """actions.forgiving: argument mistakes seen in the usability tests, read the way they were meant. withdraw with item/good
+    "food" (dropped) or {"food": 3} (the qty), and the one store the agent may draw from when none is named; transfer to a store's
+    id ("S1": store:S1) or an inbox address ("@A1": A1), a note as its memo (law.v2) or dropped."""
+    if not isinstance(args, dict):
+        return args
+    args = dict(args)
+    if name == "withdraw" and "subsistence" in k.w:
+        from charter import accounts as AC
+        for key in ("item", "good", "goods", "what", "resource"):
+            if key in args:
+                v = args.pop(key)
+                if str(v).strip().lower() not in ("food", ""):
+                    raise ActionError(f"a store holds food only: withdraw {{\"store\": \"S1\", \"qty\": 2}} takes food out (not {v})")
+        if "food" in args and "qty" not in args and not isinstance(args["food"], bool):
+            args["qty"] = args.pop("food")
+        args.pop("food", None)
+        if "store" not in args and "id" not in args and "from" not in args:
+            from charter import institutions as IN
+            mine = [sid for sid, s in sorted(AC.stores(k).items()) if s["owner"] == aid
+                    or (s["owner"] not in k.w["agents"] and aid in IN.officers(k, s["owner"]))]
+            if len(mine) == 1:
+                args["store"] = mine[0]
+    if name in ("transfer", "act_for") and isinstance(args.get("to"), str):
+        to = args["to"].strip()
+        stores = (k.w.get("subsistence") or {}).get("stores") or {}
+        bare = to[1:] if to.startswith("@") else to
+        if to not in k.w["agents"]:
+            if bare in k.w["agents"]:
+                to = bare
+            elif bare.upper() in stores and bare.upper() not in k.w["agents"]:
+                to = "store:" + bare.upper()
+            elif bare.lower().startswith("store ") and bare[6:].strip().upper() in stores:
+                to = "store:" + bare[6:].strip().upper()
+            elif to.startswith("@"):
+                to = bare
+        args["to"] = to
+    if name == "transfer":
+        note = None
+        for key in ("note", "memo", "message", "reason", "purpose"):
+            if key in args:
+                v = args.pop(key)
+                note = v if note is None else note
+        if note is not None and D.v2(k):
+            args["memo"] = note
+    return args
+
+
+def _plain_type_error(name, e, fn) -> str:
+    """actions.forgiving: a missing or unexpected argument in words, with the action's own syntax."""
+    import re as _re
+    msg = str(e)
+    doc = AR.REG[name].doc if name in AR.REG else ""
+    syntax = doc.split(": ", 1)[0] if doc else name
+    miss = _re.findall(r"'(\w+)'", msg.split("argument", 1)[-1]) if "missing" in msg else []
+    if miss:
+        return f"{name} needs {', '.join(miss)}: {syntax}"
+    bad = _re.findall(r"'(\w+)'", msg)
+    if "unexpected" in msg and bad:
+        return f"{name} takes no {bad[-1]}: {syntax}"
+    return f"{name}: the arguments did not fit ({_as_before(e, fn, name)}); use {syntax}"
 
 
 def _as_before(e: TypeError, fn, name: str) -> str:
@@ -547,7 +624,7 @@ def _transfer(k, aid, to, item, qty, memo=None, **kw):
     return _send(k, aid, to, item, qty, memo=memo)
 
 
-def pay_institution(k, aid, iid, item, qty, memo=None, src=None, as_=None):
+def pay_institution(k, aid, iid, item, qty, memo=None, src=None, as_=None, extra=None):
     """Review 31 (08 §2.2; contracts.pay_institutions): goods into institution iid's treasury (J0's reserve, an association's
     "assoc:<id>", a polity's reserve), as an ordinary transfer (why "transfer": laws' before_move sees it, levies apply, the
     balance cap holds). src: the paying account (an agent's holdings, or an institution's treasury when an office pays "as" it).
@@ -578,7 +655,8 @@ def pay_institution(k, aid, iid, item, qty, memo=None, src=None, as_=None):
     k.w["effects"]["transfer_qty"] += qty * v
     k.w["effects"]["transfer_taxed"] += tax * v
     eid = k.log("transfer", aid, {"to": iid, "item": item, "qty": qty, "tax": tax, "treasury": dst,
-                                  **({"as": as_} if as_ else {}), **({"memo": memo} if memo is not None else {})}, vis=vis)
+                                  **({"as": as_} if as_ else {}), **({"memo": memo} if memo is not None else {}), **(extra or {})},
+          vis=vis)
     return (f"Paid {qty - tax:g} {item} into {iid}'s treasury" + (f" out of {as_}'s" if as_ else "") + (f" ({tax:g} taxed)" if tax
                                                                                                        else "") + f" ({eid}).")
 

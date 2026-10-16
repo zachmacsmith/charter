@@ -879,6 +879,9 @@ class ScriptedPolicy:
         from charter import directories as DR
         if DR.enabled(k):                                                # directories: an owner's bot keeps it (no RNG; off: nothing)
             acts[:0] = DR.scripted_actions(k, a, n_actions)
+        if "contracts" in k.w:                                           # manual obligations: fulfil what is due first (no RNG;
+            from charter import obligations as OB                       # nothing unless a manual leg is due from this agent)
+            acts[:0] = OB.scripted_actions(k, a)
         if "subsistence" in k.w:                                         # review 15: no harvest levies or quotas from the bots
             from charter import subsistence as SB
             acts = SB.bot_filter(k, acts)

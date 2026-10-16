@@ -129,6 +129,13 @@ DEFAULTS = {
     "applicant_lines": True,    # review 31 (03 #14): an institution's officers see its pending applicants in their state (false: not)
     "pay_institutions": True,   # review 31 (08 §2.2): transfer {"to": "A1" | "J0"} and an office's transfer "as" pay that institution's
                                 # treasury, and a contract's law may pay "J0" (false: only agents and stores, as before)
+    # manual obligations (docs/review/31_institutions/00_framework.md §1; charter/obligations.py): an institution works only while
+    # its people do its work; automation is the accountability layer, never the labour
+    "legs_default": "auto",     # the mode a standing contract's legs get when its code does not say (start.contracts, J0 payroll):
+                                # manual (nothing moves by itself: fulfil or a matching transfer) | auto (the legs run at round end)
+    "obligations": False,       # the fulfil action exists (pay what a manual leg asks in one action); false: it is unknown
+    "role_cards": False,        # each agent's state carries its role cards (offices and contract positions: numbers, decisions)
+    "bot_obligations": "perform",   # dry runs: the scripted bots fulfil their manual obligations when able | neglect (a collapse test)
 }
 PROCEDURES = ("members", "two_thirds", "founder")
 ENFORCEMENT = ("escrow", "escrow_court", "word")
@@ -2114,6 +2121,19 @@ def act_standing_order(k, aid, to, item, qty, every=1, keep=0, times=0, name=Non
 
 
 # ---------------------------------------------------------------------- end of round (features.PHASES round_end)
+def settle_obligations(k) -> None:
+    """Before the laws' on_round_end: this round's payments credited to the manual contract legs (charter/obligations.py). Nothing
+    happens where no leg is manual."""
+    from charter import obligations as OB
+    OB.settle(k)
+
+
+def obligations_end(k) -> None:
+    """After the laws' on_round_end: notices of unmet manual obligations, and petitions gone public (charter/obligations.py)."""
+    from charter import obligations as OB
+    OB.end_round(k)
+
+
 def end_round(k) -> None:
     """After the laws' on_round_end: contract changes whose ballots closed this round are adopted or fail; then members leave
     (requests, expulsions, members who left the world): on_exit first, then the refund of their escrow."""
@@ -2161,7 +2181,8 @@ def _fmt(d) -> str:
 def state_lines(k, aid) -> list[str]:
     if "contracts" not in k.w:
         return []
-    out = []
+    from charter import obligations as OB                              # manual obligations, petitions, role cards (each gated)
+    out = OB.state_lines(k, aid)
     for cid, rec in recs(k).items():
         if aid in rec["members"]:
             left = " (you leave at the end of this round)" if aid in rec["leaving"] else ""
@@ -2245,6 +2266,8 @@ def render_event(k, e, tag, viewer=None) -> str | None:
         return f"{tag} {c}: {who} breached '{d['clause']}'" + (f"; remedy: {d['remedy']}" if d.get("remedy") else "")
     if t == "contract_notice":
         return f"{tag} {c} notice: {d['text']}"
+    if t == "petition_unanswered":
+        return f"{tag} {d['text']}"
     if t == "contract_law_error":
         return f"{tag} {c}'s law {d['law']} failed and is suspended ({d['error']}); members can replace it (propose_contract_change)"
     if t == "contract_changed":

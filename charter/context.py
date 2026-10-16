@@ -1531,6 +1531,11 @@ def situation_lines(k, a, n_actions) -> list:
     # survival, again last before acting (it also heads the state layer): food, and any hunger or missed-meal warning
     food = _optional("subsistence", "state_lines", k, aid) or []
     lines += [l for l in food if l.startswith(("Food:", "HUNGRY", "STARVING", "Warning: you hold"))]
+    if "contracts" in k.w:                                              # manual obligations still open this round
+        from charter import obligations as _OB
+        ob = _OB.situation_line(k, aid)
+        if ob:
+            lines.append(ob)
     bal = [b for b in k.w["ballots"].values() if b["status"] == "open" and aid in b["electorate"] and aid not in b["votes"]]
     if bal:
         lines.append(f"Ballots waiting for your vote: {', '.join(b['id'] for b in bal)}.")

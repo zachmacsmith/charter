@@ -115,10 +115,17 @@ def enrolled(alive):
         elif key in mem:
             out[key] = t
     if OPEN and f == "roster":
+        opt = OPT_IN and any_manual()
         for m in mem:
-            if m not in out:
+            if m not in out and (not opt or len([v for v in allowance_of(m).values() if v > 0]) > 0):
                 out[m] = {}
     return out
+
+def manual(l):
+    return l.get("mode", MODE) == "manual" and l.get("kind", "move") != "harvest"
+
+def any_manual():
+    return len([l for l in LEGS if manual(l)]) > 0
 
 def bindings(alive):
     f = form()
@@ -297,14 +304,14 @@ def plan_of(r):
         p = {"id": l["id"], "kind": l.get("kind", "move"), "from": l.get("from", ""), "to": l.get("to", ""), "item": l.get("item", ""),
              "qty": l.get("qty", 0), "per": l.get("per", ""), "after": l.get("after", ""), "keep": l.get("keep", 0),
              "owe": l.get("owe", False), "breach": l.get("breach", True), "when": l.get("when", {}), "check": l.get("check", "guard"),
-             "f": factor(l), "caps": [], "l": l}
+             "f": factor(l), "caps": [], "l": l, "manual": manual(l)}
         p["due"] = None
         if not is_text(l.get("every", 1)) and not is_text(l.get("first", 0)):
             p["due"] = due(l, d, r)
         out.append(p)
     for p in out:
         for q in out:
-            if q["per"] == p["id"] and not q["owe"]:
+            if q["per"] == p["id"] and not q["owe"] and not q["manual"]:
                 p["caps"].append(q)
     return out
 
@@ -315,6 +322,9 @@ def due_now(p, b, r):
 
 def run_leg(p, b, key, r, done, alive):
     lid = p["id"]
+    if p["manual"] and p["kind"] == "move":
+        run_manual(p, b, key, r, done, alive)
+        return
     if not due_now(p, b, r):
         return
     w = p["when"]
@@ -379,6 +389,83 @@ def clear_miss(key, lid):
     if m != None and m.get(lid, 0) > 0:
         m[lid] = 0
 
+def is_on(p, b, r, done):
+    if not due_now(p, b, r):
+        return False
+    w = p["when"]
+    if len(w) > 0 and not all([b.get(x) == v for x, v in w.items()]):
+        return False
+    return p["after"] == "" or done.get(p["after"], 0) > 0
+
+def run_manual(p, b, key, r, done, alive):
+    lid = p["id"]
+    item = b.get(p["item"], p["item"])
+    src = acct(p["from"], b, alive)
+    dst = acct(p["to"], b, alive)
+    paid = num(state.get("paid", {}).get(key, {}).get(lid, 0))
+    ov = num(state.get("overdue", {}).get(key, {}).get(lid, 0))
+    done[lid] = paid
+    if src == None or dst == None or not is_text(item) or src == dst:
+        note(key, lid + ": no such party")
+        return
+    want = 0
+    if is_on(p, b, r, done):
+        want = num(b.get(p["qty"], p["qty"])) * p["f"]
+        if p["per"] != "":
+            want = want * done.get(p["per"], 0)
+    if want <= 0.000001 and ov <= 0.000001 and paid <= 0.000001:
+        return
+    state["moved"].setdefault(key, {})[lid] = [item, round_to(paid, 6), src, dst]
+    short = round_to(want + ov - paid, 6)
+    late = short
+    if p["per"] != "":
+        late = round_to(ov - paid, 6)
+    book = state.setdefault("book", {}).setdefault(key, {}).setdefault(lid, [0, 0])
+    rec = {"r": r, "due": round_to(want, 6), "paid": round_to(paid, 6), "overdue": max(0, short), "late": max(0, late), "item": item,
+           "src": src, "dst": dst, "why": "", "misses": 0}
+    ovs = state.setdefault("overdue", {}).setdefault(key, {})
+    if short > 0.000001:
+        ovs[lid] = short
+    elif lid in ovs:
+        ovs.pop(lid)
+    state.setdefault("last", {}).setdefault(key, {})[lid] = rec
+    if late <= 0.000001:
+        if want > 0.000001 or ov > 0.000001:
+            book[0] = book[0] + 1
+        if p["breach"]:
+            clear_miss(key, lid)
+        return
+    book[1] = book[1] + 1
+    why = "would"
+    if src in alive:
+        if balance(src, item) - num(b.get(p["keep"], p["keep"])) < late - 0.000001:
+            why = "could"
+    elif balance(src, item) < late - 0.000001:
+        why = "could"
+    rec["why"] = why
+    if not (src in alive):
+        note(key, lid + " unpaid " + fmt(late) + " " + item + " (" + why + ")")
+    elif why == "could":
+        cnt = state.setdefault("could", {}).setdefault(key, {})
+        cnt[lid] = cnt.get(lid, 0) + 1
+        note(key, lid + " missed: " + src + " could not (short of " + item + ")")
+    elif is_polity():
+        note(key, lid + " missed: " + src + " held it and did not deliver")
+        if FINE > 0:
+            got = fine(src, item if FINE_ITEM == "" else FINE_ITEM, FINE * late)
+            note(key, "fined " + fmt(got))
+    elif p["breach"]:
+        miss = state.setdefault("missed", {}).setdefault(key, {})
+        miss[lid] = miss.get(lid, 0) + 1
+        rec["misses"] = miss[lid]
+        note(key, lid + " missed: " + src + " would not " + str(miss[lid]) + " of grace " + str(GRACE))
+        if miss[lid] > GRACE:
+            miss[lid] = 0
+            rec["breached"] = True
+            do_breach(src, LABEL + " " + lid, victim_of(dst, alive), key)
+    else:
+        note(key, lid + " missed: " + src + " did not")
+
 def pay_arrears(alive):
     owed = state.get("owed", {})
     for a in sorted(owed):
@@ -402,6 +489,8 @@ def drop_member(key):
         ros.pop(key)
     state.get("notice", {}).pop(key, None)
     state.get("terms_lines", {}).pop(key, None)
+    if key in state.get("overdue", {}):
+        state["overdue"].pop(key)
     if not is_polity() and form() == "roster":
         for item in sorted(BOND.get("member", {})):
             refund(key, item)
@@ -464,12 +553,16 @@ def on_round_end(r):
     alive = agents()
     state["notes"] = {}
     state["moved"] = {}
+    if any_manual():
+        state["last"] = {}
     pay_arrears(alive)
     plan = plan_of(r)
     for pair in bindings(alive):
         done = {}
         for p in plan:
             run_leg(p, pair[1], pair[0], r, done, alive)
+    if any_manual():
+        state["paid"] = {}
     for key, end in sorted(state.get("notice", {}).items()):
         if end <= r:
             if key == "*":
@@ -549,7 +642,7 @@ def hints(a, b, plan):
         return out
     al = allowance_of(a)
     for p in plan:
-        if p["kind"] == "move" and b.get(p["from"], p["from"]) == a:
+        if p["kind"] == "move" and not p["manual"] and b.get(p["from"], p["from"]) == a:
             item = b.get(p["item"], p["item"])
             q = num(b.get(p["qty"], p["qty"])) * p["f"]
             if p["per"] == "" and al.get(item, 0) < q - 0.000001:
@@ -609,9 +702,45 @@ def write_lines(r):
         for a in who:
             lines[a] = line_for(a, pair[0], pair[1], alive, plan, byid, cache)
     state["terms_lines"] = lines
+    if any_manual():
+        dues_of(r, alive, plan, byid)
     if VISIBILITY == "public":
         public["terms"] = {"legs": [dict(l) for l in LEGS], "terms": defaults(), "parties": dict(PARTIES), "roster": dict(state.get("roster", {}))}
         public["book"] = {"round": r + 1, "moved": dict(state.get("moved", {})), "owed": dict(state.get("owed", {}))}
+        if any_manual():
+            public["book"]["record"] = dict(state.get("book", {}))
+            public["book"]["overdue"] = dict(state.get("overdue", {}))
+
+def dues_of(r, alive, plan, byid):
+    out = []
+    for pair in bindings(alive):
+        key = pair[0]
+        b = pair[1]
+        for p in plan:
+            if not p["manual"]:
+                continue
+            ov = num(state.get("overdue", {}).get(key, {}).get(p["id"], 0))
+            on = due_now(p, b, r) and when_ok(p["l"], b)
+            if not on and ov <= 0.000001:
+                continue
+            src = acct(p["from"], b, alive)
+            dst = acct(p["to"], b, alive)
+            if src == None or dst == None:
+                continue
+            q = 0
+            if on:
+                q = num(b.get(p["qty"], p["qty"])) * p["f"]
+            d = {"key": key, "leg": p["id"], "kind": p["kind"], "from": src, "to": dst, "item": str(b.get(p["item"], p["item"])),
+                 "qty": 0, "unit": 0, "per": p["per"], "after": p["after"], "keep": num(b.get(p["keep"], p["keep"])), "overdue": ov,
+                 "check": str(p["check"]), "on": on}
+            if p["per"] != "":
+                d["unit"] = q
+                if p["per"] in byid and byid[p["per"]]["kind"] == "harvest":
+                    d["per_harvest"] = True
+            else:
+                d["qty"] = q
+            out.append(d)
+    state["dues"] = out
 
 def give_notice(agent, member=""):
     key = agent
@@ -806,6 +935,10 @@ BASE = {
     "ON_BREACH": "",        # "" | drop (off the roster) | expel
     "FINE": 0,              # polity: fine per unit short when the member held it at the start of the round (Quota)
     "FINE_ITEM": "",
+    "MODE": "",             # every leg's default mode (a leg's own "mode" wins): manual (nothing moves by itself: the obligated
+                            # party acts, fulfil or a matching transfer, and the accountability layer records, reminds and
+                            # escalates) | auto (the legs run at the end of the round) | "" (auto: contracts made before modes)
+    "OPT_IN": False,        # manual and OPEN: only members who set an allowance with it (their standing consent) are enrolled
 }
 
 PRESETS = {
@@ -860,7 +993,7 @@ PRESETS = {
                    "TERMS": {"ration": 1, "price": 2, "store": "store:S1", "pay": "penny"},
                    "LEGS": [{"id": "F", "from": "store", "to": "member", "item": "food", "qty": "ration", "breach": False},
                             {"id": "P", "from": "member", "to": "treasury", "item": "pay", "qty": "price", "per": "F", "breach": False}],
-                   "NOTICE": 0, "GRACE": 1, "ACTIONS": {"set": "board_price"}, "SET_TERM": "price"}},
+                   "NOTICE": 0, "GRACE": 1, "ACTIONS": {"set": "board_price"}, "SET_TERM": "price", "OPT_IN": True}},
     "Payroll": {
         "topic": "wages", "fires": "on_round_end",
         "intent": "A payroll (an employer's code, or a polity's civil list): each round every worker on the roster is paid its wage "

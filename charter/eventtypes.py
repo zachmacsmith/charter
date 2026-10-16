@@ -487,6 +487,8 @@ E("contract_pull", "contracts", "legal_act", "parties", "event", "contracts", pr
 E("contract_breach", "contracts", "legal_act", "parties|public", "event", "contracts", primitive="breach",
   note="public under contracts.enforcement word (a breach is a reputation), else its members (P4.4)")
 E("contract_notice", "contracts", "summary", "parties", "event", "contracts", note="a contract law's gazette, shown to its members")
+E("petition_unanswered", "contracts", "summary", "public", "official", "contracts",
+  note="a petition to an institution's inbox unanswered for institutions.petition_public_after rounds (charter/obligations.py)")
 E("contract_law_error", "contracts", "summary", "parties|monitor", "event", "contracts",
   note="an association's law failed: it is suspended and its members told; the Fixer is not called")
 E("contract_changed", "contracts", "legal_act", "public", "event", "contracts", primitive="amend")

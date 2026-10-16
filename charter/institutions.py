@@ -850,7 +850,7 @@ def _office_paid(k, aid, iid, item, qty) -> None:
     st["paid"][key] = round(float(st["paid"].get(key, 0.0)) + qty, 6)
 
 
-def pay_as(k, aid, iid, to, item, qty, memo=None) -> str:
+def pay_as(k, aid, iid, to, item, qty, memo=None, extra=None) -> str:
     """transfer {"to", "item", "qty", "as": iid}: pay out of iid's treasury as one of its offices (control on). Allowed for a holder
     of an office that controls the treasury, or within one of its office's transfer grants (item, qty per round, recipients).
     The move is an ordinary transfer (laws' before_move sees it, taxes apply), by the agent, from the treasury."""
@@ -888,7 +888,7 @@ def pay_as(k, aid, iid, to, item, qty, memo=None) -> str:
         raise ActionError(f"{iid}'s treasury holds only {k.bal(src, item):g} {item}")
     if to_inst is not None:                                             # an ordinary transfer into the other treasury
         from charter.actions import pay_institution
-        out = pay_institution(k, aid, to_inst, item, qty, memo=memo, src=src, as_=iid)
+        out = pay_institution(k, aid, to_inst, item, qty, memo=memo, src=src, as_=iid, extra=extra)
         _office_paid(k, aid, iid, item, qty)
         return out
     if str(to).startswith("store:") and "subsistence" in k.w:
@@ -903,5 +903,5 @@ def pay_as(k, aid, iid, to, item, qty, memo=None) -> str:
     vis = sorted({aid, to} & set(k.w["agents"]) | set(officers(k, iid)))
     eid = k.log("office_payment", aid, {"as": iid, "to": to, "item": item, "qty": qty, "tax": tax,
                                         **({"memo": memo} if memo is not None else {}),
-                                        "text": f"{aid} paid {qty:g} {item} to {to} out of {iid}'s treasury"}, vis=vis)
+                                        "text": f"{aid} paid {qty:g} {item} to {to} out of {iid}'s treasury", **(extra or {})}, vis=vis)
     return f"Paid {qty - tax:g} {item} to {to} out of {iid}'s treasury" + (f" ({tax:g} taxed)" if tax else "") + f" ({eid})."

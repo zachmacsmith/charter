@@ -410,7 +410,7 @@ def _wage_code(employer, wages) -> str:
                                         "WAGES": {str(w["worker"]): float(w["qty"]) for w in wages}})
 
 
-def _j0_payroll_code(wages) -> str:
+def _j0_payroll_code(wages, mode="auto") -> str:
     """Review 31 (08 §2.2): start.wages with employer J0 as the Payroll preset's polity form (a J0 law paying out of the reserve;
     a worker "office:<right>" is every holder of that office)."""
     from charter import library as LB
@@ -425,10 +425,12 @@ def _j0_payroll_code(wages) -> str:
         if n != 1 and leg.get("kind", "move") == "move":
             leg["every"] = n
     params = {"ROSTER": {str(w["worker"]): {"wage": float(w["qty"])} for w in wages}, "TERMS": {"pay": items.pop()}, "LEGS": legs}
+    if mode != "auto":                                                  # contracts.legs_default (manual: J0's officers pay)
+        params["MODE"] = mode
     return LB.instantiate("Payroll", SD.merged("Payroll", params))
 
 
-def _contract_code(p, e) -> tuple:
+def _contract_code(p, e, mode="auto") -> tuple:
     """(code, template record) of a start.contracts entry: a standing-contract preset with its parties or roster and params (TERMS,
     ACTIONS and BOND merged over the preset's), or another contract template with its params."""
     from charter import lawlang as L
@@ -441,6 +443,8 @@ def _contract_code(p, e) -> tuple:
             params["PARTIES"] = {str(a): str(r) for a, r in e["parties"].items()}
         if e.get("roster"):
             params["ROSTER"] = {str(a): dict(t or {}) for a, t in e["roster"].items()}
+        if mode != "auto" and "MODE" not in params:                    # contracts.legs_default: the world's default leg mode
+            params["MODE"] = mode
         params = SD.merged(name, params)
     elif e.get("parties") or e.get("roster"):
         raise ValueError(f"{p}: parties and roster are for the standing-contract templates ({', '.join(SD.PRESETS)})")
@@ -458,6 +462,8 @@ def compile(sp: dict, inst: dict) -> dict:
     from charter import features as FT
     from charter import succession as SU
     b = copy.deepcopy(_block(sp))
+    from charter import contracts as KC
+    legs_mode = str(KC.cfg_of(sp).get("legs_default") or "auto")     # manual obligations: the standing contracts' leg mode
     names = {a["id"] for a in inst["agents"]}
     insts = [e for e in b.get("institutions") or () if e.get("id") != "J0"]
     j0 = [e for e in b.get("institutions") or () if e.get("id") == "J0"]
@@ -563,7 +569,7 @@ def compile(sp: dict, inst: dict) -> dict:
             c, t = _law_code(f"start.institutions.J0.laws[{j}]", le)
             sched.append(_entry("law", f"J0.{j}", {"code": c, "template": t}))
     if j0_wages:
-        sched.append(_entry("law", "J0.wages", {"code": _j0_payroll_code(j0_wages),
+        sched.append(_entry("law", "J0.wages", {"code": _j0_payroll_code(j0_wages, legs_mode),
                                                 "template": {"name": "Payroll", "params": None, "rank": None}}))
     for e in stores:
         sched.append(_entry("store", e["id"], {"id": e["id"], "owner": account(f"start.stores.{e['id']}.owner", e["owner"]),
@@ -602,7 +608,7 @@ def compile(sp: dict, inst: dict) -> dict:
                         raise ValueError(f"{p}.roster: {a} is not a member of {iid}")
             if e.get("parties"):
                 raise ValueError(f"{p}: parties name a bilateral contract (give a founder, not `in`)")
-            code, t = _contract_code(p, e)
+            code, t = _contract_code(p, e, legs_mode)
             sched.append(_entry("contract_law", i, {"in": iid, "code": code, "template": t}))
             cid = iid
         else:
@@ -612,7 +618,7 @@ def compile(sp: dict, inst: dict) -> dict:
                 raise ValueError(f"{p}: the founder {founder} must be one of its parties")
             seq += 1
             cid = f"A{seq}"
-            code, t = _contract_code(p, e)
+            code, t = _contract_code(p, e, legs_mode)
             sched.append(_entry("contract", i, {"id": cid, "founder": founder, "members": [a for a in parties if a != founder],
                                                 "name": str(e.get("name") or e["template"]), "code": code, "template": t}))
         for f in ("allowances", "escrow"):

@@ -606,6 +606,11 @@ EXTRA = {
     "channels.found_right": None, "channels.headlines": 8,
     # review 31.04 §5 (channels that carry business): off / none = byte-identical
     "channels.square_delivery": None, "channels.business": False, "channels.notices": None, "channels.board_headlines": 1,
+    # manual obligations (charter/obligations.py): 0 / false = as before
+    "institutions.petition_public_after": 0,                           # rounds a petition to an institution's inbox may wait unanswered
+                                                                       # before a public notice names the office (0: never; listed to officers)
+    "actions.forgiving": False,                                        # forgiving arguments (withdraw item/food, transfer to S1 or @A1,
+                                                                       # a note on a transfer) and plain messages for missing arguments
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.

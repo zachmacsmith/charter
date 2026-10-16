@@ -16,6 +16,8 @@ An entry:  register(name, purpose, section, core=False, pre=False, msg=False, ne
               "mod:<key>"     spec <key>.enabled (or "mod:typed" for typed camps, "mod:leases", "mod:dm", "mod:shared_archive")
               "opt:<key>.<o>" spec <key>.<o> is not false (a module option that defaults to on, e.g. "opt:media2.polls")
               "flag:<key>.<o>" spec <key>.<o> is true (an option that defaults to off, e.g. "flag:law.v2")
+              "cfg:<mod>.<o>"  charter.<mod>.DEFAULTS merged with spec <mod> has <o> true (a default the engine version may flip,
+                               e.g. "cfg:contracts.obligations")
               "right:<r>"     the agent holds right r ("right:harvest:*" any harvest right)
               "cls:<c>"       the agent's class (or second class) is c; "notcls:<c>" it is not
               "level:<n>"     law level at least Ln
@@ -160,6 +162,10 @@ def _need(inst, a, rights, n) -> bool:
     if kind == "flag":
         mod, _, opt = v.partition(".")
         return bool((inst["spec"].get(mod) or {}).get(opt))
+    if kind == "cfg":
+        mod, _, opt = v.partition(".")
+        d = getattr(importlib.import_module("charter." + mod), "DEFAULTS", {})
+        return bool({**d, **(inst["spec"].get(mod) or {})}.get(opt))
     if kind == "right":
         return any(r.startswith("harvest:") for r in rights) if v == "harvest:*" else v in rights
     if kind == "cls":
@@ -827,6 +833,13 @@ R("set_allowance", "let a contract take from you each round", "contracts", needs
   handler="contracts:act_set_allowance", module="contracts", category="economic", emits=("contract_allowance",),
   doc='set_allowance {"contract": "A1", "item": "grain", "qty": 2}: a contract you belong to may take up to qty of item from you '
       'each round (dues, premiums, instalments); qty 0 withdraws it')
+R("fulfil", "meet what a contract asks of you this round", "contracts", needs=("mod:contracts", "cfg:contracts.obligations"),
+  handler="obligations:act_fulfil", module="contracts", category="economic", emits=("transfer", "store_deposit", "office_payment"),
+  aliases={"law": "contract", "institution": "contract", "id": "contract", "leg_id": "leg", "for": "member"},
+  doc='fulfil {"contract": "A1", "leg": "D"}: pay or deliver what a contract leg asks of you this round, plus anything overdue '
+      '(your state lists each one under OBLIGATIONS with this call): from your holdings, or, as an officer who pays for an '
+      'institution, out of its treasury or store. Without "leg": every leg due from you there; "member": only what is due to or '
+      'for that agent. Any transfer of the right goods to the right party counts too; nothing moves by itself')
 R("propose_contract_change", "propose new code for a contract", "contracts", needs=("mod:contracts",),
   handler="contracts:act_propose_contract_change", module="contracts", category="political",
   aliases={"law": "replaces", "target": "replaces"},          # the decision logs contract_changed / _failed (contracts._decide)
@@ -1017,6 +1030,7 @@ CORE_SURFACE = (
     "tend", "improve", "practice", "clear",                             # engine 14: farming (only where fields exist)
     "propose", "amend", "vote", "invoke",                               # law; invoke: offices a law or contract defines
     "create_contract", "join_contract", "leave_contract", "propose_contract_change", "deposit_escrow", "set_allowance",   # institutions
+    "fulfil",                                                           # manual obligations (contracts.obligations)
     "attack", "forge", "fortify",                                       # force (where conflict is on)
     "commission", "create_agent",                                       # children (where life is on; create_agent: Makers)
     "conceive",                                                         # review 15 S4: two parents (life.reproduction.mode pairs or both)
@@ -1116,7 +1130,8 @@ ACTIONS_ORDER = (
     "conceive",                                                         # review 15 S4 (pairs)
     "recall",                                                           # review 20 (history mode)
     "craft", "watch",                                                   # the harm combat model (docs/review/21_combat.md)
-    "tend", "improve", "practice", "clear")                             # engine 14: farming
+    "tend", "improve", "practice", "clear",
+    "fulfil")                                                           # manual obligations (charter/obligations.py)                             # engine 14: farming
 # agents.ACTION_DOC: the order the legacy (context-off) system prompt lists action docs in
 DOC_ORDER = (
     "harvest", "run_python", "post", "dm", "reply", "forge_dm", "transfer", "deposit", "redeem", "propose", "vote", "veto", "patch", "amend",
@@ -1139,7 +1154,8 @@ DOC_ORDER = (
     "conceive",                                                         # review 15 S4 (pairs)
     "recall",                                                           # review 20 (history mode)
     "craft", "watch",                                                   # the harm combat model (docs/review/21_combat.md)
-    "tend", "improve", "practice", "clear")                             # engine 14: farming
+    "tend", "improve", "practice", "clear",
+    "fulfil")                                                           # manual obligations (charter/obligations.py)                             # engine 14: farming
 if not sorted(ACTIONS_ORDER) == sorted(REG) == sorted(DOC_ORDER):
     raise ValueError("ACTIONS_ORDER and DOC_ORDER must name every registered action exactly once")
 
@@ -1151,7 +1167,7 @@ HUNGRY_REFUSED = ("attack", "join_attack", "contract", "found", "create_contract
                   "commission", "build", "fortify", "forge", "invest", "contribute", "buy_initiative", "improve")
 STARVING_OK = ("transfer", "reply", "dm", "post", "channel_post", "send", "harvest", "hunt", "farm", "tend", "withdraw", "join", "leave",
                "join_contract", "leave_contract", "authorize", "revoke_authorization", "standing_order", "bequest", "vote",
-               "accept_loan", "repay_loan", "write_scratchpad")
+               "accept_loan", "repay_loan", "write_scratchpad", "fulfil")
 
 
 def _fed_table() -> dict:

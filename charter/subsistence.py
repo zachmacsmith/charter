@@ -1139,7 +1139,7 @@ def change_build(k, agent, kind, owner, store_id) -> dict:
     return {"store": store_id, "owner": owner}
 
 
-def deposit(k, aid, to, item, qty, memo=None) -> str:
+def deposit(k, aid, to, item, qty, memo=None, extra=None) -> str:
     """transfer {"to": "store:S1", "item": "food", "qty"}: anyone puts food in a store (a move: laws see it)."""
     from charter import lawlang as L
     sid = _store_id(k, to)
@@ -1163,7 +1163,7 @@ def deposit(k, aid, to, item, qty, memo=None) -> str:
         raise _err("a law blocked this transfer" + (f" ({out.reason})" if getattr(out, "reason", None) else ""))
     vis = sorted({aid, s["owner"]} & set(k.w["agents"])) or [aid]
     k.log("store_deposit", aid, {"store": sid, "owner": s["owner"], "item": item, "qty": qty,
-                                 "text": f"{aid} put {qty:g} food in store {sid}."}, vis=vis)
+                                 "text": f"{aid} put {qty:g} food in store {sid}.", **(extra or {})}, vis=vis)
     return f"Put {qty:g} food in store {sid} ({float(s['holdings'].get(FOOD, 0.0)):.3g}/{float(s['capacity']):g})."
 
 
