@@ -1,0 +1,6 @@
+# Millbrook with no private goals AND no temperaments: the same cast, models and world as millbrook_nogoal, with the temperament
+# line dropped from every prompt (personality.none), so behaviour comes from the model, the role and the world alone.
+extends: [millbrook_nogoal]
+personality: {none: true}
+chronicle:
+  namespace: millbrook_nogoal_notemp
