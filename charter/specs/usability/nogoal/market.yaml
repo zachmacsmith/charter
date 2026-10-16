@@ -1,0 +1,7 @@
+# No-goal control of usability/market.yaml: the same world and cast with no private goals and no temperament, and no goal or score
+# wording anywhere in the prompts (goals.none, personality.none): the agents' own tendencies inside the institution.
+extends: [usability/market]
+goals: {none: true}
+personality: {none: true}
+chronicle:
+  namespace: usability_market_nogoal

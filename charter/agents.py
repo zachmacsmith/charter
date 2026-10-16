@@ -324,6 +324,8 @@ def _world_rules(v):
 @SC.section("Goals in this world", layers=("manual", "legacy", "observer"))
 def _goals(v):
     # The manual has always shown the prior without the spec (no slot-rule note, no Life weights); kept byte-identical (P1.6).
+    if (v.spec.get("goals") or {}).get("none"):                      # the no-goal control: no goals section at all
+        return ""
     return goal_prior(v.spec.get("goals")) if v.layer == "manual" else goal_prior(v.spec.get("goals"), v.spec)
 
 

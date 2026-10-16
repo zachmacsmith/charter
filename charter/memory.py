@@ -479,6 +479,11 @@ def what_to_do(k, a, n_actions, final) -> str:
     new = _new_since(k, a)
     if new:
         lines.append(new)
+    if CX.no_goals(k.inst):                                             # the no-goal control: no goal, no exhortation
+        lines.append(reminder(k, aid))
+        if final:
+            lines.append("This is the final round.")
+        return "## What to do now\n" + "\n".join(lines)
     lines.append(f"Your goal: {CX._short_goal(a, True)}")
     lines.append(f"Use this turn for it. Any of your {n_actions} actions you do not use are wasted, and so are unused messages. Think "
                  "strategically: what would move your score most from here? If you have no plan, make one and write it down. If you "
@@ -524,7 +529,7 @@ def turn(k, a: dict, order: list, since: int, n_actions: int, final: bool, simul
         if last.get("exchange"):
             middle.append(f"## Your private messages in round {k.r} (every message you received and sent, in order)\n" + last["exchange"])
     now = [f"## What happened since your last turn\n{feed}"]
-    if final:
+    if final and not CX.no_goals(k.inst):
         now.append("This is the final round. In goal_guesses_json, map each other agent to the goal name from the list that best fits "
                    "what they did.")
     pad, cut = CX.clip(k.w["scratchpad"][aid], CX.scratchpad_size(k, aid))

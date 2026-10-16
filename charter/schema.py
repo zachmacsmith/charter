@@ -470,6 +470,8 @@ def _ann():
         "contracts.offer_templates": dict(types=("bool",)),             # review 14 A: the design arm
         "law.library.visibility": dict(types=("str",), enum=("prompt", "on_request", "none")),
         "goals.outcome_only": dict(types=("bool",)),
+        "goals.none": dict(types=("bool",)),                           # the no-goal control: no goal or score wording in prompts
+        "personality.none": dict(types=("bool",)),                     # no temperament text in prompts
         "goals.show_rules": dict(types=("bool",)),
         "goals.score_at_end": dict(types=("bool",)),
         "goals.aims": dict(types=("bool",)),                           # review 24: aims (time structure) instead of texts
@@ -582,6 +584,8 @@ EXTRA = {
     "contracts.offer_templates": True,
     "law.library.visibility": "prompt",
     "goals.outcome_only": False,
+    "goals.none": False,
+    "personality.none": False,
     "goals.show_rules": True,
     "goals.score_at_end": True,                                        # life: lineage override and departures (scorer.score)
     "actions.core_only": False,
