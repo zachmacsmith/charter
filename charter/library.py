@@ -4936,6 +4936,152 @@ def on_round_end(r):
 ''', doc="""Standing wages paid by an association (a house, a guild, a firm) out of its treasury to the members it names; unpaid
 wages are owed, publicly.""", fires="on_round_end")
 
+# review 31 (docs/review/31_institutions/03_money_labour.md §2, 08 §2.1): the Standing Contract core and its presets (Supply
+# Contract, Board, Payroll, Quota, Grant, Charge, Retainer), one code with parameter sets (charter/standing.py)
+from charter import standing as _STANDING                                # noqa: E402
+_STANDING.register(established_template)
+
+established_template("Licence", "law", "licence", '''
+title = "Licence"
+intent = "What GATES names (harvest, hunt, sow, reap: at the camps in TARGETS; post: in the channels in TARGETS; convert: by the recipes or products in TARGETS; empty TARGETS: everywhere) needs a licence: the right RIGHT, or membership of the institution HOLDERS_FROM names (roster:<id>: its members are licensed while they are members). The REGISTRAR office issues and revokes licences; with FEE above 0 anyone may also buy one (<TAG>_apply) for FEE FEE_ITEM paid to the treasury. A licence lasts TERM rounds (0: until revoked). Every issue, revocation and expiry is in a public register."
+rank = "statute"
+GATES = ["harvest"]
+TARGETS = []
+RIGHT = "licence"
+REGISTRAR = ""
+HOLDERS = []
+HOLDERS_FROM = ""
+FEE_ITEM = "penny"
+FEE = 0
+TERM = 0
+TAG = "licence"
+
+def book(a, event, extra):
+    reg = public.setdefault("register", [])
+    row = {"round": round() + 1, "agent": a, "event": event}
+    for x, v in extra.items():
+        row[x] = v
+    reg.append(row)
+    if len(reg) > 60:
+        reg.pop(0)
+
+def licensed(a):
+    if has(a, RIGHT):
+        return True
+    if HOLDERS_FROM[:7] == "roster:":
+        c = contract_state(HOLDERS_FROM[7:])
+        return c != None and a in c["members"]
+    return False
+
+def issue(a, how):
+    grant(a, RIGHT)
+    until = None
+    if TERM > 0:
+        until = round() + TERM
+    state.setdefault("until", {})[a] = until
+    book(a, how, {"until": None if until == None else until + 1})
+
+def gate(a, target, what):
+    if (len(TARGETS) == 0 or target in TARGETS) and not licensed(a):
+        how = "a licence (" + RIGHT + ")"
+        if FEE > 0:
+            how = how + ": invoke " + TAG + "_apply for " + str(FEE) + " " + FEE_ITEM
+        elif REGISTRAR != "":
+            how = how + " from the " + REGISTRAR
+        return {"block": True, "reason": LABEL + ": " + what + " at " + str(target) + " needs " + how}
+    return None
+
+LABEL = "Licence"
+
+def before_harvest(p, chain):
+    if "harvest" in GATES:
+        return gate(p["agent"], p["camp"], "harvesting")
+    return None
+
+def before_hunt(p, chain):
+    if "hunt" in GATES:
+        return gate(p["agent"], p["camp"], "hunting")
+    return None
+
+def before_sow(p, chain):
+    if "sow" in GATES:
+        return gate(p["agent"], p["camp"], "sowing")
+    return None
+
+def before_reap(p, chain):
+    if "reap" in GATES:
+        return gate(p["agent"], p["camp"], "reaping")
+    return None
+
+def before_post(p, chain):
+    if "post" in GATES and p.get("kind") == "channel_post":
+        return gate(p["agent"], p.get("outlet"), "posting")
+    return None
+
+def before_convert(p, chain):
+    if "convert" in GATES:
+        t = p.get("via")
+        if len(TARGETS) > 0 and t not in TARGETS:
+            t = p.get("dst_item")
+        return gate(p["agent"], t, "making " + str(p.get("dst_item")))
+    return None
+
+def apply_licence(agent):
+    if has(agent, RIGHT):
+        refuse("you hold a licence already")
+    if FEE <= 0:
+        refuse("licences are issued by the " + REGISTRAR)
+    if balance(agent, FEE_ITEM) < FEE or not move(agent, treasury(), FEE_ITEM, FEE):
+        refuse("the licence costs " + str(FEE) + " " + FEE_ITEM)
+    issue(agent, "bought")
+    return "licence issued"
+
+def issue_licence(agent, target):
+    if not is_text(target) or target not in agents():
+        refuse("no such agent: " + str(target))
+    if has(target, RIGHT):
+        refuse(target + " holds a licence already")
+    issue(target, "issued by " + agent)
+    notify(target, LABEL + ": " + agent + " issued you a licence (" + RIGHT + ")")
+    return "licence issued to " + target
+
+def revoke_licence(agent, target, reason=""):
+    if not has(target, RIGHT):
+        refuse(str(target) + " holds no licence")
+    revoke(target, RIGHT)
+    book(target, "revoked by " + agent, {"reason": str(reason)[:200]})
+    notify(target, LABEL + ": your licence was revoked by " + agent + ". " + str(reason)[:200])
+    return "licence revoked"
+
+def on_round_start(r):
+    if TERM <= 0:
+        return
+    until = state.get("until", {})
+    for a in sorted(until):
+        if until[a] != None and r >= until[a] and has(a, RIGHT):
+            revoke(a, RIGHT)
+            until.pop(a)
+            book(a, "expired", {})
+            notify(a, LABEL + ": your licence has expired")
+
+def on_enact():
+    create_right(RIGHT)
+    for a in HOLDERS:
+        if a in agents() and not has(a, RIGHT):
+            issue(a, "held at enactment")
+    if REGISTRAR != "":
+        define_action(REGISTRAR, TAG + "_issue", issue_licence)
+        define_action(REGISTRAR, TAG + "_revoke", revoke_licence)
+    if FEE > 0:
+        create_right(TAG + "_applicant")
+        for a in agents():
+            grant(a, TAG + "_applicant")
+        define_action(TAG + "_applicant", TAG + "_apply", apply_licence)
+''', doc="""One licence for every gate (review 31 08 §2.6): forest and camp licences (harvest, hunt), company camps (HOLDERS_FROM
+roster:<firm>: only the firm's members, while they are members), a publishing licence (post in named channels) and a forge gate
+(convert by recipe or product); a Registrar office issues and revokes, an optional fee buys one, a term, a public register.""",
+                     fires="before_harvest", needs=())
+
 
 # ---------------------------------------------------------------------- edition lookups
 def settings(x=None) -> dict:

@@ -128,14 +128,14 @@ def _have(sha):
 def test_infer_version_from_git_history():
     for v, e in PV.ENGINE_FLIPS.items():
         assert ST.infer_version(e["commits"][0]) == v
-        assert ST.infer_version(e["commits"][0] + "^") == {2: 1, 3: 1, 10: 7, 11: 1, 16: 14}.get(v, v - 1)   # 2, 3, 10, 11 and 16 were made on parallel branches
+        assert ST.infer_version(e["commits"][0] + "^") == {2: 1, 3: 1, 10: 7, 11: 1, 16: 14, 17: 14}.get(v, v - 1)   # 2, 3, 10, 11, 16 and 17 were made on parallel branches
     s = ST.infer(PV.ENGINE_FLIPS[3]["commits"][0])                       # version 3 without version 2's flip
     assert s["engine_version"] == 3 and s["defaults"] == {"charter.channels.DEFAULTS": {"delivery": "pull"}}
     assert ST.patches(s) == {"charter.channels.DEFAULTS": {"delivery": "pull", "business": False},
                              "charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}, "budgets": {"state": 800}},
                              "charter.conflict.DEFAULTS": {"model": "disable"},
                              "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0},
-                             "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15}
+                             "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15, "charter.contracts.DEFAULTS": CON17}
     s = ST.infer(PV.ENGINE_FLIPS[10]["commits"][0])                      # version 10 (wp/survival-exp) without 8's or 9's flips
     assert s["engine_version"] == 10 and s["defaults"] == {"charter.conflict.DEFAULTS": {"model": "disable"},
                                                            "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}}
@@ -143,6 +143,7 @@ def test_infer_version_from_git_history():
     assert ST.infer_version("0" * 40) is None
 
 
+CON17 = {"pay_institutions": False, "applicant_lines": False}                # engine 17: economic plumbing
 EXTRA15 = {"law.effects": False, "law.call_failures": False, "law.expects": False,    # engine 15: laws that fail loudly
            "institutions.amend_offices": False}
 SUB14 = {"game": {"hunt_mode": "shared"}, "forest": {"clearing": 5},                     # engine 14: farming, the individual hunt
@@ -156,7 +157,7 @@ def test_patches_revert_later_flips_only_where_the_snapshot_is_silent():
     p = ST.patches({"engine_version": 1, "defaults": {"charter.context.DEFAULTS": {"memory_text": "v2"}}})
     assert p == {"charter.channels.DEFAULTS": {"delivery": "pull", "business": False},
                  "charter.context.DEFAULTS": {"dm_delta": False, "history": {"enabled": False}, "budgets": {"state": 800}},
-                 "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15}
+                 "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15, "charter.contracts.DEFAULTS": CON17}
     assert ST.patches({"engine_version": 7, "defaults": {}}) == {"charter.context.DEFAULTS": {"budgets": {"state": 800}}, "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15, "charter.channels.DEFAULTS": {"business": False}}
     assert ST.patches({"engine_version": 9, "defaults": {}}) == {"charter.context.DEFAULTS": {"budgets": {"state": 800}}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15, "charter.channels.DEFAULTS": {"business": False}}           # engine 10: review 23's scoring fixes
     with ST.use({"engine_version": 1, "defaults": {}}):
@@ -175,6 +176,8 @@ def test_old_run_resumes_under_the_defaults_of_its_git_sha(tmp_path, monkeypatch
         for key in EXTRA15:                                               # and engine 15's
             m.setitem(__import__("charter.schema").schema.EXTRA, key, False)
         m.setitem(__import__("charter.channels").channels.DEFAULTS, "business", False)   # and engine 16's
+        for key in CON17:                                                 # and engine 17's
+            m.setitem(__import__("charter.contracts").contracts.DEFAULTS, key, False)
         old_ref = runner.run(_inst(), AG.ScriptedPolicy(1), tmp_path / "old_ref", **QUIET)
         old = runner.run(_inst(), AG.ScriptedPolicy(1), tmp_path / "old", until=1, **QUIET)
     inst = json.loads((old / "instance.json").read_text())

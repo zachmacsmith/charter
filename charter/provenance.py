@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 16
+ENGINE_VERSION = 17
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -128,6 +128,14 @@ ENGINE_FLIPS = {
                  "edition) and followed_by, pull boards with unread counts in the state, channel_posts for laws, the Market Board "
                  "template, official record to a notices channel (channels.notices); under channels.business (on from 16): manual "
                  "text matching delivery, search over channel posts, visible reader narrowing (channel_resealed), channel_read"},
+    17: {"commits": ["7c8ac2dc408b96c6d574193cd85a65c7c3c11691"],
+         "flips": [("charter.contracts.DEFAULTS", ("pay_institutions",), False, True),
+                   ("charter.contracts.DEFAULTS", ("applicant_lines",), False, True)],
+         "note": "economic plumbing (docs/review/31_institutions/03_money_labour.md, 08 §2): transfers and office payments into "
+                 "an institution's treasury (A<n>, J0); J0 as an employer (start.wages employer J0, office:J0.<office> workers); "
+                 "start.contracts, start.allowances, start.escrow; the Standing Contract core (charter/standing.py) with the "
+                 "Supply, Board, Payroll, Quota, Grant, Charge and Retainer presets and terms lines; the Licence template; officers "
+                 "see pending applicants"},
 }
 
 

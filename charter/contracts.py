@@ -126,6 +126,9 @@ DEFAULTS = {
     "breach_cases": False,      # W7e: under escrow_court, a breach opens a courts v2 case (source "contract"; file_breach_case)
     "max_own": 5,               # W8e (D-27): currencies, rights and offices one contract may create, each (was MAX_OWN)
     "max_funds": 5,             # W8e (D-27): funds one law may open (was MAX_FUNDS)
+    "applicant_lines": True,    # review 31 (03 #14): an institution's officers see its pending applicants in their state (false: not)
+    "pay_institutions": True,   # review 31 (08 §2.2): transfer {"to": "A1" | "J0"} and an office's transfer "as" pay that institution's
+                                # treasury, and a contract's law may pay "J0" (false: only agents and stores, as before)
 }
 PROCEDURES = ("members", "two_thirds", "founder")
 ENFORCEMENT = ("escrow", "escrow_court", "word")
@@ -159,6 +162,23 @@ def issuer(k, name):
         return None
     cid = name.split(SEP, 1)[0]
     return cid if cid in recs(k) else None
+
+
+def institution_payee(k, to):
+    """Review 31 (08 §2.2), with contracts.pay_institutions on (also with contracts off): the institution whose treasury a payment
+    `to` names: "J0" (the polity), a live association ("A1" or "assoc:A1"), or (jurisdictions on) a polity's id. None otherwise,
+    and always None for an agent's id or with the flag off."""
+    if not isinstance(to, str) or to in k.w["agents"] or not cfg(k).get("pay_institutions"):
+        return None
+    iid = to[len(AC.ASSOC):] if to.startswith(AC.ASSOC) else to
+    if iid == "J0":
+        return iid
+    rec = recs(k).get(iid) if "contracts" in k.w else None
+    if rec is not None:
+        return iid if rec["status"] != "dissolved" else None
+    if J.enabled(k) and iid in J.jurs(k):
+        return iid
+    return None
 
 
 def _other_treasury(k, key) -> bool:
@@ -976,6 +996,8 @@ def scope_api(k, lid, api: dict) -> dict:
             return x
         if isinstance(x, str) and x.startswith(AC.STORE) and x[len(AC.STORE):] in AC.stores(k):
             return x                                                    # review 15 S3: anyone may put food in a store
+        if x == "J0" and institution_payee(k, x) == "J0":
+            return AC.treasury_of(k, "J0")                              # review 31: pay the polity's treasury (pay_institutions)
         return None
 
     def move(src, dst, item, qty, memo=None):                           # W6a: memo (law.v2)
@@ -2149,9 +2171,12 @@ def state_lines(k, aid) -> list[str]:
                        f"{', '.join(rec['laws']) or 'none'}{'; SUSPENDED' if rec['status'] == 'suspended' else ''}){left}: your "
                        f"escrow {_fmt(rec['escrow'].get(aid))}; your allowance per round {_fmt(rec['allowances'].get(aid))}; its "
                        f"treasury {_fmt(rec['reserve'])}.")
+            if rec["applicants"] and cfg(k).get("applicant_lines") and aid in INS.officers(k, cid):   # review 31 (03 #14)
+                out.append(f"Applicants to {cid}: {', '.join(rec['applicants'])} (a law of {cid} admits them, e.g. an officer's hire).")
+    out += terms_lines(k, aid)                                         # review 31: one line per standing contract a party holds
     others = [f"{c} '{r['name']}' ({r['template'] or 'own code'}, {len(r['members'])} members{', closed' if r['admission'] == 'closed' else ''}"
               f"{_claims(k, r)})"
-              for c, r in recs(k).items() if r["status"] != "dissolved" and aid not in r["members"]]
+              for c, r in recs(k).items() if r["status"] != "dissolved" and aid not in r["members"] and not _named_parties(k, r)]
     if others:
         out.append("Contracts you could join: " + "; ".join(others) + ".")
     for g in _auths(k).values():                                       # P4.5: agency, both sides
@@ -2163,6 +2188,28 @@ def state_lines(k, aid) -> list[str]:
                        f"{g['action']} up to {g['qty']:g} {g['item']} per round of theirs ({_auth_left(k, g):g} left this round): "
                        f"act_for {{\"auth\": \"{g['id']}\", ...}}.")
     return out
+
+
+def terms_lines(k, aid) -> list[str]:
+    """Review 31 (03 §2.5, 08 Phase 0.9): the terms line each standing contract (charter/standing.py) writes for its parties into its
+    law state (state["terms_lines"][aid]), in enactment order: a polity's laws and associations' alike."""
+    out = []
+    for lid in k.w["law_order"]:
+        law = k.w["laws"].get(lid)
+        if not law or law["status"] != "active":
+            continue
+        line = ((law.get("state") or {}).get("terms_lines") or {}).get(aid)
+        if isinstance(line, str) and line:
+            out.append(line[:700])
+    return out
+
+
+def _named_parties(k, rec) -> bool:
+    """A closed contract whose standing-contract law names its parties (a bilateral one): nobody else could join it, so it is not
+    listed among the contracts others could join."""
+    if rec["admission"] != "closed":
+        return False
+    return any(((k.w["laws"].get(lid) or {}).get("state") or {}).get("named") is True for lid in rec["laws"])
 
 
 def render_event(k, e, tag, viewer=None) -> str | None:

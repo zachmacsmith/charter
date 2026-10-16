@@ -507,6 +507,8 @@ def _ann():
         "contracts.breach_cases": dict(types=("bool",)),                 # W7e (review 11 §4.1): breaches open court cases
         "contracts.max_own": dict(types=("int",), range=NONNEG),           # W8e (D-27): was contracts.MAX_OWN
         "contracts.max_funds": dict(types=("int",), range=NONNEG),         # W8e (D-27): was contracts.MAX_FUNDS
+        "contracts.pay_institutions": dict(types=("bool",)),             # review 31 (08 §2.2): transfers into treasuries
+        "contracts.applicant_lines": dict(types=("bool",)),              # review 31 (03 #14): applicants on officers' state
         "agent_rules": dict(kind="map"),
         "agent_rules.*": dict(kind="leaf", types=("dict",), check=_check_agent_rules),
         "directories.stores": dict(kind="map"),

@@ -540,7 +540,47 @@ def _transfer(k, aid, to, item, qty, memo=None, **kw):
     if isinstance(to, str) and to.startswith("store:") and "subsistence" in k.w:   # review 15 S3: a deposit in a food store
         from charter import subsistence as SB
         return SB.deposit(k, aid, to, item, qty, memo=memo)
+    from charter import contracts as KC
+    iid = KC.institution_payee(k, to)
+    if iid is not None:                                                # review 31 (08 §2.2): pay an institution's treasury
+        return pay_institution(k, aid, iid, item, qty, memo=memo)
     return _send(k, aid, to, item, qty, memo=memo)
+
+
+def pay_institution(k, aid, iid, item, qty, memo=None, src=None, as_=None):
+    """Review 31 (08 §2.2; contracts.pay_institutions): goods into institution iid's treasury (J0's reserve, an association's
+    "assoc:<id>", a polity's reserve), as an ordinary transfer (why "transfer": laws' before_move sees it, levies apply, the
+    balance cap holds). src: the paying account (an agent's holdings, or an institution's treasury when an office pays "as" it).
+    The transfer event goes to the payer and the institution's officers (and an association's members)."""
+    from charter import institutions as IN
+    qty = float(qty)
+    if qty <= 0:
+        raise ActionError("qty must be positive")
+    src = src or aid
+    dst = AC.treasury_of(k, iid)
+    if dst == src:
+        raise ActionError(f"that is {iid}'s own treasury")
+    if not AC.can_pay(k, src, item, qty):
+        raise ActionError(f"you have only {k.bal(src, item):g} {item}" if src == aid else f"{as_}'s treasury holds only "
+                          f"{k.bal(src, item):g} {item}")
+    memo = D.memo_text(memo)
+    kw = {"memo": memo} if memo is not None else {}
+    out = k.apply("move", src=src, dst=dst, item=item, qty=qty, why="transfer", actor=aid, **kw)
+    rec = IN.get(k, iid) or {}
+    vis = sorted(({aid} | set(IN.officers(k, iid)) | set(rec.get("members") or ())) & set(k.w["agents"]))
+    if not out.ok:
+        k.w["effects"]["blocked_transfers"] += 1
+        k.log("transfer_blocked", aid, {"to": iid, "item": item, "qty": qty,
+                                        **({"by": list(out.blocked_by), "reason": out.reason} if out.reason else {})}, vis=vis)
+        raise ActionError("a law blocked this payment" + (f" (law {', '.join(out.blocked_by)}: {out.reason})" if out.reason else ""))
+    tax = float((out.result or {}).get("charged") or 0.0)
+    v = k._v(item)
+    k.w["effects"]["transfer_qty"] += qty * v
+    k.w["effects"]["transfer_taxed"] += tax * v
+    eid = k.log("transfer", aid, {"to": iid, "item": item, "qty": qty, "tax": tax, "treasury": dst,
+                                  **({"as": as_} if as_ else {}), **({"memo": memo} if memo is not None else {})}, vis=vis)
+    return (f"Paid {qty - tax:g} {item} into {iid}'s treasury" + (f" out of {as_}'s" if as_ else "") + (f" ({tax:g} taxed)" if tax
+                                                                                                       else "") + f" ({eid}).")
 
 
 def _send(k, aid, to, item, qty, extra=None, memo=None):
