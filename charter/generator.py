@@ -79,6 +79,9 @@ def fixed_names(spec_names, classes: list) -> list | None:
     return out
 
 
+NO_GOAL_TEMPERAMENT = (("one cause, your primary goal,", "one cause of your own,"),          # temperament wording that presumes a goal
+                       ("You want your payoff this round.", "You want results now, this round."),
+                       ("You plan for the end of the game and will wait for a payoff.", "You plan for the long run and will wait for results."))
 RESERVED_IDS = ("world", "reserve", "all", "observer", "constitution", "intervention", "nobody", "members", "treasury")
 
 
@@ -597,8 +600,11 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
     for a in agents:                                                   # personality.explicit.<id>: none: no archetype text either
         if a["id"] in (pspec.get("explicit") or {}) and pspec["explicit"][a["id"]] in (None, "none"):
             a["personality_text"] = ""
-        if (a.get("goal") or {}).get("none") or gspec.get("none"):      # a goalless agent's archetype names no goal
-            a["personality_text"] = (a.get("personality_text") or "").replace("your primary goal", "what you want")
+        if (a.get("goal") or {}).get("none") or gspec.get("none"):      # a goalless agent's temperament names no goal or payoff
+            t = a.get("personality_text") or ""
+            for x, y in NO_GOAL_TEMPERAMENT:
+                t = t.replace(x, y)
+            a["personality_text"] = t
 
     # endowments (scientists, legislators and media may start with nothing)
     target = float(sp["endowment_gini"])

@@ -55,3 +55,14 @@ def test_schema_accepts_none_and_null():
         assert not [e for e in schema.validate(sp) if "explicit" in e]
     sp["personality"]["explicit"] = {a: "calm"}
     assert [e for e in schema.validate(sp) if "explicit" in e]
+
+
+def test_goalless_temperament_names_no_goal_or_payoff():
+    sp = S.load("opus20")
+    sp["personality"]["enabled"] = True
+    sp["personality"]["archetypes"] = {"enabled": True, "prob": 1.0, "weights": {"zealot": 1.0}}
+    sp["goals"]["none"] = True
+    inst = generator.generate(sp, 1)
+    texts = " ".join(a["personality_text"] for a in inst["agents"])
+    assert "one cause of your own" in texts
+    assert "payoff" not in texts and "primary goal" not in texts
