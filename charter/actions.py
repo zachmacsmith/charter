@@ -149,8 +149,8 @@ def _act(k, aid: str, name: str, args: dict) -> str:
     from charter import conflict as _CF
     if not _CF.harm(k):                                                 # craft and watch only under the harm combat model
         hidden_here |= set(_CF.HARM_ACTIONS)
-    if sub and not any(c.get("type") == "fields" for c in k.w["camps"].values()):   # review 19: fields parked (off): no farm action
-        hidden_here.add("farm")
+    if sub and not any(c.get("type") == "fields" for c in k.w["camps"].values()):   # review 19: fields off: no farming action
+        hidden_here |= {"farm", "tend", "improve", "practice", "clear"}
     if name not in ACTIONS or name in hidden_here:
         raise ActionError(f"unknown action '{name}'. Actions: {', '.join(x for x in ACTIONS if x not in hidden_here)}")
     if sub:                                                             # review 15 S1: hunger closes actions (Act.fed; agency: both)

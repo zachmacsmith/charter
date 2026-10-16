@@ -364,7 +364,7 @@ def test_the_composer_appends_forests_and_draws_nothing_else():
         "shared_archive.enabled=false", "agents={worker: 100, scientist: 0, legislator: 0, media: 0, board: 0, fixer: 1}", FIELDS]), 1)
     types = [c["type"] for c in inst["camps"] if c.get("role") == "subsistence"]
     assert types.count("forest") == 9 and types.count("fields") == 3 and "weak_link" not in types
-    assert sum(len(c["plots"]) for c in inst["camps"] if c["type"] == "fields") == 40
+    assert sum(len(c["plots"]) for c in inst["camps"] if c["type"] == "fields") == 100   # engine 14: plots_per_agent 1.0
 
 
 def test_fields_are_parked_out_of_the_prompt_and_the_actions():
@@ -442,7 +442,7 @@ def test_a_law_quota_applies_to_foraging_and_hunting():
 
 
 def test_felling_shrinks_the_forest_and_clears_a_plot():
-    inst, k = small([FIELDS])
+    inst, k = small([FIELDS, "subsistence.forest.clearing=5"])            # engine 14: felling clears plots only when set (default 0)
     f = food_camps(k, "forest")[0]
     c = k.w["camps"][f]
     fl = c["fn"]["pair"]
@@ -457,6 +457,11 @@ def test_felling_shrinks_the_forest_and_clears_a_plot():
     inst, k = small()                                                      # fields off: felling clears nothing
     f = food_camps(k, "forest")[0]
     assert k.w["camps"][f]["fn"]["pair"] is None
+    for x in eaters(k)[:5]:
+        assert "Felled 3 timber" in A.act(k, x, "harvest", {"camp": f, "fell": True})
+    assert not any(e["type"] == "plot_cleared" for e in k.events)
+    inst, k = small([FIELDS])                                              # engine 14 default: felling never clears (clear does)
+    f = food_camps(k, "forest")[0]
     for x in eaters(k)[:5]:
         assert "Felled 3 timber" in A.act(k, x, "harvest", {"camp": f, "fell": True})
     assert not any(e["type"] == "plot_cleared" for e in k.events)
@@ -479,7 +484,7 @@ def test_sow_ripen_reap_by_another_and_the_sower_is_told():
     assert any(x.startswith("Your crops: " + fl + " plot 1 RIPE") for x in SB.state_lines(k, a))
     f0 = k.bal(b, "food")
     assert "sown by " + a in A.act(k, b, "farm", {"camp": fl, "reap": 1})  # liberty: anyone reaps (U1 residual)
-    assert k.bal(b, "food") - f0 == pytest.approx(3 * 3.5)
+    assert k.bal(b, "food") - f0 == pytest.approx(3 * 3.0)                 # engine 14: mult 3.0
     ev = next(e for e in k.events if e["type"] == "reap")
     assert set(ev["vis"]) == {a, b} and ev["data"]["sower"] == a
     p = k.w["camps"][fl]["plots"][0]
@@ -573,7 +578,7 @@ def forest(k):
 
 def test_expected_catch_rises_with_the_party_then_thins():
     from charter.camptypes import forest as FO
-    gp = SB.cfg({})["game"]
+    gp = {**SB.cfg({})["game"], "hunt_mode": "shared"}                     # the shared mode (review 19); individual: test_farming
     per = {E: FO.expected_catch(gp, E) / E for E in (1, 2, 3, 4, 6, 8, 12)}
     assert per[1] == pytest.approx(1.15, abs=0.02) and per[6] == pytest.approx(2.26, abs=0.02)
     assert per[1] < per[2] < per[3] < per[4] < per[6] and per[6] > per[8] > per[12]     # better together, diminishing returns
@@ -584,7 +589,8 @@ def test_expected_catch_rises_with_the_party_then_thins():
 
 
 def test_a_party_hunts_together_and_the_catch_is_shared_by_effort():
-    inst, k = small(["subsistence.spoil=0", "subsistence.ration=0", "subsistence.seasons.enabled=false"])
+    inst, k = small(["subsistence.spoil=0", "subsistence.ration=0", "subsistence.seasons.enabled=false",
+                     "subsistence.game.hunt_mode=shared"])                  # one quarry per party (engine 14: not the default)
     a, b, c, d, e = eaters(k)[:5]
     f, cm = forest(k)
     for x in (a, b, c):

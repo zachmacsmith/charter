@@ -138,7 +138,7 @@ FEATURES: list[Feature] = [
     F("contracts", "charter.contracts", "contracts", state=("contracts",), rng=("contracts",), golden="contracts_small",
       live="contracts"),
     # Review 15 S1-S3: food, hunger, the food camps and stores (spec subsistence; off: every entry is skipped and the tails are empty)
-    F("subsistence", "charter.subsistence", "subsistence", state=("subsistence",), rng=("subsistence", "subsistence-bot"),
+    F("subsistence", "charter.subsistence", "subsistence", state=("subsistence",), rng=("subsistence", "subsistence-bot", "subsistence-bot-farm"),
       golden="subsistence_small", skip_off=True),
 ]
 del F

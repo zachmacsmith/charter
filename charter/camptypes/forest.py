@@ -20,9 +20,24 @@ fee: laws' set_quota, set_harvest_limit, set_fee) apply to every forest action a
                                        party at the same forest hunt together, no party: alone. Again: one more unit (up to the
                                        forest-action budget)
 
-The hunt (end of the round, camps step 2: Forest.end_of_round; review 19 §5). For each party, in label order, with effort E (each
-hunter's units x its hunger multiplier) and game density g = G/K before its draw, from random.Random(f"{seed}|subsistence|hunt|
-{camp}|{round}|{label}"):
+The hunt (end of the round, camps step 2: Forest.end_of_round; review 19 §5) has two modes, subsistence.game.hunt_mode (a forest
+generated before engine 14 has no mode in its parameters and hunts shared, as it always did).
+
+Individual (the default from engine 14). Each hunter draws its own catch: every effort unit of every member is one draw, in an order
+shuffled by random.Random(f"{seed}|subsistence|hunt|{camp}|{round}|{label}"), at the game density g = G/K left by the draws before it
+(each catch leaves the stock at once, never more than G). With E the party's effort (each hunter's units x its hunger multiplier) and
+crowding c = 1 / (1 + E / crowd):
+    p_large  = min(.95, individual.large  x g^theta x c x (1 - exp(-(E / scale_L)^shape_L)))     a large animal: food_L (20)
+    p_medium = min(.95, individual.medium x g^theta x c x (1 - exp(-(E / scale_M)^shape_M)))     a deer: food_M (5)
+    p_small  = min(.95, individual.small  x g^theta x c)                                         small game: food_S (1)
+one u per draw: large, else medium, else small, else nothing; the food is scaled by the drawing hunter's hunger multiplier. A
+bigger party raises every member's chance of bigger game; crowding thins every draw, so the party's total catch grows with its size
+with diminishing returns per extra hunter (and the stock caps it). Expected food per unit of effort at full stock: alone 1.07; 2:
+1.43; 4: 2.05; 6: 2.27 (the peak); 8: 2.19; 12: 1.86; 16: 1.61, so a party's total: 1.1, 2.9, 8.2, 13.6, 17.5, 22.3, 25.7.
+Each hunter keeps its own catch (the harvest primitive pays it).
+
+Shared (hunt_mode shared; review 19). For each party, in label order, with effort E and game density g = G/K before its draw, from
+random.Random(f"{seed}|subsistence|hunt|{camp}|{round}|{label}"):
     p_large  = min(.95, catch_L) x g^theta x (1 - exp(-(E / scale_L)^shape_L))     a large animal: food_L (20)
     p_medium = min(.95, catch_M) x g^theta x (1 - exp(-(E / scale_M)^shape_M))     a deer: food_M (5)
     one draw u: u < p_large -> large; else u < p_large + (1 - p_large) p_medium -> medium; else small game: each of the party's
@@ -45,6 +60,11 @@ from charter.camptypes import CampType, register
 GAME_LEVELS = ((0.6, "plentiful"), (0.3, "fair"), (0.1, "scarce"), (0.0, "very scarce"))
 
 
+def _clearing(p) -> bool:
+    """Does clearing (clear {"camp": forest}) make plots from this forest? Only with fields and their clear parameters."""
+    return bool(p.get("pair")) and bool(p.get("clear"))
+
+
 def game_level(g) -> str:
     """The coarse word agents (and laws) get for a forest's game density G/K: hunters see tracks, not a census."""
     return next((name for lo, name in GAME_LEVELS if g >= lo), GAME_LEVELS[-1][1])
@@ -61,8 +81,33 @@ def kill_chances(gp, E, g) -> tuple:
     return tuple(out)
 
 
+def mode(gp) -> str:
+    """A forest's hunt mode: its parameters' hunt_mode (subsistence.game.hunt_mode at generation); a forest generated before engine
+    14 has none and hunts shared, as it did."""
+    return (gp or {}).get("hunt_mode") or "shared"
+
+
+def unit_chances(gp, E, g) -> tuple:
+    """Individual mode: (p_large, p_medium, p_small) of one effort unit's draw in a party of effort E at game density g."""
+    ind = gp["individual"]
+    gd = max(0.0, float(g)) ** float(gp["theta"])
+    crowd = 1.0 / (1.0 + max(0.0, E) / float(ind["crowd"])) if float(ind.get("crowd") or 0) > 0 else 1.0
+    out = []
+    for cls in ("large", "medium"):
+        x = gp[cls]
+        s = 1.0 - math.exp(-((max(0.0, E) / float(x["scale"])) ** float(x["shape"]))) if E > 0 else 0.0
+        out.append(min(0.95, float(ind[cls]) * gd * crowd * s))
+    out.append(min(0.95, float(ind["small"]) * gd * crowd))
+    return tuple(out)
+
+
 def expected_catch(gp, E, g=1.0) -> float:
-    """Expected food a party of effort E takes at game density g (before the stock cap): the doc table and the bot."""
+    """Expected food a party of effort E takes at game density g (before the stock cap): the doc table and the bot. Its mode's:
+    shared, one quarry for the party; individual, the sum of E draws (each unit's)."""
+    if mode(gp) == "individual":
+        pl, pm, ps = unit_chances(gp, E, g)
+        per = pl * float(gp["large"]["food"]) + (1 - pl) * pm * float(gp["medium"]["food"]) + (1 - pl) * (1 - pm) * ps * float(gp["small"]["food"])
+        return per * max(0.0, E)
     pl, pm = kill_chances(gp, E, g)
     small = (1 - pl) * (1 - pm) * E * min(0.95, float(gp["small"]["catch"])) * max(0.0, g) ** float(gp["theta"]) * float(gp["small"]["food"])
     return pl * float(gp["large"]["food"]) + (1 - pl) * pm * float(gp["medium"]["food"]) + small
@@ -85,13 +130,20 @@ class Forest(CampType):
         cid = self.camp["id"]
         pair = f" on {p['pair']}" if p.get("pair") else ""
         fell = (f"harvest {{\"camp\": \"{cid}\", \"fell\": true}} cuts {p['fell_timber']:g} timber and shrinks the forest for good"
-                + (f"; every {p['clearing']} fells clear a new plot{pair}" if p.get("pair") else "") + ". ")
+                + (f"; every {p['clearing']} fells clear a new plot{pair}" if p.get("pair") and int(p.get("clearing") or 0) > 0 else "")
+                + ". ")
+        hunt = ("alone you mostly catch small game; hunters who name the same party hunt together and have better chances of a "
+                "deer or a large animal (shared by effort). " if mode(p.get("game")) == "shared" else
+                "alone you mostly catch small game; hunters who name the same party hunt together, and the bigger the party the "
+                "better each hunter's chances of a deer or a large animal; each hunter keeps its own catch. ")
+        clear = (f"clear {{\"camp\": \"{cid}\"}} clears forest into a new field plot on {p['pair']} (yours to farm; the forest "
+                 "shrinks for good). " if p.get("pair") and _clearing(p) else "")
         return (f"An open forest (no right needed) with plants and game. harvest {{\"camp\": \"{cid}\"}} forages plants: up to "
                 f"{p['yield']:g} food x stock/capacity per action (less when you are hungry; foraging never takes the last "
                 f"{p['refuge']:.0%}). hunt {{\"camp\": \"{cid}\", \"party\": \"<name>\"}} hunts game, paid at the end of the round: "
-                "alone you mostly catch small game; hunters who name the same party hunt together and have better chances of a "
-                "deer or a large animal (shared by effort). " + fell + f"At most {p['per_round']} forest actions (forage, hunt or fell) "
-                "per agent per round. Plants regrow fast, game slowly; both regrow faster at middling stocks than when stripped.")
+                + hunt + fell + clear + f"At most {p['per_round']} forest actions "
+                + ("(forage, hunt, fell or clear) " if clear else "(forage, hunt or fell) ")
+                + "per agent per round. Plants regrow fast, game slowly; both regrow faster at middling stocks than when stripped.")
 
     def state_line(self, k, aid) -> str:
         from charter import subsistence as SB
@@ -220,7 +272,7 @@ class Forest(CampType):
         c["S"] = round(min(c["S"], c["K"]), 4)
         p["fells"] = int(p.get("fells", 0)) + 1
         note = ""
-        if p.get("pair") and p["fells"] % int(p["clearing"]) == 0:
+        if p.get("pair") and int(p.get("clearing") or 0) > 0 and p["fells"] % int(p["clearing"]) == 0:
             pid = FL.clear_plot(k, p["pair"], by=aid)
             if pid is not None:
                 p["cleared"] = int(p.get("cleared", 0)) + 1
@@ -246,6 +298,11 @@ class Forest(CampType):
             h = hunts[aid]
             parties.setdefault(h["party"] or f"@{aid}", []).append(aid)
         rec = []
+        if mode(gp) == "individual":
+            for label in sorted(parties):
+                rec.append(self._hunt_individual(k, label, parties[label], hunts))
+            self._hunt_record(k, rec)
+            return []
         for label in sorted(parties):
             members = parties[label]
             eff = {a: int(hunts[a]["effort"]) * SB.yield_mult(k, a) for a in members}
@@ -283,9 +340,64 @@ class Forest(CampType):
             st["actions"] += units
             rec.append({"party": None if label.startswith("@") else label, "hunters": members, "effort": round(E, 3),
                         "kind": kind, "catch": food})
+        self._hunt_record(k, rec)
+        return []
+
+    def _hunt_record(self, k, rec) -> None:
+        c = self.camp
         if rec:
             g = c["game"]
-            k.log("hunt_round", None, {"camp": cid, "round": k.r, "parties": rec, "game": round(g["G"] / g["K"], 4) if g["K"] > 0
-                                       else 0.0, "level": game_level(g["G"] / g["K"]) if g["K"] > 0 else game_level(0.0)},
+            k.log("hunt_round", None, {"camp": c["id"], "round": k.r, "parties": rec, "game": round(g["G"] / g["K"], 4)
+                                       if g["K"] > 0 else 0.0, "level": game_level(g["G"] / g["K"]) if g["K"] > 0 else game_level(0.0)},
                   vis="monitor")
-        return []
+
+    def _hunt_individual(self, k, label, members, hunts) -> dict:
+        """One party's hunt in individual mode (module docstring): every effort unit draws, in a shuffled order, at the density the
+        draws before it left; each hunter keeps its own catch. Returns the party's hunt_round row."""
+        from charter import subsistence as SB
+        c, gp = self.camp, self.p["game"]
+        cid = c["id"]
+        g = c["game"]
+        mult = {a: SB.yield_mult(k, a) for a in members}
+        E = sum(int(hunts[a]["effort"]) * mult[a] for a in members)
+        rng = random.Random(f"{k.inst['seed']}|subsistence|hunt|{cid}|{k.r}|{label}")
+        draws = [a for a in members for _ in range(int(hunts[a]["effort"]))]
+        rng.shuffle(draws)
+        got = {a: [] for a in members}
+        food_of = {"large": float(gp["large"]["food"]), "medium": float(gp["medium"]["food"]), "small": float(gp["small"]["food"])}
+        for a in draws:
+            dens = g["G"] / g["K"] if g["K"] > 0 else 0.0
+            pl, pm, ps = unit_chances(gp, E, dens)
+            u = rng.random()
+            kind = "large" if u < pl else "medium" if u < pl + (1 - pl) * pm else \
+                "small" if u < pl + (1 - pl) * pm + (1 - pl) * (1 - pm) * ps else None
+            if kind is None:
+                continue
+            food = max(0.0, min(round(food_of[kind] * mult[a], 3), float(g["G"])))
+            if food <= 0:
+                continue
+            g["G"] = max(0.0, round(g["G"] - food, 4))
+            got[a].append((kind, food))
+        total = round(sum(f for a in members for _, f in got[a]), 3)
+        names = ", ".join(members)
+        words = {"large": "a large animal", "medium": "a deer", "small": "small game"}
+        for a in members:
+            mine = round(sum(f for _, f in got[a]), 3)
+            kinds = [x for x, _ in got[a]]
+            what = ", ".join(f"{n} {words[x]}" if x == "small" and n > 1 else words[x]
+                             for x, n in ((x, kinds.count(x)) for x in ("large", "medium", "small")) if n) or "nothing"
+            ded = 0.0
+            if mine > 0:
+                ded = k.apply("harvest", agent=a, camp=cid, x=[], item="food", qty=mine, via="typed").result["deducted"]
+            party = None if label.startswith("@") else label
+            k.log("hunt_result", a, {"camp": cid, "party": party, "hunters": members, "effort": round(E, 3), "catch": total,
+                                     "kind": what, "share": mine, "deducted": ded, "mode": "individual",
+                                     "text": (f"Your hunt at {cid}" + (f" (party {label}: {names})" if party else " (alone)")
+                                              + f": you took {what}, {mine:g} food" + (f" ({ded:g} deducted by law)" if ded else "")
+                                              + (f"; the party took {total:g} food in all" if party else "") + ".")},
+                  vis=[a])
+        st = c.setdefault("stats", {"yield": 0.0, "value": 0.0, "actions": 0, "rounds": 0})
+        st["yield"] = round(st["yield"] + total, 6)
+        st["actions"] += len(draws)
+        return {"party": None if label.startswith("@") else label, "hunters": members, "effort": round(E, 3),
+                "kind": "individual", "catch": total, "catches": {a: round(sum(f for _, f in got[a]), 3) for a in members}}

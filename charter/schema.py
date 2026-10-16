@@ -411,6 +411,20 @@ def _ann():
         "subsistence.store_spoil": dict(range=PROB),
         "subsistence.store.cost": dict(kind="map"),
         "subsistence.store.cost.*": dict(types=("number",), range=NONNEG),
+        "subsistence.game.hunt_mode": dict(types=("str",), enum=("individual", "shared")),   # engine 14
+        "subsistence.fields.share": dict(range=PROB),
+        "subsistence.fields.tend.bonus": dict(types=("list",)),
+        "subsistence.fields.tend.soil": dict(range=PROB),
+        "subsistence.fields.upkeep_every": dict(types=("int",), range=(1, None)),
+        **{f"subsistence.fields.improvements.{kind}.{m}": dict(kind="map") for kind in ("terraces", "irrigation", "shed", "plough")
+           for m in ("cost", "upkeep") if not (kind == "plough" and m == "upkeep")},
+        **{f"subsistence.fields.improvements.{kind}.{m}.*": dict(types=("number",), range=NONNEG)
+           for kind in ("terraces", "irrigation", "shed", "plough") for m in ("cost", "upkeep") if not (kind == "plough" and m == "upkeep")},
+        "subsistence.fields.improvements.irrigation.blight": dict(range=PROB),
+        "subsistence.fields.improvements.shed.rot": dict(range=PROB),
+        "subsistence.fields.improvements.plough.break": dict(range=PROB),
+        "subsistence.fields.skills.rotation.loss": dict(range=PROB),
+        "subsistence.fields.skills.seed_selection.needs": dict(types=("str", "null")),
         "life.lifespan": dict(types=("list", "dict"), fields=("mean", "sd", "min", "max")),
         "life.elapsed": dict(types=("list",)),
         "life.design_rounds": dict(types=("int", "null"), range=(1, None)),
@@ -636,11 +650,12 @@ DOCS = {
                                    "that office alone (only its holders withdraw from a controlled store; they pay out of the "
                                    "treasury with transfer \"as\"); office transfer grants are usable within their bound. Off: "
                                    "the fields are recorded, nothing reads them",
-    "subsistence.shocks": "scheduled forest shocks (review 27): [{round, plants, game, season, rounds, text}]: at the end of round "
-                          "`round` (1-based) every forest keeps `plants` (and `game`) of its stock, announced publicly; then the "
-                          "season is `season` for `rounds` rounds. [] (default): none",
+    "subsistence.shocks": "scheduled shocks (review 27; crops and blight: engine 14): [{round, plants, game, crops, blight, season, "
+                          "rounds, text}]: at the end of round `round` (1-based) every forest keeps `plants` (and `game`) of its "
+                          "stock and every standing crop survives with chance `crops`, announced publicly; then the season is "
+                          "`season` and crops ripening fail with extra chance `blight` for `rounds` rounds. [] (default): none",
     "start": "established worlds (charter/start.py): who and what exists at round 0 (rights, currencies, institutions with members, "
-             "offices and treasuries, stores, holdings, wages, loans, kin, channels, camp rights, laws), compiled at generation into "
+             "offices and treasuries, stores, holdings, wages, loans, kin, channels, camp rights, farms, laws), compiled at generation into "
              "round-0 setup interventions (recorded like any intervention); every name must resolve",
     "actions.core_only": "review 14 A: only the core surface (action_registry.CORE_SURFACE, ~30 actions) exists; every other action "
                          "is unknown",
@@ -843,7 +858,63 @@ DOCS = {
     "subsistence.seasons.p_plenty": "chance a new season is plentiful",
     "subsistence.seasons.persistence": "chance a season simply continues into the next round",
     "subsistence.seasons.game": "how much of the season's effect the game feels (0: none, 1: as plants)",
-    "subsistence.fields.enabled": "fields and the farm action (parked: off by default, review 19)",
+    "subsistence.fields.enabled": "fields, farms and the farming actions (farm, tend, improve, practice, clear); off by default",
+    "subsistence.fields.share": "a new farm's crop share: the part of a crop someone else reaps that goes to the plot's holder",
+    "subsistence.fields.tend": "tending a growing crop (tend {camp, plot})",
+    "subsistence.fields.tend.bonus": "yield bonus of the 1st, 2nd, ... tend of a crop (none after the list; once per plot per round)",
+    "subsistence.fields.tend.soil": "each tend cuts the harvest's fertility loss by this share",
+    "subsistence.fields.upkeep_every": "improvements pay upkeep at the end of every this-many-th round (unpaid: they lose a level)",
+    "subsistence.fields.improvements": "farm improvements (improve {kind, camp, plot}): cost (used up), effect, upkeep",
+    "subsistence.fields.improvements.terraces": "terraces on a plot: more seed per plot",
+    "subsistence.fields.improvements.terraces.cost": "materials one level of terraces costs (used up)",
+    "subsistence.fields.improvements.terraces.cost.*": "quantity of this resource",
+    "subsistence.fields.improvements.terraces.max": "most levels of terraces a plot takes",
+    "subsistence.fields.improvements.terraces.seed": "extra seed cap per level of terraces",
+    "subsistence.fields.improvements.terraces.upkeep": "materials each level of terraces takes as upkeep",
+    "subsistence.fields.improvements.terraces.upkeep.*": "quantity of this resource",
+    "subsistence.fields.improvements.irrigation": "irrigation on a plot: more yield, less blight",
+    "subsistence.fields.improvements.irrigation.cost": "materials one level of irrigation costs (used up)",
+    "subsistence.fields.improvements.irrigation.cost.*": "quantity of this resource",
+    "subsistence.fields.improvements.irrigation.max": "most levels of irrigation a plot takes",
+    "subsistence.fields.improvements.irrigation.mult": "added to the yield multiplier per level of irrigation",
+    "subsistence.fields.improvements.irrigation.blight": "an irrigated plot's blight chance multiplier",
+    "subsistence.fields.improvements.irrigation.upkeep": "materials each level of irrigation takes as upkeep",
+    "subsistence.fields.improvements.irrigation.upkeep.*": "quantity of this resource",
+    "subsistence.fields.improvements.shed": "a farm's drying shed: ripe crops rot slower",
+    "subsistence.fields.improvements.shed.cost": "materials a shed costs (used up)",
+    "subsistence.fields.improvements.shed.cost.*": "quantity of this resource",
+    "subsistence.fields.improvements.shed.max": "most levels of shed a farm takes",
+    "subsistence.fields.improvements.shed.rot": "rot multiplier for the ripe crops of a farm with a shed",
+    "subsistence.fields.improvements.shed.upkeep": "materials a shed takes as upkeep",
+    "subsistence.fields.improvements.shed.upkeep.*": "quantity of this resource",
+    "subsistence.fields.improvements.plough": "a plough (a good): one sow, tend or reap action covers several plots",
+    "subsistence.fields.improvements.plough.cost": "materials a plough costs (used up)",
+    "subsistence.fields.improvements.plough.cost.*": "quantity of this resource",
+    "subsistence.fields.improvements.plough.plots": "plots one farm action covers with a plough",
+    "subsistence.fields.improvements.plough.break": "chance a plough breaks each time it covers more than one plot",
+    "subsistence.fields.skills": "farming skills (practice {learn | teach, to}): per agent, lost at death unless taught",
+    "subsistence.fields.skills.rotation": "rotation: the sower's harvests tire the soil less",
+    "subsistence.fields.skills.rotation.work": "units of practice to learn rotation",
+    "subsistence.fields.skills.rotation.teach": "units one teaching gives the learner",
+    "subsistence.fields.skills.rotation.loss": "fertility loss multiplier for crops sown by an agent who knows rotation",
+    "subsistence.fields.skills.seed_selection": "seed selection: the sower's crops ripen sooner",
+    "subsistence.fields.skills.seed_selection.work": "units of practice to learn seed selection",
+    "subsistence.fields.skills.seed_selection.teach": "units one teaching gives the learner",
+    "subsistence.fields.skills.seed_selection.grow": "rounds fewer to ripen for crops sown by an agent who knows it (at least 1)",
+    "subsistence.fields.skills.seed_selection.needs": "the skill it requires first",
+    "subsistence.fields.clear": "clearing forest into plots (clear {camp: forest}; the clearer holds the plot)",
+    "subsistence.fields.clear.work": "units of clearing work per new plot",
+    "subsistence.fields.clear.plants": "plant capacity (food) a forest loses for good per plot cleared",
+    "subsistence.fields.clear.game": "game capacity (food) a forest loses for good per plot cleared",
+    "subsistence.fields.clear.timber": "timber each unit of clearing work cuts",
+    "subsistence.game.hunt_mode": "individual (engine 14): every hunter's effort draws its own catch, the party's size raising each "
+                                  "draw's chance of bigger game | shared: one quarry per party, shared by effort",
+    "subsistence.game.individual": "individual hunt mode: each effort unit's chances at full stock (x the party's large/medium "
+                                   "sigmoid, x crowding 1/(1 + E/crowd))",
+    "subsistence.game.individual.large": "a draw's chance of a large animal for a big enough party",
+    "subsistence.game.individual.medium": "a draw's chance of a deer for a big enough party",
+    "subsistence.game.individual.small": "a draw's chance of small game",
+    "subsistence.game.individual.crowd": "party effort at which crowding halves every draw's chances (0: no crowding)",
     "subsistence.bot_hunt": "scripted bots: chance a bot hunts in a round (dry runs)",
     "subsistence.bot_effort": "scripted bots: hunt actions a hunting bot spends in that round",
     "subsistence.store.cost": "a store's building cost (destroyed)",
@@ -1284,8 +1355,8 @@ def _check_shocks(path, v) -> list:
         if not isinstance(s, dict) or not isinstance(s.get("round"), int) or s["round"] < 1:
             errs.append(f"{p}: needs round (a whole number from 1: the shock strikes at the end of that round)")
             continue
-        errs += [f"{p}.{k}: unknown key" for k in s if k not in ("round", "plants", "game", "season", "rounds", "text")]
-        for f in ("plants", "game"):
+        errs += [f"{p}.{k}: unknown key" for k in s if k not in ("round", "plants", "game", "crops", "blight", "season", "rounds", "text")]
+        for f in ("plants", "game", "crops", "blight"):
             if f in s and not (_is_num(s[f]) and 0 <= s[f] <= 1):
                 errs.append(f"{p}.{f}: the share of the stock kept, 0..1")
         if s.get("season") not in (None, "lean", "normal", "plentiful"):

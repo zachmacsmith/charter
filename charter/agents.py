@@ -177,6 +177,12 @@ def action_doc(name: str, inst: dict, a: dict, f: dict | None = None) -> str:
     if name == "rule" and (inst["spec"].get("law") or {}).get("v2"):  # courts v2: remedies, panels, appeals (law.v2 worlds only)
         doc += ('; law.v2: add "remedy": damages (a number) or a named remedy, which the clause\'s penalty receives. Your polity\'s '
                 "court rules (set by law) may make you one vote of a panel, require an office to judge, or allow an appeal")
+    if name == "hunt" and (inst["spec"].get("subsistence") or {}).get("enabled"):   # engine 14: the hunt's mode (the doc above: shared)
+        from charter import subsistence as SB
+        if SB.cfg(inst["spec"])["game"].get("hunt_mode") == "individual":
+            doc = doc.replace("a party of 3 to 6 has good chances of a deer or a large animal, shared by effort",
+                              "in a party each hunter draws its own catch, and the bigger the party the better each one's chances of a "
+                              "deer or a large animal (the most per hunter in parties of 4 to 8)")
     if name == "attack" and CF.harm(inst):                             # the harm model: factual, no nudge
         secret = a.get("id") in ((inst.get("roles") or {}).get("holders") or {}).get("assassin", [])
         vis = CF.config(inst["spec"])["visibility"]

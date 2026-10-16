@@ -33,6 +33,11 @@ J0), a store declared here, an office declared here. `python -m charter spec che
       channels: [{id, owner, by, purpose, readers, writers, listed, identity, retention, rate, members, subscribers}]
                                                       an id starting with @ changes an existing inbox (e.g. @J0's readers)
       camp_rights: [{resource: copper | camp: camp3, holders: [Name, ...] | members: A1, exclusive: true}]
+      farms: [{owner: Name | A1 | J0, camp: fields | fields2 | camp9, plots: 3, allow: [Name], share: 1, deliver: S2,
+               works: {terraces: 1, irrigation: 1, shed: 1}, crops: true}]   (engine 14; needs subsistence.fields.enabled) the
+                                                      lowest open plots of that fields camp ("fields": the first, "fieldsN": the
+                                                      N-th) held by the owner at round 0, its farm's settings and works; crops:
+                                                      every plot starts with a full-seed crop ripening in turn over the first rounds
       laws: [{template, params, rank} | {code}]       J0 laws enacted at round 0, after everything above exists
 Offices (charter/institutions.py): duties and controls are read under institutions.office_control; succession clauses under
 institutions.succession (an election may name its electorate: a right, e.g. vote, or an office, e.g. J0.council).
@@ -43,7 +48,8 @@ import copy
 import re
 
 OP = "establish"
-SECTIONS = ("rights", "currencies", "institutions", "stores", "holdings", "wages", "loans", "kin", "channels", "camp_rights", "laws")
+SECTIONS = ("rights", "currencies", "institutions", "stores", "holdings", "wages", "loans", "kin", "channels", "camp_rights", "farms",
+            "laws")
 INST_KEYS = ("id", "name", "founder", "members", "admission", "procedure", "charter", "laws", "offices", "treasury", "kind")
 STORE_KEYS = ("id", "owner", "food", "capacity", "name")
 WAGE_KEYS = ("employer", "worker", "item", "qty", "every")
@@ -53,6 +59,7 @@ CHANNEL_KEYS = ("id", "owner", "by", "purpose", "readers", "writers", "listed", 
                 "subscribers")
 CAMP_KEYS = ("resource", "camp", "holders", "members", "exclusive")
 LAW_KEYS = ("template", "params", "rank", "code")
+FARM_KEYS = ("owner", "camp", "plots", "allow", "share", "deliver", "works", "crops")
 ASSOC = re.compile(r"^A[1-9][0-9]*$")
 STORE_ID = re.compile(r"^S[1-9][0-9]*$")
 
@@ -127,6 +134,20 @@ def check(path, v) -> list:
     errs += lst("kin", KIN_KEYS, ("child",))
     errs += lst("channels", CHANNEL_KEYS, ("id",))
     errs += lst("camp_rights", CAMP_KEYS)
+    errs += lst("farms", FARM_KEYS, ("owner", "plots"))
+    for i, e in enumerate(v.get("farms") or () if isinstance(v.get("farms"), list) else ()):
+        if not isinstance(e, dict):
+            continue
+        q = f"{path}.farms[{i}]"
+        if not (isinstance(e.get("plots"), int) and not isinstance(e.get("plots"), bool) and e["plots"] >= 1):
+            errs.append(f"{q}.plots: a whole number of plots from 1")
+        if "share" in e and not (isinstance(e["share"], (int, float)) and not isinstance(e["share"], bool) and 0 <= e["share"] <= 1):
+            errs.append(f"{q}.share: 0..1")
+        if "works" in e and not (isinstance(e["works"], dict) and set(e["works"]) <= {"terraces", "irrigation", "shed"}
+                                 and all(isinstance(x, int) and x >= 0 for x in e["works"].values())):
+            errs.append(f"{q}.works: {{terraces: level, irrigation: level, shed: 0 | 1}}")
+        if "allow" in e and not (isinstance(e["allow"], list) and all(isinstance(x, str) for x in e["allow"])):
+            errs.append(f"{q}.allow: [Name, ...]")
     errs += _check_laws(f"{path}.laws", v.get("laws"))
     return errs
 
@@ -223,6 +244,12 @@ def placed_names(sp: dict) -> list:
         if isinstance(e, dict):
             for h in e.get("holders") or ():
                 add("camp_rights.holders", h)
+    for e in b.get("farms") or ():
+        if isinstance(e, dict):
+            if e.get("owner") is not None and not _is_account(b, e["owner"]):
+                add("farms.owner", e["owner"])
+            for a in e.get("allow") or ():
+                add("farms.allow", a)
     return out
 
 
@@ -473,6 +500,42 @@ def compile(sp: dict, inst: dict) -> dict:
         if not cid.startswith("@") and "owner" not in spec:
             raise ValueError(f"start.channels.{cid}: needs an owner")
         sched.append(_entry("channel", cid, spec))
+    fields = [c["id"] for c in inst["camps"] if c.get("type") == "fields"]
+    room = {c["id"]: len(c.get("plots") or []) for c in inst["camps"] if c.get("type") == "fields"}
+    for i, e in enumerate(b.get("farms") or ()):
+        p = f"start.farms[{i}]"
+        if not fields:
+            raise ValueError(f"{p}: farms need fields (subsistence.fields.enabled)")
+        ref = str(e.get("camp") or "fields")
+        m = re.match(r"^fields([1-9][0-9]*)?$", ref)
+        if m:
+            n = int(m.group(1) or 1)
+            if n > len(fields):
+                raise ValueError(f"{p}.camp: {ref}, but this world has {len(fields)} fields camp(s): {', '.join(fields)}")
+            cid = fields[n - 1]
+        elif ref in fields:
+            cid = ref
+        else:
+            raise ValueError(f"{p}.camp: {ref!r} is not a fields camp (fields camps: {', '.join(fields)}; or \"fields\", \"fields2\")")
+        owner = account(f"{p}.owner", e["owner"])
+        if owner in {s["id"] for s in stores}:
+            raise ValueError(f"{p}.owner: a store cannot hold land")
+        room[cid] -= int(e["plots"])
+        if room[cid] < 0:
+            raise ValueError(f"{p}: {cid} has too few plots for the farms declared on it ({-room[cid]} short; raise "
+                             "subsistence.fields.plots_per_agent)")
+        deliver = e.get("deliver")
+        if deliver is not None:
+            deliver = str(deliver)[6:] if str(deliver).startswith("store:") else str(deliver)
+            st = next((s for s in stores if s["id"] == deliver), None)
+            if st is None:
+                raise ValueError(f"{p}.deliver: no store {deliver} declared in start")
+            if account(f"{p}.deliver", st["owner"]) != owner:
+                raise ValueError(f"{p}.deliver: store {deliver} is {st['owner']}'s, not the farm owner's")
+        sched.append(_entry("farm", i, {"owner": owner, "camp": cid, "plots": int(e["plots"]),
+                                        "allow": [agent(f"{p}.allow", a) for a in e.get("allow") or ()],
+                                        "share": e.get("share"), "deliver": deliver, "works": dict(e.get("works") or {}),
+                                        "crops": bool(e.get("crops", True))}))
     for j, le in enumerate(b.get("laws") or ()):
         c, t = _law_code(f"start.laws[{j}]", le)
         sched.append(_entry("law", j, {"code": c, "template": t}))
@@ -735,9 +798,25 @@ def h_channel(k, inst, spec):
     return {"channel": cid}
 
 
+def h_farm(k, inst, spec):
+    """start.farms: the owner holds the lowest open plots of the fields camp as its farm at round 0 (camptypes/fields.establish)."""
+    from charter.camptypes import fields as FL
+    from charter import subsistence as SB
+    if not SB.on(k) or spec["camp"] not in SB.fields_camps(k):
+        raise _fail(f"no fields camp {spec['camp']}")
+    try:
+        got = FL.establish(k, spec["owner"], spec["camp"], spec["plots"], allow=spec.get("allow"), share=spec.get("share"),
+                           deliver=spec.get("deliver"), works=spec.get("works"), crops=spec.get("crops", True))
+    except ValueError as e:
+        raise _fail(str(e))
+    k.log("farm_held", None, {"camp": spec["camp"], "holder": spec["owner"], "plots": got,
+                              "text": f"{spec['owner']} holds a farm at {spec['camp']}: plots {', '.join(map(str, got))}."}, vis="public")
+    return {"farm": spec["owner"], "camp": spec["camp"], "plots": got}
+
+
 HANDLERS = {"rights": h_rights, "currency": h_currency, "institution": h_institution, "polity_offices": h_polity_offices,
             "law": h_law, "store": h_store, "holding": h_holding, "standing_wage": h_standing_wage, "loan": h_loan, "kin": h_kin,
-            "camp_rights": h_camp_rights, "channel": h_channel}
+            "camp_rights": h_camp_rights, "channel": h_channel, "farm": h_farm}
 _ops()
 
 

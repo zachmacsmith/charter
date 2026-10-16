@@ -1,0 +1,28 @@
+# Engine 14 (docs/review/31_institutions/01b_farming.md): nature_subsistence with farming. 24 founders (names fixed by
+# agents.names, so the placements hold at any seed); one fields camp of 24 plots; six farmers hold three plots each from round 0
+# (spec start.farms, a crop already growing on every plot, ripening in turn), the other 18 forage and hunt in two forests, may sow
+# the six open plots, and may clear forest into plots of their own. For scripted dry runs and the farming calibration (the doc's
+# §6); a blight arm: subsistence.shocks (e.g. [{round: 10, plants: 0.5, game: 0.6, crops: 0.4, blight: 0.3, season: lean,
+# rounds: 6}]).
+extends: [nature_subsistence]
+rounds: 30
+agents:
+  worker: 24
+  scientist: 0
+  legislator: 0
+  media: 0
+  board: 0
+  fixer: 0
+  names: [Alder, Bryn, Cass, Dell, Edda, Fion, Gale, Hob, Ivy, Jory, Kit, Lark, Moss, Nell, Oak, Pell, Quill, Rue, Sage, Tam,
+          Ula, Vell, Wren, Yarrow]
+subsistence:
+  enabled: true
+  fields: {enabled: true}
+start:
+  farms:
+    - {owner: Alder, camp: fields, plots: 3}
+    - {owner: Bryn, camp: fields, plots: 3}
+    - {owner: Cass, camp: fields, plots: 3}
+    - {owner: Dell, camp: fields, plots: 3}
+    - {owner: Edda, camp: fields, plots: 3}
+    - {owner: Fion, camp: fields, plots: 3}

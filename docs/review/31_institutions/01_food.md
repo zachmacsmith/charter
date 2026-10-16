@@ -8,7 +8,9 @@ distribute and consume, with payment flowing back, in the four regimes. Engine c
 
 - **Production is foraging and hunting, not farming.** Fields are parked (`subsistence.py:92`, `fields.enabled: false`) and
   scheduled shocks hit forests only (`subsistence.py:264-289`). In this design a "farmer" is a forager who holds a forest licence and
-  a "hunter" is a member of a hunting party. Fields are a later swap (§8).
+  a "hunter" is a member of a hunting party. Fields are a later swap (§8). *(Update, engine 14: farming is built, off by default:
+  farms held by agents or institutions, `start.farms`, tending, improvements with upkeep, clearing, and a per-hunter hunt;
+  01b_farming.md.)*
 - **A chain needs enclosure.** Forests are open to everyone (`camptypes/forest.py:75`). `start.camp_rights` skips subsistence
   camps (`start.py:453-454`). As things stand, all 24 agents can feed themselves and no institution is needed. Every regime therefore
   starts with one J0 law, a **Forest Licence** (NEW, small; a variant of Licensing Authority, `library.py:2192`, that also gates
