@@ -137,7 +137,9 @@ E("report", "actions", "communication", "public", "post", "agents", act="report"
 E("digest", "actions", "communication", "public", "post", "agents", act="write_digest", flags=_POSTF)
 E("channel_post", "actions", "communication", "channel", "post", "agents", act="channel_post",
   flags="post quote leak:passing observed messages own",
-  note="a post (POSTABLE, context.POSTS) but not searchable, forgeable, veilable, in the law API's posts() or goals.PUBLIC", primitive="post")
+  note="a post (POSTABLE, context.POSTS) but not forgeable, veilable, in the law API's posts() or goals.PUBLIC; searchable by "
+       "search_board, and a cut one points at read {\"channel\"}, only under channels.business (review 31.04 #3); laws read a "
+       "channel's posts with channel_posts", primitive="post")
 E("dm", "actions", "communication", "parties", "message", "agents", act="dm", flags="quote leak:passing recent:dms observed messages own",
   note="also forge_dm and reply (actions._deliver)", primitive="dm")
 E("gazette", "kernel", "legal_act", "public|parties", "official", "agents",
@@ -182,6 +184,11 @@ E("channel_set", "channels", "primitive", "channel", "event", "agents", act="set
 E("channel_subscribed", "channels", "primitive", "parties", "event", "agents", act="join_channel", note="also leave_channel",
   primitive="subscribe")
 E("channel_seeded", "channels", "record", "monitor", "silent", None, note="channels.v2: the squares and inboxes the kernel made")
+E("channel_resealed", "channels", "primitive", "public|parties", "event", "agents", act="set_channel", primitive="set_channel",
+  note="channels.business (review 31.08 §2.4): a set_channel that narrowed readers or retention; public for a listed channel, "
+       "else its owner, members and the readers who lost access")
+E("channel_read", "channels", "record", "monitor", "silent", None, act="read",
+  note="channels.business (review 31.04 #6): a read of a channel (agent, channel, upto, unread_before), for read rates")
 E("message_refused", "channels", "record", "monitor", "silent", None,
   note="channels.v2: a law's send_message that could not be delivered (why)")
 E("anon_truth", "actions", "truth", "monitor", "silent", None, act="anon_post", primitive="post")

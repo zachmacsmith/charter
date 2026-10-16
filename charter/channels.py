@@ -25,9 +25,20 @@ carrying channel_id "@<agent>"; to an institution, a channel_post in its inbox).
 camp (spec channels.square: one by default; per_camp squares are read and written by the agents present at the camp), rate-limited. Anyone may open a channel (D-33's residual); the Press Act (charter/code/press.py)
 seeds today's press gate where a preset wants it (spec channels.found_right does the same without the default code).
 
-Delivery (spec channels.delivery, pull by default): pull leaves channel posts out of the feed and shows, per channel an agent
-follows, the unread count and the latest headline (state_lines); `read` opens one (a look-up). DMs and the agent's own inbox are
-always pushed. push: posts reach the feed as before.
+Delivery (spec channels.delivery, the world's default: push, the default, or pull; review 31.04 §5.2): push sends a channel's
+posts to its readers' feeds; pull leaves them out of the feed and shows, per channel an agent follows, the unread count and the
+latest headline(s) (state_lines); `read` opens one (a look-up). A channel's own `delivery` field (push | pull | edition; set in
+start.channels or by its owner with set_channel) overrides the world default (squares: spec channels.square_delivery); edition
+collects a round's posts and delivers them once, as one digest, at the reader's first turn after the round. `followed_by:
+readers` makes every agent who can read a channel follow it (a public board appears in every reader's state without a join).
+DMs and the agent's own inbox are always pushed.
+
+Spec channels.business (default off, so earlier runs replay with their prompts; review 31.04 §5, 31.08 §2.4/§2.9): the manual
+states each delivery as it is; a cut channel post in the feed points at read {"channel"}; search_board finds the channel posts the
+agent may read; a `read` of a channel logs a monitor-only channel_read; a set_channel narrowing readers or retention logs a
+channel_resealed event (public for a listed channel). Spec channels.notices (default none): the engine posts the official record
+(laws enacted, amended or repealed, offices filled, licences, contract registrations, rulings, gazette notices) into that channel at
+the start of the next round. Laws read a channel's posts with channel_posts(channel, since, by) (business valid only when posted).
 
 Institutions are reached only through the helpers owner_kind, institutions, is_member and may_speak_for, which read WP-D's
 charter/institutions.py (institutions.unified on or off). Media2 is untouched (WP-H re-expresses it on channels).
@@ -40,6 +51,9 @@ import json
 import re
 
 FIELDS = ("purpose", "readers", "writers", "listed", "inbox", "identity", "retention", "rate")
+DELIVERY_FIELDS = ("delivery", "followed_by")                          # review 31.04 §5.2: per channel (absent: the world's)
+DELIVERIES = ("push", "pull", "edition")
+FOLLOWED_BY = ("subscribers", "readers")
 SELECTORS = ("agents", "members", "office", "subscribers", "all", "camp", "address", "any")
 # Wave 9 E (institutions.grants): {"officers": "<iid>"} holders of any office the institution's code declares; {"officers_or_members":
 # "<iid>"} its officers when it has declared an office, else its members (an institution's inbox readers under the flag).
@@ -50,7 +64,13 @@ SQUARES = ("one", "per_camp", "none")
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-.]{0,39}$")
 WORLD = "world"
 SQUARE = "square"
-DEFAULTS = {"v2": False, "delivery": "push", "square": "one", "square_rate": 2, "found_right": None, "headlines": 8}
+DEFAULTS = {"v2": False, "delivery": "push", "square": "one", "square_rate": 2, "found_right": None, "headlines": 8,
+            # review 31.04 §5 (channels that carry business): every default keeps earlier runs byte-identical
+            "square_delivery": None, "business": False, "notices": None, "board_headlines": 1}
+# The official record the engine posts into spec channels.notices (event types; only public events).
+RECORD_TYPES = ("gazette", "enact", "amended", "repeal", "office_filled", "office_vacant", "licence_granted", "licence_revoked",
+                "contract_created", "case_final")
+RECORD_AS = "Record"
 # A channel's purpose: one or two sentences saying what the channel is for and when to post in it (required when an agent opens one).
 PURPOSE_MIN, PURPOSE_MAX = 20, 300
 ACTIONS = ("send", "read", "open_channel", "set_channel", "join_channel", "leave_channel")
@@ -84,7 +104,23 @@ def active(k) -> bool:
 
 
 def pull(k) -> bool:
+    """The world's default delivery is pull (a channel may override it: delivery)."""
     return active(k) and cfg(k)["delivery"] == "pull"
+
+
+def business(k) -> bool:
+    """Spec channels.business (review 31.04 §5): the corrected manual, read pointers, searchable channel posts, read and reseal events."""
+    return active(k) and bool(cfg(k)["business"])
+
+
+def delivery(k, ch) -> str:
+    """A channel's effective delivery: its own field, else the squares' (channels.square_delivery), else the world default."""
+    d = ch.get("delivery")
+    if d:
+        return d
+    if ch.get("owner") == WORLD and cfg(k)["square_delivery"]:
+        return cfg(k)["square_delivery"]
+    return cfg(k)["delivery"]
 
 
 def _st(k) -> dict:
@@ -349,6 +385,8 @@ def followed(k, aid, ch) -> bool:
     the squares it can read, and the inboxes it reads for an institution."""
     if aid == ch["owner"] or aid in ch["members"] or aid in ch["subscribers"]:
         return True
+    if ch.get("followed_by") == "readers":                              # review 31.04 §5.2: a public board needs no join
+        return can_read(k, aid, ch)
     if ch["owner"] == WORLD or (ch["inbox"] and owner_kind(k, ch["owner"]) in ("jurisdiction", "association")):
         return can_read(k, aid, ch)
     return False
@@ -356,12 +394,17 @@ def followed(k, aid, ch) -> bool:
 
 # ---------------------------------------------------------------------- records
 def _record(k, cid, owner, by=None, purpose="", readers=None, writers=None, listed=True, inbox=False, identity="named",
-            retention="all", rate=None, members=()) -> dict:
+            retention="all", rate=None, members=(), delivery=None, followed_by=None) -> dict:
     writers = writers if writers is not None else {"all": True}
-    return {"v": 2, "id": cid, "owner": owner, "purpose": str(purpose)[:200], "readers": readers if readers is not None else {"all": True},
-            "writers": writers, "listed": bool(listed), "inbox": bool(inbox), "identity": identity, "retention": retention,
-            "rate": rate, "members": sorted(set(members)), "open": writers == {"all": True}, "subscribers": [], "since": {},
-            "known": [], "known_via": [], "known_public": False, "created": k.r, "by": by}
+    rec = {"v": 2, "id": cid, "owner": owner, "purpose": str(purpose)[:200], "readers": readers if readers is not None else {"all": True},
+           "writers": writers, "listed": bool(listed), "inbox": bool(inbox), "identity": identity, "retention": retention,
+           "rate": rate, "members": sorted(set(members)), "open": writers == {"all": True}, "subscribers": [], "since": {},
+           "known": [], "known_via": [], "known_public": False, "created": k.r, "by": by}
+    if delivery is not None:                                           # review 31.04 §5.2: only when set (older records unchanged)
+        rec["delivery"] = delivery
+    if followed_by is not None:
+        rec["followed_by"] = followed_by
+    return rec
 
 
 def inbox_id(owner) -> str:
@@ -379,7 +422,7 @@ def _inbox_record(k, owner) -> dict:
 
 def _summary(ch) -> dict:
     return {x: ch[x] for x in ("id", "owner", "purpose", "readers", "writers", "listed", "inbox", "identity", "retention", "rate",
-                               "members")}
+                               "members") + DELIVERY_FIELDS if x in ch}
 
 
 def squares(k) -> list:
@@ -445,6 +488,73 @@ def round_start(k) -> None:
         return
     _st(k)["posted"] = {}
     sync(k)
+    post_record(k)
+
+
+def post_record(k) -> int:
+    """Spec channels.notices (review 31.04 #4, 31.08 §2.7): the official record since the last call (public events of RECORD_TYPES:
+    laws enacted, amended or repealed, offices filled or vacant, licences, contract registrations, final rulings, gazette notices)
+    posted into the notices channel, one post each, in the record's name, citing the event (ref e<n>). The first call starts the
+    record after the world's founding. Returns the number posted."""
+    cid = cfg(k)["notices"]
+    if not cid or not active(k):
+        return 0
+    st = _st(k)
+    if "record_at" not in st:
+        st["record_at"] = len(k.events)
+        return 0
+    ch = k.w["channels"].get(str(cid))
+    start, st["record_at"] = st["record_at"], len(k.events)
+    if ch is None or ch.get("v") != 2:
+        return 0
+    n = 0
+    for e in k.events[start:st["record_at"]]:
+        if e["type"] not in RECORD_TYPES or e.get("vis") != "public":
+            continue
+        txt = _record_text(k, e)
+        if not txt:
+            continue
+        if _record_post(k, ch["id"], txt, e["id"]):
+            n += 1
+    st["record_at"] = len(k.events)
+    return n
+
+
+def _record_text(k, e) -> str:
+    """One record event as a notice line."""
+    d, t = e.get("data") or {}, e["type"]
+    if t == "gazette":
+        txt = str(d.get("text", ""))
+    elif t == "enact":
+        txt = f"Law {d.get('law')} '{d.get('title')}' enacted ({d.get('class')})" + (f", proposed by {e['agent']}" if e.get("agent") else "") + "."
+    elif t == "repeal":
+        txt = f"Law {d.get('law')} repealed" + (" (expired)" if d.get("via") == "expired" else f" by {d['by']}" if d.get("by") else "") + "."
+    elif t == "amended":
+        txt = f"Law {d.get('law')} amended" + (f" by {d['by']}" if d.get("by") else "") + (f": {d['reason']}" if d.get("reason") else "") + "."
+    elif t == "office_filled":
+        txt = f"{d.get('successor') or e.get('agent')} now holds the office {d.get('right')}" + (f" ({d['rule']})" if d.get("rule") else "") + "."
+    elif t == "office_vacant":
+        txt = f"The office {d.get('right')} is vacant" + (f" ({d['cause']})" if d.get("cause") else "") + "."
+    elif t == "contract_created":
+        txt = f"Contract {d.get('contract')} '{d.get('name')}' registered by {e.get('agent')}" + (f" ({d['template']})" if d.get("template") else "") + "."
+    elif t == "case_final":
+        txt = f"Case {d.get('case')} is final: {d.get('verdict')}" + (f", remedy {d['remedy']}" if d.get("remedy") is not None else "") + "."
+    else:
+        from charter import agents as AG
+        txt = re.sub(r"^\[e\d+ r\d+\]\s*", "", str(AG.render_event(k, e, None) or ""))
+    txt = " ".join(txt.split())
+    return f"{txt[:600]} (ref {e['id']})" if txt else ""
+
+
+def _record_post(k, cid, text, ref) -> bool:
+    from charter import actions as A
+    from charter import dispatch as D
+    try:
+        with k.cause("kernel", "notices", root=True):
+            return bool(post_to(k, None, cid, text, as_=RECORD_AS, law=None, record=ref))
+    except (A.ActionError, D.PhysicsError, D.Blocked) as e:            # a law refusing the post: logged for the monitor
+        k.log("message_refused", None, {"as": RECORD_AS, "to": cid, "why": str(e)[:300]}, vis="monitor")
+        return False
 
 
 # ---------------------------------------------------------------------- the log index and addresses
@@ -537,6 +647,49 @@ def after_post(p, chain):
     if p["outlet"] == SOURCE and p["agent"] is not None:
         send_message(TARGET, p["agent"] + " wrote: " + p["text"])
 ''',
+    # review 31.04 #5 (channels.business): business valid only when posted, read with channel_posts
+    "Posted Draws Only": '''
+title = "Posted Draws Only"
+intent = "A draw from the store STORE counts only once it is posted: the drawer first posts DRAW <qty> in the channel CHANNEL, and draws this round up to the total it posted this round; any other withdrawal is refused."
+STORE = "S1"
+CHANNEL = "ministry"
+
+def num(x):
+    s = str(x).strip()
+    if s == "" or s == "." or s.count(".") > 1 or not all([c in "0123456789." for c in s]):
+        return 0
+    return float(s)
+
+def posted(agent):
+    total = 0
+    for p in channel_posts(CHANNEL, round(), agent):
+        for line in p["text"].split("\\n"):
+            w = line.strip().split()
+            if len(w) >= 2 and w[0].upper() == "DRAW":
+                total = total + num(w[1])
+    return total
+
+def before_withdraw(p, chain):
+    if p["store"] != STORE.replace("store:", "") or p["agent"] is None:
+        return
+    if state.get("round") != round():
+        state["round"] = round()
+        state["drawn"] = {}
+    used = state["drawn"].get(p["agent"], 0)
+    if used + p["qty"] > posted(p["agent"]) + 0.000001:
+        refuse("a draw from " + STORE + " counts only once posted: post DRAW <qty> in " + CHANNEL + " first")
+    state["drawn"][p["agent"]] = used + p["qty"]
+    return True
+''',
+    "Compulsory Gazette": '''
+title = "Compulsory Gazette"
+intent = "The channel CHANNEL stays pushed to everyone: no change to its delivery, readers or retention is allowed."
+CHANNEL = "gazette"
+
+def before_set_channel(p, chain):
+    if p["channel"] == CHANNEL and p["key"] in ["delivery", "readers", "retention"]:
+        refuse(CHANNEL + " is the compulsory gazette: its delivery, readers and retention are fixed by law")
+''',
 }
 LAW_EXAMPLES = {n: c.strip() + "\n" for n, c in LAW_EXAMPLES.items()}
 
@@ -611,7 +764,7 @@ def _rate(k, aid, ch) -> None:
     _st(k)["posted"][key] = n + 1
 
 
-def post_to(k, aid, cid, text, as_=None, auth=None, to=None, law=None) -> str:
+def post_to(k, aid, cid, text, as_=None, auth=None, to=None, law=None, record=None) -> str:
     """A post in a v2 channel (the post primitive, kind channel_post; the square of a one-square world: kind post, public). aid
     None: a law's (send_message); as_: the account it is sent in the name of."""
     ch = k.w["channels"].get(str(cid))
@@ -626,7 +779,8 @@ def post_to(k, aid, cid, text, as_=None, auth=None, to=None, law=None) -> str:
             raise _err(f"you cannot write in {cid} (writers: {describe(ch['writers'])})")
         _rate(k, aid, ch)
     data = {"channel": cid, "channel_id": cid, "text": text, "v2": True, **({"as": as_} if as_ else {}),
-            **({"to": to} if to else {}), **({"law": law} if law else {}), **({"auth": auth["id"]} if auth else {})}
+            **({"to": to} if to else {}), **({"law": law} if law else {}), **({"auth": auth["id"]} if auth else {}),
+            **({"record": record} if record else {})}
     anon = ch["identity"] == "anonymous" and aid is not None and not as_
     if cid == SQUARE and ch["owner"] == WORLD:                          # one square: the public board (type post, public)
         t = k.agent(aid)["title"] if aid else None
@@ -804,9 +958,14 @@ def act_set_channel(k, aid, channel, field, value=None):
         raise _err(f"no channel {channel}")
     check_manage(k, aid, ch)
     key = str(field)
-    if key not in FIELDS:
-        raise _err(f"field is one of {', '.join(FIELDS)}")
-    if key in ("readers", "writers"):
+    if key not in FIELDS + DELIVERY_FIELDS:
+        raise _err(f"field is one of {', '.join(FIELDS + (DELIVERY_FIELDS if business(k) else ()))}")
+    if key == "delivery" and value not in DELIVERIES + (None,):
+        raise _err("delivery is push (posts reach the readers' feeds), pull (counted in their state; read opens it), edition "
+                   "(a round's posts delivered once, as one digest) or null (the world's default)")
+    elif key == "followed_by" and value not in FOLLOWED_BY + (None,):
+        raise _err("followed_by is subscribers (the default: who joins it) or readers (everyone who can read it follows it)")
+    elif key in ("readers", "writers"):
         value = check_selector(value, key, extra_selectors(k))
     elif key in ("listed", "inbox"):
         if not isinstance(value, bool):
@@ -827,11 +986,27 @@ def act_set_channel(k, aid, channel, field, value=None):
 
 def change_set_channel(k, agent, channel, key, value) -> dict:
     ch = k.w["channels"][channel]
-    ch[key] = value
+    watch = business(k) and key in ("readers", "retention")             # review 31.08 §2.4: a narrowing is logged in public
+    before = _readers_now(k, ch) if watch else None
+    old = ch.get(key)
+    if key in DELIVERY_FIELDS and value is None:
+        ch.pop(key, None)
+    else:
+        ch[key] = value
     if key == "writers":
         ch["open"] = value == {"all": True}
     k.log("channel_set", agent, {"channel": channel, "key": key, "value": value}, vis=f"channel:{channel}")
+    if watch:
+        lost = sorted(before - _readers_now(k, ch))
+        if lost or (key == "retention" and old == "all" and value == "joined"):
+            k.log("channel_resealed", agent, {"channel": channel, "key": key, "value": value, "lost": lost,
+                                              "readers_before": len(before), "readers_after": len(before) - len(lost)},
+                  vis=register_vis(k, ch, lost))
     return {"channel": channel, "key": key}
+
+
+def _readers_now(k, ch) -> set:
+    return {a for a in k.roster() if k.w["agents"][a].get("departed") is None and can_read(k, a, ch)}
 
 
 def act_join_channel(k, aid, channel):
@@ -890,7 +1065,8 @@ def directory(k, aid) -> str:
             continue
         n = len(_st(k)["log"].get(cid) or [])
         lines.append(f"- {cid}: {ch['purpose'] or '(no purpose given)'}; owner {ch['owner']}; readers {describe(ch['readers'])}; "
-                     f"writers {describe(ch['writers'])}; {n} post(s)" + ("" if ch["listed"] else "; unlisted"))
+                     f"writers {describe(ch['writers'])}; " + (f"delivery {delivery(k, ch)}; " if business(k) else "")
+                     + f"{n} post(s)" + ("" if ch["listed"] else "; unlisted"))
     lines.append("Every agent's inbox is @<name>: send {\"to\": \"<name>\", \"text\"} reaches it as a private message.")
     return "\n".join(lines)
 
@@ -923,10 +1099,13 @@ def read(k, aid, channel=None, n=10) -> str:
             shown.append(txt)
         if len(shown) >= n:
             break
+    if business(k):                                                    # review 31.04 #6: read rates (monitor only)
+        k.log("channel_read", aid, {"agent": aid, "channel": cid, "upto": f"e{seqs[-1]}" if seqs else None,
+                                    "unread_before": unread(k, aid, cid)[0]}, vis="monitor")
     if seqs:
         _mark_read(k, aid, cid, seqs[-1])
     head = (f"Channel {cid} ({ch['purpose'] or 'no purpose given'}; owner {ch['owner']}; readers {describe(ch['readers'])}; "
-            f"writers {describe(ch['writers'])}; {len(seqs)} post(s)):")
+            f"writers {describe(ch['writers'])}; " + (f"delivery {delivery(k, ch)}; " if business(k) else "") + f"{len(seqs)} post(s)):")
     return head + "\n" + ("\n".join(reversed(shown)) or "(no posts you can read)")
 
 
@@ -936,27 +1115,65 @@ def act_read(k, aid, channel=None, n=10):
 
 # ---------------------------------------------------------------------- the feed and the state
 def pulled(k, aid, e) -> bool:
-    """Pull delivery: a channel post that stays out of the feed (counted in the state instead). DMs and the agent's own inbox are
-    pushed."""
+    """A channel post that stays out of the feed: its channel's effective delivery is pull (counted in the state instead) or edition
+    (delivered once a round as a digest: editions). DMs and the agent's own inbox are pushed. Callers check active(k) first."""
     d = e.get("data")
     if not isinstance(d, dict) or e["type"] == "dm":
         return False
     cid = d.get("channel_id")
-    return bool(cid) and cid != inbox_id(aid)
+    if not cid or cid == inbox_id(aid):
+        return False
+    ch = k.w["channels"].get(cid)
+    if ch is None or ch.get("v") != 2:
+        return cfg(k)["delivery"] != "push"
+    return delivery(k, ch) != "push"
 
 
-def unread(k, aid, cid) -> tuple:
-    """(unread count, latest event) of a channel for this agent."""
+def unread(k, aid, cid, heads=1) -> tuple:
+    """(unread count, latest event) of a channel for this agent; heads > 1: (count, the latest `heads` unread events, oldest first)."""
     seqs = _st(k)["log"].get(cid) or []
     mark = _st(k)["read"].get(aid, {}).get(cid, 0)
-    n, latest = 0, None
+    n, latest = 0, []
     for s in seqs[bisect.bisect_right(seqs, mark):]:
         e = k.events[s - 1] if s - 1 < len(k.events) else None
         if e is None or e.get("agent") == aid or not k.can_see(aid, e):
             continue
         n += 1
-        latest = e
+        latest = (latest + [e])[-max(1, int(heads)):]
+    if heads == 1:
+        return n, (latest[-1] if latest else None)
     return n, latest
+
+
+def editions(k, aid, since) -> list:
+    """Edition delivery (review 31.04 §5.2 item 6): for each channel with effective delivery edition that the agent follows, the
+    posts of the rounds completed since its last look (rounds from the round of event `since` up to the last one) as one digest
+    item: (event index of the last post, text). Posts of the current round wait for the next round's digest."""
+    if not active(k) or k.r <= 0:
+        return []
+    r0 = k.events[since - 1]["round"] if 0 < since <= len(k.events) else -1
+    out = []
+    for cid, ch in sorted(k.w["channels"].items()):
+        if ch.get("v") != 2 or cid == inbox_id(aid) or delivery(k, ch) != "edition" or not followed(k, aid, ch):
+            continue
+        posts = []
+        for sq in _st(k)["log"].get(cid) or []:
+            e = k.events[sq - 1] if sq - 1 < len(k.events) else None
+            if e is None or not (r0 <= e["round"] < k.r) or e.get("agent") == aid or not k.can_see(aid, e):
+                continue
+            posts.append((sq - 1, e))
+        if not posts:
+            continue
+        rounds = sorted({e["round"] + 1 for _, e in posts})
+        span = f"round {rounds[0]}" if len(rounds) == 1 else f"rounds {rounds[0]}-{rounds[-1]}"
+        body = "\n".join(f"- {_who(e)}: {' '.join(str(e['data'].get('text', '')).split())}" for _, e in posts)
+        out.append((posts[-1][0], f"[Edition of {cid}, {span}: {len(posts)} post{'s' if len(posts) != 1 else ''}]\n{body}"))
+    return out
+
+
+def _who(e) -> str:
+    d = e["data"]
+    return d.get("as") or e.get("agent") or "Anonymous"
 
 
 def _headline(e) -> str:
@@ -982,23 +1199,35 @@ def writable_line(k, aid) -> list:
 
 
 def state_lines(k, aid) -> list:
-    """The channel lines of an agent's state (agents.state_view under channels.v2)."""
+    """The channel lines of an agent's state (agents.state_view under channels.v2): the push channels it follows (one line of
+    names), the pull channels (unread counts and the latest headline(s): channels.board_headlines), the edition channels."""
     chans = [ch for ch in k.w["channels"].values() if ch.get("v") == 2 and ch["id"] != inbox_id(aid) and followed(k, aid, ch)]
     own = f"Your inbox: {inbox_id(aid)} (messages to you arrive in your feed)."
-    if not pull(k):
-        names = ", ".join(sorted(c["id"] for c in chans))
-        return [own, "Channels you follow: " + (names or "none") + " (read {} lists the directory)."] + writable_line(k, aid)
-    rows = []
-    for ch in chans:
-        n, latest = unread(k, aid, ch["id"])
-        rows.append((n, ch["id"], latest))
-    rows.sort(key=lambda x: (-x[0], x[1]))
-    cap = int(cfg(k)["headlines"])
-    parts = [f"{cid} {n} unread" + (f", latest {_headline(e)}" if e is not None else "") for n, cid, e in rows[:cap]]
-    more = len(rows) - cap
-    line = ("Channels (their posts are not in your feed: read {\"channel\": \"<id>\"} opens one; read {} lists the directory): "
-            + ("; ".join(parts) or "none") + (f"; and {more} more" if more > 0 else "") + ".")
-    return [own, line] + writable_line(k, aid)
+    by = {d: [c for c in chans if delivery(k, c) == d] for d in DELIVERIES}
+    out = [own]
+    if by["push"] or not pull(k):
+        names = ", ".join(sorted(c["id"] for c in by["push"]))
+        out.append("Channels you follow: " + (names or "none") + " (read {} lists the directory).")
+    if by["pull"] or (pull(k) and not by["push"]):
+        heads = max(1, int(cfg(k)["board_headlines"]))
+        rows = []
+        for ch in by["pull"]:
+            n, latest = unread(k, aid, ch["id"], heads)
+            rows.append((n, ch["id"], latest))
+        rows.sort(key=lambda x: (-x[0], x[1]))
+        cap = int(cfg(k)["headlines"])
+        if heads == 1:
+            parts = [f"{cid} {n} unread" + (f", latest {_headline(e)}" if e is not None else "") for n, cid, e in rows[:cap]]
+        else:
+            parts = [f"{cid} {n} unread" + (", latest " + " | ".join(_headline(e) for e in reversed(es)) if es else "")
+                     for n, cid, es in rows[:cap]]
+        more = len(rows) - cap
+        out.append("Channels (their posts are not in your feed: read {\"channel\": \"<id>\"} opens one; read {} lists the directory): "
+                   + ("; ".join(parts) or "none") + (f"; and {more} more" if more > 0 else "") + ".")
+    if by["edition"]:
+        out.append("Editions you receive (each round's posts arrive in your feed once, as one digest, after the round): "
+                   + ", ".join(sorted(c["id"] for c in by["edition"])) + ".")
+    return out + writable_line(k, aid)
 
 
 def render(k, e, tag, viewer=None) -> str:
@@ -1012,7 +1241,7 @@ def render(k, e, tag, viewer=None) -> str:
     return f"{tag} #{d['channel']} {who}{to}: {d['text']}"
 
 
-EVENT_TYPES = ("channel_opened", "channel_set", "channel_subscribed")
+EVENT_TYPES = ("channel_opened", "channel_set", "channel_subscribed", "channel_resealed")
 
 
 def render_event(k, e, tag) -> str:
@@ -1022,6 +1251,11 @@ def render_event(k, e, tag) -> str:
                 f"{describe(d['readers'])}; writers {describe(d['writers'])}" + ("" if d.get("listed") else "; unlisted") + ")")
     if t == "channel_set":
         return f"{tag} {who} set {d['channel']}'s {d['key']} to {json.dumps(d['value'])}"
+    if t == "channel_resealed":
+        lost = d.get("lost") or []
+        return (f"{tag} {who} narrowed who can read {d['channel']} ({d['key']} now {json.dumps(d['value'])}): "
+                + (f"{len(lost)} reader(s) lost access ({', '.join(lost)})" if lost else "newcomers no longer see its history")
+                + f"; {d.get('readers_after')} reader(s) now")
     return f"{tag} {who} {'joined' if d.get('on') else 'left'} channel {d['channel']}"
 
 
@@ -1104,13 +1338,46 @@ def send_as(k, iid, to, text, lid=None) -> bool:
         return False
 
 
+POSTS_MAX = 200
+
+
+def channel_posts_for(k, lid, channel, since=None, by=None) -> list:
+    """The law API's channel_posts (review 31.04 #5): the posts in a channel the law may read (law_reads: its own institution's
+    channel, or one every agent reads), oldest first, at most POSTS_MAX (the newest): [{"id", "round", "agent", "as", "text"}].
+    since: a round number (posts of that round and later; round() is the current one) or a post id "e<n>" (posts after it).
+    by: only posts by that agent or sent as that account. An unknown or unreadable channel gives []."""
+    ch = k.w["channels"].get(str(channel)) if channel is not None else None
+    if ch is None or ch.get("v") != 2 or not law_reads(k, lid, ch["id"]):
+        return []
+    seqs = _st(k)["log"].get(ch["id"]) or []
+    if isinstance(since, str) and re.fullmatch(r"e\d+", since.strip()):
+        seqs = seqs[bisect.bisect_right(seqs, int(since.strip()[1:])):]
+        rmin = None
+    else:
+        rmin = None if since is None or isinstance(since, bool) or not isinstance(since, (int, float)) else since
+    out = []
+    for sq in seqs:
+        e = k.events[sq - 1] if sq - 1 < len(k.events) else None
+        if e is None or (rmin is not None and e["round"] < rmin):
+            continue
+        d = e.get("data") or {}
+        if by is not None and str(by) not in (e.get("agent"), d.get("as")):
+            continue
+        out.append({"id": e["id"], "round": e["round"], "agent": e.get("agent"), "as": d.get("as"), "text": str(d.get("text", ""))})
+    return out[-POSTS_MAX:]
+
+
 def law_api(k, lid) -> dict:
-    """channels.v2: send_message(to, text), a message in the name of the law's own institution (Kernel.api_for)."""
+    """channels.v2: send_message(to, text), a message in the name of the law's own institution, and channel_posts(channel, since,
+    by), the posts of a channel it may read (Kernel.api_for)."""
     from charter import jurisdictions as J
 
     def send_message(to, text):
         return send_as(k, J.law_jur(k, lid), to, text, lid)
-    return {"send_message": send_message}
+
+    def channel_posts(channel, since=None, by=None):
+        return channel_posts_for(k, lid, channel, since, by)
+    return {"send_message": send_message, "channel_posts": channel_posts}
 
 
 # ---------------------------------------------------------------------- standing orders that send
@@ -1163,6 +1430,24 @@ def act_standing_order(k, aid, to=None, item=None, qty=None, every=1, keep=0, ti
 
 
 # ---------------------------------------------------------------------- the manual (agent-facing text)
+def _delivery_text(k) -> str:
+    """The manual's delivery sentence. channels.business: as each channel's delivery is (review 31.04 #2); off: the earlier text,
+    kept so earlier runs replay with their prompts (it said "do not come to your feed" whatever the delivery)."""
+    if k is None or not business(k):
+        return ("Channel posts do not come to your feed: your state shows each channel you follow with its unread count and "
+                "latest headline. Private messages and your own inbox always reach your feed.\n")
+    default = cfg(k)["delivery"]
+    text = (f"Each channel has a delivery, set by its owner (set_channel field delivery); this world's default is {default}. "
+            "push: its posts come to your feed. pull: they do not; your state lists each pull channel you follow with its unread "
+            "count and latest headline(s), and read opens it. edition: a round's posts come to your feed once, as one digest, "
+            "after the round. The directory (read {}) shows each channel's delivery. Private messages and your own inbox always "
+            "reach your feed.")
+    if cfg(k)["notices"]:
+        text += (f" The official record (laws enacted, amended or repealed, offices filled, licences, contract registrations, "
+                 f"rulings, notices) is posted in {cfg(k)['notices']}.")
+    return text + "\n"
+
+
 def manual_text(k=None) -> str:
     return (
         "A channel is a named, owned stream with access rules: who writes, who reads, whether it is listed in the directory, whether "
@@ -1174,8 +1459,7 @@ def manual_text(k=None) -> str:
         "an agent or an inbox count against your private-message limit.\n"
         "- post {\"text\": \"...\", \"channel\": \"<id>\", \"as\": \"<institution>\"}: without a channel, the square.\n"
         "- read {\"channel\": \"<id>\", \"n\": 10} (a look-up): the latest posts of a channel you may read; read {} lists the "
-        "directory. Channel posts do not come to your feed: your state shows each channel you follow with its unread count and "
-        "latest headline. Private messages and your own inbox always reach your feed.\n"
+        "directory. " + _delivery_text(k) +
         "- open_channel {\"name\": \"...\", \"purpose\": \"...\", \"readers\": <selector>, \"writers\": <selector>, \"listed\": true, "
         "\"identity\": \"named\"|\"anonymous\", \"retention\": \"all\"|\"joined\", \"members\": [\"Name\"], \"rate\": null, "
         "\"template\": \"<name>\", \"as\": \"<institution>\"}: you (or the institution) own it. \"purpose\" is required: one or two "
@@ -1183,7 +1467,10 @@ def manual_text(k=None) -> str:
         "every turn). An unlisted channel's id gets a random suffix: its address is a key, learned only by being told (a message "
         "that names it).\n"
         "- set_channel {\"channel\": \"<id>\", \"field\": \"readers\", \"value\": <selector>}: fields purpose, readers, writers, "
-        "listed, identity, retention, rate, inbox (owner only; an institution's channels: its speak office).\n"
+        "listed, identity, retention, rate, inbox" + (", delivery (push, pull, edition or null: the world's), followed_by "
+        "(subscribers, or readers: everyone who can read it follows it)" if k is not None and business(k) else "")
+        + " (owner only; an institution's channels: its speak office)." + (" Narrowing a channel's readers or retention is "
+        "recorded where its readers can see it." if k is not None and business(k) else "") + "\n"
         "- join_channel / leave_channel {\"channel\": \"<id>\"}: follow a channel (subscribe); add_member, remove_member and "
         "close_channel manage a channel's members.\n"
         "Selectors: {\"all\": true}, {\"agents\": [\"Name\"]}, {\"members\": true} (the channel's members), {\"members\": "

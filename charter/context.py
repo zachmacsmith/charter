@@ -438,8 +438,10 @@ def _search(items, query, n, what) -> str:
 
 
 def search_board(k, aid, query) -> str:
-    """Every public post ever made (posts, anonymous posts, stories, reports, digests, gazette entries) that this agent may see."""
+    """Every public post ever made (posts, anonymous posts, stories, reports, digests, gazette entries) that this agent may see;
+    channels.business: also the posts of every channel (not inboxes) it may read."""
     from charter import agents as AG
+    from charter import channels as CH
     digest_only = k.spec["conditions"].get("feed_mode") == "digest_only"
     items = []
     for i, e in enumerate(k.events):
@@ -453,6 +455,14 @@ def search_board(k, aid, query) -> str:
         s = AG.render_event(k, e, aid)
         if s:
             items.append((i, e["id"], s))
+    if CH.business(k):                                                  # review 31.04 #3: the channel posts this agent may read
+        for i, e in enumerate(k.events):
+            d = e.get("data") or {}
+            if e["type"] != "channel_post" or not d.get("v2") or str(d.get("channel_id", "")).startswith("@") or not k.can_see(aid, e):
+                continue
+            s = AG.render_event(k, e, aid)
+            if s:
+                items.append((i, e["id"], s))
     return _search(items, query, int(cfg(k)["search_hits"]), "public posts")
 
 
@@ -1251,11 +1261,12 @@ def feed_layer(k, aid, since, budget, exclude=()) -> tuple[str, int, dict]:
             x for x in (("has new sections: " + ", ".join(new)) if new else "", ("has updated sections: " + ", ".join(upd)) if upd else "") if x)
             + " (fetch with the manual lookup)."))
     from charter import channels as CH
-    pull = CH.pull(k)                                                   # channels.v2, pull: channel posts are counted, not pushed
+    chan = CH.active(k)                                                 # channels.v2: pull and edition channels' posts are not pushed
+    biz = CH.business(k)                                                # channels.business: a cut channel post points at read
     for i, e in enumerate(k.events[since:], since):
         if not k.can_see(aid, e):
             continue
-        if pull and CH.pulled(k, aid, e):
+        if chan and CH.pulled(k, aid, e):
             continue
         if digest_only and e["type"] == "post" and e["agent"] != aid:
             continue
@@ -1268,8 +1279,15 @@ def feed_layer(k, aid, since, budget, exclude=()) -> tuple[str, int, dict]:
             continue
         p = _priority(k, aid, e)
         cap = c["dm_tokens"] if p == 3 else c["post_tokens"] if p in (4, 6) else c["item_tokens"]
-        s = clip(s, int(cap), f"...(cut: {POINTERS.get(p, 'search_board')} \"{e['id']}\")" if p in POINTERS else "...(cut)")[0]
+        cid = (e.get("data") or {}).get("channel_id") if biz and e["type"] == "channel_post" else None
+        if cid:                                                         # review 31.04 #3: search_board skipped channel posts
+            s = clip(s, int(cap), f"...(cut: read {{\"channel\": \"{cid}\"}})")[0]
+        else:
+            s = clip(s, int(cap), f"...(cut: {POINTERS.get(p, 'search_board')} \"{e['id']}\")" if p in POINTERS else "...(cut)")[0]
         items.append((p, i, s))
+    if chan:                                                            # edition channels: last round's posts as one digest each
+        for i, s in CH.editions(k, aid, since):
+            items.append((5, i, clip(s, int(c["dm_tokens"]) * 2, "...(cut: read {\"channel\"})")[0]))
     room = budget - 60                                                  # room for the pointer lines
     keep, dropped = [], {}
     for p, i, s in sorted(items, key=lambda x: (x[0], -x[1])):

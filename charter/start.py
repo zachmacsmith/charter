@@ -30,7 +30,8 @@ J0), a store declared here, an office declared here. `python -m charter spec che
                                                       Wage Roll); an agent by standing order (its allowance)
       loans: [{lender, borrower, item, qty, repay_qty, due_in, rate}]   needs a law that enables loans
       kin: [{parents: [A, B], child: C}]              founding families (life on): children(), heirs and hereditary succession
-      channels: [{id, owner, by, purpose, readers, writers, listed, identity, retention, rate, members, subscribers}]
+      channels: [{id, owner, by, purpose, readers, writers, listed, identity, retention, rate, members, subscribers, delivery,
+                  followed_by}]                       delivery: push | pull | edition (absent: the world's); followed_by: readers
                                                       an id starting with @ changes an existing inbox (e.g. @J0's readers)
       camp_rights: [{resource: copper | camp: camp3, holders: [Name, ...] | members: A1, exclusive: true}]
       farms: [{owner: Name | A1 | J0, camp: fields | fields2 | camp9, plots: 3, allow: [Name], share: 1, deliver: S2,
@@ -56,7 +57,7 @@ WAGE_KEYS = ("employer", "worker", "item", "qty", "every")
 LOAN_KEYS = ("lender", "borrower", "item", "qty", "repay_qty", "due_in", "rate", "repay_item")
 KIN_KEYS = ("parents", "parent", "child")
 CHANNEL_KEYS = ("id", "owner", "by", "purpose", "readers", "writers", "listed", "identity", "retention", "rate", "members",
-                "subscribers")
+                "subscribers", "delivery", "followed_by")
 CAMP_KEYS = ("resource", "camp", "holders", "members", "exclusive")
 LAW_KEYS = ("template", "params", "rank", "code")
 FARM_KEYS = ("owner", "camp", "plots", "allow", "share", "deliver", "works", "crops")
@@ -133,6 +134,11 @@ def check(path, v) -> list:
     errs += lst("loans", LOAN_KEYS, ("lender", "borrower", "item", "qty"))
     errs += lst("kin", KIN_KEYS, ("child",))
     errs += lst("channels", CHANNEL_KEYS, ("id",))
+    for i, e in enumerate(v.get("channels") or () if isinstance(v.get("channels"), list) else ()):
+        if isinstance(e, dict) and e.get("delivery") not in (None, "push", "pull", "edition"):
+            errs.append(f"{path}.channels[{i}].delivery: push, pull or edition")
+        if isinstance(e, dict) and e.get("followed_by") not in (None, "subscribers", "readers"):
+            errs.append(f"{path}.channels[{i}].followed_by: subscribers or readers")
     errs += lst("camp_rights", CAMP_KEYS)
     errs += lst("farms", FARM_KEYS, ("owner", "plots"))
     for i, e in enumerate(v.get("farms") or () if isinstance(v.get("farms"), list) else ()):
@@ -757,7 +763,7 @@ def h_channel(k, inst, spec):
         ch = k.w["channels"].get(cid)
         if ch is None:
             raise _fail(f"no inbox {cid}")
-        for f in ("purpose", "listed", "identity", "retention", "rate"):
+        for f in ("purpose", "listed", "identity", "retention", "rate", "delivery", "followed_by"):
             if f in spec:
                 ch[f] = spec[f]
         for f, v in sel.items():
@@ -780,7 +786,8 @@ def h_channel(k, inst, spec):
         writers = sel.get("writers", {"all": True})
         settings = {"purpose": str(spec.get("purpose") or "")[:200], "readers": readers, "writers": writers,
                     "listed": bool(spec.get("listed", True)), "identity": spec.get("identity", "named"),
-                    "retention": spec.get("retention", "all"), "rate": spec.get("rate"), "owner": owner}
+                    "retention": spec.get("retention", "all"), "rate": spec.get("rate"), "owner": owner,
+                    **{f: spec[f] for f in ("delivery", "followed_by") if spec.get(f) is not None}}
         mem = sorted(set(spec.get("members") or ()))
         k.apply("found", agent=by, polity=cid, kind="channel", members=mem, open=writers == {"all": True}, settings=settings)
         if cid not in k.w["channels"]:
@@ -928,7 +935,9 @@ def lived(run) -> list:
                 except ActionError as ex:
                     reached = f"refused ({ex})"
             add(f"channel {cid}", rd and wr and office_ok and reached is True,
-                f"owner {ch0['owner']}; readers {len(rd)}, writers {len(wr)}; office holders named in its selectors can use it: "
+                f"owner {ch0['owner']}; delivery {CH.delivery(k0, ch0)}"
+                + (f" (followed by {sum(1 for a in rd if CH.followed(k0, a, ch0))} readers)" if CH.delivery(k0, ch0) != "push" else "")
+                + f"; readers {len(rd)}, writers {len(wr)}; office holders named in its selectors can use it: "
                 f"{office_ok}; a post by {w} reaches every reader: {reached}; subscribers {len(ch0['subscribers'])} at start, "
                 f"{subs} at the end; posts during the run {posts.get(cid, 0)}")
         # 3. controlled stores: only the controlling office's holders can draw (tried on a copy of the round-0 world)

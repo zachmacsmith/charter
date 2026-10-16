@@ -591,19 +591,19 @@ def render_event(k, e, viewer=None) -> str | None:
         if d.get("v2"):                                                # channels.v2: as, anonymous, inbox recipients
             return CH.render(k, e, tag, viewer)
         return f"{tag} #{d['channel']} {who}: {d['text']}"
-    if t in ("channel_opened", "channel_set", "channel_subscribed"):     # channels.v2: opened, set, joined or left
+    if t in ("channel_opened", "channel_set", "channel_subscribed", "channel_resealed"):   # channels.v2: opened, set, joined/left, resealed
         return CH.render_event(k, e, tag)
     return FT.render_event(k, e, tag, viewer)                          # the feature modules' renderers (features.TAILS order)
 
 
 def feed(k, aid: str, since: int, max_items: int = 80) -> tuple[str, int]:
     digest_only = k.spec["conditions"].get("feed_mode") == "digest_only"
-    pull = CH.pull(k)                                                   # channels.v2, pull: channel posts are counted, not pushed
+    chan = CH.active(k)                                                 # channels.v2: pull and edition channels' posts are not pushed
     lines = []
     for e in k.events[since:]:
         if not k.can_see(aid, e):
             continue
-        if pull and CH.pulled(k, aid, e):
+        if chan and CH.pulled(k, aid, e):
             continue
         if digest_only and e["type"] == "post" and e["agent"] != aid:
             continue
@@ -612,6 +612,8 @@ def feed(k, aid: str, since: int, max_items: int = 80) -> tuple[str, int]:
         s = render_event(k, e, aid)
         if s:
             lines.append(s + MD.annotation_suffix(k, e, aid))             # media2: [Outlet: text] commentary on posts
+    if chan:
+        lines += [s for _, s in CH.editions(k, aid, since)]            # edition channels: last round's posts as one digest each
     return "\n".join(lines[-max_items:]) or "(nothing new)", len(k.events)
 
 

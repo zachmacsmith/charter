@@ -4690,7 +4690,7 @@ scarce. The quota (set_quota) counts the members of this polity only.""", fires=
 # succession; a granary under a ration; a levy on payments in a currency; a wage roll. Kept apart from TOOLKIT (whose catalogue
 # every toolkit world lists) and listed only where institutions.office_control is on, so no other world's prompt changes.
 ESTABLISHED: dict[str, dict] = {}
-ESTABLISHED_NEEDS = ("law.v2", "institutions.grants", "subsistence", "contracts")
+ESTABLISHED_NEEDS = ("law.v2", "institutions.grants", "subsistence", "contracts", "channels.business")
 
 
 def established_template(name, kind, topic, src, doc, fires, needs=("institutions.grants",)):
@@ -4719,7 +4719,8 @@ def established_templates(x=None) -> list:
     if not IN.control_on_spec(sp):
         return []
     test = {"law.v2": lambda: bool((sp.get("law") or {}).get("v2")), "institutions.grants": lambda: G.on_spec(sp),
-            "subsistence": lambda: FT.on("subsistence", sp), "contracts": lambda: FT.on("contracts", sp)}
+            "subsistence": lambda: FT.on("subsistence", sp), "contracts": lambda: FT.on("contracts", sp),
+            "channels.business": lambda: bool((sp.get("channels") or {}).get("v2")) and bool((sp.get("channels") or {}).get("business"))}
     return [e for e in ESTABLISHED.values() if all(test[n]() for n in e["needs"])]
 
 
@@ -4727,6 +4728,106 @@ def v2_templates() -> dict:
     """Every law.v2 template by name: the toolkit, the food and family templates and the established-world templates."""
     return {**TOOLKIT, **FOOD_TEMPLATES, **ESTABLISHED}
 
+
+# Review 31.04 #5 / 31.08 §2.3 (channels.business): business valid only when posted. The template reads the board with the law
+# function channel_posts; owner-law hooks are the other half of the pattern (channels.LAW_EXAMPLES: Posted Draws Only,
+# Compulsory Gazette).
+established_template("Market Board", "law", "market", '''
+title = "Market Board"
+intent = "Offers count only when posted on the board BOARD. Each line posted there as SELL <qty> <item> @ <price> <currency> (or BUY <qty> <item> @ <price> <currency>) enters a public table of offers under the post's id: a newer line by the same poster for the same side and item replaces the older, WITHDRAW <id> removes one, and an offer lapses after TTL rounds. A holder of TRADER_RIGHT takes a posted offer with take_offer [id, qty]: the goods and the price change hands at the posted price, both or neither, and the trade is posted back on the board. An offer not on the board cannot be taken."
+rank = "statute"
+BOARD = "market"
+TTL = 3
+TRADER_RIGHT = "trader"
+
+def num(x):
+    s = str(x).strip()
+    if s == "" or s == "." or s.count(".") > 1 or not all([c in "0123456789." for c in s]):
+        return None
+    return float(s)
+
+def citizens():
+    return [a for a in agents() if class_of(a) not in ["board", "fixer"]]
+
+def parse(p):
+    who = p["as"] or p["agent"]
+    if who not in citizens():
+        return
+    offers = public.setdefault("offers", {})
+    j = 0
+    for line in p["text"].split("\\n"):
+        w = line.strip().split()
+        if len(w) == 2 and w[0].upper() == "WITHDRAW":
+            o = offers.get(w[1])
+            if o is not None and o["by"] == who:
+                offers.pop(w[1])
+            continue
+        if len(w) < 6 or w[0].upper() not in ["SELL", "BUY"] or w[3] != "@":
+            continue
+        q = num(w[1])
+        price = num(w[4])
+        if q is None or price is None or q <= 0:
+            continue
+        side = w[0].upper()
+        item = lower(w[2])
+        for n in sorted(offers):
+            if offers[n]["by"] == who and offers[n]["side"] == side and offers[n]["item"] == item:
+                offers.pop(n)
+        ref = p["id"] if j == 0 else p["id"] + "-" + str(j)
+        j += 1
+        offers[ref] = {"by": who, "side": side, "qty": q, "item": item, "price": price, "currency": lower(w[5]),
+                       "round": p["round"]}
+
+def refresh():
+    for p in channel_posts(BOARD, state.get("seen")):
+        parse(p)
+        state["seen"] = p["id"]
+    offers = public.setdefault("offers", {})
+    for n in sorted(offers):
+        if round() - offers[n]["round"] >= TTL:
+            offers.pop(n)
+
+def take_offer(agent, ref, qty):
+    refresh()
+    ref = str(ref).strip()
+    o = public["offers"].get(ref)
+    if o is None:
+        refuse("no offer " + ref + " on " + BOARD + ": an offer counts only once it is posted there (SELL <qty> <item> @ <price> <currency>)")
+    q = num(qty)
+    if q is None or q <= 0 or q > o["qty"]:
+        refuse("take between 0 and " + str(o["qty"]) + " of offer " + ref)
+    if o["by"] == agent:
+        refuse("offer " + ref + " is your own")
+    seller = o["by"] if o["side"] == "SELL" else agent
+    buyer = agent if o["side"] == "SELL" else o["by"]
+    pay = round_to(q * o["price"], 6)
+    if balance(seller, o["item"]) < q:
+        refuse(seller + " holds less than " + str(q) + " " + o["item"])
+    if balance(buyer, o["currency"]) < pay:
+        refuse(buyer + " holds less than " + str(pay) + " " + o["currency"])
+    move(seller, buyer, o["item"], q, memo="market " + ref)
+    move(buyer, seller, o["currency"], pay, memo="market " + ref)
+    o["qty"] = o["qty"] - q
+    if o["qty"] <= 0.000001:
+        public["offers"].pop(ref)
+    public["trades"] = (public.get("trades", []) + [{"ref": ref, "seller": seller, "buyer": buyer, "item": o["item"], "qty": q,
+                                                     "price": o["price"], "currency": o["currency"], "round": round()}])[-50:]
+    send_message(BOARD, "TRADE " + ref + ": " + seller + " sold " + str(q) + " " + o["item"] + " to " + buyer + " @ "
+                 + str(o["price"]) + " " + o["currency"])
+    return "traded " + str(q) + " " + o["item"] + " for " + str(pay) + " " + o["currency"]
+
+def on_enact():
+    create_right(TRADER_RIGHT)
+    for a in citizens():
+        grant(a, TRADER_RIGHT)
+    define_action(TRADER_RIGHT, "take_offer", take_offer)
+
+def on_round_end(r):
+    refresh()
+''', doc="""Business valid only when posted (review 31.04 #5, 31.08 §2.3): the market board's posted lines are the offers.
+The law reads the board with channel_posts (it must own the board or the board must be readable by everyone), keeps a public
+offers table, and executes a posted offer at its posted price when a trader takes it; nothing else counts as an offer.""",
+                     fires="invoke:take_offer", needs=("channels.business",))
 
 established_template("Offices Act", "law", "offices", '''
 title = "Offices Act"
