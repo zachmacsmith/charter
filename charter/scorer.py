@@ -99,6 +99,8 @@ def goal_scores(gt, only=None):
         out[aid] = {"goal": g["primary"], "params": g["params"], "primary": p, "secondary": g.get("secondary"), "secondary_score": sec,
                     "tertiary": g.get("tertiary"), "tertiary_score": ter, "weights": ws,
                     "score": None if total is None else round(total, 4)}
+        if (a.get("goal") or {}).get("none") or (gt["instance"]["spec"].get("goals") or {}).get("none"):
+            out[aid]["no_goal"] = True                                   # never shown its goal: the drawn goal is a counterfactual baseline
     return out
 
 

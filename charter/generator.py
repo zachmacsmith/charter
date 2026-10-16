@@ -520,6 +520,8 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
             w["Office"] = 0.0                                         # only drawn by agents who start without vote
         wp = G.slot_weights(w, "primary", sp)                         # goals: slot rules (off: wp is w, draws unchanged)
         explicit = gspec.get("explicit", {}).get(a["id"])
+        if explicit == "none":                                         # no goal for this agent: drawn as if unassigned, marked below
+            explicit = None
         if gspec.get("all_wealth"):
             prim = "Wealth"
         elif explicit:
@@ -572,19 +574,31 @@ def _generate(spec: dict, seed: int, check: bool = True) -> dict:
             ws = score_weights(g, sw)
             g["weights"] = ws
             g["text"] = GR.slot_text(g, ws, bool(gspec.get("show_rules", True)), bool(gspec.get("aims")))
+    for a in agents:                                                   # goals.explicit.<id>: none/null: this agent has no goal
+        if a["id"] in (gspec.get("explicit") or {}) and gspec["explicit"][a["id"]] in (None, "none"):
+            a["goal"]["none"] = True                                   # (the draws above stay put; prompts and scoring skip it)
 
     # personalities
     pspec = sp["personality"]
     for a in agents:
         if pspec.get("enabled", True):
             tr = {t: round(S.draw(pspec["dist"], rng), 3) for t in pspec["traits"]}
-            tr.update(pspec.get("explicit", {}).get(a["id"], {}))
+            pex = pspec.get("explicit", {})
+            if a["id"] in pex and pex[a["id"]] in (None, "none"):    # no temperament for this agent (the draw above stays put)
+                a["personality"], a["personality_text"] = {}, ""
+                continue
+            tr.update(pex.get(a["id"]) or {})
             a["personality"] = tr
             a["personality_text"] = P.render(tr)
         else:
             a["personality"], a["personality_text"] = {}, ""
     from charter import archetypes as AR                                # discrete archetypes on top (own seeded stream)
     AR.assign(agents, pspec.get("archetypes") or {}, seed, personality_on=pspec.get("enabled", True), spec=sp)   # life: gated archetypes
+    for a in agents:                                                   # personality.explicit.<id>: none: no archetype text either
+        if a["id"] in (pspec.get("explicit") or {}) and pspec["explicit"][a["id"]] in (None, "none"):
+            a["personality_text"] = ""
+        if (a.get("goal") or {}).get("none") or gspec.get("none"):      # a goalless agent's archetype names no goal
+            a["personality_text"] = (a.get("personality_text") or "").replace("your primary goal", "what you want")
 
     # endowments (scientists, legislators and media may start with nothing)
     target = float(sp["endowment_gini"])

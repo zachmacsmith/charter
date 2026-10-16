@@ -317,8 +317,7 @@ def _ann():
         "personality.traits": dict(types=("list",), items=_traits),
         "personality.dist": dict(range=PROB),
         "personality.explicit": dict(kind="map"),
-        "personality.explicit.*": dict(kind="map", keys=_traits),
-        "personality.explicit.*.*": dict(types=("number",), range=PROB),
+        "personality.explicit.*": dict(kind="leaf", types=("dict", "str", "null"), check=_check_explicit_traits),
         "personality.archetypes.weights": dict(kind="map", keys=_archetypes),
         "personality.archetypes.weights.*": dict(types=("number",), range=NONNEG),
         "personality.archetypes.explicit": dict(kind="map"),
@@ -764,9 +763,8 @@ DOCS = {
     "models.by_class.*": "model id for every agent of this class",
     "goals.category_weights.*": "percent of draws for this goal category",
     "goals.within.*": "this goal's weight inside its category",
-    "goals.explicit.*": "this agent's goal: a name, or {primary, params, secondary, secondary_params}",
-    "personality.explicit.*": "this agent's fixed trait values",
-    "personality.explicit.*.*": "trait value, 0..1",
+    "goals.explicit.*": "this agent's goal: a name, or {primary, params, secondary, secondary_params}, or none (no goal: as goals.none, for this agent only)",
+    "personality.explicit.*": "this agent's fixed trait values, or none (no temperament text: as personality.none, for this agent only)",
     "personality.archetypes.weights.*": "relative draw weight of this archetype (unlisted: 0)",
     "personality.archetypes.explicit.*": "this agent's archetype (none: no archetype)",
     "personality.archetypes.exclude.*": "archetypes this class never draws",
@@ -1485,8 +1483,22 @@ def _check_child_fixed(path, v) -> list:
     return [] if v is None or v in G.CATALOGUE else [f"{path}: a catalogue goal, not {v!r}"]
 
 
+def _check_explicit_traits(path, v) -> list:
+    """{trait: 0..1} / none or null (this agent has no temperament text)"""
+    if v is None or v == "none":
+        return []
+    if not isinstance(v, dict):
+        return [f"{path}: expected {{trait: value}} or none, got {v!r}"]
+    names = _traits()
+    errs = [f"{path}.{k}: unknown key in {path}{_close(k, names)}; known: {', '.join(names)}" for k in v if k not in names]
+    return errs + [f"{path}.{k}: expected a number in [0, 1], got {x!r}" for k, x in v.items()
+                   if k in names and (isinstance(x, bool) or not isinstance(x, (int, float)) or not 0 <= x <= 1)]
+
+
 def _check_explicit_goal(path, v) -> list:
-    """goal name / {primary, params?, secondary?, secondary_params?}"""
+    """goal name / {primary, params?, secondary?, secondary_params?} / none or null (this agent has no goal)"""
+    if v is None or v == "none":
+        return []
     names = _explicit_goal_names()
     if isinstance(v, str):
         return [] if v in names else [f"{path}: unknown goal {v!r}{_close(v, names)}"]

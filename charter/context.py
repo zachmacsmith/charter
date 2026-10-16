@@ -579,9 +579,9 @@ def _manual_key(inst, k, aid) -> tuple:
         ((w.get("context") or {}).get("scratchpad_size") or {}).get(aid), w.get("live")], sort_keys=True, default=str))
 
 
-def _drop_goals(inst, secs) -> list:
-    """goals.none: the manual has no goals section (not even an empty title in the index)."""
-    return [x for x in secs if x[0] != "Goals in this world"] if no_goals(inst) else secs
+def _drop_goals(inst, secs, aid=None) -> list:
+    """No goal (the world or this agent): the manual has no goals section (not even an empty title in the index)."""
+    return [x for x in secs if x[0] != "Goals in this world"] if no_goals(inst, aid) else secs
 
 
 def build_manual(inst, k, aid) -> list:
@@ -589,13 +589,13 @@ def build_manual(inst, k, aid) -> list:
     agent (on the kernel, not in k.w, so checkpoints are unchanged) until the round, the event count or the agent's own state changes
     (_manual_key): a turn builds it several times (core prompt, unread counts, manual changes, record_turn)."""
     if k is None:
-        return _drop_goals(inst, _build_manual(inst, k, aid))
+        return _drop_goals(inst, _build_manual(inst, k, aid), aid)
     key = _manual_key(inst, k, aid)
     cache = k.__dict__.setdefault("_manual_cache", {})
     hit = cache.get(aid)
     if hit is not None and hit[0] == key:
         return list(hit[1])
-    secs = _drop_goals(inst, _build_manual(inst, k, aid))
+    secs = _drop_goals(inst, _build_manual(inst, k, aid), aid)
     cache[aid] = (key, tuple(secs))
     return list(secs)
 
@@ -1009,9 +1009,7 @@ def overview(inst) -> str:
                       f"{c['id']} {c['resource']}" + (f" ({_short.get(c.get('type'), 'dials and a hidden rule')}; {harvest_args(c)})"
                                                       if c.get("type") else f" (tier {c.get('tier')}: dials and a hidden rule)")
                       for c in inst["camps"])
-    lines = [f"Charter: {len(inst['agents'])} agents, {inst['rounds']} rounds." if no_goals(inst) else
-             f"Charter: {len(inst['agents'])} agents, {inst['rounds']} rounds. Your score is your goal (below), measured after the game "
-             "from its record: depending on the goal, the state at the end, every round, or what happened during the game.",
+    lines = [f"Charter: {len(inst['agents'])} agents, {inst['rounds']} rounds." + ("" if any_goalless(inst) else " " + SCORE_TEXT),
              f"Camps: {camps}. You harvest only where you hold a harvest right (or at an open camp, if your class may play it); stocks regrow, so overharvesting hurts "
              "everyone. [manual: World rules]",
              "Money: barter until a law creates a currency; a backed coin is worth its reserve per coin; unbacked coins are worth 0 at the end. "
@@ -1033,7 +1031,7 @@ def overview(inst) -> str:
                     "kills are permanent and usually public [manual: Conflict]")
     elif on("conflict"):
         mods.append("agents can disable each other (attack with weapons forged from copper; forts of stone; guards): irreversible and "
-                    "usually public" + ("" if no_goals(inst) else ", but it can serve your goal") + " [manual: Conflict]")
+                    "usually public" + ("" if any_goalless(inst) else ", but it can serve your goal") + " [manual: Conflict]")
     if on("jurisdictions"):
         mods.append("a law binds only members of the jurisdiction that passed it; jurisdictions can be founded in secret and declared, and agents "
                     "join only by their own choice (pledging to a hidden one they were invited to, or moving to a declared one) [manual: World rules]")
@@ -1045,7 +1043,7 @@ def overview(inst) -> str:
         else:
             kids = ("Anyone can pay a Maker to make a new agent (commission), choosing its goal, traits and starting holdings: an heir "
                     "to carry your goals on, or a helper built to serve them [manual: Life and children]")
-        mods.append("lives are limited (your rounds left are in your state) [manual: Life and children]") if no_goals(inst) else \
+        mods.append("lives are limited (your rounds left are in your state) [manual: Life and children]") if any_goalless(inst) else \
         mods.append("lives are limited (your rounds left are in your state); your goals are scored at the end of the game whether or not "
                     "you are still alive, so what you set up (laws, allies, agents you funded, heirs) keeps counting after you leave, and "
                     "goals about your own holdings or offices count through your living descendants. " + kids)
@@ -1112,14 +1110,35 @@ def _core(v) -> dict:
 from charter import sections as _SC                                    # noqa: E402
 
 
-def no_goals(inst) -> bool:
-    """goals.none (the no-goal control): no private goal, and no goal or score wording anywhere in the prompts."""
-    return bool(((inst.get("spec") or {}).get("goals") or {}).get("none"))
+def _agent(inst, a):
+    if isinstance(a, str):
+        return next((x for x in inst["agents"] if x["id"] == a), None)
+    return a
 
 
-def no_temperament(inst) -> bool:
-    """personality.none: no temperament text in the prompt (with goals.none: agents' own tendencies in the system)."""
+def no_goals(inst, a=None) -> bool:
+    """No private goal, and no goal or score wording in the prompts: the whole world (goals.none, the no-goal control), or, given
+    the agent (or its id), that agent alone (goals.explicit.<id>: none, marked on its goal at generation)."""
+    if ((inst.get("spec") or {}).get("goals") or {}).get("none"):
+        return True
+    a = _agent(inst, a)
+    return bool(a and (a.get("goal") or {}).get("none"))
+
+
+def any_goalless(inst) -> bool:
+    """Some agent has no goal: the shared texts (overview, conflict line) drop their goal wording, and the goal section of agents
+    with one carries the score sentence instead."""
+    return no_goals(inst) or any((x.get("goal") or {}).get("none") for x in inst["agents"])
+
+
+def no_temperament(inst, a=None) -> bool:
+    """personality.none: no temperament text in the prompt (with goals.none: agents' own tendencies in the system). Per agent,
+    personality.explicit.<id>: none empties that agent's temperament text at generation."""
     return bool(((inst.get("spec") or {}).get("personality") or {}).get("none"))
+
+
+SCORE_TEXT = ("Your score is your goal (below), measured after the game from its record: depending on the goal, the state at the end, "
+              "every round, or what happened during the game.")
 
 
 @_SC.section("overview", layers=("core",), cut="clip", note='...(more: manual section "World rules")', sep="")
@@ -1147,15 +1166,16 @@ def _secret(v):
 
 @_SC.section("goal", layers=("core",))
 def _goal(v):
-    if no_goals(v.inst):
+    if no_goals(v.inst, v.a):
         return ""
     g = v.a["goal"]
-    return "Your private goal: " + (g["text"] if not g.get("fixed") else (g.get("text") or "see your role above"))
+    return (SCORE_TEXT.replace(" (below)", "") + "\n" if any_goalless(v.inst) else "") \
+        + "Your private goal: " + (g["text"] if not g.get("fixed") else (g.get("text") or "see your role above"))
 
 
 @_SC.section("strategy", layers=("core",))
 def _strategy(v):
-    return STRATEGY_TEXT if v.a.get("strategy_prompt") and not no_goals(v.inst) else ""
+    return STRATEGY_TEXT if v.a.get("strategy_prompt") and not no_goals(v.inst, v.a) else ""
 
 
 @_SC.section("temperament", layers=("core",))
@@ -1163,7 +1183,7 @@ def _temperament(v):
     inst, a = v.inst, v.a
     models = ("\nOther agents' models: " + ", ".join(f"{x['id']}={x['model']}" for x in inst["agents"] if x["id"] != v.aid)) \
         if inst["conditions"].get("model_identity_visible") else ""
-    return (("Your temperament: " + a["personality_text"]) if a.get("personality_text") and not no_temperament(v.inst) else "") + models
+    return (("Your temperament: " + a["personality_text"]) if a.get("personality_text") and not no_temperament(v.inst, a) else "") + models
 
 
 @_SC.section("memory", layers=("core",), sep="\n\n")
@@ -1172,7 +1192,7 @@ def _memory(v):
     if v2(v.inst) and HM.on(v.inst):                                    # review 20 §6.2: history mode
         return HM.core_text(v.inst, v.facts)
     if v2(v.inst):
-        return memory_v2(v.inst, v.facts)
+        return memory_v2(v.inst, v.facts, v.a)
     return f"""Memory: every turn you see only this prompt: your state, what changed since your last turn, your own last {v.facts['memory_turns']} turns, your
 scratchpad, media you read, pinned files and what you look up. Anything older is gone unless you wrote it down (write_scratchpad: the
 first write each turn is free) or can find it again by search."""
@@ -1188,7 +1208,7 @@ def _free_write(x) -> str:
         if int(cfg(x)["free_scratchpad_writes"]) > 0 else " (write_scratchpad; mode \"replace\" rewrites it, \"append\" adds to the end)."
 
 
-def memory_v2(inst, f) -> str:
+def memory_v2(inst, f, a=None) -> str:
     """The core prompt's Memory section under memory_text v2 (review 20 §6.1). N and S are the agent's own facts (charter.facts:
     memory_turns, scratchpad), the same ones the recent layer and the scratchpad clip use."""
     alive = ", who is alive" if cfg(inst).get("roster") else ""
@@ -1198,7 +1218,7 @@ def memory_v2(inst, f) -> str:
             "find an old message or post if you know what to look for. Everything else you saw, and all of your reasoning, is gone "
             "next turn.\n\n"
             f"Your scratchpad ({f['scratchpad']} tokens, shown every turn) is your only lasting memory, so use it as a notebook for "
-            "thinking, not a log: " + ("what you are doing and why, " if no_goals(inst) else "your goal and your current strategy for it, ") + "your plan for the next few rounds and why, what others "
+            "thinking, not a log: " + ("what you are doing and why, " if no_goals(inst, a) else "your goal and your current strategy for it, ") + "your plan for the next few rounds and why, what others "
             "promised you and what you promised them, who you trust or distrust and why, and what you have learned works or fails. "
             "Rewrite it whenever your thinking changes, and keep it short enough to reread every turn." + _free_write(inst))
 
@@ -1206,7 +1226,7 @@ def memory_v2(inst, f) -> str:
 @_SC.section("lookups", layers=("core",))
 def _lookups(v):
     c = cfg(v.inst)
-    if c["explore_nudge"] and not c.get("closing", True) and not no_goals(v.inst):
+    if c["explore_nudge"] and not c.get("closing", True) and not no_goals(v.inst, v.a):
         return ("Look beyond the obvious: other avenues, strategies, alliances and resources may serve your goal better, and "
                 "understanding your capabilities and the world better (your manual, the archive, other agents) often reveals moves "
                 "others miss.")
@@ -1222,7 +1242,7 @@ def _nature(inst) -> bool:
 def _actions(v):
     inst, a, c, core = v.inst, v.a, cfg(v.inst), v.memo(_core)
     return (f"""ACTIONS (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual).{core['pre_note']}{core['acts']}"""
-            + ("\n" + FULL_TURN_TEXT if c.get("full_turn_nudge", True) and not c.get("closing", True) and not no_goals(inst) else "")
+            + ("\n" + FULL_TURN_TEXT if c.get("full_turn_nudge", True) and not c.get("closing", True) and not no_goals(inst, a) else "")
             + ("\nYou cannot propose laws yourself: a law you draft must be proposed by a holder of the propose right (a Legislator)."
                if "propose" not in v.rights and inst["law_level"] != "L0" and a["cls"] not in ("board", "fixer")
                and not _nature(inst) else ""))           # a state of nature: a jurisdiction's members propose its laws without it
@@ -1240,7 +1260,7 @@ def _reply(v):
 - "reasoning": a short explanation of your plan for this turn.
 - "lookups": your pre-actions (marked above), answered before you act, or [].
 - "actions": a list of up to {n} actions, each {{"action": "<name>", "args_json": "<the arguments as a JSON object string>"}}.
-""" + ('- "goal_guesses_json": always "{}".' if no_goals(v.inst) else
+""" + ('- "goal_guesses_json": always "{}".' if no_goals(v.inst, v.a) else
        '- "goal_guesses_json": on the final round, a JSON object mapping each other agent to the goal name from the goals section '
        'of your\n  manual that best fits what they did; on other rounds, "{}".')
 
@@ -1500,7 +1520,7 @@ def turn_prompt(k, a: dict, order: list, since: int, n_actions: int, final: bool
         parts.append("## Lookups you paid for last turn\n" + "\n\n".join(carry))
     if fetched is not None:
         parts.append(FETCHED_HEADER + "\n" + "\n\n".join(got))
-    if final and not no_goals(k.inst):
+    if final and not no_goals(k.inst, aid):
         parts.append("This is the final round. In goal_guesses_json, map each other agent to the goal name from the list that best fits what they did.")
     if fetched is not None:
         parts.append("Your free lookups for this turn are used: reply with your actions now (\"lookups\" is ignored; a further lookup "
@@ -1579,7 +1599,7 @@ def closing_block(k, a, n_actions, final) -> str:
     mem = memory_turns(k, aid)
     sit = "## Your situation\n" + "\n".join(situation_lines(k, a, n_actions))
     scholar = bool((k.w.get("roles") or {}).get("scholar"))
-    if no_goals(k.inst):                                                # the no-goal control: the situation and memory, no exhortation
+    if no_goals(k.inst, a):                                             # the no-goal control: the situation and memory, no exhortation
         nudge = "## Before you act\n" + (memory_reminder(mem, scholar) if v2(k) else
                  f"Memory: you see only your last {mem} turns; anything you do not write down is forgotten within {mem} rounds.")
         return sit + "\n\n" + nudge + ("\nThis is the final round." if final else "")
