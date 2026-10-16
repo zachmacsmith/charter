@@ -66,3 +66,14 @@ def test_goalless_temperament_names_no_goal_or_payoff():
     texts = " ".join(a["personality_text"] for a in inst["agents"])
     assert "one cause of your own" in texts
     assert "payoff" not in texts and "primary goal" not in texts
+
+
+def test_millbrook_nogoal_prompts_have_no_goal_wording():
+    import re
+    sp = S.load("charter/specs/millbrook_nogoal.yaml")
+    inst = generator.generate(sp, 1)
+    k = Kernel(inst)
+    pat = re.compile(r"\b(goal|goals|aim|aims|payoff|score|scored|scoring)\b", re.I)
+    for a in inst["agents"]:
+        txt = CX.core_prompt(inst, a, k) + "\n".join(t for _, t in CX.build_manual(inst, k, a["id"]))
+        assert not pat.search(txt), (a["id"], pat.search(txt).group(0))

@@ -579,9 +579,28 @@ def _manual_key(inst, k, aid) -> tuple:
         ((w.get("context") or {}).get("scratchpad_size") or {}).get(aid), w.get("live")], sort_keys=True, default=str))
 
 
+GOAL_TEXT = ((re.compile(r" ?Goals about your own holdings or offices also count through your living descendants: you score your own "
+                         r"result or your lineage's \(you and your descendants\), whichever is higher\."), ""),
+             (re.compile(r", and has a goal of its own drawn at random\. A goal both parents name \(\"inherit\"\) becomes its secondary "
+                         r"goal, which may become its primary when it comes of age, more likely the more food its parents gave it\."), "."),
+             (re.compile(r" inherit: the goal you hope the child holds \(if you both name the same one, it becomes the child's secondary "
+                         r"goal\);"), ""),
+             (re.compile(r'"inherit": "Wealth", '), ""))
+
+
+def scrub_goal_text(text: str) -> str:
+    """A goalless agent's manual and action docs: the sentences about goals and scores in other modules' texts (life, pairs)."""
+    for pat, rep in GOAL_TEXT:
+        text = pat.sub(rep, text)
+    return text
+
+
 def _drop_goals(inst, secs, aid=None) -> list:
-    """No goal (the world or this agent): the manual has no goals section (not even an empty title in the index)."""
-    return [x for x in secs if x[0] != "Goals in this world"] if no_goals(inst, aid) else secs
+    """No goal (the world or this agent): the manual has no goals section (not even an empty title in the index), and other
+    sections lose their goal and score sentences."""
+    if not no_goals(inst, aid):
+        return secs
+    return [(t, scrub_goal_text(x)) for t, x in secs if t != "Goals in this world"]
 
 
 def build_manual(inst, k, aid) -> list:
@@ -1241,7 +1260,8 @@ def _nature(inst) -> bool:
 @_SC.section("actions", layers=("core",), sep="\n\n")
 def _actions(v):
     inst, a, c, core = v.inst, v.a, cfg(v.inst), v.memo(_core)
-    return (f"""ACTIONS (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual).{core['pre_note']}{core['acts']}"""
+    acts = scrub_goal_text(core['acts']) if no_goals(inst, a) else core['acts']
+    return (f"""ACTIONS (you have {a['actions']} per turn; each item in "actions" uses one; details in your manual).{core['pre_note']}{acts}"""
             + ("\n" + FULL_TURN_TEXT if c.get("full_turn_nudge", True) and not c.get("closing", True) and not no_goals(inst, a) else "")
             + ("\nYou cannot propose laws yourself: a law you draft must be proposed by a holder of the propose right (a Legislator)."
                if "propose" not in v.rights and inst["law_level"] != "L0" and a["cls"] not in ("board", "fixer")
