@@ -1,0 +1,89 @@
+# Usability test: the market board (review 31, per-system agent tests; the Market Board template, charter/library.py, and pull
+# channels, engine 16). Can agents find, understand and use a posted-offer market without coaching?
+# Situation: no shop, no store, no contracts. The village has one market channel (`market`: anyone reads and writes it; pull
+# delivery, followed by every reader, so its unread count and headlines show in each state but posts do not land in the feed),
+# and the Market Board law is in force: a line posted there as "SELL <qty> <item> @ <price> <currency>" (or BUY ...) is an
+# offer, and anyone takes it with take_offer [id, qty]: goods and payment change hands at the posted price, both or neither.
+# Three foragers-hunters (Bryn, Cass, Dell) start with far more food than they can eat before it spoils (about 15% of food in
+# hand is lost a round); three villagers (Edda, Fion, Gale) start with little food and a purse of pennies; two (Hob, Ione) start
+# with little food, an extra stack of timber and no pennies (everyone also holds the base world's endowment of timber and stone,
+# so food is the scarce good and pennies or timber pay for it). Forests are thin, so foraging alone is a poor living. The low-food
+# villagers are fed for three rounds with no action and go hungry in round 4 unless they buy or forage. Nothing in any prompt
+# says to use the board; the law and the channel are listed as any law and channel are.
+# Success: sellers post offers in the format (parsed into the board's public offers table); buyers read the market channel
+# (channel_read) before taking an offer; trades run by take_offer (TRADE lines on the board, moves with memo "market <id>");
+# timber holders find a counterparty (SELL timber for pennies, or BUY food @ timber); offers are withdrawn or repriced; DM side
+# deals that do not deliver (a transfer promised and not made) are handled (complaints, refusal to deal again).
+# Note: the board keys an offer by poster, side and item, not currency: a second SELL food line by the same seller (say @ timber
+# after @ penny) replaces the first, so a seller cannot quote food in two currencies at once (an engine limit, reported).
+# Metrics (events.jsonl): post events on channel market (and how many parse as offers: the law's public offers table at each
+# checkpoint), channel_read by agent and round (reads before the first take), code_act / invoke take_offer results and refusals
+# (errors in turns.jsonl: "no offer", "holds less than"), moves with memo market <id>, transfers made outside the board, prices
+# by round; subsistence_round (stages, deaths); food held per round (snapshots). Interviews at the end of rounds 1 and 8.
+# Mostly Haiku, two Sonnet seats (one seller, one buyer). A system passes when the cheapest seats use it correctly.
+extends: [nature_subsistence, charter/specs/fragments/channels_v2.yaml]
+rounds: 8
+parallel_calls: 8
+agents:
+  worker: 8
+  scientist: 0
+  legislator: 0
+  media: 0
+  board: 0
+  fixer: 0
+  names: [Bryn, Cass, Dell, Edda, Fion, Gale, Hob, Ione]
+models:
+  mix: all_weak
+  pool: {strong: claude-haiku-5-5, weak: claude-haiku-5-5, strongest: claude-haiku-5-5}
+  overrides:
+    Bryn: claude-sonnet-5-5       # a seller
+    Gale: claude-sonnet-5-5       # a buyer with pennies
+goals:
+  explicit:
+    Bryn: Wealth
+    Cass: Wealth
+    Dell: Wealth
+    Edda: Survive
+    Fion: Survive
+    Gale: Survive
+    Hob: Survive
+    Ione: Survive
+institutions: {unified: true, grants: true, succession: true, office_control: true}
+contracts: {enabled: true}
+subsistence:
+  enabled: true
+  start_food: [4, 5]
+  forest: {capacity_per_agent: 2.5}
+chronicle:
+  namespace: usability_market
+life:
+  age_structure: elapsed          # founders in mid-life, so nobody dies of old age in a short test
+  elapsed: [20, 60]
+  ensure_maker: false             # no Makers, so no births in an 8-round test
+roles: {enabled: true, counts: {spy: 0, assassin: 0, scholar: 0, maker: 0, media: 0}}
+conflict: {enabled: false}        # a usability test of the market, not of force
+regime: {base: null, name: market_usability, constitution: nature}   # no state-of-nature regime: it forces conflict on
+start:
+  currencies:
+    - {name: penny, issuer: J0}
+  holdings:
+    Bryn: {food: 18}
+    Cass: {food: 18}
+    Dell: {food: 18}
+    Edda: {penny: 20}
+    Fion: {penny: 20}
+    Gale: {penny: 20}
+    Hob: {timber: 20}
+    Ione: {timber: 20}
+  channels:
+    - id: market
+      owner: J0
+      by: Bryn
+      purpose: "the village market: offers to buy and sell"
+      readers: {all: true}
+      writers: {all: true}
+      delivery: pull
+      followed_by: readers
+  laws:
+    - template: Market Board
+      params: {BOARD: market, TTL: 3}
