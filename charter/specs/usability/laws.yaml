@@ -1,0 +1,120 @@
+# Usability test: laws that work or fail loudly (review 31, per-system agent tests; engine 15, charter/laweffects.py and
+# institutions.reseat). Can a council change who holds an office with a law that actually does it, and does it notice when a
+# law does nothing?
+# Situation: a village (J0) governed by a council of three (Ada, Bram, Cora: every law passes by a majority of the council,
+# Simple Majority Procedure over J0.council; citizens may propose and petition the council through @J0). J0's Offices Act
+# declares the council and the Keeper of the Granary (Kell): only the Keeper draws from the village granary (store S1, 40 food),
+# at most 6 a round, every draw in a public ration book (Granary Ration); a vacant keepership is filled by the council's
+# election. Kell hoards: it starts with 12 food more than anyone and has a hoarding goal. At the end of round 2 a public notice
+# (a scheduled world notice, subsistence.shocks text: no forest is harmed) reports that the Keeper has been withholding food from
+# the granary. Citizens have food for about three rounds and forests at the usual capacity, so nobody needs the granary to live
+# through the test, but the granary is the village's reserve and the hungry will want it opened.
+# The engine facts a council has to find (nothing in any prompt points at them): amending the Offices Act to list new holders is
+# refused with a message ("offices.keeper.holders only seats an office when it is first declared ... revoke and grant the right
+# J0.keeper in a law, or call reseat(...)"); a law whose on_enact calls reseat("J0", "keeper", [...]) or revoke/grant of the right
+# J0.keeper does it; preview_law shows "At enactment: ..." (the diff) before a vote; every enactment publishes a law_effect
+# event, flagged inert when it changed nothing ("L9 passed but changed nothing"); a failed reseat or grant is a law_call_failed.
+# Success: citizens petition (@J0 posts, DMs to councillors); the council replaces the Keeper with reseat or revoke/grant (not a
+# no-op amendment or a law that only says so in its intent), previews it first, and reacts to an inert law_effect or a refusal
+# (redrafts rather than declaring victory); the new Keeper draws for the hungry.
+# Metrics (events.jsonl): post events on @J0 and DMs mentioning the Keeper after round 2; lookup preview_law by agent and round;
+# proposal (with its preview and inert flag), ballot_open / ballot_close, enact, law_effect (changes, inert), law_call_failed,
+# law_expectation_failed; office_filled / rights events for J0.keeper (rule reseat); refusals of propose (turns.jsonl errors that
+# quote the reseat message); store S1 draws (the Granary Ration's public draws); subsistence_round (stages, deaths).
+# Interviews at the end of rounds 3 and 8 (who holds the keepership; how did it change; how do you know the law worked).
+# Mostly Haiku, two Sonnet seats (one councillor, one citizen). A system passes when the cheapest seats use it correctly.
+extends: [nature_subsistence, charter/specs/fragments/channels_v2.yaml]
+rounds: 8
+parallel_calls: 8
+agents:
+  worker: 8
+  scientist: 0
+  legislator: 0
+  media: 0
+  board: 0
+  fixer: 0
+  names: [Ada, Bram, Cora, Kell, Dot, Eli, Fen, Gil]
+models:
+  mix: all_weak
+  pool: {strong: claude-haiku-5-5, weak: claude-haiku-5-5, strongest: claude-haiku-5-5}
+  overrides:
+    Ada: claude-sonnet-5-5        # a councillor
+    Gil: claude-sonnet-5-5        # a citizen
+goals:
+  explicit:
+    Ada: Steward
+    Bram: Survive
+    Cora: Survive
+    Kell: {primary: Hoard, params: {resource: food}}
+    Dot: Survive
+    Eli: Survive
+    Fen: Survive
+    Gil: Survive
+institutions: {unified: true, grants: true, succession: true, office_control: true}
+contracts: {enabled: true}
+jurisdictions: {enabled: false}
+subsistence:
+  enabled: true
+  start_food: [4, 5]
+  shocks:
+    - round: 2
+      plants: 1.0
+      game: 1.0
+      text: "Public notice from the granary tally: the Keeper of the Granary, Kell, has been withholding food. The village
+        granary (store S1) is short of what it should hold, and the Keeper's own stock of food is far larger than anyone
+        else's. No food has been drawn for the hungry."
+chronicle:
+  namespace: usability_laws
+life:
+  age_structure: elapsed          # founders in mid-life, so nobody dies of old age in a short test
+  elapsed: [20, 60]
+  ensure_maker: false             # no Makers, so no births in an 8-round test
+roles: {enabled: true, counts: {spy: 0, assassin: 0, scholar: 0, maker: 0, media: 0}}
+conflict: {enabled: false}        # a usability test of law-making, not of force
+regime:
+  base: null
+  name: laws_usability
+  constitution: assembly
+  laws:
+    - template: Simple Majority Procedure      # the council decides every law (ordinary, structural, procedural) by majority
+      params: {ELECTORATE: J0.council, CLASSES: [ordinary, structural, procedural], RANKS: [statute, constitution]}
+  description: "a village governed by a council of three; its Keeper of the Granary alone draws from the village granary."
+start:
+  rights:                         # every villager votes in council elections and may propose laws
+    Ada: [vote, propose]
+    Bram: [vote, propose]
+    Cora: [vote, propose]
+    Kell: [vote, propose]
+    Dot: [vote, propose]
+    Eli: [vote, propose]
+    Fen: [vote, propose]
+    Gil: [vote, propose]
+  institutions:
+    - id: J0
+      offices:
+        council:
+          title: Councillor
+          holders: [Ada, Bram, Cora]
+          seats: 3
+          powers: [speak]
+          duties: "Sit on the village council: decide the village's laws by majority, read the petitions sent to @J0, and see that
+            the village's officers do their duties."
+          succession: {rule: election, electorate: vote}
+        keeper:
+          title: Keeper of the Granary
+          holders: [Kell]
+          controls: [store:S1]
+          duties: "Keep the village granary (store S1): you alone may draw from it, at most 6 food a round under the Granary
+            Ration. Feed those who go hungry, keep a reserve for hard times, and answer to the council for every draw."
+          succession: {rule: election, electorate: J0.council}
+  stores:
+    - {id: S1, owner: J0, food: 40, capacity: 120, name: the village granary}
+  holdings:
+    Kell: {food: 12}
+  channels:
+    - id: "@J0"
+      purpose: "petitions to the village council (councillors read them)"
+      readers: {office: J0.council}
+  laws:
+    - template: Granary Ration
+      params: {STORE: S1, OFFICE: J0.keeper, CAP: 6}
