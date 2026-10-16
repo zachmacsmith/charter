@@ -518,6 +518,15 @@ def _loud_on(path):
 
 REQUIRES["reseat"] = _loud_on("institutions.amend_offices")
 REQUIRES["law_expects"] = _loud_on("law.expects")
+# review 31.04 #5 (business valid only when posted): documented only under channels.business, so earlier prompts are unchanged
+E += [
+    ("channel_posts", "reads", "Read", "channel_posts(channel, since=None, by=None)", "the posts of a channel this law's institution "
+     "may read (its own channel, or one everyone reads), oldest first: [{id, round, agent, as, text}]. since: a round number (that "
+     "round and later) or a post id \"e<n>\" (posts after it); by: one author or the account it was sent as. [] for a channel it "
+     "cannot read. For rules that count an order, price or notice only once it is posted there.", "prompt", "common"),
+]
+REQUIRES["channel_posts"] = lambda spec: (bool((spec.get("channels") or {}).get("v2")) and bool((spec.get("channels") or {}).get("business"))
+                                          and bool((spec.get("law") or {}).get("v2")))
 # subsistence (charter/subsistence.py, review 15): documented only in worlds with subsistence on (REQUIRES)
 E += [
     ("hunger", "reads", "Read", "hunger(agent)", "an agent's hunger: \"fed\", \"hungry\" or \"starving\" (None for one who does not "

@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 15
+ENGINE_VERSION = 16
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -122,6 +122,12 @@ ENGINE_FLIPS = {
          "note": "laws that work or fail loudly (docs/review/31_institutions/07_rules_courts.md §4): amendments update offices "
                  "(holder edits refused unless institutions.reseat apply; reseat() law function), law_effect events with inert "
                  "flags, failed law calls recorded, amendment previews with the enactment diff, expects postconditions"},
+    16: {"commits": ["20aaf702232395cca01d5c06bd8eccc633be8f75"],
+         "flips": [("charter.channels.DEFAULTS", ("business",), False, True)],
+         "note": "channels that carry business (docs/review/31_institutions/04_information.md): per-channel delivery (push, pull, "
+                 "edition) and followed_by, pull boards with unread counts in the state, channel_posts for laws, the Market Board "
+                 "template, official record to a notices channel (channels.notices); under channels.business (on from 16): manual "
+                 "text matching delivery, search over channel posts, visible reader narrowing (channel_resealed), channel_read"},
 }
 
 

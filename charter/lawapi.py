@@ -326,6 +326,7 @@ LAWFNS = _fns(
         F("send_message", "output", scope="none", why="a message in the name of the calling law's own institution; `to` (an "
           "agent, an institution or a channel) is its recipient, not an agent the law acts on or binds", docs="requires",
           primitive="post", v2=True),
+        F("channel_posts", "read", scope="read", docs="requires", v2=True),   # review 31.04 #5: posts of a channel it may read
     ),
     _module(
         "subsistence",                                                  # review 15 (subsistence worlds only: its law_api)

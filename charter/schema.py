@@ -498,6 +498,10 @@ def _ann():
         "channels.square_rate": dict(types=("int",), range=NONNEG),
         "channels.found_right": dict(types=("str", "null")),
         "channels.headlines": dict(types=("int",), range=(1, None)),
+        "channels.square_delivery": dict(types=("str", "null"), enum=("push", "pull", "edition", None)),   # review 31.04 §5.2
+        "channels.business": dict(types=("bool",)),
+        "channels.notices": dict(types=("str", "null")),
+        "channels.board_headlines": dict(types=("int",), range=(1, 5)),
         "contracts.scripted": dict(types=("bool",)),
         "contracts.enforcement": dict(types=("str",), enum=("escrow", "escrow_court", "word")),     # P4.4: the enforcement dial
         "contracts.breach_cases": dict(types=("bool",)),                 # W7e (review 11 §4.1): breaches open court cases
@@ -598,6 +602,8 @@ EXTRA = {
     # wave 9 C, channels v2 (charter/channels.py; review 14 §4.6, D-37): off = byte-identical
     "channels.v2": False, "channels.delivery": "push", "channels.square": "one", "channels.square_rate": 2,
     "channels.found_right": None, "channels.headlines": 8,
+    # review 31.04 §5 (channels that carry business): off / none = byte-identical
+    "channels.square_delivery": None, "channels.business": False, "channels.notices": None, "channels.board_headlines": 1,
 }
 
 # One-line docs where neither base.yaml nor a DEFAULTS dict has a comment.
@@ -696,6 +702,17 @@ DOCS = {
     "channels.square_rate": "channels.v2: posts per agent per round in a square (0: no limit)",
     "channels.found_right": "channels.v2: the right opening a channel needs without the default code's Press Act (null: anyone)",
     "channels.headlines": "channels.v2 with pull delivery: channels shown with counts and headlines in an agent's state",
+    "channels.square_delivery": "channels.v2 (review 31.04 §5.2): the squares' delivery, push | pull | edition (null: "
+                                "channels.delivery). A channel's own delivery field (start.channels, set_channel) overrides both",
+    "channels.business": "channels.v2 (review 31.04 §5, 31.08 §2.4/§2.9): the manual states each channel's delivery as it is (and "
+                         "the delivery and followed_by fields); a cut channel post in the feed points at read {\"channel\"}; "
+                         "search_board finds channel posts the agent may read; the directory shows deliveries; a read logs a "
+                         "monitor-only channel_read; a set_channel narrowing readers or retention logs channel_resealed; the "
+                         "channel_posts law function is documented. Off (default): the earlier text and events",
+    "channels.notices": "channels.v2 (review 31.04 #4, 31.08 §2.7): a channel id; the engine posts the official record (laws "
+                        "enacted, amended, repealed; offices filled or vacant; licences; contract registrations; final rulings; "
+                        "gazette notices) into it at the start of each round, one post per public record event. null (default): none",
+    "channels.board_headlines": "channels.v2: the latest unread headlines shown per pull channel in an agent's state (1: as before)",
     "endowment_gini": "target Gini of starting holdings (lognormal values tuned to it)",
     "veto_window": "rounds the Board has to veto a structural or procedural law",
     "fixer_per_round": "patches the Fixer may make per round",
