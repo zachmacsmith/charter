@@ -1,0 +1,35 @@
+# Usability test: farming (review 31, per-system agent tests). Can agents find, understand and use farms without coaching?
+# Six farmers, two plots each, NO crop growing at the start (they must sow), thin forests so foraging alone is a poor living,
+# 8 rounds (two crop cycles at grow 3). Measures: rounds to the first sow, sow/tend/reap/improve/upkeep counts, failed farm
+# actions and their errors, ripe crops left to rot, end-of-run food; interviews at the end of rounds 1 and 8 for comprehension.
+# Mostly Haiku, two Sonnet seats. Mostly-Haiku is the point: a system passes when the cheapest seats use it correctly.
+extends: [nature_farming]
+rounds: 8
+parallel_calls: 6
+agents:
+  worker: 6
+  names: [Alder, Bryn, Cass, Dell, Edda, Fion]
+models:
+  mix: all_weak
+  pool: {strong: claude-haiku-5-5, weak: claude-haiku-5-5, strongest: claude-haiku-5-5}
+  overrides:
+    Alder: claude-sonnet-5-5
+    Dell: claude-sonnet-5-5
+subsistence:
+  forest: {capacity_per_agent: 3.0}
+  fields: {enabled: true, plots_per_agent: 3.0, plots_max_per_agent: 4.0}
+start:
+  farms:
+    - {owner: Alder, camp: fields, plots: 2, crops: false}
+    - {owner: Bryn, camp: fields, plots: 2, crops: false}
+    - {owner: Cass, camp: fields, plots: 2, crops: false}
+    - {owner: Dell, camp: fields, plots: 2, crops: false}
+    - {owner: Edda, camp: fields, plots: 2, crops: false}
+    - {owner: Fion, camp: fields, plots: 2, crops: false}
+chronicle:
+  namespace: usability_farming
+life:
+  age_structure: elapsed          # founders in mid-life, so nobody dies of old age in a short test (as millbrook)
+  elapsed: [20, 60]
+conflict: {enabled: false}        # a usability test of farming, not of force
+regime: {base: null, name: farming_usability, constitution: nature}   # no state-of-nature regime: it forces conflict on
