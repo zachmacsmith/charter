@@ -486,6 +486,11 @@ def _ann():
         "institutions.grants": dict(types=("bool",)),                   # review 14 WP-E: powers from grants (charter/grants.py)
         "institutions.succession": dict(types=("bool",)),               # review 14 §7.2: vacancies and succession (succession.py)
         "institutions.office_control": dict(types=("bool",)),          # established worlds: duties and controls of offices
+        "institutions.amend_offices": dict(types=("bool",)),           # laws that work or fail loudly (E1): amendments reach offices
+        "institutions.reseat": dict(types=("str",), enum=("refuse", "apply")),
+        "law.effects": dict(types=("bool",)),                          # laws that work or fail loudly (E2, E3): law_effect, inert
+        "law.call_failures": dict(types=("bool",)),                    # (E4): law_call_failed
+        "law.expects": dict(types=("bool",)),                          # (T1): a law's `expects`, checked
         "start": dict(kind="leaf", types=("dict", "null"), check=_check_start),   # established worlds (charter/start.py)
         "channels.v2": dict(types=("bool",)),                           # wave 9 C: channels v2 (charter/channels.py)
         "channels.delivery": dict(types=("str",), enum=("push", "pull")),
@@ -585,6 +590,10 @@ EXTRA = {
     "institutions.grants": False,                                      # review 14 WP-E: off = the power table's kinds column
     "institutions.succession": False,                                  # review 14 §7.2: off = no vacancies, byte-identical
     "institutions.office_control": False,                             # established worlds: off = office duties/controls unread
+    # laws that work or fail loudly (charter/laweffects.py; docs/review/31_institutions/07_rules_courts.md §4). New behaviour on by
+    # default; false (and reseat unread) is the behaviour before them
+    "institutions.amend_offices": True, "institutions.reseat": "refuse",
+    "law.effects": True, "law.call_failures": True, "law.expects": True,
     "start": None,                                                    # established worlds (charter/start.py): none = as before
     # wave 9 C, channels v2 (charter/channels.py; review 14 §4.6, D-37): off = byte-identical
     "channels.v2": False, "channels.delivery": "push", "channels.square": "one", "channels.square_rate": 2,
@@ -645,6 +654,23 @@ DOCS = {
                                "dissolved institutions' holdings go by their wind-up clause, else the polity's Dissolution and "
                                "Escheat Act, else are locked; contracts may declare party_death. The two Acts are default code "
                                "(code.enabled), overridable unless MANDATORY. Off: today, byte-identical",
+    "institutions.amend_offices": "laws that work or fail loudly (charter/institutions.py; needs institutions.grants): amending a law "
+                                  "that declares offices applies the changed declaration as enactment does (new offices declared, "
+                                  "removed ones abolished under institutions.succession, changed powers, duties, controls, term and "
+                                  "succession applied); law.v2 laws get reseat(institution, office, agents). false: an amendment "
+                                  "changes no office record (the behaviour before)",
+    "institutions.reseat": "what an amendment that changes an existing office's declared holders does: refuse (refused at proposal, "
+                           "naming the right and reseat) | apply (its enactment reseats the office)",
+    "law.effects": "laws that work or fail loudly (charter/laweffects.py): every enactment, amendment and repeal logs a law_effect "
+                   "event with what it changed (inert when nothing did and no hook acts later), previews compare offices, stores, "
+                   "treasuries, clauses and open ballots, a proposal's preview is flagged inert, and preview_law shows the enactment's "
+                   "own diff and previews amendments as amendments (amends). false: none of this (the behaviour before)",
+    "law.call_failures": "a law's move, fine, grant, revoke, suspend, burn or reseat that fails logs law_call_failed with the reason, "
+                         "to the law's author and its institution's officers (once per law, function and round), and previews list "
+                         "the failed calls. false: such calls fail silently (the behaviour before)",
+    "law.expects": "a law's `expects` constant (its stated effect: offices, holdings, stores, treasuries, rights) is checked right "
+                   "after enactment or amendment: a failure refuses the proposal at its dry run, and in force is a public "
+                   "law_expectation_failed event. false: expects is not read",
     "institutions.office_control": "established worlds (charter/institutions.py; needs institutions.grants): an office's declared "
                                    "duties are shown to its holder every turn; its controls (\"store:S1\", \"treasury\") belong to "
                                    "that office alone (only its holders withdraw from a controlled store; they pay out of the "

@@ -264,7 +264,7 @@ def test_op_repeal_law(world):
     k, inst, rs = world
     lid = ok(apply(world, "enact_law", {"code": 'title = "Quiet"\nintent = "nothing"\n\ndef on_round_start(r):\n    pass\n'})[0])["result"]["law"]
     rec, evs = apply(world, "repeal_law", {"law": lid})
-    assert ok(rec) and k.w["laws"][lid]["status"] == "repealed" and evs[-1]["type"] == "repeal"
+    assert ok(rec) and k.w["laws"][lid]["status"] == "repealed" and [e["type"] for e in evs][-2:] == ["repeal", "law_effect"]
     assert "no law in force" in apply(world, "repeal_law", {"law": lid})[0]["error"]
 
 

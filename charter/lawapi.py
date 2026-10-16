@@ -345,6 +345,11 @@ LAWFNS = _fns(
           "same jurisdiction, rank at most the caller's); decided by its procedure", docs="requires", primitive="propose", v2=True),
     ),
     _module(
+        "institutions",                                                 # laws that work or fail loudly (institutions.amend_offices)
+        F("reseat", "rights", scope="none", why="only offices of the calling law's own institution (checked); agents are the office's "
+          "new holders (members only for an association)", docs="requires", primitive="grant_right", v2=True),
+    ),
+    _module(
         "courts",                                                       # law.v2 (courts v2): law-readable cases, court rules
         F("cases", "read", scope="read", docs="requires", v2=True),     # only cases under clauses of the law's own account
         F("case", "read", scope="read", docs="requires", v2=True),
@@ -404,6 +409,7 @@ CONTRACT_COLUMN = {
     **{n: "allow" for n in ("name", "gazette", "notify", "open_ballot", "set_procedure", "repeal", "breach", "admit", "expel", "use",
                             "public_of", "root_kind", "caused_by_agent", "caused_by_law", "chain_laws", "law_id", "treasury",
                             "refuse", "open_fund",                      # W6a: a contract's law may refuse too; P4.4 funds
+                            "reseat",                                   # its own offices only (institutions.law_api checks)
                             "send_message")},                           # wave 9 C: messages in its own name (channels.v2)
     **{n: "escrow" for n in ("move", "fine", "pull", "forfeit", "refund", "swap")},
     # P4.5: its own currencies (shares), rights and offices only: contracts.scope_api names them "<cid>.<name>", mints to anyone,
@@ -454,9 +460,9 @@ def _hooks(*hooks: Hook) -> dict:
 
 
 HOOKTABLE = _hooks(
-    Hook("on_enact", "()", "ignored", ("dispatch/changes/legal.py:do_enact", "contracts.py:_on_enact"), None,
+    Hook("on_enact", "()", "ignored", ("dispatch/changes/legal.py:_do_enact", "contracts.py:_on_enact"), None,
          note="also in every dry-run preview; a contract's law when it comes into force (P4.3)"),
-    Hook("on_repeal", "()", "ignored", ("dispatch/changes/legal.py:do_repeal", "contracts.py:_retire"), True,
+    Hook("on_repeal", "()", "ignored", ("dispatch/changes/legal.py:_do_repeal", "contracts.py:_retire"), True,
          note="a law's repeal(target) runs it too; a contract's law when it is replaced or the contract dissolves (P4.3)"),
     Hook("on_round_start", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run", "kernel.py:Kernel.trial", "lawpreview.py:_window"), None),   # the round_start phase; the previewer
     Hook("on_round_end", "(r)", "ignored", ("features.py:run", "kernel.py:Kernel.dry_run", "kernel.py:Kernel.trial", "lawpreview.py:_window"), None),       # the round_end phase; the previewer

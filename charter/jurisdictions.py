@@ -405,6 +405,7 @@ def scope_api(k, lid, api: dict) -> dict:
 
     def refuse(fn, agent):
         _log_scope(k, "jur_out_of_scope", None, {"law": lid, "fn": fn, "agent": agent, "jurisdiction": jid})
+        k.__dict__["_lcf_reason"] = f"{agent} is outside {jid}, this law's jurisdiction"   # law.call_failures (laweffects)
         return REFUSED.get(fn)
 
     def owner(x, fn):

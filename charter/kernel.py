@@ -32,6 +32,8 @@ from charter import hidden as H
 from charter import incorporation as INC                               # W8e (D-27): share valuation of incorporated companies
 from charter import jurisdictions as J
 from charter import lawlang as L
+from charter import laweffects as LE                                  # laws that work or fail loudly (law.effects, law.call_failures)
+from charter import institutions as IN                                # institutions.amend_offices: reseat (law API)
 from charter import linker as LK                                      # law.v2: exports, use, public, versions (off: never called)
 from charter import mortality as MO                                   # life: the mortality contract (disable, succession)
 from charter import media as MD                                       # media2
@@ -339,10 +341,15 @@ class Kernel:
         move's purpose (law.v2 only; dispatch.check_move)."""
         try:
             if memo is not None:
-                return self.apply("move", src=src, dst=dst, item=item, qty=qty, why=why, memo=memo, actor=by).ok
-            return self.apply("move", src=src, dst=dst, item=item, qty=qty, why=why, actor=by).ok
-        except D.PhysicsError:
+                out = self.apply("move", src=src, dst=dst, item=item, qty=qty, why=why, memo=memo, actor=by)
+            else:
+                out = self.apply("move", src=src, dst=dst, item=item, qty=qty, why=why, actor=by)
+        except D.PhysicsError as e:
+            LE.note_reason(self, e.reason)                              # law.call_failures: why a law's move failed
             return False
+        if not out.ok:
+            LE.note_reason(self, f"blocked by {', '.join(out.blocked_by) or 'a law'}" + (f": {out.reason}" if out.reason else ""))
+        return out.ok
 
     # ------------------------------------------------------------------ primitives (P2.1): the single entry point for state changes
     def apply(self, name, /, **payload):
@@ -601,6 +608,7 @@ class Kernel:
                 k.apply(prim, **payload)
             except D.PhysicsError as e:
                 k.w["effects"]["kernel_refusals"].append(e.reason)
+                LE.note_reason(k, e.reason)                             # law.call_failures
                 return False
             return True
 
@@ -782,7 +790,9 @@ class Kernel:
             api.update(EVD.law_api(k, lid))                            # law.v2 (review 10 #10): event(eid), history(...)
             if PUB.enabled(k):
                 api.update(PUB.law_api(k, lid))                        # review 12 WP2: publish, unpublish, publication
-        return J.scope_api(k, lid, api)                                # jurisdictions: a law reaches only its members (off: unchanged);
+            if IN.amend_setting(k):                                    # institutions.amend_offices: reseat(institution, office, agents)
+                api.update(IN.law_api(k, lid))
+        return LE.wrap_api(k, lid, J.scope_api(k, lid, api))          # jurisdictions: a law reaches only its members (off: unchanged);
                                                                        # a contract's law: the contract column, v2 functions included
 
     # ------------------------------------------------------------------ laws
@@ -1005,7 +1015,7 @@ class Kernel:
                 "laws": {l: v["status"] for l, v in w["laws"].items()}, "limits": {a: v["limit"] for a, v in ag.items() if v["limit"]},
                 "dm_limit": {"all": self.dm_general(), **{a: n for a, n in w["dm_limit"]["agents"].items() if a in ag}},
                 "suspended": {a: dict(v["suspended"]) for a, v in ag.items() if v["suspended"]},
-                "projects": P.view(self)}
+                "projects": P.view(self), **(LE.extra_view(self) if LE.effects_on(self) else {})}   # law.effects: offices, stores, ...
 
     def _module_rules(self, ag) -> dict:
         """Preview rules of the feature modules (life, mortality, conflict, media2, jurisdictions), one key per rule so a diff line
@@ -1101,7 +1111,7 @@ class Kernel:
         for l in sorted(set(a["laws"]) | set(b["laws"])):
             if a["laws"].get(l) != b["laws"].get(l) and a["laws"].get(l) is not None:
                 out.append(f"law {l}: {a['laws'].get(l)} -> {b['laws'].get(l)}")
-        return out
+        return out + LE.diff_extra(a, b)                               # law.effects: offices, stores, treasuries, clauses, ballots
 
     def dry_run(self, lid, rounds=3):
         """Enact a copy of the law on the current state, run `rounds` round-ends of hooks, report the diff, roll back.
@@ -1109,19 +1119,37 @@ class Kernel:
         snap = self._snapshot()
         before = self.view()
         self.dry = True
+        loud = LE.effects_on(self)
+        at_enact = None
         try:
-            with D.isolated(self):                                      # law.v2: the preview's cascades are its own
+            with D.isolated(self), LE.collect(self) as failed:          # law.v2: the preview's cascades are its own
                 self.enact(lid, via="preview")
+                if loud:                                                # law.effects: what the enactment itself changes
+                    at_enact = self.diff(before, self.view())
+                if LE.expects_on(self):                                 # law.expects: the draft's stated effect, checked at once
+                    bad = LE.unmet(self, self.w["laws"][lid]["code"])
+                    if bad:
+                        raise L.LawError("your law does not do what it expects: " + "; ".join(bad[:5]))
                 for _ in range(rounds):
                     self.hooks("on_round_start", self.r)
                     self.hooks("on_round_end", self.r)
                     self._close_ballots_dry()
                     self.w["round"] += 1
             after = self.view()
-            return self.diff(before, after)
+            out = self.diff(before, after)
+            if loud:                                                    # law.effects / law.call_failures: failed law calls
+                seen = []
+                for f in failed:
+                    line = f"failed call by {f['law']}: {f['fn']}({', '.join(f['args'])}): {f['reason']}"
+                    if line not in seen:
+                        seen.append(line)
+                out += seen[:10]
+            return out
         finally:
             self.dry = False
             self._restore(snap)
+            if loud:                                                    # read by the proposal (dispatch do_propose): its inert flag
+                self.__dict__["_dry_enact"] = (lid, at_enact)
 
     def trial(self, lid, rounds=1) -> list:
         """W9 (dispatch.ranks.requirement): what a draft does, on a copy of the world: enact it and run `rounds` round-ends of hooks

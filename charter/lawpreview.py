@@ -355,14 +355,18 @@ def _status_outcome(status) -> str:
             "stage": "stages"}.get(status, str(status))                # law.v2 (W6c): a multi-stage procedure began
 
 
-def _procedure(k, aid, code, jurisdiction, hidden) -> tuple:
-    """Propose the draft as the agent would (for real, inside the transaction): (law id or None, procedure section, error)."""
+def _procedure(k, aid, code, jurisdiction, hidden, amends=None) -> tuple:
+    """Propose the draft as the agent would (for real, inside the transaction): (law id or None, procedure section, error).
+    amends (law.effects): the draft is an amendment of that law, proposed with the amend action."""
     from charter import actions as A
     seq, start = k.w["law_seq"], len(k.events)
-    args = {"code": code, **({"jurisdiction": jurisdiction} if jurisdiction is not None else {})}
+    if amends:
+        act, args = "amend", {"law": str(amends), "code": code}
+    else:
+        act, args = "propose", {"code": code, **({"jurisdiction": jurisdiction} if jurisdiction is not None else {})}
     err, as_holder = None, False
     try:
-        A.act(k, aid, "propose", args)
+        A.act(k, aid, act, args)
         proposed = True
     except A.ActionError as e:
         err, proposed = str(e), False
@@ -373,7 +377,7 @@ def _procedure(k, aid, code, jurisdiction, hidden) -> tuple:
         rights.append("propose")
         start, as_holder = len(k.events), True
         try:
-            A.act(k, aid, "propose", args)
+            A.act(k, aid, act, args)
         except A.ActionError:
             pass
         finally:
@@ -408,22 +412,28 @@ def _procedure(k, aid, code, jurisdiction, hidden) -> tuple:
     return lid, proc, None
 
 
+_IN_FORCE = ("active", "enacted_repeal", "enacted_amendment")
+
+
 def _enact(k, lid, hidden) -> dict:
     law = k.w["laws"][lid]
-    out = {"status": law["status"], "ok": law["status"] in ("active", "enacted_repeal"), "blocked_by": [], "errors": []}
+    out = {"status": law["status"], "ok": law["status"] in _IN_FORCE, "blocked_by": [], "errors": []}
     if out["ok"]:
         return out
     from charter import jurisdictions as J
     try:
         with k.cause("kernel", "preview", root=True):
-            res = k.apply("enact", jurisdiction=D.jur_of(k, lid), law=lid, via="preview")
-        if not res.ok:
-            out["blocked_by"] = [x for x in res.blocked_by if x not in hidden]
+            if law.get("amends"):                                       # law.effects: an amendment, enacted as one (amend primitive)
+                k.enact(lid, via="preview")
+            else:
+                res = k.apply("enact", jurisdiction=D.jur_of(k, lid), law=lid, via="preview")
+                if not res.ok:
+                    out["blocked_by"] = [x for x in res.blocked_by if x not in hidden]
     except L.LawError as e:
         out["errors"].append(str(e))
         law["status"] = "failed"
     out["status"] = law["status"]
-    out["ok"] = law["status"] in ("active", "enacted_repeal")
+    out["ok"] = law["status"] in _IN_FORCE
     if "jur" in k.w and law["status"] == "dormant":
         out["errors"].append(f"{J.law_jur(k, lid)} is hidden: the law would wait, dormant, until it is declared")
     return out
@@ -473,7 +483,20 @@ def preview_law(k, agent, code, scenario=None, *, jurisdiction=None, amends=None
             if ref.split("@")[0] in hidden:
                 rep["error"] = f"your law was rejected by the check: use({ref!r}): no such law"
                 return rep
-        lid, proc, err = _procedure(k, agent, str(code), jurisdiction, hidden)
+        from charter import laweffects as LE
+        loud = LE.effects_on(k)                                         # law.effects: amendments as amendments; the enactment's diff
+        as_amend = amends if loud and amends else None
+        view0 = k.view() if loud else None
+        with LE.collect(k) as failed:
+            lid, proc, err = _procedure(k, agent, str(code), jurisdiction, hidden, as_amend)
+            if lid is None and as_amend:
+                from charter import amendment as AM
+                try:                                                    # refused before a draft existed: the amendment draft anyway
+                    lid = AM.amendment_draft(k, str(as_amend), str(code), agent)
+                except L.LawError as e:
+                    rep["error"] = f"your amendment was refused: {e}"
+                    rep["procedure"] = proc
+                    return rep
         if lid is None:
             try:                                                        # refused before a draft existed (rights, level): a draft anyway
                 lid = k.new_law(str(code), agent)
@@ -486,7 +509,19 @@ def preview_law(k, agent, code, scenario=None, *, jurisdiction=None, amends=None
                 return rep
         rep["procedure"] = proc
         rep["ok"] = True
-        rep["enact"] = _enact(k, lid, hidden)
+        with LE.collect(k) as failed2:
+            rep["enact"] = _enact(k, lid, hidden)
+        if loud:                                                        # what the enactment itself changes (and inert)
+            own = tuple(f"law {x}: " for x in (lid, as_amend) if x)
+            dl = [x for x in k.diff(view0, k.view()) if not x.startswith(own) and not _names_hidden(x, hidden)
+                  and not (proc.get("ballot") and x.startswith("ballot "))]
+            tgt = (k.w["laws"].get(as_amend) or {}) if as_amend else {}
+            old_code = tgt.get("patches", [{}])[-1].get("old") if tgt.get("patches") else None
+            rep["enact"]["diff"] = dl
+            rep["enact"]["inert"] = bool(rep["enact"]["ok"]) and LE.inert("amend" if as_amend else "enact", dl, old_code,
+                                                                          k.w["laws"][lid]["code"])
+            rep["enact"]["failed_calls"] = [f"{f['law']}: {f['fn']}({', '.join(f['args'])}): {f['reason']}"
+                                            for f in (failed + failed2)[:10] if f["law"] not in hidden]
         rep["static"] = _static(k, lid, system, amends)
         acc = _gas_since(k, mark0)                                      # the proposal and the enactment
         rep["warnings"] += [f"proposal: {w}" for w in _events(k, start0, agent, hidden)[1]]
@@ -569,6 +604,11 @@ def render(rep: dict, budget: int = TOKENS) -> str:
     if en["errors"]:
         e += " (" + "; ".join(en["errors"]) + ")"
     lines.append(e + ".")
+    if "diff" in en:                                                    # law.effects: what the enactment itself changes
+        lines.append("At enactment: " + ("; ".join(en["diff"][:20]) if en["diff"] else "no change")
+                     + ("; INERT: as written it changes nothing and no hook of it acts later" if en.get("inert") else "") + ".")
+        if en.get("failed_calls"):
+            lines.append("Failed law calls: " + "; ".join(en["failed_calls"]))
     for s in rep["scenarios"]:
         head = f"Scenario {s['name']}" + (f" {s['action']} {_j(s['args'])}" if s.get("action") else "")
         lines.append(f"{head}: {'ok' if s['ok'] else 'refused'}: {str(s['result'])[:200]}")

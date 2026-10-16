@@ -321,7 +321,8 @@ def _files(d):
 
 
 def _run(preset, seed, sets, tmp, grants):
-    sets = list(sets) + ["shared_archive.enabled=false", UNIFIED] + ([GRANTS] if grants else [])
+    from charter import laweffects as LE     # with grants on, law.v2 worlds document reseat (laweffects): compare without it
+    sets = list(sets) + ["shared_archive.enabled=false", UNIFIED, *LE.OFF] + ([GRANTS] if grants else [])
     inst = generator.generate(S.apply_overrides(S.load(preset), sets), seed)
     inst["run_id"] = "grants"
     return runner.run(inst, AG.ScriptedPolicy(seed), tmp / str(grants), log=lambda *a: None)

@@ -86,6 +86,8 @@ def amendment_draft(k, target: str, code, author: str, reason="", by_law: str | 
     if LK.sha(code) == tgt.get("code_sha", LK.sha(tgt["code"])):
         raise LawError(f"the new code is {target}'s current code")
     LK.check_graph(k, f"{target}@{LK.sha(code)}", code, overrides={target: code})   # a cycle closed through a dependent
+    from charter import institutions as IN
+    IN.check_amendment(k, target, code)                                 # institutions.amend_offices: offices parse; holders (reseat)
     cls = max_cls(tgt["cls"], LK.amendment_class(k, target, code))
     rank = max_rank(D.rank_of(k, target), declared_rank(code))
     deps = LK.preview_amend(k, target, code)

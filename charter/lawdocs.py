@@ -489,6 +489,35 @@ E += [
      "prompt", "common"),
 ]
 REQUIRES["send_message"] = lambda spec: bool((spec.get("channels") or {}).get("v2")) and bool((spec.get("law") or {}).get("v2"))
+# laws that work or fail loudly (charter/institutions.py, charter/laweffects.py): documented only in law.v2 worlds with offices
+# (institutions.grants) and the settings on (REQUIRES), so every other world's prompt and codex are unchanged
+E += [
+    ("reseat", "rights", "Rights", "reseat(institution, office, agents)", "makes exactly these agents the holders of an office of "
+     "this law's own institution (\"J0\", \"keeper\", [\"Osric\"]): holders not listed lose it (a vacancy, filled at once by the "
+     "new ones), the listed are granted it. An Offices Act's `holders` seats an office only when it is first declared: amending "
+     "them does not reseat it (the amendment is refused); use reseat, or revoke and grant the right \"<institution>.<office>\". "
+     "True, or False when it could not (the reason is reported to you). Structural. Every law's effect is published when it "
+     "passes (\"changed nothing\" when it did nothing); preview_law {\"code\": ..., \"amends\": \"L5\"} previews an amendment of L5 "
+     "and what its enactment changes.", "prompt", "common"),
+    ("law_expects", "hooks", "Meta", "expects = [...]", "a law may state what it does, checked right after it is enacted or amended "
+     "(and in the proposal's dry run, where a failure refuses the proposal): [{\"office\": \"J0.keeper\", \"holders\": [\"Osric\"]}, "
+     "{\"holding\": \"Elspeth\", \"item\": \"food\", \"at_most\": 0}, {\"store\": \"S1\", \"item\": \"food\", \"at_least\": "
+     "120}, {\"treasury\": \"A1\", \"item\": \"penny\", \"at_least\": 10}, {\"right\": \"J0.keeper\", \"agent\": \"Osric\", "
+     "\"has\": True}]. A law in force whose expectation fails is announced, not undone. The intent text is never executed: "
+     "only code (and expects) acts.", "common", "uncommon"),
+]
+
+
+def _loud_on(path):
+    def on(spec):
+        from charter import laweffects as LE
+        return bool((spec.get("law") or {}).get("v2")) and bool((spec.get("institutions") or {}).get("grants")) \
+            and bool(LE.setting(spec, path))
+    return on
+
+
+REQUIRES["reseat"] = _loud_on("institutions.amend_offices")
+REQUIRES["law_expects"] = _loud_on("law.expects")
 # subsistence (charter/subsistence.py, review 15): documented only in worlds with subsistence on (REQUIRES)
 E += [
     ("hunger", "reads", "Read", "hunger(agent)", "an agent's hunger: \"fed\", \"hungry\" or \"starving\" (None for one who does not "

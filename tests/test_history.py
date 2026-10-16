@@ -58,6 +58,10 @@ def test_history_off_reproduces_every_prompt_from_before(name, tmp_path, monkeyp
     from charter import subsistence as SB                               # engine 14: the individual hunt (its texts and catches)
     monkeypatch.setitem(SB.DEFAULTS["game"], "hunt_mode", "shared")
     monkeypatch.setattr(SB, "_CFG", {})
+    from charter import laweffects as LE                                # laws that work or fail loudly: the behaviour before
+    from charter import schema as SC
+    for key, v in LE.BEFORE.items():
+        monkeypatch.setitem(SC.EXTRA, key, v)
     assert _call_prompts(name, OFF, tmp_path) == json.loads(OFF_PROMPTS.read_text())[name]
 
 

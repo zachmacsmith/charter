@@ -476,23 +476,230 @@ def on_law_repealed(k, lid, replaced_by=None) -> list:
         if o["law"] != lid:
             continue
         if name in again:
-            d = again[name]
-            o.update({"law": replaced_by, "title": d["title"], "powers": d["powers"], "seats": d["seats"], "term": d["term"],
-                      "grants": [{"grantor": iid, "grantee": o["id"], **g} for g in d["grants"]], "succession": d["succession"]})
-            for f in ("duties", "controls", "calendar"):                # established worlds: the new declaration's, or none
-                if f in d:
-                    o[f] = d[f]
-                else:
-                    o.pop(f, None)
+            o["law"] = replaced_by
+            _apply_decl(iid, o, again[name])
             continue
-        with SU.cause(k, None):
-            for h in list(o["holders"]):
-                k.apply("revoke_right", agent=h["holder"], right=o["id"], via="vacancy")
-        del mine[name]
-        k.log("office_abolished", None, {"institution": iid, "office": name, "right": o["id"], "law": lid,
-                                         "past": [h["holder"] for h in o["past"]]}, vis="public")
+        _abolish(k, iid, name, lid)
         out.append(name)
     return out
+
+
+def _apply_decl(iid, o: dict, d: dict) -> None:
+    """An existing office record takes a (re)declaration's fields: title, powers, seats, term, grants, succession, duties, controls,
+    calendar. Never its holders: holding is the right (on_right)."""
+    o.update({"title": d["title"], "powers": d["powers"], "seats": d["seats"], "term": d["term"],
+              "grants": [{"grantor": iid, "grantee": o["id"], **g} for g in d["grants"]]})
+    if "succession" in d:
+        o["succession"] = d["succession"]
+    for f in ("duties", "controls", "calendar"):                        # established worlds: the new declaration's, or none
+        if f in d:
+            o[f] = d[f]
+        else:
+            o.pop(f, None)
+
+
+def _abolish(k, iid, name, lid) -> None:
+    """The office goes: its holders lose the right (no vacancy), an `office_abolished` event, the record is removed."""
+    from charter import succession as SU
+    mine = k.w[OFFICES][iid]
+    o = mine[name]
+    with SU.cause(k, None):
+        for h in list(o["holders"]):
+            k.apply("revoke_right", agent=h["holder"], right=o["id"], via="vacancy")
+    del mine[name]
+    k.log("office_abolished", None, {"institution": iid, "office": name, "right": o["id"], "law": lid,
+                                     "past": [h["holder"] for h in o["past"]]}, vis="public")
+
+
+# ---------------------------------------------------------------------- amendment and reseating (laws that work or fail loudly)
+# docs/review/31_institutions/07_rules_courts.md §4 (E1). Spec institutions.amend_offices (schema.EXTRA, default true; false: an
+# amendment of a law that declares offices changes no office record, the behaviour before it) and institutions.reseat (refuse |
+# apply, default refuse): what an amendment that changes an existing office's declared `holders` does. `holders` seats an office
+# only when it is first declared; under refuse such an amendment is refused at proposal (amendment.amendment_draft) with a message
+# naming the right and reseat(); under apply its enactment reseats the office. reseat(institution, office, agents) is the law
+# function that does it explicitly.
+RESEAT = ("refuse", "apply")
+
+
+def _setting(k, path):
+    from charter import laweffects as LE
+    return LE.setting(k.spec, path)
+
+
+def amend_setting(k) -> bool:
+    """institutions.amend_offices as set (law.v2 worlds then have reseat in the law API, documented where offices exist)."""
+    return bool(_setting(k, "institutions.amend_offices"))
+
+
+def amend_on(k) -> bool:
+    """institutions.amend_offices (and institutions.grants): amendments reconcile the offices their law declares."""
+    from charter import grants as G
+    return amend_setting(k) and G.on(k)
+
+
+def reseat_mode(k) -> str:
+    v = _setting(k, "institutions.reseat")
+    return v if v in RESEAT else "refuse"
+
+
+def _norm_holders(d) -> list:
+    return sorted(dict.fromkeys(d.get("holders") or ()))
+
+
+def check_amendment(k, lid, new_code) -> None:
+    """amendment_draft (amend_on): the new code's offices parse, and under reseat refuse no existing office of the law changes its
+    declared holders. Raises LawError with the refusal."""
+    from charter import jurisdictions as J
+    from charter import lawlang as L
+    from charter import succession as SU
+    if not amend_on(k):
+        return
+    succ = SU.on(k)
+    new = parse_offices(new_code, succ)                                 # a LawError here is the refusal (malformed offices)
+    if not new or reseat_mode(k) != "refuse":
+        return
+    try:
+        old = parse_offices((k.w["laws"].get(lid) or {}).get("code"), succ)
+    except L.LawError:
+        old = {}
+    iid = J.law_jur(k, lid)
+    mine = (k.w.get(OFFICES) or {}).get(iid) or {}
+    for name in [n for n in new if n in old]:
+        o = mine.get(name)
+        if o is None or o.get("law") != lid or _norm_holders(old[name]) == _norm_holders(new[name]):
+            continue
+        raise L.LawError(f"offices.{name}.holders only seats an office when it is first declared, so this amendment would not change "
+                         f"who holds {iid}.{name}; to change who holds it, revoke and grant the right {iid}.{name} in a law, or call "
+                         f"reseat(\"{iid}\", \"{name}\", [...]); leave offices.{name}.holders as it was")
+
+
+def on_law_amended(k, lid, old_code) -> dict:
+    """dispatch do_amend (amend_on): law lid's code changed from old_code. The offices it declares follow the new declaration as an
+    enactment would: new offices are declared (with their first holders), removed ones abolished (institutions.succession, as a
+    repeal does), changed fields applied to the existing records; a changed `holders` reseats the office under reseat apply (else it
+    is left alone: under refuse the proposal was refused). Returns {"added", "abolished", "changed", "reseated"} (names)."""
+    from charter import jurisdictions as J
+    from charter import lawlang as L
+    from charter import succession as SU
+    out = {"added": [], "abolished": [], "changed": [], "reseated": []}
+    if not amend_on(k):
+        return out
+    succ = SU.on(k)
+    try:
+        new = parse_offices((k.w["laws"].get(lid) or {}).get("code"), succ)
+    except L.LawError:
+        return out
+    try:
+        old = parse_offices(old_code, succ)
+    except L.LawError:
+        old = {}
+    if not new and not old:
+        return out
+    iid = J.law_jur(k, lid)
+    out["added"] = declare_offices(k, iid, lid)
+    mine = (k.w.get(OFFICES) or {}).get(iid) or {}
+    if succ:
+        for name, o in list(mine.items()):
+            if o.get("law") == lid and name not in new:
+                _abolish(k, iid, name, lid)
+                out["abolished"].append(name)
+    for name, d in new.items():
+        o = mine.get(name)
+        if o is None or o.get("law") != lid or name in out["added"]:
+            continue
+        before = {f: o.get(f) for f in ("title", "powers", "seats", "term", "grants", "succession", "duties", "controls", "calendar")}
+        _apply_decl(iid, o, d)
+        if any(o.get(f) != v for f, v in before.items()):
+            out["changed"].append(name)
+        if name in old and _norm_holders(old[name]) != _norm_holders(d) and reseat_mode(k) == "apply":
+            rec = get(k, iid)
+            want = [((rec or {}).get("founder") if h == "founder" else h) for h in d["holders"]]
+            reseat(k, iid, name, [a for a in want if isinstance(a, str)], by=lid, strict=False)
+            out["reseated"].append(name)
+    return out
+
+
+def reseat(k, iid, name, agents, by=None, strict=True) -> list:
+    """Make `agents` the holders of office iid.name: holders not listed lose the right (a vacancy, cause "removed", which the new
+    holders fill at once: office_filled, rule "reseat"), listed agents who do not hold it are granted it. strict: an agent who cannot
+    hold it (not an agent in the game, departed, not a member of an association) raises LawError; else it is skipped. Returns the
+    holders after."""
+    from charter import dispatch as D
+    from charter import lawlang as L
+    from charter import succession as SU
+    o = office(k, iid, name)
+    if o is None:
+        raise L.LawError(f"no office {iid}.{name}")
+    want = []
+    for a in agents:
+        a = str(a)
+        ok = a in k.w["agents"] and k.w["agents"][a].get("departed") is None and k.w["agents"][a].get("cls") != "observer"
+        if ok and kind_of(k, iid) == "association" and not is_member(k, iid, a):
+            ok = False
+        if not ok:
+            if strict:
+                raise L.LawError(f"{a} cannot hold {iid}.{name} (not a living agent" + (f" and member of {iid})" if kind_of(k, iid) == "association" else ")"))
+            continue
+        if a not in want:
+            want.append(a)
+    right = o["id"]
+    n_vac = len(SU.state(k)["vacancies"]) if SU.on(k) else 0
+    for h in [h["holder"] for h in o["holders"] if h["holder"] not in want]:
+        with SU.cause(k, "removed"):
+            try:
+                k.apply("revoke_right", agent=h, right=right, **({"lid": by} if by else {}))
+            except D.PhysicsError as e:
+                if strict:
+                    raise L.LawError(f"cannot remove {h} from {right}: {e.reason}")
+    got = []
+    for a in want:
+        if a in holders(k, iid, name):
+            continue
+        try:
+            out = k.apply("grant_right", agent=a, right=right, **({"lid": by} if by else {}))
+        except D.PhysicsError as e:
+            if strict:
+                raise L.LawError(f"cannot seat {a} in {right}: {e.reason}")
+            continue
+        if out.ok and a in holders(k, iid, name):
+            got.append(a)
+    if SU.on(k) and got:                                                # the vacancies this reseat made are filled by it
+        for vac in SU.state(k)["vacancies"][n_vac:]:
+            if vac["institution"] == iid and vac["office"] == name and vac["status"] == "open":
+                vac["status"] = "filled"
+        for a in got:
+            k.log("office_filled", a, {"institution": iid, "office": name, "right": right, "successor": a, "rule": "reseat",
+                                       "source": by, "from": None}, vis="public")
+    return holders(k, iid, name)
+
+
+def law_api(k, lid) -> dict:
+    """reseat(institution, office, agents) for law lid (Kernel.api_for adds it when amend_on): only the calling law's own
+    institution's offices. True when the office is held by exactly `agents` afterwards; False (a law_call_failed record) else."""
+    from charter import jurisdictions as J
+    from charter import lawlang as L
+
+    def reseat_(institution, office_, agents):
+        iid = str(institution)
+        name = str(office_)
+        if name.startswith(f"{iid}."):
+            name = name[len(iid) + 1:]
+        from charter import laweffects as LE
+        if not isinstance(agents, (list, tuple)):
+            agents = [agents]
+        try:
+            if J.law_jur(k, lid) != iid:
+                raise L.LawError(f"a law reseats only offices of its own institution ({J.law_jur(k, lid)}), not {iid}")
+            after = reseat(k, iid, name, list(agents), by=lid, strict=True)
+        except L.LawError as e:
+            LE.note_reason(k, str(e))
+            return False
+        if sorted(after) != sorted(dict.fromkeys(str(a) for a in agents)):
+            LE.note_reason(k, f"{iid}.{name} is held by {', '.join(after) or 'nobody'} (a law blocked a change)")
+            return False
+        return True
+
+    return {"reseat": reseat_}
 
 
 def usable_grants(k, iid, name) -> list:

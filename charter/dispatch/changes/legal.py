@@ -140,6 +140,16 @@ def do_propose(k, jurisdiction, draft, actor=None, preview=None) -> dict:
     if str(law["author"]).startswith("law:"):                          # P3.4: proposed by a law; it has no dry run
         extra["by_law"] = law["author"][4:]
         preview = preview if preview is not None else []
+    if preview is not None and not str(law["author"]).startswith("law:"):
+        from charter import laweffects as LE                           # law.effects: the preview says when the draft does nothing
+        dry = k.__dict__.pop("_dry_enact", None)
+        if LE.effects_on(k) and not law.get("repeal_target") and dry and dry[0] == lid and dry[1] is not None:
+            mine = tuple(f"law {x}: " for x in (lid, law.get("amends")) if x)
+            rest = [x for x in dry[1] if not str(x).startswith(mine)]       # the enactment's own diff in the dry run
+            extra["at_enactment"] = rest[:20]
+            tgt = k.w["laws"].get(law.get("amends")) or {}
+            if LE.inert("amend" if law.get("amends") else "enact", rest, tgt.get("code"), law["code"]):
+                extra["inert"] = True
     sims = similar_laws(k, lid)                                        # law.v2 only: a duplicate is noted, not refused
     if sims:
         extra["similar_to"] = sims
@@ -205,7 +215,17 @@ def do_veto(k, jurisdiction, law, member) -> dict:
 def do_enact(k, jurisdiction, law, via) -> dict:
     """A law comes into force: loaded, appended to the enactment order, its on_enact run, published. With jurisdictions on, a law
     of no existing jurisdiction is void and a hidden one's dormant (J.intercept_enact). A repeal law repeals its target instead."""
-    lid = law
+    from charter import laweffects as LE
+    rec = k.w["laws"][law]
+    if rec["repeal_target"]:                                            # its repeal reports its own effect
+        return _do_enact(k, law)
+    with LE.effect(k, "enact", law) as ctl:                            # law.effects: a law_effect event (laweffects.effect)
+        out = _do_enact(k, law)
+        ctl["skip"] = rec["status"] != "active"                         # void or dormant: nothing came into force
+    return out
+
+
+def _do_enact(k, lid) -> dict:
     if "jur" in k.w and J.intercept_enact(k, lid):                     # jurisdictions: void (no such jurisdiction) or dormant (hidden)
         return {"status": k.w["laws"][lid]["status"]}
     rec = k.w["laws"][lid]
@@ -234,6 +254,12 @@ def do_enact(k, jurisdiction, law, via) -> dict:
 def do_repeal(k, jurisdiction, law, by_law, via) -> dict:
     """A law in force stops: its on_repeal runs, the procedures it set fall back to the ones they replaced (if their law is still in
     force), the actions it defined go, and the repeal is published."""
+    from charter import laweffects as LE
+    with LE.effect(k, "repeal", law, old_code=k.w["laws"][law]["code"], by=by_law):   # law.effects: a law_effect event
+        return _do_repeal(k, law, by_law, via)
+
+
+def _do_repeal(k, law, by_law, via) -> dict:
     rec = k.w["laws"][law]
     ns = k.ns.get(law, {})
     if "on_repeal" in ns:
@@ -263,6 +289,15 @@ def do_repeal(k, jurisdiction, law, by_law, via) -> dict:
 def do_amend(k, jurisdiction, law, old_sha, new_sha, diff, via, by, patch=None) -> dict:
     """A law's code is replaced (the Fixer's patch): reloaded and re-bound (procedures, callbacks, penalties run the new code), a
     suspended law back in force; a patch that fails to load is undone and logged. The diff is public unless the Fixer is hidden."""
+    from charter import laweffects as LE
+    old = k.w["laws"][law]["code"]
+    with LE.effect(k, "amend", law, old_code=old, **({"proposal": patch.get("proposal")} if patch.get("proposal") else {})) as ctl:
+        out = _do_amend(k, law, via, by, patch)
+        ctl["skip"] = not out.get("ok")
+    return out
+
+
+def _do_amend(k, law, via, by, patch) -> dict:
     rec = k.w["laws"][law]
     old = rec["code"]
     rec["code"] = patch["code"]
@@ -283,6 +318,9 @@ def do_amend(k, jurisdiction, law, old_sha, new_sha, diff, via, by, patch=None) 
             return {"ok": False, "error": str(e)}
         k.log("patch_failed", patch["by"], {"law": law, "error": str(e)}, vis="public")
         return {"ok": False}
+    from charter import institutions as IN
+    if IN.amend_on(k):                                                  # institutions.amend_offices: offices follow the new code
+        IN.on_law_amended(k, law, old)
     if via == "procedure":                                              # P3.4: an amendment passed by the procedure (law.v2)
         from charter import linker as LK
         vs = rec.get("versions") or []
