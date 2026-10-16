@@ -62,7 +62,7 @@ from charter import export as X
 DEFAULT_REPO = "zachmacsmith/charter-runs"
 STAGING = Path(__file__).resolve().parent / "out" / "_publish"
 # raw files never published: pickles execute code when loaded; the rest are reports rebuilt from the data
-NEVER = re.compile(r"(^|/)(checkpoints?(/|$)|.*\.pkl$|.*\.pickle$|abandoned_calls\.jsonl$)")
+NEVER = re.compile(r"(^|/)(checkpoints?(/|$)|claude_sessions(/|$)|.*\.pkl$|.*\.pickle$|abandoned_calls\.jsonl$)")   # claude_sessions: the CLI's account file and transcripts (email, account ids, injected context)
 REPORTS = {"story.html", "messages.md", "overview.md", "observer.md", "spec_outline.md"}
 CARD_KEYS = ("title", "description", "tags", "featured", "usable_rounds", "validity", "era")
 STORY_KEYS = ("title", "subtitle", "quote", "agent", "run_id", "class", "model", "mood", "round")
