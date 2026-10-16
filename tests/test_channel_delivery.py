@@ -64,7 +64,7 @@ def line(k, aid, prefix):
 
 # ---------------------------------------------------------------------- defaults: nothing changes
 def test_defaults_add_nothing_to_records_and_keep_the_old_manual():
-    k = world()
+    k = world("channels.business=false")                                          # engine 16 turns it on; off reproduces before
     a = people(k, 1)[0]
     ch = board(k, a)
     assert "delivery" not in ch and "followed_by" not in ch and CH.delivery(k, ch) == "push"
@@ -175,7 +175,7 @@ def test_a_cut_channel_post_points_at_read_and_search_board_finds_channel_posts(
     text = CX.feed_layer(k, b, since, 3000)[0]
     assert '...(cut: read {"channel": "guild"})' in text and "search_board" not in text
     assert "copper" in CX.search_board(k, b, "copper") and "No public posts" not in CX.search_board(k, b, "copper")
-    old = world("context.enabled=true")                                            # off: as before
+    old = world("context.enabled=true", "channels.business=false")                 # off: as before
     a, b, _, _ = people(old)
     board(old, a, name="guild")
     A.act(old, b, "join_channel", {"channel": "guild"})
@@ -208,7 +208,7 @@ def test_narrowing_readers_or_retention_logs_a_public_channel_resealed():
     assert len(events(k, "channel_resealed")) == n
     A.act(k, a, "set_channel", {"channel": "news", "field": "retention", "value": "joined"})
     assert events(k, "channel_resealed")[-1]["data"]["key"] == "retention"
-    off = world()
+    off = world("channels.business=false")
     a, b, _, _ = people(off)
     board(off, a, name="news")
     A.act(off, a, "set_channel", {"channel": "news", "field": "readers", "value": {"agents": [b]}})
