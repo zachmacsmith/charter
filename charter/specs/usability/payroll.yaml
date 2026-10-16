@@ -1,0 +1,108 @@
+# Usability test: payroll and labour (review 31, per-system agent tests; the Payroll preset, charter/standing.py). Can agents
+# find, understand and use employment (hire, fire, set_wage, post_job; apply, quit with notice, strike) without coaching?
+# Situation: the Ridge Timber Company (A1) holds the exclusive right to the village's timber camp; only its members may fell
+# there. Oren (its owner: the head office, which controls the treasury and runs hire, fire, set_wage and post_job) employs five
+# workers on a Payroll at 2 pennies a round each (salary), and the company takes half of what each worker fells (the cut). Two
+# villagers (Faye, Gus) have no job: they forage, and may apply (join_contract A1) to be hired. The company's only income is a
+# standing order from the village council (a J0 Grant: 14 pennies a round for its timber) that starts paying in round 3, and the
+# treasury starts with 12 pennies: round 1's wages are paid, round 2's are mostly not (arrears are recorded and shown in each
+# worker's terms line, "Owed to you"), and from round 3 the arrears are paid off first. Hiring both job-seekers at 2 would take
+# the wage bill to 14 a round, exactly the council's order, so a hire has a real cost. Food comes from foraging (forests at the
+# usual capacity) and the food each founder starts with; wages and timber are what make a worker richer. Nothing in any prompt
+# says to hire, apply or quit.
+# Success: the job-seekers apply and the owner hires (hire with a wage) or posts a job; wages are paid by the payroll with no
+# action; workers notice the round-2 arrears (DMs to Oren, payroll_notice, leave_contract, felling less: a strike) and the owner
+# answers (explains, cuts or raises wages with set_wage, fires with severance); nobody quits without notice once paid again.
+# Metrics (events.jsonl): move events with why law:<Payroll> (W salary legs, O harvest cuts) by worker and round; the Payroll
+# state's owed by round (checkpoints); contract_joined / applicant lines / contract_notice ("enrolled", "removed", "set wage",
+# "JOB ..." gazettes); contract_leave_pending / contract_left / contract_breach ("left Payroll without notice"); harvests at the
+# timber camp by worker per round (a strike shows as a drop after round 2); DMs mentioning wages or pay; subsistence_round
+# (stages, deaths). Interviews at the end of rounds 2 and 8 (were you paid; what is owed to you; what can you do about it).
+# Mostly Haiku, two Sonnet seats (the owner and one worker). A system passes when the cheapest seats use it correctly.
+extends: [nature_subsistence, charter/specs/fragments/channels_v2.yaml]
+rounds: 8
+parallel_calls: 8
+agents:
+  worker: 8
+  scientist: 0
+  legislator: 0
+  media: 0
+  board: 0
+  fixer: 0
+  names: [Oren, Ash, Bea, Cole, Dina, Ezra, Faye, Gus]
+models:
+  mix: all_weak
+  pool: {strong: claude-haiku-5-5, weak: claude-haiku-5-5, strongest: claude-haiku-5-5}
+  overrides:
+    Oren: claude-sonnet-5-5       # the owner
+    Ezra: claude-sonnet-5-5       # a worker
+goals:
+  explicit:
+    Oren: Wealth
+    Ash: Wealth
+    Bea: Wealth
+    Cole: Wealth
+    Dina: Wealth
+    Ezra: Wealth
+    Faye: Wealth
+    Gus: Wealth
+institutions: {unified: true, grants: true, succession: true, office_control: true}
+contracts: {enabled: true, max_laws: 6, max_own: 12}
+subsistence:
+  enabled: true
+  start_food: [6, 8]
+chronicle:
+  namespace: usability_payroll
+life:
+  age_structure: elapsed          # founders in mid-life, so nobody dies of old age in a short test
+  elapsed: [20, 60]
+  ensure_maker: false             # no Makers, so no births in an 8-round test
+roles: {enabled: true, counts: {spy: 0, assassin: 0, scholar: 0, maker: 0, media: 0}}
+conflict: {enabled: false}        # a usability test of labour, not of force
+regime: {base: null, name: payroll_usability, constitution: nature}   # no state-of-nature regime: it forces conflict on
+start:
+  currencies:
+    - {name: penny, issuer: J0}
+  institutions:
+    - id: J0
+      treasury: {penny: 120}      # the council's purse: the standing order for the company's timber (14 a round from round 3)
+    - id: A1
+      name: the Ridge Timber Company
+      founder: Oren
+      members: [Ash, Bea, Cole, Dina, Ezra]
+      admission: closed
+      procedure: founder
+      charter: "The Ridge Timber Company fells the village's timber: only its members may work the timber camp. It pays its
+        workers wages and keeps a share of what they fell; the village council buys its timber with a standing order."
+      offices:
+        head:
+          title: Owner
+          holders: [Oren]
+          controls: [treasury]
+          duties: "Run the Ridge Timber Company: hire and fire its workers, set their wages, post jobs, and keep the treasury able
+            to pay what it owes."
+      treasury: {penny: 12}
+  holdings:
+    Oren: {penny: 10}
+    Ash: {penny: 3}
+    Bea: {penny: 3}
+    Cole: {penny: 3}
+    Dina: {penny: 3}
+    Ezra: {penny: 3}
+    Faye: {penny: 3}
+    Gus: {penny: 3}
+  camp_rights:
+    - {resource: timber, members: A1, exclusive: true}
+  contracts:
+    - template: Grant           # a J0 Grant with no roster never runs (its polity form binds only roster entries): Oren on the
+      in: J0                    # roster makes the leg run once a round and shows him the order's terms line
+      roster: {Oren: {}}
+      params:
+        LABEL: Council timber order
+        ROLE: contractor
+        TERMS: {recipient: "assoc:A1", goods: penny, qty: 14, every: 1, keep: 0}
+        LEGS: [{id: G, from: treasury, to: recipient, item: goods, qty: qty, every: every, keep: keep, first: 2}]
+    - template: Payroll
+      in: A1
+      roster: {Ash: {wage: 2}, Bea: {wage: 2}, Cole: {wage: 2}, Dina: {wage: 2}, Ezra: {wage: 2}}
+      params: {OFFICE: head, TERMS: {cut: 0.5}}
