@@ -1,0 +1,108 @@
+# Usability test: contracts and subscriptions (review 31, per-system agent tests; charter/standing.py). Can agents find,
+# understand and use standing contracts (allowances, notice, renegotiation) without coaching?
+# Situation: a village shop (A1, the Corner Shop: Mara keeps its treasury and store S1) sells food by subscription (the Board
+# preset: 1 food a round for 2 pennies, paid from each subscriber's allowance) and buys it from three farmers on a Supply Contract
+# (each delivers up to 2 food a round into S1 from its food allowance and is paid per unit; Dell's price is set lower than the
+# others', 1 against 1.5, so one producer has bad terms to renegotiate or quit with notice). Four consumers hold pennies and a
+# little food; two start subscribed (members with an allowance), two are not members yet (the shop is open: join_contract A1,
+# then set_allowance). Forests are thin, so foraging alone is a poor living; the farmers' plots carry a crop from round 0 and
+# must be re-sown to keep delivering. The shop pays more for supply than it takes in at the set prices (about 8 out, 4-8 in a
+# round on 30 pennies), so prices or rosters need attention before it runs into arrears. Nobody is told to use any of this.
+# Success: the unsubscribed consumers join and set an allowance, subscribers keep theirs funded; farmers keep their food
+# allowances and deliver (or give supply_notice rather than walk out); Dell (or the shop) renegotiates the price (supply_price,
+# a DM, notice); misses and arrears are noticed (a reaction within a round or two); the shopkeeper adjusts board_price or
+# supply_price to keep the shop solvent.
+# Metrics (events.jsonl): contract_joined / contract_allowance by consumer and round (first subscription); move events with
+# why law:<Board> (food to subscribers) and law:<Supply> (food into S1, pennies to farmers); contract_pull; contract_notice
+# (notice, price changes: "set price"); contract_breach and the Supply law's state missed / could / owed; contract_left; DMs
+# that mention price or terms; subsistence_round (stages, deaths); food held per round (snapshots). Interviews at the end of
+# rounds 1 and 8 for comprehension (what do you pay, what do you get, how do you stop).
+# Mostly Haiku, two Sonnet seats (the shopkeeper and one consumer). A system passes when the cheapest seats use it correctly.
+extends: [nature_subsistence, charter/specs/fragments/channels_v2.yaml]
+rounds: 8
+parallel_calls: 8
+agents:
+  worker: 8
+  scientist: 0
+  legislator: 0
+  media: 0
+  board: 0
+  fixer: 0
+  names: [Mara, Bryn, Cass, Dell, Edda, Fion, Gale, Hob]
+models:
+  mix: all_weak
+  pool: {strong: claude-haiku-5-5, weak: claude-haiku-5-5, strongest: claude-haiku-5-5}
+  overrides:
+    Mara: claude-sonnet-5-5       # the shopkeeper
+    Gale: claude-sonnet-5-5       # a consumer, not yet subscribed
+goals:
+  explicit:
+    Mara: Wealth
+    Bryn: Wealth
+    Cass: Wealth
+    Dell: Wealth
+    Edda: Survive
+    Fion: Survive
+    Gale: Survive
+    Hob: Survive
+institutions: {unified: true, grants: true, succession: true, office_control: true}
+contracts: {enabled: true, max_laws: 6, max_own: 12}
+subsistence:
+  enabled: true
+  start_food: [4, 5]
+  forest: {capacity_per_agent: 2.5}
+  fields: {enabled: true, plots_per_agent: 2.0, plots_max_per_agent: 3.0}
+chronicle:
+  namespace: usability_contracts
+life:
+  age_structure: elapsed          # founders in mid-life, so nobody dies of old age in a short test
+  elapsed: [20, 60]
+  ensure_maker: false             # no Makers, so no births in an 8-round test
+roles: {enabled: true, counts: {spy: 0, assassin: 0, scholar: 0, maker: 0, media: 0}}
+conflict: {enabled: false}        # a usability test of contracts, not of force
+regime: {base: null, name: contracts_usability, constitution: nature}   # no state-of-nature regime: it forces conflict on
+start:
+  currencies:
+    - {name: penny, issuer: J0}
+  institutions:
+    - id: A1
+      name: the Corner Shop
+      founder: Mara
+      members: [Bryn, Cass, Dell, Edda, Fion]
+      admission: open
+      procedure: founder
+      charter: "The Corner Shop buys food from the village's farmers and sells it to subscribers. Anyone may join it."
+      offices:
+        head:
+          title: Shopkeeper
+          holders: [Mara]
+          controls: [treasury, store:S1]
+          duties: "Run the Corner Shop: keep its store stocked and its treasury solvent, set what subscribers pay (board_price) and
+            what suppliers are paid (supply_price), and enrol or drop suppliers."
+      treasury: {penny: 30}
+  stores:
+    - {id: S1, owner: A1, food: 30, capacity: 150, name: the Corner Shop's store}
+  holdings:
+    Mara: {penny: 15}
+    Bryn: {penny: 10, food: 8}
+    Cass: {penny: 10, food: 8}
+    Dell: {penny: 10, food: 8}
+    Edda: {penny: 20}
+    Fion: {penny: 20}
+    Gale: {penny: 22}
+    Hob: {penny: 22}
+  farms:
+    - {owner: Bryn, camp: fields, plots: 2, crops: true}
+    - {owner: Cass, camp: fields, plots: 2, crops: true}
+    - {owner: Dell, camp: fields, plots: 2, crops: true}
+  contracts:
+    - template: Board
+      in: A1
+      params: {OFFICE: head, TERMS: {store: "store:S1", price: 2, ration: 1}}
+      allowances: {Edda: {penny: 2}, Fion: {penny: 2}}
+    - template: Supply Contract
+      in: A1
+      roster: {Bryn: {qty: 2}, Cass: {qty: 2}, Dell: {qty: 2, price: 1}}
+      params: {OFFICE: head, TERMS: {store: "store:S1", price: 1.5, keep: 2}}
+      allowances: {Bryn: {food: 2}, Cass: {food: 2}, Dell: {food: 2}}
+      escrow: {Bryn: {penny: 5}, Cass: {penny: 5}, Dell: {penny: 5}}
