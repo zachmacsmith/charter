@@ -646,6 +646,8 @@ DOCS = {
                               "read_library lists it and shows code, each for an action) | none (no library text, no lookup)",
     "goals.show_rules": "show institution goals' scoring rules in the goal text (true: today's prompts); false: agents see the aim "
                         "only, and the score stays a hidden measure (user, 9 Oct)",
+    "goals.none": "the no-goal control: agents get no private goal, and every goal or score line is left out of their prompts (header, strategy and closing nudges, the manual's goals section, final-round guesses)",
+    "personality.none": "no temperament text in the prompts (with goals.none: agents' own tendencies inside the world)",
     "goals.outcome_only": "review 14 A: draw only outcome goals (wealth, rank, security, influence, following, lineage, the commons; "
                           "goal_registry.GOAL_CLASS): never a goal naming an institution or an action recipe, no institution or "
                           "counter goals",
