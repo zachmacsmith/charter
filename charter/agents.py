@@ -535,6 +535,9 @@ def render_event(k, e, viewer=None) -> str | None:
         return None
     if t == "proposal":
         pv = ("\n  Effect preview (3-round dry run): " + "; ".join(d["preview"][:20])) if "preview" in d else ""
+        if "at_enactment" in d:                                         # law.effects: what the enactment itself changes
+            pv += "\n  At enactment: " + ("; ".join(d["at_enactment"]) or "no change") + (
+                " (INERT: as written it changes nothing in the world and installs no hook that acts later)" if d.get("inert") else "")
         if "amends" in d or "by_law" in d:                              # law.v2 (P3.4): amendments and proposals by law
             by = who or f"law {d['by_law']}"
             what = f"{d['law']}, an amendment of {d['amends']} ({d['class']}, rank {d.get('rank')}; reason: {d.get('reason') or '-'})" \
@@ -556,6 +559,9 @@ def render_event(k, e, viewer=None) -> str | None:
     if t in ("enact", "repeal", "vetoed", "veto_window", "proposal_failed", "law_error", "patched", "patch_submitted", "patch_failed", "request_fix",
              "amended"):
         return f"{tag} {t}: " + json.dumps({x: y for x, y in d.items() if x != 'diff'} | ({"diff": d['diff'][:1500]} if 'diff' in d else {}))
+    if t in ("law_effect", "law_call_failed", "law_expectation_failed"):   # law.effects (charter/laweffects.py)
+        from charter import laweffects as LE
+        return LE.render(k, e, tag)
     if t == "procedure_restored":
         return f"{tag} the {d['cls']} procedure set by law {d['law']} applies again, after the repeal of {d['after_repeal_of']}"
     if t == "veto_vote":

@@ -245,6 +245,15 @@ E("code_act", "code", "record", "monitor", "silent", None,
        "an amendment (run: source) or repealed (run: repealed); monitor-only, so difftest --ignore-code-acts can drop it")
 E("amended", "dispatch", "legal_act", "public", "event", "agents", primitive="amend",
   note="law.v2 (P3.4): an amendment passed by the procedure replaced a law's code (same id, state, public; a new version)")
+# laws that work or fail loudly (charter/laweffects.py; docs/review/31_institutions/07_rules_courts.md §4)
+E("law_effect", "laweffects", "legal_act", "public|monitor", "event", "agents", primitive="enact",
+  note="law.effects: what an enactment, amendment or repeal changed in the world (a view diff: holdings, rights, offices, stores, "
+       "treasuries, rules) and `inert` when nothing changed and no hook of the law acts later; monitor-only at setup")
+E("law_call_failed", "laweffects", "summary", "parties|monitor", "event", "agents", primitive="move",
+  note="law.call_failures: a law's move, fine, grant, revoke, suspend, burn or reseat failed (with the reason); told to the law's "
+       "author and its institution's officers, once per law, function and round")
+E("law_expectation_failed", "laweffects", "legal_act", "public|monitor", "event", "agents", primitive="enact",
+  note="law.expects: a law's declared `expects` does not hold right after its enactment or amendment (the law stays in force)")
 E("import_pinned", "linker", "record", "monitor", "silent", None, primitive="amend",
   note="law.v2 (D-8): a following import auto-pinned; its public face is a gazette by the importing law")
 E("request_fix", "actions", "legal_act", "public", "official", "agents", act="request_fix", primitive="request_fix")

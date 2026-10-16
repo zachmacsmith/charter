@@ -577,6 +577,25 @@ def test_runs_of_engine_13_replay_identically(name, tmp_path):
     from charter import agents as AG
     from charter import runner
     from charter import settings as ST
+    from charter import laweffects as LE                                # laws that work or fail loudly: off as before (until the
+    from charter import schema as SC                                     # merge lists them in provenance.ENGINE_FLIPS)
+    saved = {x: SC.EXTRA[x] for x in LE.BEFORE}
+    SC.EXTRA.update(LE.BEFORE)
+    try:
+        _engine_13_run(name, tmp_path)
+    finally:
+        SC.EXTRA.update(saved)
+
+
+def _engine_13_run(name, tmp_path):
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    import charter_golden_cases as GC
+    import test_charter_golden as TG
+    from charter import agents as AG
+    from charter import runner
+    from charter import settings as ST
     with ST.use({"engine_version": 13, "defaults": {}}):
         inst = GC.instance(name)
     inst["settings"] = {"engine_version": 13, "defaults": {}}             # the run plays under them (runner.run: frozen_run)

@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from charter import laweffects as LE     # laws that work or fail loudly: these scenarios replay the behaviour before (LE.OFF)
+
 FIXTURE = Path(__file__).parent / "fixtures" / "charter_dispatch_hooks.json"
 
 HOOK_LAWS = ['start_laws=["Harvest Levy", "Transfer Tax", "Bribery Disclosure", "Moderation", "Open Data", "Research Grant", '
@@ -52,7 +54,7 @@ def hook_calls(preset, seed=1, rounds=3, sets=()):
     calls, orig, call = _logging_calls()
     Kernel.call = call
     try:
-        sp = S.apply_overrides(S.load(preset), [f"rounds={rounds}", "shared_archive.enabled=false", *sets])
+        sp = S.apply_overrides(S.load(preset), [f"rounds={rounds}", "shared_archive.enabled=false", *LE.OFF, *sets])
         inst = generator.generate(sp, seed)
         inst["run_id"] = f"hooklog_{preset}"
         with tempfile.TemporaryDirectory() as d:
@@ -135,7 +137,8 @@ def scenario() -> dict:
     calls, orig, call = _logging_calls()
     Kernel.call = call
     try:
-        sp = S.apply_overrides(S.load("E4"), ["conditions.law_reads_dms=true", "channels.encryption=true", "shared_archive.enabled=false"])
+        sp = S.apply_overrides(S.load("E4"), ["conditions.law_reads_dms=true", "channels.encryption=true", "shared_archive.enabled=false",
+                                                 *LE.OFF])
         k = Kernel(generator.generate(sp, 1))
         roster = k.roster()
         workers = [a for a in roster if any(r.startswith("harvest:") for r in k.w["agents"][a]["rights"])]
@@ -425,7 +428,7 @@ def legal_scenario(sets=()) -> dict:
     calls, orig, call = _logging_calls()
     Kernel.call = call
     try:
-        sp = S.apply_overrides(S.load("E4"), ["agents.fixer=1", "shared_archive.enabled=false", *sets])
+        sp = S.apply_overrides(S.load("E4"), ["agents.fixer=1", "shared_archive.enabled=false", *LE.OFF, *sets])
         inst = generator.generate(sp, 1)
         inst["law_level"] = "L4"
         k = Kernel(inst)

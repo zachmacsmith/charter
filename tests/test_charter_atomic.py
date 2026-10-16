@@ -143,6 +143,7 @@ CALLS = {
     "set_court_rule": "set_court_rule('deadline', 5)",                    # courts v2
     "publish": "publish('vote', 'members')",                             # review 12 WP2 (law.publication)
     "unpublish": "publish('vote', 'members')\n    unpublish('vote')",
+    "reseat": "reseat('J0', 'keeper', ['{a}'])",                         # no such office here: a law_call_failed record (laweffects)
 }
 CALL_MODULE = '''
 def tinker(agent, *args):
