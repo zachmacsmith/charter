@@ -991,20 +991,37 @@ def change_hunt(k, agent, camp, party, effort) -> dict:
     return {"camp": camp, "party": party, "effort": h["effort"]}
 
 
-def act_farm(k, aid, camp, sow=None, reap=None, plot=None, plots=None, **kw):
-    """The farm action (S2; engine 14): sow or reap at a fields camp, or set a farm (allow, disallow, share, deliver, give; "as":
-    an institution's farm) (charter/camptypes/fields.py)."""
+def _farm_camp(k, aid, camp, verb):
+    """The fields camp a farm action means: the one given, else the only fields camp where the agent works a plot (usability test,
+    16 Oct: agents left out "camp" and got a Python error); otherwise a plain error naming the choices."""
+    if camp:
+        return camp
     from charter.camptypes import fields as FL
+    mine = [cid for cid in fields_camps(k)
+            if any(FL.may_work(k, aid, k.w["camps"][cid], p) is None and p.get("holder") is not None
+                   for p in k.w["camps"][cid].get("plots") or [])]
+    if len(mine) == 1:
+        return mine[0]
+    raise _err(f'{verb} needs "camp": ' + (f"one of {', '.join(mine)}" if mine else
+                                             f"a fields camp ({', '.join(fields_camps(k)) or 'none here'})"))
+
+
+def act_farm(k, aid, camp=None, sow=None, reap=None, plot=None, plots=None, **kw):
+    """The farm action (S2; engine 14): sow or reap at a fields camp, or set a farm (allow, disallow, share, deliver, give; "as":
+    an institution's farm) (charter/camptypes/fields.py). "camp" may be left out when the agent works plots in one fields camp."""
+    from charter.camptypes import fields as FL
+    if "tend" in kw:
+        raise _err('tending is its own action: tend {"camp": ..., "plot": N}')
     bad = sorted(set(kw) - set(FL.SETTINGS) - {"to", "as"})
     if bad:
-        raise TypeError(f"act_farm() got an unexpected keyword argument {bad[0]!r}")
-    return FL.act(k, aid, camp, sow=sow, reap=reap, plot=plot, plots=plots, **kw)
+        raise _err(f"farm takes sow, reap, plot or plots (or farm settings: {', '.join(sorted(FL.SETTINGS))}), not {bad[0]!r}")
+    return FL.act(k, aid, _farm_camp(k, aid, camp, "farm"), sow=sow, reap=reap, plot=plot, plots=plots, **kw)
 
 
-def act_tend(k, aid, camp, plot=None, plots=None):
-    """tend {"camp", "plot"?}: tend a growing crop (engine 14; charter/camptypes/fields.py)."""
+def act_tend(k, aid, camp=None, plot=None, plots=None):
+    """tend {"camp"?, "plot"?}: tend a growing crop (engine 14; charter/camptypes/fields.py)."""
     from charter.camptypes import fields as FL
-    return FL.act_tend(k, aid, camp, plot=plot, plots=plots)
+    return FL.act_tend(k, aid, _farm_camp(k, aid, camp, "tend"), plot=plot, plots=plots)
 
 
 def act_improve(k, aid, kind, camp=None, plot=None, **kw):

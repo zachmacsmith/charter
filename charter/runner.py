@@ -284,7 +284,7 @@ def _run(inst, policy, out, sandbox, log, resume, live, notices, dry, instance_s
         RG.enact_statutes(k, inst)                                     # a regime's starting statutes (none without a regime)
         rs = RunState(shared_snap=shared_snap, const=const, agents=agents, out=out)
         from charter import start as STT                                # established worlds: the start block's round-0 entries
-        _setup(k, inst, rs, STT.schedule(inst) + list(schedule or []), live, notices, 0, log)   # interventions: --live, --notice, setup
+        _setup(k, inst, rs, IV.merge(STT.schedule(inst), list(schedule or [])), live, notices, 0, log)   # by id: a replay's recorded schedule repeats the start entries
         for name in inst["spec"].get("start_laws") or []:              # library laws in force from round 0 (spec start_laws)
             k.enact(k.new_law(LB.code(name, inst), "constitution"))    # law.library.edition 2: the rewrite (P3.9)
         if (inst["spec"].get("law") or {}).get("v2"):                  # W6d: the legal fingerprint at round 0 (law.v2 worlds only)

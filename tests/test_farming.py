@@ -583,3 +583,29 @@ def test_runs_of_engine_13_replay_identically(name, tmp_path):
     out = runner.run(inst, AG.ScriptedPolicy(GC.CASES[name][1]), tmp_path / name, log=lambda *a: None)
     fp = TG.files_fingerprint(out)
     assert (fp["events.jsonl"], fp["snapshots.json"]) == ENGINE_13[name]
+
+
+# ---------------------------------------------------------------------- usability fixes (the 16 Oct agent test)
+def test_farm_and_tend_without_camp_use_the_agents_one_fields_camp():
+    inst, k = world("nature_farming", rounds=8, seed=1)
+    setup(inst, k)
+    fl = fields(k)
+    set_food(k, "Alder", 5)
+    pl = plot(k, fl, 1)
+    pl.update({"status": "fallow", "seed": 0, "sower": None, "ripe": None})
+    SB.act_farm(k, "Alder", sow=2, plot=1)                               # no "camp": the agent farms in one fields camp
+    assert plot(k, fl, 1)["status"] == "growing" and plot(k, fl, 1)["sower"] == "Alder"
+    SB.act_tend(k, "Alder", plot=1)
+    assert plot(k, fl, 1).get("tends")
+
+
+def test_farm_with_wrong_keywords_says_what_to_do():
+    from charter.actions import ActionError
+    inst, k = world("nature_farming", rounds=8, seed=1)
+    setup(inst, k)
+    with pytest.raises(ActionError, match="tend is its own action|tending is its own action"):
+        SB.act_farm(k, "Alder", tend=1, plot=1)
+    with pytest.raises(ActionError, match="farm takes sow, reap"):
+        SB.act_farm(k, "Alder", plant=1)
+    with pytest.raises(ActionError, match='needs "camp"'):
+        SB.act_farm(k, "Gale", sow=1)                                    # Gale works no farm: name the fields camps

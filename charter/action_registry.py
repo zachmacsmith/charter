@@ -534,8 +534,10 @@ R("farm", "sow food on fields, reap it rounds later; set your farm", "PRODUCE", 
   aliases={"field": "camp", "fields": "camp", "seed": "sow", "qty": "sow", "amount": "sow", "harvest": "reap", "permit": "allow",
            "forbid": "disallow", "for": "as", "institution": "as", "store": "deliver", "plot_ids": "plots"},
   doc='farm {"camp": "camp8", "sow": 2, "plot": null}: sow that much of your food (1 up to the plot\'s seed cap) on a fallow plot '
-      'you may work (yours first, then a farm that lets you, then an open plot; the seed is used up); farm {"camp": "camp8", '
-      '"reap": 4}: reap a ripe crop (a multiple of its seed, more when tended, less on tired soil; another\'s farm takes its share). '
+      'you may work (yours first, then a farm that lets you, then an open plot; the seed is used up; the harvest is about 3x the '
+      'seed, so a full cap pays best); farm {"camp": "camp8", "reap": 4}: reap a ripe crop, one plot per action (more when tended, '
+      'less on tired soil; another\'s farm takes its share; a ripe crop left unreaped loses about half each round). "camp" may be '
+      'left out if you farm in one fields camp. '
       'With a plough, "plots": [a, b] works two plots in one action. A holder sets its farm: farm {"camp": "camp8", "allow": '
       '"<name>"} (or "disallow"), "share": 0-1 (the part of others\' harvests that goes to you), "deliver": "<your store>", "give": '
       '<plot> with "to": "<name or institution>"; add "as": "A1" for an institution\'s farm you manage')
