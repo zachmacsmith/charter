@@ -135,7 +135,7 @@ def test_infer_version_from_git_history():
                              "charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}, "budgets": {"state": 800}},
                              "charter.conflict.DEFAULTS": {"model": "disable"},
                              "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0},
-                             "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14}
+                             "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15}
     s = ST.infer(PV.ENGINE_FLIPS[10]["commits"][0])                      # version 10 (wp/survival-exp) without 8's or 9's flips
     assert s["engine_version"] == 10 and s["defaults"] == {"charter.conflict.DEFAULTS": {"model": "disable"},
                                                            "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}}
@@ -143,6 +143,8 @@ def test_infer_version_from_git_history():
     assert ST.infer_version("0" * 40) is None
 
 
+EXTRA15 = {"law.effects": False, "law.call_failures": False, "law.expects": False,    # engine 15: laws that fail loudly
+           "institutions.amend_offices": False}
 SUB14 = {"game": {"hunt_mode": "shared"}, "forest": {"clearing": 5},                     # engine 14: farming, the individual hunt
          "fields": {"plots_per_agent": 0.4, "plots_max_per_agent": 0.8, "mult": 3.5}}
 
@@ -150,13 +152,13 @@ SUB14 = {"game": {"hunt_mode": "shared"}, "forest": {"clearing": 5},            
 def test_patches_revert_later_flips_only_where_the_snapshot_is_silent():
     p = ST.patches({"engine_version": 3, "defaults": {}})
     assert p == {"charter.context.DEFAULTS": {"memory_text": "v1", "dm_delta": False, "history": {"enabled": False}, "budgets": {"state": 800}},
-                 "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14}
+                 "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15}
     p = ST.patches({"engine_version": 1, "defaults": {"charter.context.DEFAULTS": {"memory_text": "v2"}}})
     assert p == {"charter.channels.DEFAULTS": {"delivery": "pull"},
                  "charter.context.DEFAULTS": {"dm_delta": False, "history": {"enabled": False}, "budgets": {"state": 800}},
-                 "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14}
-    assert ST.patches({"engine_version": 7, "defaults": {}}) == {"charter.context.DEFAULTS": {"budgets": {"state": 800}}, "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14}
-    assert ST.patches({"engine_version": 9, "defaults": {}}) == {"charter.context.DEFAULTS": {"budgets": {"state": 800}}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14}           # engine 10: review 23's scoring fixes
+                 "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15}
+    assert ST.patches({"engine_version": 7, "defaults": {}}) == {"charter.context.DEFAULTS": {"budgets": {"state": 800}}, "charter.conflict.DEFAULTS": {"model": "disable"}, "charter.jurisdictions.DEFAULTS": {"admission_rounds": 0}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15}
+    assert ST.patches({"engine_version": 9, "defaults": {}}) == {"charter.context.DEFAULTS": {"budgets": {"state": 800}}, "charter.goals.SCORING_DEFAULTS": {"fixes": False}, "charter.subsistence.DEFAULTS": SUB14, "charter.schema.EXTRA": EXTRA15}           # engine 10: review 23's scoring fixes
     with ST.use({"engine_version": 1, "defaults": {}}):
         assert CX.DEFAULTS["memory_text"] == "v1" and CX.cfg({})["dm_delta"] is False
         assert CX.DEFAULTS["history"]["enabled"] is False and CX.DEFAULTS["history"]["chunk"] == 3   # the rest of the block kept
@@ -170,6 +172,8 @@ def test_old_run_resumes_under_the_defaults_of_its_git_sha(tmp_path, monkeypatch
     with monkeypatch.context() as m:                                  # "the old code"
         _flip(m)
         m.setitem(__import__("charter.goals").goals.SCORING_DEFAULTS, "fixes", False)   # engine 3 predates engine 10's flip too
+        for key in EXTRA15:                                               # and engine 15's
+            m.setitem(__import__("charter.schema").schema.EXTRA, key, False)
         old_ref = runner.run(_inst(), AG.ScriptedPolicy(1), tmp_path / "old_ref", **QUIET)
         old = runner.run(_inst(), AG.ScriptedPolicy(1), tmp_path / "old", until=1, **QUIET)
     inst = json.loads((old / "instance.json").read_text())

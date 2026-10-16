@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 14
+ENGINE_VERSION = 15
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -114,6 +114,14 @@ ENGINE_FLIPS = {
                  "improvements with upkeep, skills, the plough, clear (forest -> field), crop shocks; fields stay off by default. The "
                  "hunt draws per hunter (game.hunt_mode individual; shared: one quarry per party, as before); felling no longer clears "
                  "plots"},
+    15: {"commits": ["524646a674ced6e5bb4c6196e9055367b75e720b"],
+         "flips": [("charter.schema.EXTRA", ("law.effects",), False, True),
+                   ("charter.schema.EXTRA", ("law.call_failures",), False, True),
+                   ("charter.schema.EXTRA", ("law.expects",), False, True),
+                   ("charter.schema.EXTRA", ("institutions.amend_offices",), False, True)],
+         "note": "laws that work or fail loudly (docs/review/31_institutions/07_rules_courts.md §4): amendments update offices "
+                 "(holder edits refused unless institutions.reseat apply; reseat() law function), law_effect events with inert "
+                 "flags, failed law calls recorded, amendment previews with the enactment diff, expects postconditions"},
 }
 
 
