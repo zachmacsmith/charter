@@ -141,8 +141,9 @@ class Forest(CampType):
         return (f"An open forest (no right needed) with plants and game. harvest {{\"camp\": \"{cid}\"}} forages plants: up to "
                 f"{p['yield']:g} food x stock/capacity per action (less when you are hungry; foraging never takes the last "
                 f"{p['refuge']:.0%}). hunt {{\"camp\": \"{cid}\", \"party\": \"<name>\"}} hunts game, paid at the end of the round: "
-                + hunt + fell + clear + f"At most {p['per_round']} forest actions (forage, hunt, fell or clear) "
-                "per agent per round. Plants regrow fast, game slowly; both regrow faster at middling stocks than when stripped.")
+                + hunt + fell + clear + f"At most {p['per_round']} forest actions "
+                + ("(forage, hunt, fell or clear) " if clear else "(forage, hunt or fell) ")
+                + "per agent per round. Plants regrow fast, game slowly; both regrow faster at middling stocks than when stripped.")
 
     def state_line(self, k, aid) -> str:
         from charter import subsistence as SB

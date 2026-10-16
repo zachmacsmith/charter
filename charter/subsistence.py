@@ -647,15 +647,15 @@ def rules_text(inst) -> str:
     src, after = [], []
     if forests:
         sea, g = c["seasons"], c["game"]
-        hunt = ("shared by effort; parties of 3 to 6 get the most food per hunter, bigger ones share one quarry more thinly"
+        hunt = ("shared by effort; parties of 3 to 6 get the most food per hunter, bigger ones share one quarry more thinly, and "
                 if g.get("hunt_mode", "shared") == "shared" else
                 "each hunter keeps its own catch; the bigger the party the better each hunter's chances, so a bigger party takes "
-                "more in all, though each extra hunter adds less (parties of 4 to 8 get the most per hunter)")
+                "more in all, though each extra hunter adds less (parties of 4 to 8 get the most per hunter); ")
         src.append(f"forests {', '.join(forests)} (open commons with two stocks. Plants: harvest {{\"camp\": ...}} forages them at "
                    "once, more when the plants are thick, less as they thin. Game: hunt {\"camp\": ..., \"party\": \"<name>\"} hunts, "
                    f"paid at the end of the round; alone you mostly catch small game (about {float(g['small']['food']):g} food), "
                    f"while hunters who name the same party hunt together and have better chances of a deer "
-                   f"({float(g['medium']['food']):g} food) or a large animal ({float(g['large']['food']):g} food), " + hunt + "; "
+                   f"({float(g['medium']['food']):g} food) or a large animal ({float(g['large']['food']):g} food), " + hunt +
                    "fewer animals mean fewer kills. Plants regrow within a few rounds, game over many, and both regrow fastest at "
                    "middling stocks, so a stripped forest recovers slowly. \"fell\": true cuts timber and shrinks the forest)")
         if sea.get("enabled"):

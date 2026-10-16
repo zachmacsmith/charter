@@ -88,6 +88,11 @@ def test_fields_off_no_farming_action_or_word():
     for word in ("farm", "plot", "tend {", "clear {"):
         assert word not in text, word
     assert "keeps its own catch" in SB.rules_text(inst)                   # engine 14: the hunt's text follows its mode
+    from charter import agents as AG
+    assert "draws its own catch" in AG.action_doc("hunt", inst, a)
+    inst2, _ = world(extra=(SMALL, "subsistence.game.hunt_mode=shared"))
+    assert AG.action_doc("hunt", inst2, a).endswith("a party of 3 to 6 has good chances of a deer or a large animal, shared by effort")
+    assert "share one quarry more thinly, and fewer animals mean fewer kills" in SB.rules_text(inst2)   # the engine 13 text
 
 
 def test_start_farms_need_fields_and_resolve(tmp_path):

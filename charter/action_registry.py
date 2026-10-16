@@ -527,8 +527,7 @@ R("hunt", "hunt game in a forest, alone or in a party", "PRODUCE", core=True,
   aliases={"forest": "camp", "group": "party", "band": "party", "with": "party", "team": "party"},
   doc='hunt {"camp": "camp6", "party": "red"}: one unit of hunting effort at a forest this round (a forest action), paid at the '
       'end of the round; everyone who names the same party there hunts with you (no party: alone). Alone you mostly catch small '
-      'game; in a party of 3 to 8 the chances of a deer or a large animal are good (the manual\'s Food section says how a party\'s '
-      'catch is divided)')
+      'game; a party of 3 to 6 has good chances of a deer or a large animal, shared by effort')   # individual mode: agents.action_doc
 R("farm", "sow food on fields, reap it rounds later; set your farm", "PRODUCE", core=True,
   needs=("mod:subsistence", "camp:fields", "notcls:board", "notcls:fixer"),
   handler="subsistence:act_farm", module="subsistence", category="productive", emits=("sow", "reap", "farm_set"),
