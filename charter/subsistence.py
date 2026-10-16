@@ -134,10 +134,13 @@ _CFG: dict = {}                                                        # the mer
 
 
 def cfg(spec) -> dict:
-    block = (spec or {}).get("subsistence") or {}
-    key = json.dumps(block, sort_keys=True, default=str)
+    from charter import settings as ST                                 # a run's frozen settings swap DEFAULTS: never serve a merge
+    block = (spec or {}).get("subsistence") or {}                      # made under other defaults (settings.GENERATION)
+    key = f"{ST.GENERATION[0]}|" + json.dumps(block, sort_keys=True, default=str)
     hit = _CFG.get(key)
     if hit is None:
+        if len(_CFG) > 512:
+            _CFG.clear()
         hit = _CFG[key] = _cfg(block)
     return hit
 

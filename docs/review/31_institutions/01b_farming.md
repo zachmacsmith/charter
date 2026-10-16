@@ -224,7 +224,9 @@ Engine 14 (`charter/provenance.py`, `docs/engine_versions.md`). `ENGINE_FLIPS[14
 0.8 -> 1.5, `fields.mult` 3.5 -> 3.0. A run of an earlier engine plays under its frozen settings (or, before frozen settings, under
 the flips set back), and its forests carry no `hunt_mode`, so it hunts shared: the `subsistence_small` and `pairs_small` golden runs
 replayed under engine 13's settings are byte-identical to their engine 13 fingerprints (tests/test_farming.py). New keys (tending,
-improvements, skills, clearing, the individual hunt's chances) only act where fields are on or the mode is individual.
+improvements, skills, clearing, the individual hunt's chances) only act where fields are on or the mode is individual. Making this
+test pass exposed a stale cache: `subsistence.cfg` memoised its merge per spec block, so a process that had merged under one set of
+defaults served it under another run's frozen settings; the cache now keys on `settings.GENERATION`, bumped at every swap.
 
 Goldens re-recorded: every case's `instance.json` (the settings snapshot records the new keys and the engine version); the events,
 snapshots and scores of `subsistence_small` and `pairs_small` (the individual hunt, and the forests' parameters in the instance).

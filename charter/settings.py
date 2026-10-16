@@ -41,6 +41,7 @@ TARGETS = (
 EVENTS = "charter.events.REGISTRY"          # each event type's defaults: "charter.events.REGISTRY.<name>"
 
 _LOCK = threading.RLock()
+GENERATION = [0]                            # bumped at every swap: caches of merged defaults key on it (subsistence.cfg)
 
 
 class CodeDrift(SystemExit):
@@ -160,12 +161,14 @@ def use(settings_or_inst):
                 new = _merged(d, p)
                 d.clear()
                 d.update(new)
+            GENERATION[0] += 1
         yield
     finally:
         with _LOCK:
             for name, orig in saved.items():
                 live[name].clear()
                 live[name].update(orig)
+            GENERATION[0] += 1
 
 
 def effective(settings: dict | None) -> dict:

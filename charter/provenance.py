@@ -54,7 +54,7 @@ LOG_FORMAT = 1
 # run plays under, charter/settings.py) record it. ENGINE_FLIPS[v]: the commits that made version v (the first decides, by git
 # ancestry, whether a run's recorded sha has it: settings.infer_version) and the default flips, (settings target, key path, old,
 # new); settings.use sets a flip back to `old` for a run of an earlier version whose frozen snapshot lacks the key.
-ENGINE_VERSION = 13
+ENGINE_VERSION = 14
 ENGINE_FLIPS = {
     2: {"commits": ["38070e15cf97e171258cd0dbdb7ddfd710ed30ab"],
         "flips": [("charter.channels.DEFAULTS", ("delivery",), "pull", "push")],
@@ -104,6 +104,16 @@ ENGINE_FLIPS = {
          "note": "channel purposes and prompt changes: the state lists channels an agent can post in; opening a channel needs a "
                  "purpose; starvation reads as starvation; soft context budgets (state 1500); the Press Act only where "
                  "channels.found_right is set (behaviour, not a default; prompts differ from earlier versions)"},
+    14: {"commits": ["b7bdd6a2ca2dfa3ec98d9f2fa85ccaf70f912636"],
+         "flips": [("charter.subsistence.DEFAULTS", ("game", "hunt_mode"), "shared", "individual"),
+                   ("charter.subsistence.DEFAULTS", ("forest", "clearing"), 5, 0),
+                   ("charter.subsistence.DEFAULTS", ("fields", "plots_per_agent"), 0.4, 1.0),
+                   ("charter.subsistence.DEFAULTS", ("fields", "plots_max_per_agent"), 0.8, 1.5),
+                   ("charter.subsistence.DEFAULTS", ("fields", "mult"), 3.5, 3.0)],
+         "note": "farming (docs/review/31_institutions/01b_farming.md): farms held by agents or institutions, start.farms, tend, "
+                 "improvements with upkeep, skills, the plough, clear (forest -> field), crop shocks; fields stay off by default. The "
+                 "hunt draws per hunter (game.hunt_mode individual; shared: one quarry per party, as before); felling no longer clears "
+                 "plots"},
 }
 
 

@@ -540,3 +540,41 @@ def test_a_plough_covers_two_plots_and_may_break():
     with pytest.raises(A.ActionError, match="only with a plough"):
         A.act(k, a, "tend", {"camp": fl, "plots": [1, 2]})
     assert any(e["type"] == "farm_upkeep" and e["data"]["kind"] == "plough" for e in k.events)
+
+
+# ---------------------------------------------------------------------- earlier engines replay identically
+ENGINE_13 = {"subsistence_small": ("dac0cc40fef4502a", "7c0ade6d2bd513e5"),     # events.jsonl, snapshots.json at engine 13
+             "pairs_small": ("4afb3d910edee40f", "dc50fb91bf23adb8")}         # (tests/fixtures/charter_golden.json before 14)
+
+
+def test_engine_14_flips_set_back_for_earlier_runs():
+    from charter import provenance as PV
+    from charter import settings as ST
+    flips = {tuple(f[1]): (f[2], f[3]) for f in PV.ENGINE_FLIPS[14]["flips"]}
+    assert flips[("game", "hunt_mode")] == ("shared", "individual") and flips[("forest", "clearing")] == (5, 0)
+    with ST.use({"engine_version": 13, "defaults": {}}):
+        c = SB.cfg({})
+        assert c["game"]["hunt_mode"] == "shared" and c["forest"]["clearing"] == 5
+        assert (c["fields"]["mult"], c["fields"]["plots_per_agent"], c["fields"]["plots_max_per_agent"]) == (3.5, 0.4, 0.8)
+        assert c["fields"]["enabled"] is False
+    assert SB.cfg({})["game"]["hunt_mode"] == "individual"
+
+
+@pytest.mark.parametrize("name", sorted(ENGINE_13))
+def test_runs_of_engine_13_replay_identically(name, tmp_path):
+    """A subsistence golden case generated and played under engine 13's settings (the flips of 14 set back) is byte-identical to its
+    engine 13 run: the same events and snapshots."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    import charter_golden_cases as GC
+    import test_charter_golden as TG
+    from charter import agents as AG
+    from charter import runner
+    from charter import settings as ST
+    with ST.use({"engine_version": 13, "defaults": {}}):
+        inst = GC.instance(name)
+    inst["settings"] = {"engine_version": 13, "defaults": {}}             # the run plays under them (runner.run: frozen_run)
+    out = runner.run(inst, AG.ScriptedPolicy(GC.CASES[name][1]), tmp_path / name, log=lambda *a: None)
+    fp = TG.files_fingerprint(out)
+    assert (fp["events.jsonl"], fp["snapshots.json"]) == ENGINE_13[name]
