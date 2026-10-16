@@ -909,7 +909,7 @@ R("send", "message an agent, an institution's inbox or a channel", "TALK AND TRA
       'its inbox; to a channel, a post. "as": an institution whose speak office you hold, or an agent who authorized you to '
       'send for it. Messages to an agent or an inbox count against your private-message limit')
 R("read", "a channel's latest posts, or the directory", "INFORMATION", core=True, pre=True, needs=_CH,
-  args='{"channel": "<id>", "n": 10}', handler="channels:act_read", module="core", category="productive",
+  args='{"channel": "<id>", "n": 10}', handler="channels:act_read", module="core", category="productive", emits=("channel_read",),
   aliases={"name": "channel", "id": "channel", "to": "channel"},
   doc='read {"channel": "<id>", "n": 10}: the latest posts of a channel you may read (marks them read); read {} lists the '
       'directory of listed channels and inboxes')
@@ -919,7 +919,7 @@ R("open_channel", "open a channel: a group, a newspaper, a chamber, a secret cel
       '"identity": "named", "retention": "all", "members": ["Name"], "template": null, "as": null}: a channel you own (or, "as", an '
       'institution whose speak office you hold); unlisted channels get a secret address (see the manual\'s Channels section)')
 R("set_channel", "change a channel you own", "channels", needs=_CH,
-  handler="channels:act_set_channel", module="core", category="talk", emits=("channel_set",),
+  handler="channels:act_set_channel", module="core", category="talk", emits=("channel_set", "channel_resealed"),
   aliases={"key": "field", "setting": "field"},
   doc='set_channel {"channel": "<id>", "field": "readers", "value": {"subscribers": true}}: fields purpose, readers, writers, '
       'listed, identity, retention, rate, inbox (owner only)')
